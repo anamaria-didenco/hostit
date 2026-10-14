@@ -15,6 +15,8 @@
  *        Creates a booking. Body matches the widget's payload shape.
  */
 
+import { ymdInTz } from "@shared/automatedTasks";
+
 const NBI_API = "https://api.nowbookit.com";
 
 // Headers that mimic the public widget; required to satisfy CORS / origin checks
@@ -81,7 +83,7 @@ export interface NbiResult {
 export async function verifyNbiCredentials(
   creds: NbiCredentials
 ): Promise<{ valid: boolean; venueName?: string; services?: NbiService[]; error?: string }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymdInTz(Date.now());
   try {
     const url = `${NBI_API}/bookings/get-schedule/venue/${encodeURIComponent(
       creds.venueId
@@ -116,7 +118,7 @@ export async function listNbiServices(
   date?: string,
   covers: number = 2
 ): Promise<NbiService[]> {
-  const day = date ?? new Date().toISOString().slice(0, 10);
+  const day = date ?? ymdInTz(Date.now());
   const url = `${NBI_API}/bookings/get-schedule/venue/${encodeURIComponent(
     creds.venueId
   )}?date=${day}&numOfPeople=${covers}&accountId=${encodeURIComponent(creds.accountId)}`;

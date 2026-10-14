@@ -103,12 +103,16 @@ export async function countUnreadNotifications(ownerId: number): Promise<number>
   return Number(row?.n ?? 0);
 }
 
-export async function markNotificationsRead(ownerId: number, id?: number) {
+/** One alert (id), every unread alert about one enquiry (leadId), or —
+ *  with neither — everything unread. */
+export async function markNotificationsRead(ownerId: number, id?: number, leadId?: number) {
   const db = await getDb();
   if (!db) return;
   const { isNull } = await import("drizzle-orm");
   const where = id
     ? and(eq(venueNotifications.ownerId, ownerId), eq(venueNotifications.id, id))
-    : and(eq(venueNotifications.ownerId, ownerId), isNull(venueNotifications.readAt));
+    : leadId
+      ? and(eq(venueNotifications.ownerId, ownerId), eq(venueNotifications.leadId, leadId), isNull(venueNotifications.readAt))
+      : and(eq(venueNotifications.ownerId, ownerId), isNull(venueNotifications.readAt));
   await db.update(venueNotifications).set({ readAt: new Date() }).where(where);
 }

@@ -604,7 +604,7 @@ export default function ProposalBuilder() {
                   <div className="text-center py-6 border-2 border-dashed border-border">
                     <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-dm text-sm text-muted-foreground">No menu packages yet.</p>
-                    <p className="font-dm text-xs text-muted-foreground mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
+                    <p className="font-dm text-xs text-muted-foreground mt-1">This venue has no menu packages set up. Add what you're offering as line items under Pricing below.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">

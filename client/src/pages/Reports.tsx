@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ymdInTz } from "@shared/automatedTasks";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
@@ -587,7 +588,7 @@ function GoogleAdsBookingExport() {
         const url = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
         const a = document.createElement("a");
         a.href = url;
-        a.download = `google-ads-booking-conversions-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.download = `google-ads-booking-conversions-${ymdInTz(Date.now())}.csv`;
         a.click();
         URL.revokeObjectURL(url);
       }

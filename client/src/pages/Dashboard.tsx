@@ -1,4 +1,5 @@
 import React, { Fragment, useState, useMemo, useRef, useEffect, useId } from "react";
+import { ymdInTz } from "@shared/automatedTasks";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -682,6 +683,19 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             <select> above. Without these, mobile users had no way to reach
             /daily-checklists at all. */}
         <div className="grid grid-cols-2 gap-2">
+          {/* Reports isn't in the phone's bottom bar — this is its way in. */}
+          <a
+            href="/dashboard?tab=reports"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
+          >
+            Reports
+          </a>
+          <a
+            href="/staff-links"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
+          >
+            Staff Portal Links
+          </a>
           <a
             href="/daily-checklists"
             className="flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
@@ -1000,8 +1014,12 @@ export default function Dashboard() {
   };
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist"|"follow-ups";
-  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments","expressbook"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist","follow-ups"];
+  // "expressbook" is left out on purpose: the feature is unfinished, so an
+  // old ?tab=expressbook link falls back to the overview.
+  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","floor-plans","statuses","waitlist","follow-ups"];
+  // "profile" and "email-settings" are mock-ups whose buttons do nothing, so
+  // they're no longer reachable by URL (?sub=profile falls back to Venue).
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
   const _qp = new URLSearchParams(window.location.search);
@@ -1490,6 +1508,20 @@ export default function Dashboard() {
     { enabled: !!selectedLead?.id }
   );
   const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
+  // Opening an enquiry (list, board or drawer) means its alerts have been
+  // seen — clear them so the bell only counts what still needs a look.
+  const openedLeadId: number | null = selectedLead?.id ?? drawerLeadId ?? selectedBooking?.leadId ?? null;
+  const utilsAlerts = trpc.useUtils();
+  const markLeadAlertsRead = trpc.notifications.markRead.useMutation({
+    onSuccess: () => {
+      utilsAlerts.notifications.unreadCount.invalidate();
+      utilsAlerts.notifications.list.invalidate();
+    },
+  });
+  useEffect(() => {
+    if (openedLeadId && !isStaff) markLeadAlertsRead.mutate({ leadId: openedLeadId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedLeadId]);
   const drawerBookingIdForRs = selectedBooking && !selectedBooking._isLead ? selectedBooking.id : null;
   const { data: drawerLeadRunsheets, refetch: refetchDrawerRunsheets } = trpc.runsheets.list.useQuery(
     { leadId: drawerLeadId ?? 0 },
@@ -1573,14 +1605,14 @@ export default function Dashboard() {
     await Promise.all([refetchDrawerPayments(), refetchDrawerPaymentSummary()]);
   };
   const addDrawerPaymentMutation = trpc.payments.add.useMutation({
-    onSuccess: async () => { toast.success('Payment recorded'); await refreshDrawerPayments(); setDrawerNewPayment({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: new Date().toISOString().split('T')[0], notes: '' }); },
+    onSuccess: async () => { toast.success('Payment recorded'); await refreshDrawerPayments(); setDrawerNewPayment({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' }); },
     onError: () => toast.error('Failed to record payment'),
   });
   const deleteDrawerPaymentMutation = trpc.payments.delete.useMutation({
     onSuccess: async () => { toast.success('Payment removed'); await refreshDrawerPayments(); },
     onError: () => toast.error('Failed to remove payment'),
   });
-  const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: new Date().toISOString().split('T')[0], notes: '' });
+  const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' });
   const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
@@ -3290,7 +3322,7 @@ export default function Dashboard() {
       }
     } else {
       if (selectedBooking.status === 'cancelled') { toast('This event is already cancelled.'); return; }
-      if (confirm(`Cancel the event for ${name}? It'll be marked Cancelled and the date freed, but kept in your records. You can restore it from the status dropdown.`)) {
+      if (confirm(`Cancel the event for ${name}? It'll be marked Cancelled and the date freed, but kept in your records. You can restore it from the status dropdown.\n\nAny DRAFT Xero invoices for it will be deleted (approved or paid ones are left alone) and won't come back if you restore it.`)) {
         rescheduleBooking.mutate({ id: selectedBooking.id, status: 'cancelled' as any });
         setSelectedBooking((prev: any) => prev ? { ...prev, status: 'cancelled' } : prev);
         utils.bookings.byMonth.invalidate();
@@ -11793,11 +11825,11 @@ export default function Dashboard() {
         ] : [
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          // The calendar is what a manager checks on shift — phones had no
+          // way to reach it. Daily Checklists moved to More (with Reports).
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
           // Payments was only reachable via More on a phone.
           { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
-          // Daily Checklists is a separate route, not a tab — rendered as an
-          // anchor below so mobile users can reach it without diving into More.
-          { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
         ]).map(item => {
