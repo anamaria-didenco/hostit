@@ -4713,8 +4713,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.paymentNotes !== undefined) updateData.paymentNotes = fields.paymentNotes;
         if (fields.paymentInstructions !== undefined) updateData.paymentInstructions = fields.paymentInstructions;
         updateData.updatedAt = new Date();
-        await db.update(runsheets).set(updateData)
-          .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
+        const saved = await db.update(runsheets).set(updateData)
+          .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
+          .returning({ id: runsheets.id });
+        // Nothing matched (deleted, or not this account's): say so, rather
+        // than letting the screen show "All changes saved".
+        if (saved.length === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'This runsheet no longer exists — it may have been deleted.' });
 
         // Cascade shared event fields back to the linked booking + lead. The
         // dashboard / events table read from bookings & leads (NOT the
