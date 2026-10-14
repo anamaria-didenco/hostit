@@ -1862,7 +1862,16 @@ export default function Dashboard() {
     let mutValue: any = raw;
     if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
     else if (field === "totalNzd" || field === "depositNzd" || field === "minimumSpend") mutValue = raw === "" ? null : Number(raw);
-    else if (field === "eventDate" || field === "eventEndDate") mutValue = raw === "" ? null : new Date(raw).toISOString();
+    else if (field === "eventDate" || field === "eventEndDate") {
+      if (raw === "") mutValue = null;
+      else {
+        // A real time that lands exactly on UTC midnight (1:00 pm in NZ
+        // summer) gets +1ms, so it isn't mistaken for a date-only value.
+        const t = new Date(raw).getTime();
+        const iso = new Date(t).toISOString();
+        mutValue = raw.includes("T") && iso.endsWith("T00:00:00.000Z") ? new Date(t + 1).toISOString() : iso;
+      }
+    }
     else if (field === "spaceName") mutValue = raw === "" ? null : raw;
     else mutValue = raw; // email and any other string field
     // Optimistic local update — keep the prior value so we can roll back if the
@@ -1882,6 +1891,21 @@ export default function Dashboard() {
     setDrawerEdit(null);
   }
   // ISO datetime → value for <input type="datetime-local"> (yyyy-MM-ddTHH:mm in LOCAL time).
+  // The drawer's date editor value: "YYYY-MM-DD", plus "THH:mm" only when the
+  // event has a real time — a date-only event must not come back as 1:00 pm.
+  function toDrawerDateValue(iso: string | null | undefined): string {
+    const full = toDatetimeLocal(iso);
+    if (!full) return "";
+    return fmtEventTime(iso) ? full : localYmd(iso!);
+  }
+  // The calendar date as the venue sees it. Date-only events are stored at UTC
+  // midnight, which is already that date; timed ones are read in local time.
+  function localYmd(iso: string | Date): string {
+    const d = new Date(iso);
+    if (!fmtEventTime(d)) return d.toISOString().slice(0, 10);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
   function toDatetimeLocal(iso: string | null | undefined): string {
     if (!iso) return "";
     const d = new Date(iso);
@@ -1894,6 +1918,9 @@ export default function Dashboard() {
     if (!iso) return "";
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
+    // A date-only event has no time: show an empty box, not "1:00 pm" (UTC
+    // midnight read in NZ time).
+    if (!fmtEventTime(d)) return "";
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
@@ -1903,8 +1930,9 @@ export default function Dashboard() {
   function combineDateAndTime(baseIso: string | null | undefined, hhmm: string, fallbackIso?: string | null): string {
     const anchor = baseIso || fallbackIso;
     if (!anchor || !hhmm) return "";
-    const d = new Date(anchor);
-    if (isNaN(d.getTime())) return "";
+    if (isNaN(new Date(anchor).getTime())) return "";
+    // Start from the event's calendar day (a date-only value is UTC midnight).
+    const d = new Date(`${localYmd(anchor)}T00:00:00`);
     const [hStr, mStr] = hhmm.split(":");
     const h = Number(hStr); const m = Number(mStr);
     if (Number.isNaN(h) || Number.isNaN(m)) return "";
@@ -4383,7 +4411,8 @@ export default function Dashboard() {
                               phone: selectedLead.phone ?? '',
                               company: selectedLead.company ?? '',
                               eventType: selectedLead.eventType ?? '',
-                              eventDate: selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0, 10) : '',
+                              // Local date: toISOString() gave the UTC date, a day early for a morning event in NZ.
+                              eventDate: selectedLead.eventDate ? localYmd(selectedLead.eventDate) : '',
                               guestCount: selectedLead.guestCount ?? '',
                               budget: selectedLead.budget ?? '',
                             });
@@ -4403,7 +4432,13 @@ export default function Dashboard() {
                                 phone: eventDetailForm.phone || null,
                                 company: eventDetailForm.company || null,
                                 eventType: eventDetailForm.eventType || null,
-                                eventDate: eventDetailForm.eventDate || null,
+                                // Keep the event's time when only the day changes; a date-only
+                                // value used to wipe it.
+                                eventDate: eventDetailForm.eventDate
+                                  ? (combineLocalDateTime(eventDetailForm.eventDate, selectedLead.eventDate && fmtEventTime(selectedLead.eventDate)
+                                      ? (() => { const d = new Date(selectedLead.eventDate); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
+                                      : null) ?? eventDetailForm.eventDate)
+                                  : null,
                                 guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
                                 budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
                               });
@@ -10116,38 +10151,66 @@ export default function Dashboard() {
                 ].filter(Boolean).join(' · ')}
                 open={secOpen('details')} onToggle={() => toggleDrawerSection('details')}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                {/* DATE */}
-                {(selectedBooking.eventDate || drawerEdit?.field === "eventDate") && (
+                {/* DATE — always shown: it's the one detail every enquiry needs,
+                    and a no-date enquiry (client said "flexible") used to hide
+                    it behind a small "+ Date" link at the bottom. */}
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <div className={DRAWER_LABEL}>Date</div>
                       {drawerEdit?.field !== "eventDate" && (
-                        <button onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
+                        <button onClick={() => setDrawerEdit({ field: "eventDate", value: toDrawerDateValue(selectedBooking.eventDate) })}
                           className={DRAWER_PENCIL} aria-label="Edit date">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
                     </div>
-                    {drawerEdit?.field === "eventDate" ? (
-                      <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <Input type="datetime-local" value={drawerEdit.value}
-                          onChange={e => setDrawerEdit({ field: "eventDate", value: e.target.value })}
-                          onKeyDown={drawerEditKeys("eventDate")}
-                          className="h-8 text-xs" autoFocus />
-                        <button onClick={() => saveDrawerField("eventDate", drawerEdit.value)}
-                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
+                    {drawerEdit?.field === "eventDate" ? (() => {
+                      // Date and time as two boxes. A single date-and-time box
+                      // has no value until BOTH are filled, so picking just a
+                      // date (an enquiry that never had one) and pressing Save
+                      // saved nothing at all. The time is optional.
+                      const [dPart = "", tPart = ""] = (drawerEdit.value || "").split("T");
+                      const setParts = (d: string, t: string) => setDrawerEdit({ field: "eventDate", value: t ? `${d}T${t}` : d });
+                      const save = () => {
+                        if (!dPart) { toast.error("Pick a date first"); return; }
+                        saveDrawerField("eventDate", combineLocalDateTime(dPart, tPart.slice(0, 5)) ?? dPart);
+                      };
+                      return (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <Input type="date" value={dPart} aria-label="Event date"
+                          onChange={e => setParts(e.target.value, tPart.slice(0, 5))}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } else if (e.key === "Escape") setDrawerEdit(null); }}
+                          className="h-10 text-sm w-auto" autoFocus />
+                        <Input type="time" value={tPart.slice(0, 5)} aria-label="Start time (optional)"
+                          onChange={e => setParts(dPart, e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } else if (e.key === "Escape") setDrawerEdit(null); }}
+                          className="h-10 text-sm w-[124px]" />
+                        <button onClick={save}
+                          className="px-3 min-h-[40px] rounded-sm bg-forest text-cream text-xs font-semibold">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
-                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
+                          className="px-3 min-h-[40px] rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
-                    ) : (
+                      );
+                    })() : (
                       <>
                         <button type="button" tabIndex={-1}
-                          onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
+                          onClick={() => setDrawerEdit({ field: "eventDate", value: toDrawerDateValue(selectedBooking.eventDate) })}
                           className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>
                           {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
                         </button>
+                        {!selectedBooking.eventDate && (
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {(selectedBooking as any).dateFlexible && (
+                              <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">DATE TBC</span>
+                            )}
+                            <button type="button" onClick={() => setDrawerEdit({ field: "eventDate", value: "" })}
+                              className="font-dm text-xs font-semibold text-forest border border-forest/40 rounded-sm px-3 min-h-[40px] hover:bg-forest/5">
+                              Add a date
+                            </button>
+                          </div>
+                        )}
                         {/* Always-on inline START / END time editors — change saves immediately.
                             The DATE cell is half the panel wide, so two 90px time
                             inputs side by side were crushed to ~30px each (the
@@ -10199,7 +10262,6 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-                )}
                 {/* GUESTS */}
                 {(hasDrawerValue(selectedBooking.guestCount) || drawerEdit?.field === "guestCount") && (
                 <div className="flex items-start gap-3">
@@ -10343,7 +10405,6 @@ export default function Dashboard() {
                 {/* Fields not filled in yet: one "+" each, nothing else. */}
                 {(() => {
                   const missing: Array<[string, () => void]> = [];
-                  if (!selectedBooking.eventDate && drawerEdit?.field !== "eventDate") missing.push(["Date", () => setDrawerEdit({ field: "eventDate", value: "" })]);
                   if (!hasDrawerValue(selectedBooking.guestCount) && drawerEdit?.field !== "guestCount") missing.push(["Guests", () => setDrawerEdit({ field: "guestCount", value: "" })]);
                   if (!selectedBooking.spaceName?.trim() && !drawerAddFields.has('space')) missing.push(["Space", () => setDrawerAddFields(prev => new Set(prev).add('space'))]);
                   if (!hasDrawerValue(selectedBooking.minimumSpend) && drawerEdit?.field !== "minimumSpend") missing.push(["Minimum spend", () => setDrawerEdit({ field: "minimumSpend", value: "" })]);
