@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { safeHtml, textToHtml } from "@/lib/safeHtml";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -1570,6 +1571,18 @@ export default function RunsheetBuilder() {
     { id: effectiveBookingId! },
     { enabled: !!effectiveBookingId },
   );
+  // Payments already recorded toward this event's bill (not the deposit, not
+  // drinks invoices) come off the balance to collect — same as the BEO.
+  const { data: paymentSummary } = trpc.payments.summary.useQuery(
+    { bookingId: effectiveBookingId! },
+    { enabled: !!effectiveBookingId },
+  );
+  const paidToDate = paymentSummary?.paidTowardEventBill ?? 0;
+  // The booking the money figures read from. \`booking\` only loads while a
+  // new sheet is being created (it pre-fills the form), so on a saved sheet
+  // the balance used to ignore the booking total, minimum spend and deposit
+  // — and disagree with the BEO, which always reads the booking.
+  const moneyBooking: any = booking ?? billingBooking;
   const utilsBilling = trpc.useUtils();
   const updateBillingTerms = trpc.bookings.update.useMutation({
     onSuccess: () => {
@@ -1838,9 +1851,11 @@ export default function RunsheetBuilder() {
         const sp = spacesForPrefill.find((s: any) => s.id === (lead as any).spaceId);
         if (sp?.name) setSpaceName(sp.name);
       }
-      // Seed notes from the enquiry message + internal notes
-      const msgParts = [lead.message, (lead as any).internalNotes].filter(Boolean);
-      if (msgParts.length) setNotes(msgParts.join("\n\n"));
+      // Seed notes from the enquiry message + internal notes. Both are plain
+      // text (the message comes from the public form), so escape them —
+      // notes are rich HTML.
+      const msgParts = [lead.message, (lead as any).internalNotes].filter(Boolean).map(textToHtml);
+      if (msgParts.length) setNotes(msgParts.join("<br><br>"));
     }
   }, [lead, sheetId, spacesForPrefill, existing]);
 
@@ -3235,9 +3250,9 @@ export default function RunsheetBuilder() {
 
             {/* Deposit & balance — so staff can see what's already been paid and
                 only collect the remaining balance (don't re-charge the deposit). */}
-            {booking && (() => {
-              const dep = Number((booking as any).depositNzd ?? 0);
-              const paid = !!(booking as any).depositPaid;
+            {moneyBooking && (() => {
+              const dep = Number((moneyBooking as any).depositNzd ?? 0);
+              const paid = !!(moneyBooking as any).depositPaid;
               if (!(dep > 0 || paid)) return null;
               // The same balance the run sheet PDF prints (shared/eventBilling):
               // the larger of the booking total, minimum spend and the itemised
@@ -3246,9 +3261,9 @@ export default function RunsheetBuilder() {
               // it's applied to food or the total; by default it comes off drinks.
               const bal = eventBalance({
                 fnb: fnbItems as any, costItems, gstInclusive,
-                bookingTotal: (booking as any).totalNzd, minimumSpend: (booking as any).minimumSpend,
-                depositAmount: dep, depositPaid: paid, depositApplied: (booking as any).billingDepositApplied,
-                billingFood: (booking as any).billingFood,
+                bookingTotal: (moneyBooking as any).totalNzd, minimumSpend: (moneyBooking as any).minimumSpend,
+                depositAmount: dep, depositPaid: paid, depositApplied: (moneyBooking as any).billingDepositApplied,
+                billingFood: (moneyBooking as any).billingFood, paidToDate,
               });
               const totalRef = bal.contractTotal;
               const balance = totalRef > 0 || bal.basis === 'contra' ? bal.balance : null;
@@ -3271,7 +3286,7 @@ export default function RunsheetBuilder() {
                           <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(balance)}</div>
                           <div className="font-dm text-xs text-ink/75 mt-0.5">{bal.basis === 'contra'
                             ? 'Contra event — food is not charged'
-                            : <>of {currency(totalRef)} — {basis}{paid && dep > 0 && !bal.depositOffThisBill ? ' · deposit comes off the drinks bill' : ''}</>}</div>
+                            : <>of {currency(totalRef)} — {basis}{paid && dep > 0 && !bal.depositOffThisBill ? ' · deposit comes off the drinks bill' : ''}{bal.paidToDate > 0 ? ` · less ${currency(bal.paidToDate)} paid` : ''}</>}</div>
                         </div>
                       );
                     })()}
@@ -3381,7 +3396,7 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     {!isHidden && venueSetup && (
-                      <div className="hidden print:block px-5 py-3 font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: venueSetup }} />
+                      <div className="hidden print:block px-5 py-3 font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(venueSetup) }} />
                     )}
                   </div>
                 </SortableSection>
@@ -3672,7 +3687,7 @@ export default function RunsheetBuilder() {
                 minHeight="56px"
                 className="no-print"
               />
-              {notes && <div className="hidden print:block font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: notes }} />}
+              {notes && <div className="hidden print:block font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(notes) }} />}
             </div>
 
             {items.length === 0 ? (
@@ -3978,7 +3993,7 @@ export default function RunsheetBuilder() {
                 minHeight="72px"
                 className="no-print"
               />
-              {footerText && <div className="hidden print:block font-dm text-sm text-ink/75" dangerouslySetInnerHTML={{ __html: footerText }} />}
+              {footerText && <div className="hidden print:block font-dm text-sm text-ink/75" dangerouslySetInnerHTML={{ __html: safeHtml(footerText) }} />}
             </div>
           </div>
         </section>
@@ -4807,13 +4822,14 @@ export default function RunsheetBuilder() {
               // the balance tile and the Costs total.)
               const bal = eventBalance({
                 fnb: fnbItems as any, costItems, gstInclusive,
-                bookingTotal: (booking as any)?.totalNzd, minimumSpend: (booking as any)?.minimumSpend,
-                depositAmount: (booking as any)?.depositNzd, depositPaid: (booking as any)?.depositPaid,
-                depositApplied: (booking as any)?.billingDepositApplied, billingFood: (booking as any)?.billingFood,
+                bookingTotal: (moneyBooking as any)?.totalNzd, minimumSpend: (moneyBooking as any)?.minimumSpend,
+                depositAmount: (moneyBooking as any)?.depositNzd, depositPaid: (moneyBooking as any)?.depositPaid,
+                depositApplied: (moneyBooking as any)?.billingDepositApplied, billingFood: (moneyBooking as any)?.billingFood,
+                paidToDate,
               });
               const tab = rsTabAmount ? Number(rsTabAmount) : 0;
-              const dep = Number(booking?.depositNzd ?? 0);
-              const minSpend = Number(booking?.minimumSpend ?? 0);
+              const dep = Number(moneyBooking?.depositNzd ?? 0);
+              const minSpend = Number(moneyBooking?.minimumSpend ?? 0);
               // Same resolution as the BEO: the per-event override wins.
               const effectivePaymentInstructions = paymentInstructions.trim() || venueDefaultPaymentInstructions;
               const showBlock = minSpend > 0 || tab > 0 || dep > 0 || bal.itemisedInclGst > 0 || bal.contractTotal > 0
@@ -4843,10 +4859,17 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     {dep > 0 && (
-                      <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
-                        <div className={lbl}>DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
+                      <div className={`border px-3 py-2 ${moneyBooking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
+                        <div className={lbl}>DEPOSIT {moneyBooking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
                         <div className={fig}>{currency(dep)}</div>
-                        {booking?.depositPaid && !bal.depositOffThisBill && <div className="font-dm text-xs text-ink/75">Comes off the drinks bill</div>}
+                        {moneyBooking?.depositPaid && !bal.depositOffThisBill && <div className="font-dm text-xs text-ink/75">Comes off the drinks bill</div>}
+                      </div>
+                    )}
+                    {bal.paidToDate > 0 && !contra && (
+                      <div className="bg-forest/5 border border-forest/40 px-3 py-2">
+                        <div className={lbl}>PAID SO FAR</div>
+                        <div className={fig}>{currency(bal.paidToDate)}</div>
+                        <div className="font-dm text-xs text-ink/75">Recorded payments, not the deposit</div>
                       </div>
                     )}
                     {(bal.contractTotal > 0 || contra) && (
@@ -4855,7 +4878,7 @@ export default function RunsheetBuilder() {
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(bal.balance)}</div>
                         <div className="font-dm text-xs text-cream/85">
                           {contra ? 'Contra — food not charged'
-                            : `of ${currency(bal.contractTotal)}${bal.basis ? ` · ${bal.basis}` : ''}${bal.depositOffThisBill ? ' · less deposit' : ''}`}
+                            : `of ${currency(bal.contractTotal)}${bal.basis ? ` · ${bal.basis}` : ''}${bal.depositOffThisBill ? ' · less deposit' : ''}${bal.paidToDate > 0 ? ' · less payments' : ''}`}
                         </div>
                       </div>
                     )}
@@ -6285,7 +6308,7 @@ export default function RunsheetBuilder() {
         {/* Print footer */}
         <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
           {footerText && (
-            <div data-print-section="footer" className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
+            <div data-print-section="footer" className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: safeHtml(footerText) }} />
           )}
           <div className="text-xs text-ink/75 font-dm text-center">
             Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}

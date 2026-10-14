@@ -45,6 +45,8 @@ export type RunSheetData = {
     total?: string;
     totalNote?: string;
     deposit?: { label: string; amount: string };
+    /** Payments already received toward this bill (not the deposit). */
+    paid?: { label: string; amount: string };
     minimum?: { label: string; amount: string };
     balance?: { label: string; amount: string };
     /** How the event is billed: one line per step, plain text. */
@@ -148,13 +150,14 @@ function billingSection(b: NonNullable<RunSheetData["billing"]>): string {
   if (b.note?.length) {
     rows.push(`<div class="row top"><div class="lbl">Note</div><div class="entry">${b.note.map(n => `<div>${esc(n)}</div>`).join("")}</div></div>`);
   }
-  const hasSummary = b.total || b.deposit || b.minimum || b.balance;
+  const hasSummary = b.total || b.deposit || b.paid || b.minimum || b.balance;
   if (b.lines.length || hasSummary) {
     const left = b.lines.map(l => `<div class="bill-line"><b class="l">${esc(l.label)}</b><span class="d">${esc(l.detail ?? "")}</span><b class="amt">${esc(l.amount)}</b></div>`).join("");
     const sum = [
       b.total ? `<div class="sum-row"><span>Total${b.totalNote ? ` <small>${esc(b.totalNote)}</small>` : ""}</span><b>${esc(b.total)}</b></div>` : "",
       b.minimum ? `<div class="sum-row"><span>${esc(b.minimum.label)}</span><b>${esc(b.minimum.amount)}</b></div>` : "",
       b.deposit ? `<div class="sum-row"><span>${esc(b.deposit.label)}</span><b>${esc(b.deposit.amount)}</b></div>` : "",
+      b.paid ? `<div class="sum-row"><span>${esc(b.paid.label)}</span><b>${esc(b.paid.amount)}</b></div>` : "",
       b.balance ? `<div class="balance"><span>${esc(b.balance.label)}</span><b>${esc(b.balance.amount)}</b></div>` : "",
     ].join("");
     rows.push(`<div class="row top"><div class="lbl" style="padding-top:3px">Breakdown</div><div class="billing"><div>${left}</div><div class="sum">${sum}</div></div></div>`);

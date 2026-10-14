@@ -62,3 +62,24 @@ export function derivePaymentStatus(args: {
   if (args.depositRequired && covers(depositPaidAmount(args.rows), args.depositNzd)) return "deposit_paid";
   return "partial";
 }
+
+/**
+ * Money already paid toward the event's own bill — what comes off the
+ * "balance to collect" on the runsheet and BEO.
+ *
+ * Deposits are left out: the deposit-paid flag and where the deposit is
+ * applied (food, total or drinks) already account for them. Payments of a
+ * drinks invoice are left out too, because drinks are billed on their own
+ * bill. Refunds count against whatever they refund. Never below zero.
+ */
+export function paidTowardEventBill(
+  rows: (PaymentLike & { xeroInvoiceId?: string | null })[],
+  drinksInvoiceIds: ReadonlySet<string> = new Set(),
+): number {
+  const total = rows.reduce((s, p) => {
+    if (p.type === "deposit") return s;
+    if (p.xeroInvoiceId && drinksInvoiceIds.has(p.xeroInvoiceId)) return s;
+    return s + (p.type === "refund" ? -1 : 1) * Number(p.amount || 0);
+  }, 0);
+  return Math.max(0, round2(total));
+}

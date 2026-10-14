@@ -32,6 +32,16 @@ const AUTOCOMPLETE: Record<string, string> = {
   company: "organization",
 };
 
+// The longest value each contact field can hold (matches the server's
+// limits), so a very long entry stops at the field instead of failing on send.
+const MAX_LENGTH: Record<string, number> = {
+  firstName: 100,
+  lastName: 100,
+  email: 254,
+  phone: 40,
+  company: 200,
+};
+
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@shared/enquiryCopy";
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 import { isVenueSiteOrigin, originOf } from "@shared/adAttribution";
@@ -1331,6 +1341,7 @@ export default function LeadForm() {
         <>
           <Input id={controlId} type="email" value={value} onChange={onChange} required={field.required}
             autoComplete={!isCustom ? AUTOCOMPLETE.email : undefined}
+            maxLength={MAX_LENGTH.email}
             aria-invalid={hasError} aria-describedby={describedBy}
             placeholder="" className={inputClass} />
           {showFix && (
@@ -1354,6 +1365,7 @@ export default function LeadForm() {
         onBlur={field.id === 'phone' ? (e: React.FocusEvent<HTMLInputElement>) => setForm(p => ({ ...p, phone: formatNZPhone(e.target.value) })) : undefined}
         required={field.required}
         autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
+        maxLength={!isCustom ? MAX_LENGTH[field.id] : undefined}
         aria-invalid={hasError}
         aria-describedby={describedBy}
         placeholder={field.id === 'phone' ? '+64 21 000 0000' : ''}

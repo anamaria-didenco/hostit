@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { safeHtml } from '@/lib/safeHtml';
 
 interface RichTextareaProps {
   value: string;
@@ -33,7 +34,7 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
 
   useEffect(() => {
     if (editorRef.current && value !== lastHtml.current) {
-      editorRef.current.innerHTML = value || '';
+      editorRef.current.innerHTML = safeHtml(value);
       lastHtml.current = value;
     }
   }, [value]);

@@ -9,9 +9,46 @@ const t = initTRPC.context<TrpcContext>().create({
   // the UI can show what's in the way and offer "Book anyway".
   errorFormatter({ shape, error }) {
     const clashes = (error.cause as { clashes?: unknown } | undefined)?.clashes;
-    return Array.isArray(clashes) ? { ...shape, data: { ...shape.data, clashes } } : shape;
+    if (Array.isArray(clashes)) return { ...shape, data: { ...shape.data, clashes } };
+    const message = userFacingMessage(error);
+    if (message !== shape.message) return { ...shape, message, data: { ...shape.data, stack: undefined } };
+    return shape;
   },
 });
+
+/** A database failure's text ("Failed query: insert into leads … params: …")
+ *  names tables and echoes what was submitted. It must never reach a browser —
+ *  least of all a public visitor's. The full detail is still logged
+ *  server-side (see the tRPC onError in _core/index.ts). */
+export function isDatabaseError(error: { message: string; cause?: unknown }): boolean {
+  const cause = error.cause as { name?: string; code?: unknown } | undefined;
+  return /^Failed query:/i.test(error.message)
+    || cause?.name === "DrizzleQueryError"
+    || (typeof cause?.code === "string" && /^[0-9A-Z]{5}$/.test(cause.code));
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  firstName: "First name", lastName: "Last name", email: "Email", phone: "Phone",
+  company: "Company", message: "Message", guestCount: "Guest count", eventDate: "Event date",
+};
+
+/** One readable sentence for validation and database failures; every other
+ *  error keeps the message its procedure chose. */
+export function userFacingMessage(error: TRPCError): string {
+  if (error.code === "INTERNAL_SERVER_ERROR" && isDatabaseError(error)) {
+    return "That couldn't be saved. Please check what you entered and try again.";
+  }
+  const issues = (error.cause as { issues?: { path?: PropertyKey[]; message?: string; code?: string; maximum?: unknown }[] } | undefined)?.issues;
+  if (error.code === "BAD_REQUEST" && Array.isArray(issues) && issues.length) {
+    const first = issues[0];
+    const key = String(first.path?.[first.path.length - 1] ?? "");
+    const field = FIELD_LABELS[key] ?? (key ? key.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) : "A field");
+    if (first.code === "too_big" && first.maximum !== undefined) return `${field} is too long (${first.maximum} characters at most).`;
+    if (first.code === "too_small") return `${field} is required.`;
+    return `${field}: ${first.message ?? "is not valid"}.`;
+  }
+  return error.message;
+}
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
