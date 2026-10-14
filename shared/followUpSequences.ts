@@ -181,6 +181,7 @@ export function applySequenceUpdate(
 
 /** Alert kinds the venue can mute individually for email (the bell always shows them). */
 export const ALERT_KIND_LABELS: { kind: string; label: string }[] = [
+  { kind: "partial_enquiry", label: "Someone started the enquiry form but didn't send it" },
   { kind: "reply_overdue", label: "An enquiry is waiting for a reply" },
   { kind: "proposal_stalled", label: "A proposal was opened but not accepted" },
   { kind: "proposal_viewed", label: "A client opened a proposal" },
