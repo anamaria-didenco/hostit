@@ -118,9 +118,14 @@ export function eventDrinksBillingLines(opts: {
   return [{ description: label, quantity: 1, unitAmount: amt }];
 }
 
+/** NZ GST. The one place the rate lives for event balances. */
+export const GST_RATE = 0.15;
+
 export interface EventBalance {
   /** Priced F&B food + food/beverage cost lines, including GST. */
   itemisedInclGst: number;
+  /** The same lines excluding GST, for a printed subtotal / GST breakdown. */
+  itemisedExGst: number;
   /** What the event is owed on: the larger of the booking total, the
    *  minimum spend and the itemised total. */
   contractTotal: number;
@@ -138,8 +143,8 @@ export interface EventBalance {
 }
 
 /**
- * The balance staff collect for an event. One rule for the run sheet PDF and
- * the runsheet screen, so the two never disagree. The bar tab is left out on
+ * The balance staff collect for an event. One rule for the run sheet PDF, the
+ * client copy BEO and the runsheet screen, so they never disagree. The bar tab is left out on
  * purpose: it's a ceiling, not money spent, and drinks are billed on
  * consumption on their own bill.
  */
@@ -161,11 +166,12 @@ export function eventBalance(o: {
   const food = fnbFoodLines(o.fnb, o.costItems).reduce((s, i) => s + num(i.qty) * num(i.unitPrice), 0);
   const costs = (o.costItems ?? []).filter(isFoodBeverageCost).reduce((s, ci) => s + num(ci.qty) * num(ci.unitPrice), 0);
   const itemised = food + costs;
-  const itemisedInclGst = o.gstInclusive ? itemised : itemised * 1.15;
+  const itemisedInclGst = o.gstInclusive ? itemised : itemised * (1 + GST_RATE);
+  const itemisedExGst = o.gstInclusive ? itemised / (1 + GST_RATE) : itemised;
   // A contra event is given in kind: the itemised figure is still its value,
   // but no minimum spend or booking total is owed and there's nothing to collect.
   if (o.billingFood === "contra") {
-    return { itemisedInclGst, contractTotal: 0, basis: "contra", depositOffThisBill: false, paidToDate: 0, balance: 0 };
+    return { itemisedInclGst, itemisedExGst, contractTotal: 0, basis: "contra", depositOffThisBill: false, paidToDate: 0, balance: 0 };
   }
   const bookingTotal = num(o.bookingTotal);
   const minimumSpend = num(o.minimumSpend);
@@ -176,5 +182,5 @@ export function eventBalance(o: {
   const depositOffThisBill = dep > 0 && Boolean(o.depositPaid) && (o.depositApplied === "food" || o.depositApplied === "total");
   const paidToDate = Math.max(0, num(o.paidToDate));
   const balance = Math.round(Math.max(0, contractTotal - (depositOffThisBill ? dep : 0) - paidToDate) * 100) / 100;
-  return { itemisedInclGst, contractTotal, basis, depositOffThisBill, paidToDate, balance };
+  return { itemisedInclGst, itemisedExGst, contractTotal, basis, depositOffThisBill, paidToDate, balance };
 }

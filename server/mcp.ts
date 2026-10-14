@@ -33,7 +33,28 @@ function ok(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
-function buildServer(ctx: { ownerId: number }): McpServer {
+type McpCtx = { ownerId: number; req: Request; res: Response };
+
+/**
+ * The app's own tRPC procedures, called as the token's owner. Leads, bookings
+ * and runsheets keep copies of each other's fields (date, status, guests…) and
+ * the procedures keep them in step — date moves, cancel cascades, holds,
+ * NowBookIt. Writes from here go through them, so a change made from Claude
+ * lands exactly as the same change made in the app.
+ */
+async function ownerCaller(ctx: McpCtx) {
+  const { getDb } = await import("./db");
+  const { users } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [user] = await db.select().from(users).where(eq(users.id, ctx.ownerId)).limit(1);
+  if (!user) throw new Error("Account not found");
+  const { appRouter } = await import("./routers");
+  return appRouter.createCaller({ req: ctx.req, res: ctx.res, user, isTeamMember: false, isStaff: false, actorName: null });
+}
+
+export function buildServer(ctx: McpCtx): McpServer {
   const server = new McpServer({ name: "venueflow", version: "1.0.0" });
 
   // ─── Leads / enquiries ────────────────────────────────────────────────────
@@ -115,25 +136,21 @@ function buildServer(ctx: { ownerId: number }): McpServer {
     "Change a lead's pipeline status (new, contacted, proposal_sent, negotiating, booked, lost, cancelled). When marking lost, lostReason may be one of: price, date_unavailable, other_venue, event_cancelled, no_response, size_mismatch, other.",
     { id: z.number(), status: z.string(), note: z.string().optional(), lostReason: z.string().optional() },
     async ({ id, status, note, lostReason }) => {
+      const { getLeadById, touchLead } = await import("./db");
+      if (!(await getLeadById(id, ctx.ownerId))) return ok({ success: false, error: "Lead not found" });
+      // leads.updateStatus: creates the booking on "booked", cancels it when
+      // the lead moves off booked, starts/ends date holds, logs the activity.
+      const caller = await ownerCaller(ctx);
       if (status === "lost") {
-        const { markLeadLost } = await import("./db");
-        const found = await markLeadLost(ctx.ownerId, id, lostReason ?? null, note ?? null);
-        return ok(found ? { success: true } : { success: false, error: "Lead not found" });
+        // A free-text reason is kept as "other" with the text, as markLeadLost does.
+        const { isLostReason } = await import("../shared/lostReasons");
+        const known = isLostReason(lostReason) ? lostReason : undefined;
+        const freeText = known ? undefined : lostReason?.trim().slice(0, 500) || undefined;
+        await caller.leads.updateStatus({ id, status, note, lostReason: known ?? (freeText ? "other" : undefined), lostReasonNote: freeText });
+        return ok({ success: true });
       }
-      const { getDb } = await import("./db");
-      const { leads, leadActivity } = await import("../drizzle/schema");
-      const { eq, and } = await import("drizzle-orm");
-      const db = await getDb();
-      if (!db) throw new Error("DB unavailable");
-      await db.update(leads).set({ status: status as any, updatedAt: Date.now() } as any)
-        .where(and(eq(leads.id, id), eq(leads.ownerId, ctx.ownerId)));
-      if (note) {
-        await db.insert(leadActivity).values({
-          leadId: id, ownerId: ctx.ownerId, type: "status_change", content: note, createdAt: Date.now(),
-        } as any);
-      }
+      await caller.leads.updateStatus({ id, status, note });
       // Keeps "gone quiet" / "needs reply" in step with the status change.
-      const { touchLead } = await import("./db");
       await touchLead(id, ctx.ownerId, { replied: true });
       return ok({ success: true });
     }
@@ -202,13 +219,10 @@ function buildServer(ctx: { ownerId: number }): McpServer {
     "Update a booking's status (confirmed, tentative, cancelled, finished).",
     { id: z.number(), status: z.enum(["confirmed", "tentative", "cancelled", "finished"]) },
     async ({ id, status }) => {
-      const { getDb } = await import("./db");
-      const { bookings } = await import("../drizzle/schema");
-      const { eq, and } = await import("drizzle-orm");
-      const db = await getDb();
-      if (!db) throw new Error("DB unavailable");
-      await db.update(bookings).set({ status, updatedAt: new Date() } as any)
-        .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.ownerId)));
+      // bookings.update: moves the lead's status with it, and a cancel drops
+      // the event's draft Xero invoices; confirming pushes to NowBookIt.
+      const caller = await ownerCaller(ctx);
+      await caller.bookings.update({ id, status });
       return ok({ success: true });
     }
   );
@@ -266,13 +280,8 @@ function buildServer(ctx: { ownerId: number }): McpServer {
       })),
     },
     async ({ id, dietaries }) => {
-      const { getDb } = await import("./db");
-      const { runsheets } = await import("../drizzle/schema");
-      const { eq, and } = await import("drizzle-orm");
-      const db = await getDb();
-      if (!db) throw new Error("DB unavailable");
-      await db.update(runsheets).set({ dietaries, updatedAt: new Date() } as any)
-        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      const caller = await ownerCaller(ctx);
+      await caller.runsheets.update({ id, dietaries });
       return ok({ success: true });
     }
   );
@@ -381,18 +390,19 @@ function buildServer(ctx: { ownerId: number }): McpServer {
       eventStartTime: z.string().optional(),
       eventEndTime: z.string().optional(),
     },
-    async ({ id, eventDate, ...rest }) => {
+    async ({ id, ...fields }) => {
       const { getDb } = await import("./db");
       const { runsheets } = await import("../drizzle/schema");
       const { eq, and } = await import("drizzle-orm");
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
-      const patch: any = { ...rest, updatedAt: new Date() };
-      if (eventDate !== undefined) patch.eventDate = new Date(eventDate);
-      // Strip undefined keys so we don't overwrite with null
-      Object.keys(patch).forEach(k => patch[k] === undefined && delete patch[k]);
-      await db.update(runsheets).set(patch)
-        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      const [rs] = await db.select({ id: runsheets.id }).from(runsheets)
+        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId))).limit(1);
+      if (!rs) return ok({ success: false, error: "Runsheet not found" });
+      // runsheets.update: a new day, the guest count, event type or space
+      // carry to the linked booking and enquiry. Undefined fields are left alone.
+      const caller = await ownerCaller(ctx);
+      await caller.runsheets.update({ id, ...fields });
       const [updated] = await db.select().from(runsheets)
         .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
       return ok(updated ?? { success: false, error: "Runsheet not found" });
@@ -460,6 +470,21 @@ function buildServer(ctx: { ownerId: number }): McpServer {
           if (!l) return ok({ success: false, error: `Lead ${leadId} not found or not owned by you` });
         }
         patch.leadId = leadId;
+      }
+      // The app has no relink; its rule is that a runsheet carries its event's
+      // date (bookings.update / leads.update push date moves to it). Take the
+      // booking's date, or the enquiry's when only linked to one, so the event
+      // never shows two dates.
+      const finalBookingId = bookingId !== undefined ? bookingId : rs.bookingId;
+      const finalLeadId = leadId !== undefined ? leadId : rs.leadId;
+      if (finalBookingId) {
+        const [b] = await db.select({ eventDate: bookings.eventDate }).from(bookings)
+          .where(and(eq(bookings.id, finalBookingId), eq(bookings.ownerId, ctx.ownerId))).limit(1);
+        if (b?.eventDate) patch.eventDate = b.eventDate;
+      } else if (finalLeadId) {
+        const [l] = await db.select({ eventDate: leads.eventDate }).from(leads)
+          .where(and(eq(leads.id, finalLeadId), eq(leads.ownerId, ctx.ownerId))).limit(1);
+        if (l?.eventDate) patch.eventDate = l.eventDate;
       }
       await db.update(runsheets).set(patch)
         .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId)));
@@ -559,7 +584,7 @@ export async function handleMcp(req: Request, res: Response): Promise<void> {
       });
       return;
     }
-    const server = buildServer({ ownerId: auth.ownerId });
+    const server = buildServer({ ownerId: auth.ownerId, req, res });
     // Stateless mode — each request gets its own server+transport pair.
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => { transport.close().catch(() => {}); server.close().catch(() => {}); });

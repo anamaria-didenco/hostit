@@ -1,6 +1,6 @@
 import {
   integer, pgEnum, pgTable, text, timestamp,
-  varchar, decimal, boolean, bigint, json, jsonb, serial, uniqueIndex
+  varchar, decimal, boolean, bigint, json, jsonb, serial, uniqueIndex, index
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -486,7 +486,11 @@ export const bookings = pgTable("bookings", {
   clashFlaggedAt: timestamp("clashFlaggedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Migration 0085.
+  ownerIdx: index("bookings_owner_idx").on(t.ownerId),
+  leadIdx: index("bookings_lead_idx").on(t.leadId),
+}));
 
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = typeof bookings.$inferInsert;
@@ -499,7 +503,9 @@ export const leadActivity = pgTable("lead_activity", {
   type: leadActivityTypeEnum("type").notNull(),
   content: text("content"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  leadIdx: index("lead_activity_lead_idx").on(t.leadId), // migration 0085
+}));
 
 export type LeadActivity = typeof leadActivity.$inferSelect;
 
@@ -626,7 +632,9 @@ export const runsheetItems = pgTable("runsheet_items", {
   bold: boolean("bold").default(false),
   italic: boolean("italic").default(false),
   highlight: varchar("highlight", { length: 50 }),
-});
+}, (t) => ({
+  runsheetIdx: index("runsheet_items_runsheet_idx").on(t.runsheetId), // migration 0085
+}));
 export type RunsheetItem = typeof runsheetItems.$inferSelect;
 export type InsertRunsheetItem = typeof runsheetItems.$inferInsert;
 
@@ -800,6 +808,7 @@ export const payments = pgTable("payments", {
   xeroPaymentUnique: uniqueIndex("payments_owner_xeropayment_uq")
     .on(t.ownerId, t.xeroPaymentId)
     .where(sql`${t.xeroPaymentId} IS NOT NULL`),
+  bookingIdx: index("payments_booking_idx").on(t.bookingId), // migration 0085
 }));
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
@@ -880,7 +889,9 @@ export const fnbItems = pgTable("fnb_items", {
   sortOrder: integer("sortOrder").default(0).notNull(),
   unitPrice: decimal("unitPrice", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  runsheetIdx: index("fnb_items_runsheet_idx").on(t.runsheetId), // migration 0085
+}));
 export type FnbItem = typeof fnbItems.$inferSelect;
 export type InsertFnbItem = typeof fnbItems.$inferInsert;
 

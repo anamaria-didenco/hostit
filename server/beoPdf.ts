@@ -47,9 +47,8 @@ import {
   depositAppliedClause,
   depositComesOffDrinks,
   billingStageLabel,
-  isContra,
 } from "@shared/billingTerms";
-import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance } from "@shared/eventBilling";
+import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance, type EventBalance } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import { isSharedMenu, SET_MENUS, setMenuCoursesText, setMenuSummary } from "@shared/eventMenus2026";
 import { eventBillingSteps } from "@shared/nowNext";
@@ -162,6 +161,26 @@ export function beoFileName(opts: { eventDate: any; eventType?: string; clientNa
     .filter(Boolean)
     .map(p => p.replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim());
   return `${parts.join(" - ")}.pdf`;
+}
+
+/** One row under the client copy's "What it comes to" totals. */
+export interface BillBalanceRow { label: string; amount: number; minus?: boolean; strong?: boolean; balance?: boolean }
+
+/**
+ * The rows from the total down to "Balance to collect" on the client copy,
+ * read straight off eventBalance so they can't disagree with the run sheet.
+ * The balance prints only when it differs from the total above it (a deposit
+ * or payment comes off, or the minimum spend / booking total applies).
+ * Labels are HTML.
+ */
+export function clientBillBalanceRows(bal: EventBalance, o: { depositAmount: number }): BillBalanceRow[] {
+  if (bal.basis === "contra") return [{ label: "Balance to collect &middot; contra, no charge", amount: 0, strong: true }];
+  if (!(bal.contractTotal > 0)) return [];
+  const rows: BillBalanceRow[] = [];
+  if (bal.depositOffThisBill) rows.push({ label: "Less deposit received", amount: o.depositAmount, minus: true });
+  if (bal.paidToDate > 0) rows.push({ label: "Less paid so far", amount: bal.paidToDate, minus: true });
+  if (rows.length || bal.basis !== "") rows.push({ label: "Balance to collect", amount: bal.balance, balance: true });
+  return rows;
 }
 
 function fmtCurrency(v: string | number | null | undefined): string {
@@ -1201,7 +1220,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         <div class="kv">${venueSetup}</div>
       </div>` : "";
 
-    // ── Cost summary (page 2) — internal only, never public ──────────────
+    // ── Billing lines (client copy + run sheet) — internal only ──────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
     const lineAmt = (ci: any) => Number(ci.qty ?? 0) * Number(ci.unitPrice ?? 0);
     // Priced FOOD lines entered on the F&B sheet (qty × unitPrice). The operator
@@ -1215,61 +1234,17 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // line so it isn't counted/listed twice on the client's bill. Match on the
     // item name, normalised (trim + lowercase + collapse whitespace).
     const fnbFoodLines: any[] = pickFnbFoodLines(fnbList as any, costList as any);
-    const fnbFoodTotal = fnbFoodLines.reduce((s, i: any) => s + Number(i.qty ?? 0) * Number(i.unitPrice ?? 0), 0);
     // The client BEO bills only Food & Beverage cost lines (matching the
     // runsheet's on-screen Running Total). Other cost lines (AV, hire, styling)
     // are the operator's own costs — kept on the Costs tab for profitability but
     // not auto-added to the client's bill; operators add anything else manually.
     const billCostList = costList.filter(isFoodBeverageCost);
-    const costItemsTotal = billCostList.reduce((s, ci) => s + lineAmt(ci), 0);
     const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
-    // The entered total is priced food (from the F&B sheet) PLUS every itemised
-    // cost line. When nothing has been priced anywhere, fall back to the booking
-    // total / minimum spend so the summary still shows the deal value.
-    const itemisedTotal = fnbFoodTotal + costItemsTotal;
-    const enteredTotal = itemisedTotal > 0
-      ? itemisedTotal
-      : Math.max(Number(booking.totalNzd ?? 0), minSpendAmt);
+    const bookingTotalNum = Number(booking.totalNzd ?? 0) || 0;
     const depAmt = Number(booking.depositNzd ?? 0);
-    // GST breakdown — mirrors the runsheet Costs tab. The gstInclusive toggle
-    // declares whether the entered amounts already carry 15% GST; either way
-    // the BEO shows the full picture (subtotal, GST, total incl. GST) and the
-    // balance to collect is the INCLUSIVE amount.
+    // The gstInclusive toggle declares whether the entered amounts already
+    // carry 15% GST. Totals and balances are worked out by eventBalance below.
     const gstInclusiveFlag = Boolean((runsheet as any)?.gstInclusive);
-    const subtotalExGst = gstInclusiveFlag ? enteredTotal / 1.15 : enteredTotal;
-    const gstAmt = gstInclusiveFlag ? enteredTotal - subtotalExGst : enteredTotal * 0.15;
-    const totalInclGst = subtotalExGst + gstAmt;
-    // Contra: given in kind, so there's nothing to collect on the food bill.
-    const contraFood = isContra((booking as any).billingFood);
-    const balanceToCollect = contraFood ? 0 : totalInclGst > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
-    const showFinancials = !isPublic && (enteredTotal > 0 || minSpendAmt > 0 || depAmt > 0);
-    const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
-    // Itemised breakdown — one row per priced line (food from the F&B sheet
-    // first, then the Costs-tab lines), so the totals below are justified
-    // rather than dropping out of nowhere.
-    const fnbLineHtml = (label: string, qty: number, amt: number) => {
-      const qtyBit = qty > 1 ? `<span class="qy"> × ${escHtml(String(qty))}</span>` : "";
-      return `<div class="cost-row line"><span class="k">${escHtml(label)}${qtyBit}</span><span class="v small">${fmtCurrency(amt)}</span></div>`;
-    };
-    const fnbLinesHtml = fnbFoodLines
-      .map((i: any) => fnbLineHtml(i.dishName ?? "Item", Number(i.qty ?? 0), Number(i.qty ?? 0) * Number(i.unitPrice ?? 0)))
-      .join("");
-    const costLinesHtml = billCostList
-      .filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0)
-      .map(ci => fnbLineHtml(ci.label ?? "Item", Number(ci.qty ?? 0), lineAmt(ci)))
-      .join("");
-    const financialsSection = showFinancials ? `
-      <div class="cost">
-        <div class="cost-title">Cost Summary${gstInclusiveFlag ? " &middot; incl. GST" : " &middot; excl. GST"}</div>
-        ${fnbLinesHtml}
-        ${costLinesHtml}
-        ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v small">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-        ${enteredTotal > 0 ? `<div class="cost-row sub"><span class="k">Subtotal (excl. GST)</span><span class="v small">${fmtCurrency(subtotalExGst)}</span></div>` : ""}
-        ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">GST (15%)</span><span class="v small">${fmtCurrency(gstAmt)}</span></div>` : ""}
-        ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">Total (incl. GST)</span><span class="v">${fmtCurrency(totalInclGst)}</span></div>` : ""}
-        ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v small">${fmtCurrency(depAmt)} ${booking.depositPaid ? "&middot; Paid" : "&middot; Outstanding"}</span></div>` : ""}
-        <div class="cost-row balance"><span class="k">Balance to collect <span class="k-sub">${contraFood ? "contra &middot; no charge" : "incl. GST"}</span></span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
-      </div>` : "";
 
     // Footer note (closing message) — shown to everyone, on page 2.
     const footerNoteSection = footerNote.trim() ? `
@@ -1603,30 +1578,40 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div class="bill-row" style="break-inside:avoid;page-break-inside:avoid;display:grid;grid-template-columns:1fr 90px 60px 110px;padding:4px 12px;border-top:1px solid var(--hair);font-size:11.5px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
     const foodBillRows = fnbFoodLines.map((i: any) => billRow(`Food &amp; Beverage &mdash; ${escHtml(i.dishName ?? "Item")}`, "", fmtCurrency(Number(i.unitPrice) || 0), String(Number(i.qty) || 0), fmtCurrency((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)))).join("");
     const costBillRows = billCostList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
+    // Every total and balance printed below comes from eventBalance — the same
+    // rule as the run sheet and the runsheet screen — so one event never shows
+    // two numbers. The client copy used to add 15% on top of a booking total
+    // that already includes GST, and ignored the minimum spend and payments
+    // already received.
+    const bal = eventBalance({
+      fnb: fnbList as any, costItems: costList, gstInclusive: gstInclusiveFlag,
+      bookingTotal: bookingTotalNum, minimumSpend: minSpendAmt,
+      depositAmount: depAmt, depositPaid: booking.depositPaid, depositApplied: termsDeposit,
+      billingFood: termsFood,
+      // The public pack prints no money, so it doesn't look payments up.
+      paidToDate: isPublic ? 0 : await paidTowardBookingBill(booking.id, booking.ownerId),
+    });
     // Billing total: show the GST breakdown (subtotal → GST → total incl. GST),
     // mirroring the runsheet Costs tab, instead of only a single ex-GST figure.
-    // Falls back to a plain "Day Estimated Total" when nothing has been priced.
-    const billingTotalRows = enteredTotal > 0
-      ? `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(subtotalExGst)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(gstAmt)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(totalInclGst)}</span></div>`
-      : `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div>`;
-    // The deposit is only deducted here when it actually comes off THIS bill.
-    // Applied to the drinks bill (the default) it must not be subtracted from a
-    // food total, or the balance staff read would be $575 short.
-    const depositOffThisBill = depAmt > 0 && Boolean(booking.depositPaid)
-      && (termsDeposit === "food" || termsDeposit === "total");
+    // With nothing priced, the booking total / minimum spend rows and the
+    // balance carry it; "Day Estimated Total" only when there's no figure at all.
+    const billingTotalRows = bal.itemisedInclGst > 0
+      ? `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(bal.itemisedExGst)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(bal.itemisedInclGst - bal.itemisedExGst)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(bal.itemisedInclGst)}</span></div>`
+      : (bal.contractTotal > 0 || bal.basis === "contra") ? ""
+      : `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(0)}</span></div>`;
     const summaryRow = (label: string, value: string, opts?: { strong?: boolean }) =>
       `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:${opts?.strong ? "var(--ink2)" : "var(--gray)"}"><span style="text-align:right;${opts?.strong ? "font-weight:700" : ""}">${label}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${value}</span></div>`;
-    const minSpendRow = minSpendAmt > 0 ? summaryRow("Minimum spend", fmtCurrency(minSpendAmt), { strong: true }) : "";
+    // The figure the balance is worked from is marked "applies".
+    const minSpendRow = (minSpendAmt > 0 ? summaryRow(`Minimum spend${bal.basis === "minimum spend" ? " &middot; applies" : ""}`, fmtCurrency(minSpendAmt), { strong: true }) : "")
+      + (bal.basis === "booking total" ? summaryRow("Booking total &middot; applies", fmtCurrency(bookingTotalNum), { strong: true }) : "");
     // A deposit that isn't a numbered step (not required, but paid anyway)
     // would otherwise vanish with the old Billing Instructions block.
     const strayDepositRow = (!(depositRequired && depAmt > 0) && depAmt > 0)
       ? summaryRow(`Deposit &middot; ${booking.depositPaid ? "paid" : "due"}`, fmtCurrency(depAmt)) : "";
-    const balanceRows = contraFood ? summaryRow("Balance to collect &middot; contra, no charge", fmtCurrency(0), { strong: true })
-      : depositOffThisBill && totalInclGst > 0
-      ? summaryRow("Less deposit received", `&minus;${fmtCurrency(depAmt)}`)
-        + `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:9px 16px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink)"><span style="text-align:right;font-weight:700">Balance to collect</span><span style="text-align:right;font-family:var(--serif);font-size:15px;font-weight:600">${fmtCurrency(Math.max(0, totalInclGst - depAmt))}</span></div>`
-      : "";
-    const moneyBand = (clientCopy && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0 || depAmt > 0))
+    const balanceRows = clientBillBalanceRows(bal, { depositAmount: depAmt }).map(r => r.balance
+      ? `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:9px 16px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink)"><span style="text-align:right;font-weight:700">${r.label}</span><span style="text-align:right;font-family:var(--serif);font-size:15px;font-weight:600">${fmtCurrency(r.amount)}</span></div>`
+      : summaryRow(r.label, r.minus ? `&minus;${fmtCurrency(r.amount)}` : fmtCurrency(r.amount), { strong: r.strong })).join("");
+    const moneyBand = (clientCopy && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0 || depAmt > 0 || bal.contractTotal > 0))
       ? bandLabel("What it comes to", escHtml(eventDate))
         // Column headings only when there are lines under them; an empty
         // Item/Price/Qty header over a bare total reads as missing data.
@@ -2142,15 +2127,7 @@ ${sheetsHtml}
       // "Running totals" / "Financials" hide the money, never the client's
       // contact; Financials also hides how the event is billed.
       const hideMoney = noFinancials || hideSet.has("totals");
-      const bookingTotalNum = Number(booking.totalNzd ?? 0) || 0;
-      // Same rule as the runsheet screen (shared/eventBilling): no bar tab.
-      const bal = eventBalance({
-        fnb: fnbList as any, costItems: costList, gstInclusive: gstInclusiveFlag,
-        bookingTotal: bookingTotalNum, minimumSpend: minSpendAmt,
-        depositAmount: depAmt, depositPaid: booking.depositPaid, depositApplied: termsDeposit,
-        billingFood: termsFood,
-        paidToDate: await paidTowardBookingBill(booking.id, booking.ownerId),
-      });
+      // `bal` is the same eventBalance the client copy prints (no bar tab).
       const contra = bal.basis === "contra";
       const billingFull: NonNullable<RunSheetData["billing"]> = {
         client: { name: clientName, phone: leadPhone || (booking as any).phone || undefined, email: leadEmail || undefined },
