@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { DRINK_GROUPS, DRINK_GROUP_LABEL, drinkGroupOf, groupDrinks } from "@shared/drinkGroups";
-import { eventBalance } from "@shared/eventBilling";
+import { eventBalance, isFoodBeverageCost } from "@shared/eventBilling";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
@@ -49,12 +49,23 @@ function AutoGrowField({ value, onChange, singleLine, className, ...rest }: Omit
   value: string; onChange: (v: string) => void; singleLine?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  React.useLayoutEffect(() => {
+  const fit = React.useCallback(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
+  }, []);
+  React.useLayoutEffect(fit, [value, fit]);
+  // Re-fit when the field's width changes (window resize, phone rotation),
+  // or the height measured at the old width sticks.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; fit(); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
   return (
     <textarea
       ref={ref}
@@ -546,6 +557,8 @@ export default function RunsheetBuilder() {
   // Independent "show drink prices on the BEO" toggle (separate from the food
   // PRICE column). Defaults ON so priced drinks appear; persisted per runsheet.
   const [showDrinkPrices, setShowDrinkPrices] = useState(true);
+  // Which selected drink has its type / price editor open (one at a time).
+  const [editingDrink, setEditingDrink] = useState<string | null>(null);
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
 
   // F&B
@@ -599,7 +612,6 @@ export default function RunsheetBuilder() {
 
   // Floor plan link
   const [linkedFloorPlanId, setLinkedFloorPlanId] = useState<number | undefined>(undefined);
-  const [floorPlanSectionOpen, setFloorPlanSectionOpen] = useState(false);
 
   // Section ordering and visibility (persisted to localStorage)
   // Note: 'dietary' was removed — it now lives as a sub-tab inside the F&B tab.
@@ -1573,7 +1585,9 @@ export default function RunsheetBuilder() {
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
-    { enabled: floorPlanSectionOpen || activeSection === 'tableplan' }
+    // Always loaded: the Table Plan picker needs it, and it used to say "No
+    // floor plans yet" until you happened to scroll to that section.
+    {}
   );
   const { data: linkedFloorPlan } = trpc.floorPlans.get.useQuery(
     { id: linkedFloorPlanId! },
@@ -2582,7 +2596,7 @@ export default function RunsheetBuilder() {
             else if (leadId) navigate("/dashboard");
             else navigate("/runsheet");
           }}
-          className="text-ink/75 hover:text-forest flex items-center gap-1.5 font-dm text-xs min-h-[44px] pr-1"
+          className="min-h-[40px] max-md:min-h-[44px] text-ink/75 hover:text-forest flex items-center gap-1.5 font-dm text-xs min-h-[44px] pr-1"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden /> {bookingId ? 'Event' : 'Back'}
         </button>
@@ -2597,7 +2611,7 @@ export default function RunsheetBuilder() {
             <button
               onClick={() => setViewMode('edit')}
               aria-pressed={viewMode === 'edit'}
-              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors ${
+              className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors ${
                 viewMode === 'edit' ? 'bg-forest text-cream shadow-sm font-semibold' : 'text-ink/75 hover:text-forest'
               }`}
             >
@@ -2608,7 +2622,7 @@ export default function RunsheetBuilder() {
               disabled={!effectiveBookingId}
               aria-pressed={viewMode === 'preview'}
               title={effectiveBookingId ? 'Read-only runsheet staff & kitchen see' : 'Link this runsheet to an event to preview'}
-              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 viewMode === 'preview' ? 'bg-forest text-cream shadow-sm font-semibold' : 'text-ink/75 hover:text-forest'
               }`}
             >
@@ -2622,7 +2636,7 @@ export default function RunsheetBuilder() {
               onClick={() => setExportMenuOpen(v => !v)}
               aria-expanded={exportMenuOpen}
               aria-haspopup="menu"
-              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border transition-colors ${
+              className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border transition-colors ${
                 exportMenuOpen ? 'text-forest bg-linen border-gold/40' : 'text-ink/75 border-gold/50 hover:text-forest hover:bg-linen'
               }`}
               title="Print, export and share options"
@@ -2760,7 +2774,7 @@ export default function RunsheetBuilder() {
                   setExtraEmails("");
                 }}
                 title="Email the runsheet link + BEO PDF to your staff"
-                className="no-print font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border border-gold/50 text-ink/75 hover:text-forest hover:bg-linen transition-colors"
+                className="min-h-[40px] max-md:min-h-[44px] no-print font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border border-gold/50 text-ink/75 hover:text-forest hover:bg-linen transition-colors"
               >
                 <Mail className="w-3.5 h-3.5" aria-hidden /> <span className="hidden sm:inline">Send to staff</span>
               </button>
@@ -2803,7 +2817,7 @@ export default function RunsheetBuilder() {
       </nav>
 
       {/* ── DocBar — document identity strip ────────────────────────────── */}
-      <div role="region" aria-label="Document details" className="no-print sticky top-14 z-40 bg-cream/90 backdrop-blur border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
+      <div role="region" aria-label="Document details" className="no-print md:sticky top-14 z-40 bg-cream border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
         <h1 className="font-serif text-base sm:text-lg font-semibold text-ink truncate max-w-[40vw]">
           {title || 'Untitled runsheet'}
         </h1>
@@ -2912,8 +2926,20 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
-      {/* ── Smart Paste Import (promoted to an inviting card) ───────────── */}
-      {viewMode === 'edit' && (
+      {/* ── Smart Paste Import ─────────────────────────────────────────────
+          The big card is for a new, empty sheet. Once the sheet has a run of
+          day or food, it shrinks to a button so the event comes first. */}
+      {viewMode === 'edit' && (items.length > 0 || fnbItems.length > 0) && !smartPasteOpen && (
+        <div className="no-print max-w-6xl mx-auto px-4 sm:px-6 pt-4 flex justify-end">
+          <button
+            onClick={() => setSmartPasteOpen(true)}
+            className="inline-flex items-center gap-2 font-dm text-sm font-semibold text-forest border border-forest/40 rounded-md px-3 min-h-[44px] hover:bg-forest/5"
+          >
+            <Sparkles className="w-4 h-4" aria-hidden /> Smart paste from an email or brief
+          </button>
+        </div>
+      )}
+      {viewMode === 'edit' && (smartPasteOpen || (items.length === 0 && fnbItems.length === 0)) && (
         <div className="no-print max-w-6xl mx-auto px-4 sm:px-6 pt-5">
           <div className="rounded-lg bg-[#2f5488] text-white overflow-hidden shadow-sm">
             <button
@@ -3011,12 +3037,15 @@ export default function RunsheetBuilder() {
 
         {/* ── Section rail / quick-jump (replaces the six tabs) ──────────── */}
         {/* Mobile: sticky horizontal quick-jump chips */}
-        <div className="md:hidden sticky top-[100px] z-30 -mx-4 sm:-mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
+        {/* Sits right under the toolbar. It used to stick at 100px, under the
+            (then sticky) event title bar, so the two overlapped and the page
+            showed through. On a phone only the toolbar and these stick. */}
+        <div className="md:hidden sticky top-14 z-30 -mx-4 sm:-mx-6 px-4 py-2 bg-cream border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
           {RUNSHEET_SECTIONS.map(s => (
             <button
               key={s.id}
               onClick={() => scrollToSection(s.id)}
-              className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full font-bebas tracking-widest text-[11px] transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 px-3 min-h-[40px] rounded-full font-bebas tracking-widest text-[11px] transition-colors ${
                 activeSection === s.id ? 'bg-[#2f5488] text-white' : 'bg-forest/5 text-ink/75'
               }`}
             >
@@ -3065,7 +3094,7 @@ export default function RunsheetBuilder() {
                     <button
                       key={s.id}
                       onClick={() => scrollToSection(s.id)}
-                      className="flex items-center gap-2 font-dm text-xs text-ink/75 hover:text-forest text-left"
+                      className="min-h-[40px] max-md:min-h-[44px] flex items-center gap-2 font-dm text-xs text-ink/75 hover:text-forest text-left"
                     >
                       <span className="w-3 h-3 rounded-full border-[1.5px] border-gold/50 flex-none" />
                       Add {s.label.toLowerCase()}
@@ -3084,7 +3113,7 @@ export default function RunsheetBuilder() {
           <main id="rs-main" className="min-w-0 space-y-6">
 
         {/* ── Event Details Card ──────────────────────────────────────────── */}
-        <section id="rb-details" className="scroll-mt-[120px]">
+        <section id="rb-details" className="scroll-mt-[120px] md:scroll-mt-[140px]">
         <div className="dante-card p-6 print:shadow-none print:border-0 print:mb-2 print:p-0">
           {/* Editorial event header — eyebrow + lifecycle status pill */}
           <div className="flex items-end justify-between gap-3 mb-2 no-print">
@@ -3266,7 +3295,7 @@ export default function RunsheetBuilder() {
 
               if (sectionId === 'setup') return (
                 <SortableSection key="setup" id="setup">
-                  <div id="rb-setup" data-print-section="setup" className={`dante-card mb-6 scroll-mt-[120px] print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                  <div id="rb-setup" data-print-section="setup" className={`dante-card mb-6 scroll-mt-[120px] md:scroll-mt-[140px] print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
                       <button
@@ -3317,7 +3346,7 @@ export default function RunsheetBuilder() {
                           <span className="font-bebas tracking-widest text-[11px] text-ink/75">QUICK FILL TEMPLATES</span>
                           <button
                             onClick={openSetupManager}
-                            className="flex items-center gap-1.5 font-dm text-xs text-forest hover:text-forest transition-colors min-h-[44px] px-1"
+                            className="min-h-[40px] max-md:min-h-[44px] flex items-center gap-1.5 font-dm text-xs text-forest hover:text-forest transition-colors min-h-[44px] px-1"
                           >
                             <Settings2 className="w-3.5 h-3.5" aria-hidden /> Customise
                           </button>
@@ -3595,12 +3624,12 @@ export default function RunsheetBuilder() {
         )}
 
         {/* ── TIMELINE SECTION ────────────────────────────────────────────── */}
-        <section id="rb-timeline" className="scroll-mt-[120px]">
+        <section id="rb-timeline" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div data-print-section="timeline" className="dante-card border-t-0 print:shadow-none">
             {/* Timeline header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-3">
-                <h2 className="font-sans text-[11px] tracking-[0.2em] font-extrabold uppercase text-ink/75">EVENT TIMELINE</h2>
+                <h2 className="font-sans text-[11px] tracking-[0.2em] font-extrabold uppercase text-ink/75 whitespace-nowrap">EVENT TIMELINE</h2>
                 {items.length > 0 && (() => {
                   const sorted = [...items].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
                   const first = sorted[0]; const last = sorted[sorted.length - 1];
@@ -3614,13 +3643,13 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowPasteImport(true); setParsedData(null); setPasteText(''); }}
-                  className="font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
+                  className="whitespace-nowrap min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
                 >
                   <FileText className="w-3.5 h-3.5" aria-hidden /> Import from text
                 </button>
                 <button
                   onClick={addItem}
-                  className="font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 transition-colors border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5"
+                  className="whitespace-nowrap min-h-[40px] max-md:min-h-[44px] font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 transition-colors border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5"
                 >
                   <Plus className="w-3.5 h-3.5" aria-hidden /> Add item
                 </button>
@@ -3683,8 +3712,10 @@ export default function RunsheetBuilder() {
                       }`}
                       style={hlBg ? { backgroundColor: hlBg } : undefined}
                     >
-                      {/* Main row */}
-                      <div className="flex items-center gap-0 print:gap-3">
+                      {/* Main row — on a phone the move/copy/delete buttons wrap onto
+                          their own line, so the title keeps the width it needs
+                          (they used to squeeze it to nothing). */}
+                      <div className="flex flex-wrap md:flex-nowrap items-center gap-0 print:gap-3">
                         {/* Run-of-day timeline node — a coloured dot on a vertical
                             connector line (deep blue normally, red for flagged /
                             key moments), so the run of day reads as one thread. */}
@@ -3773,7 +3804,7 @@ export default function RunsheetBuilder() {
 
 
                         {/* Actions */}
-                        <div className="flex items-center gap-0.5 px-2 py-3 no-print opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <div className="w-full md:w-auto flex items-center justify-end gap-0.5 px-2 pb-1 md:py-3 no-print opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
                           <button
                             onClick={() => moveItem(idx, 'up')}
                             disabled={idx === 0}
@@ -3953,7 +3984,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── FOOD & BEVERAGE SECTION ─────────────────────────────────────── */}
-        <section id="rb-fnb" className="scroll-mt-[120px]">
+        <section id="rb-fnb" className="scroll-mt-[120px] md:scroll-mt-[140px]">
         <div data-print-section="food">
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
@@ -3971,14 +4002,14 @@ export default function RunsheetBuilder() {
                       if (!name) return;
                       setFnbItems(prev => [...prev, { section: 'foh', course: name, dishName: '', qty: defaultCovers, dietary: '', serviceTime: '', staffAssigned: '', prepNotes: '', platingNotes: '', drinkCategory: '' } as any]);
                     }}
-                    className="font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
+                    className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
                     title="Add a new course (e.g. Petit Fours, Coffee)"
                   >
                     <Plus className="w-3.5 h-3.5" aria-hidden /> Add course
                   </button>
                   <button
                     onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
-                    className="font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
+                    className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
                     title="Paste a menu and let AI split it into dishes"
                   >
                     <Sparkles className="w-3.5 h-3.5" aria-hidden /> AI paste
@@ -4353,9 +4384,18 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/80 flex items-start gap-2 no-print">
-                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden />
-                <span className="min-w-0">Use the <strong className="text-forest">Linked Proposal</strong> section below to connect a proposal and auto-import F&amp;B selections.</span>
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/80 flex items-center gap-2 no-print">
+                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">Have a proposal for this event? Link it to bring its food and drinks in.</span>
+                {/* Opens the Linked Proposal panel and takes you there, rather
+                    than telling you to go and find it further down the page. */}
+                <button
+                  type="button"
+                  onClick={() => { setProposalSectionOpen(true); setTimeout(() => document.getElementById('rb-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
+                  className="flex-none font-dm text-xs font-semibold text-forest border border-forest/40 rounded-sm px-3 min-h-[40px] -my-2 hover:bg-forest/5"
+                >
+                  Link a proposal
+                </button>
               </div>
             )}
 
@@ -4367,7 +4407,7 @@ export default function RunsheetBuilder() {
                   <button
                     onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
                     aria-pressed={fnbCustomMode}
-                    className={`font-dm text-xs flex items-center gap-1.5 border rounded-sm px-3 min-h-[44px] transition-colors ${
+                    className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 border rounded-sm px-3 min-h-[44px] transition-colors ${
                       fnbCustomMode ? 'bg-gold/20 border-gold text-ink font-semibold' : 'border-gold/20 text-ink/80 hover:bg-linen'
                     }`}
                   >
@@ -4375,13 +4415,13 @@ export default function RunsheetBuilder() {
                   </button>
                   <button
                     onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setFnbCustomMode(false); }}
-                    className="font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
+                    className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
                   >
                     <UtensilsCrossed className="w-3.5 h-3.5" aria-hidden /> Add from catalogue
                   </button>
                   <button
                     onClick={addNewCourse}
-                    className="font-dm text-xs text-ink/75 hover:text-forest flex items-center gap-1.5 border border-gold/20 rounded-sm px-3 min-h-[44px] hover:bg-linen transition-colors"
+                    className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-ink/75 hover:text-forest flex items-center gap-1.5 border border-gold/20 rounded-sm px-3 min-h-[44px] hover:bg-linen transition-colors"
                     title="Create a new course header for this runsheet"
                   >
                     <Plus className="w-3.5 h-3.5" aria-hidden /> New course
@@ -4555,7 +4595,7 @@ export default function RunsheetBuilder() {
                         <div key={item._tempId ?? originalIdx}>
                           {/* SCREEN — clean, menu-style collapsible row */}
                           <div
-                            className={`no-print flex items-center gap-3 px-5 py-2.5 border-b border-gold/20 text-sm font-dm group transition-colors border-l-4 ${isDrinks ? 'border-l-blue-300 hover:bg-blue-50/40' : `${cc.leftBorder} ${cc.rowHover}`} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : cc.expandBg) : ''}`}
+                            className={`no-print flex flex-wrap md:flex-nowrap items-center gap-x-3 gap-y-0.5 px-3 md:px-5 py-2 md:py-2.5 border-b border-gold/20 text-sm font-dm group transition-colors border-l-4 ${isDrinks ? 'border-l-blue-300 hover:bg-blue-50/40' : `${cc.leftBorder} ${cc.rowHover}`} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : cc.expandBg) : ''}`}
                           >
                             {/* course-colour dash */}
                             <span className={`flex-none w-4 h-0.5 rounded-full bg-current ${isDrinks ? 'text-blue-400' : cc.text}`} aria-hidden />
@@ -4564,8 +4604,12 @@ export default function RunsheetBuilder() {
                               value={item.dishName}
                               onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
                               placeholder="Dish name…"
-                              className="font-semibold text-ink bg-transparent border-0 focus:outline-none focus:bg-white/70 rounded px-1 -ml-1 min-w-0 w-[38%]"
+                              aria-label="Dish name"
+                              className="font-semibold text-ink bg-transparent border-0 focus:outline-none focus:bg-white/70 rounded px-1 -ml-1 min-w-0 flex-1 md:flex-none md:w-[38%] min-h-[36px]"
                             />
+                            {/* Phone: the dish name gets the whole first line; qty,
+                                tags, price and buttons go underneath. */}
+                            <span className="basis-full h-0 md:hidden" aria-hidden />
                             {/* covers — inline editable qty (kept in the collapsed row
                                 so quantities can be changed without expanding the dish) */}
                             {item.course !== 'Drinks' && (
@@ -4577,14 +4621,17 @@ export default function RunsheetBuilder() {
                                   value={item.qty || 1}
                                   onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))}
                                   aria-label="Quantity / covers"
-                                  className="w-12 text-center text-ink bg-transparent border border-transparent hover:border-gold/50 focus:border-forest focus:bg-white/70 rounded px-1 py-0.5 focus:outline-none"
+                                  className="min-h-[32px] w-12 text-center text-ink bg-transparent border border-transparent hover:border-gold/50 focus:border-forest focus:bg-white/70 rounded px-1 py-0.5 focus:outline-none"
                                 />
                               </span>
                             )}
                             {/* description preview */}
+                            {/* Phone: no room for a cut-off preview — expand the dish to read it. */}
                             {item.description
-                              ? <span className="flex-1 min-w-0 truncate text-ink/75">{item.description}</span>
-                              : <span className="flex-1" />}
+                              ? <span className="flex-1 min-w-0 truncate text-ink/75 hidden md:block">{item.description}</span>
+                              : null}
+                            <span className="flex-1 md:hidden" />
+                            {!item.description && <span className="flex-1 hidden md:block" />}
                             {/* dietary chip */}
                             {item.dietary && <span className="flex-none bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}
                             {/* price hint */}
@@ -4592,10 +4639,10 @@ export default function RunsheetBuilder() {
                               <span className="flex-none text-xs text-forest font-semibold font-dm">${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{item.course !== 'Drinks' ? '/head' : ''}</span>
                             )}
                             {/* actions — chevron always visible */}
-                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none -my-1 w-7 h-7 inline-flex items-center justify-center rounded-sm text-ink/75 hover:text-forest hover:bg-linen transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'} aria-label={isExpanded ? 'Collapse details' : 'Expand details'} aria-expanded={isExpanded}>
+                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none -my-1 w-11 h-11 md:w-9 md:h-9 inline-flex items-center justify-center rounded-sm text-ink/75 hover:text-forest hover:bg-linen transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'} aria-label={isExpanded ? 'Collapse details' : 'Expand details'} aria-expanded={isExpanded}>
                               <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
-                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none -my-1 w-7 h-7 inline-flex items-center justify-center rounded-sm text-ink/75 hover:text-red-600 hover:bg-red-50 transition-colors" title="Remove item (you can undo)" aria-label="Remove item"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none -my-1 w-11 h-11 md:w-9 md:h-9 inline-flex items-center justify-center rounded-sm text-ink/75 hover:text-red-600 hover:bg-red-50 transition-colors" title="Remove item (you can undo)" aria-label="Remove item"><Trash2 className="w-4 h-4" /></button>
                           </div>
                           {/* PRINT — full static column row so the printed runsheet
                               keeps its structured table (honours the column toggles) */}
@@ -4701,7 +4748,7 @@ export default function RunsheetBuilder() {
                             placeholder="Course name..."
                           />
                           <span className="text-xs text-ink/75 flex-shrink-0 font-dm italic no-print">click to rename</span>
-                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/75 hover:text-red-500 transition-colors p-0.5" title={`Delete all ${course} items`}>
+                          <button onClick={() => deleteCourse(course)} className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center no-print flex-shrink-0 text-ink/75 hover:text-red-500 transition-colors p-0.5" title={`Delete all ${course} items`}>
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -4751,73 +4798,73 @@ export default function RunsheetBuilder() {
             )}
             {/* ── RUNNING TOTALS (bottom of runsheet) ────────────────────────── */}
             {(() => {
-              // Pull F&B totals out of the selected dishes/drinks themselves
-              // (qty × unit price) so the running total reflects what the team
-              // actually chose, not just whatever cost line items were added
-              // separately. Food and drinks are split so the bar runs its own
-              // sub-total.
-              const fnbFoodTotal = fnbItems
-                .filter(it => (it.course ?? '') !== 'Drinks')
-                .reduce((sum, it) => sum + (Number(it.qty || 0) * Number(it.unitPrice ?? 0)), 0);
-              const fnbDrinkTotal = fnbItems
-                .filter(it => (it.course ?? '') === 'Drinks')
-                .reduce((sum, it) => sum + (Number(it.qty || 0) * Number(it.unitPrice ?? 0)), 0);
-              // Legacy cost-item food/bev (entered on the Costs tab) — kept so
-              // existing runsheets aren't visibly downgraded after the switch.
-              const costFood = costItems
-                .filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage'))
-                .reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
-              // Beverages are billed on consumption / bar tab, so the drinks
-              // selection is deliberately NOT totalled or rolled into the total.
-              const grandTotal = fnbFoodTotal + costFood + (rsTabAmount ? Number(rsTabAmount) : 0);
+              // One rule for every money figure on this page, the run sheet PDF
+              // and the balance tile at the top (shared/eventBilling): the
+              // larger of the booking total, minimum spend and itemised F&B
+              // incl. GST, less the deposit when it comes off this bill. The
+              // bar tab is a LIMIT billed on consumption — shown, never added.
+              // (This block used to add the tab in, so it disagreed with both
+              // the balance tile and the Costs total.)
+              const bal = eventBalance({
+                fnb: fnbItems as any, costItems, gstInclusive,
+                bookingTotal: (booking as any)?.totalNzd, minimumSpend: (booking as any)?.minimumSpend,
+                depositAmount: (booking as any)?.depositNzd, depositPaid: (booking as any)?.depositPaid,
+                depositApplied: (booking as any)?.billingDepositApplied, billingFood: (booking as any)?.billingFood,
+              });
+              const tab = rsTabAmount ? Number(rsTabAmount) : 0;
+              const dep = Number(booking?.depositNzd ?? 0);
+              const minSpend = Number(booking?.minimumSpend ?? 0);
               // Same resolution as the BEO: the per-event override wins.
               const effectivePaymentInstructions = paymentInstructions.trim() || venueDefaultPaymentInstructions;
-              const showBlock = booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd
-                || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || effectivePaymentInstructions.trim().length > 0;
+              const showBlock = minSpend > 0 || tab > 0 || dep > 0 || bal.itemisedInclGst > 0 || bal.contractTotal > 0
+                || effectivePaymentInstructions.trim().length > 0;
               if (!showBlock) return null;
+              const tile = "bg-white border border-gold/30 px-3 py-2";
+              const lbl = "font-bebas tracking-widest text-[11px] text-ink/75";
+              const fig = "font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink";
+              const contra = bal.basis === 'contra';
               return (
                 <div data-print-section="totals" className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
-                  <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap mb-3">
+                    <div className="font-bebas tracking-widest text-xs text-forest">WHAT IT COMES TO</div>
+                    <div className="font-dm text-xs text-ink/75">Same figures as the run sheet and Costs</div>
+                  </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
-                      <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[11px] text-ink/75">MINIMUM SPEND</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(booking.minimumSpend))}</div>
+                    {bal.itemisedInclGst > 0 && (
+                      <div className={tile}>
+                        <div className={lbl}>ITEMISED F&amp;B · INCL. GST</div>
+                        <div className={fig}>{currency(bal.itemisedInclGst)}</div>
                       </div>
                     )}
-                    {fnbFoodTotal > 0 && (
-                      <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[11px] text-ink/75">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(fnbFoodTotal)}</div>
+                    {minSpend > 0 && !contra && (
+                      <div className={tile}>
+                        <div className={lbl}>MINIMUM SPEND{bal.basis === 'minimum spend' ? ' · APPLIES' : ''}</div>
+                        <div className={fig}>{currency(minSpend)}</div>
                       </div>
                     )}
-                    {/* Drinks subtotal intentionally removed — beverages are not
-                        totalled here (billed on consumption / bar tab). */}
-                    {costFood > 0 && (
-                      <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[11px] text-ink/75">EXTRA F&amp;B (COSTS TAB)</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(costFood)}</div>
+                    {dep > 0 && (
+                      <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
+                        <div className={lbl}>DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
+                        <div className={fig}>{currency(dep)}</div>
+                        {booking?.depositPaid && !bal.depositOffThisBill && <div className="font-dm text-xs text-ink/75">Comes off the drinks bill</div>}
                       </div>
                     )}
-                    {rsTabAmount && Number(rsTabAmount) > 0 && (
-                      <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[11px] text-ink/75">BAR TAB</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(rsTabAmount))}</div>
-                      </div>
-                    )}
-                    {grandTotal > 0 && (
+                    {(bal.contractTotal > 0 || contra) && (
                       <div className="bg-forest text-cream border border-forest px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[11px] text-cream/85">RUNNING TOTAL</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(grandTotal)}</div>
-                      </div>
-                    )}
-                    {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
-                      <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
-                        <div className="font-bebas tracking-widest text-[11px] text-ink/75">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(booking.depositNzd))}</div>
+                        <div className="font-bebas tracking-widest text-[11px] text-cream/85">BALANCE TO COLLECT</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(bal.balance)}</div>
+                        <div className="font-dm text-xs text-cream/85">
+                          {contra ? 'Contra — food not charged'
+                            : `of ${currency(bal.contractTotal)}${bal.basis ? ` · ${bal.basis}` : ''}${bal.depositOffThisBill ? ' · less deposit' : ''}`}
+                        </div>
                       </div>
                     )}
                   </div>
+                  {tab > 0 && (
+                    <p className="mt-3 font-dm text-sm text-ink/80">
+                      <b className="font-semibold">Bar tab limit {currency(tab)}</b> — drinks are billed on what's poured, on their own bill, so the tab isn't added to the balance.
+                    </p>
+                  )}
                   {effectivePaymentInstructions.trim().length > 0 && (
                     <div data-print-section="payment" className="mt-3 bg-white border border-gold/50 px-4 py-3">
                       <div className="font-bebas tracking-widest text-[11px] text-ink/75 mb-1">PAYMENT INSTRUCTIONS</div>
@@ -4836,7 +4883,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── DRINKS SECTION ──────────────────────────────────────────────── */}
-        <section id="rb-drinks" className="scroll-mt-[120px]">
+        <section id="rb-drinks" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div data-print-section="drinks" className="dante-card border-t-0">
             {/* Header */}
             <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-4 sm:px-5 py-3 border-b border-gold/20">
@@ -4960,31 +5007,47 @@ export default function RunsheetBuilder() {
                           {g.items.map(e => {
                             const price = e.custom ? (rsDrinkPrices[e.name] ?? e.custom.price) : rsDrinkPrices[e.name];
                             return (
-                              <span key={e.key} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/50">
+                              <span key={e.key} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-sm px-2.5 py-1 font-dm border border-gold/50">
                                 <span className="min-w-0 break-words">{e.name}</span>
-                                <select
-                                  value={rsDrinkTypes[e.name] ?? ''}
-                                  onChange={ev => setRsDrinkTypes(prev => { const n = { ...prev }; if (ev.target.value) n[e.name] = ev.target.value; else delete n[e.name]; return n; })}
-                                  className="border border-gold/20 rounded-sm px-1 py-1 text-xs font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
-                                  title={`Drink type for ${e.name}`}
-                                  aria-label={`Drink type for ${e.name}`}
-                                >
-                                  <option value="">Auto: {DRINK_GROUP_LABEL[drinkGroupOf(e.name)]}</option>
-                                  {DRINK_GROUPS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                                </select>
-                                {/* Only offered when prices are actually going to be
-                                    shown — otherwise it's a field with no effect. */}
-                                {showDrinkPrices && (
-                                  <span className="inline-flex items-center text-xs text-ink/80">$
-                                    <input type="number" min={0} step={0.5} value={price ?? ''}
-                                      onChange={ev => setRsDrinkPrices(prev => { const n = { ...prev }; if (ev.target.value === '') delete n[e.name]; else n[e.name] = Number(ev.target.value); return n; })}
-                                      placeholder="—" title={`Price per ${e.name} (till amount)`} aria-label={`Price per ${e.name}`}
-                                      className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-xs font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
+                                {showDrinkPrices && price != null && <span className="text-ink/80 [font-variant-numeric:tabular-nums]">${price}</span>}
+                                {/* The drink type and till price are tucked behind
+                                    "Edit": a dropdown and an empty price box on every
+                                    drink made the list hard to read, and the type is
+                                    usually right (it's the heading above). */}
+                                {editingDrink === e.key ? (
+                                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                                    <select
+                                      value={rsDrinkTypes[e.name] ?? ''}
+                                      onChange={ev => setRsDrinkTypes(prev => { const n = { ...prev }; if (ev.target.value) n[e.name] = ev.target.value; else delete n[e.name]; return n; })}
+                                      className="border border-gold/50 rounded-sm px-1 text-xs font-dm focus:outline-none focus:border-forest bg-white min-h-[40px]"
+                                      title={`Drink type for ${e.name}`}
+                                      aria-label={`Drink type for ${e.name}`}
+                                    >
+                                      <option value="">Auto: {DRINK_GROUP_LABEL[drinkGroupOf(e.name)]}</option>
+                                      {DRINK_GROUPS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                                    </select>
+                                    {showDrinkPrices && (
+                                      <span className="inline-flex items-center text-xs text-ink/80">$
+                                        <input type="number" min={0} step={0.5} value={price ?? ''}
+                                          onChange={ev => setRsDrinkPrices(prev => { const n = { ...prev }; if (ev.target.value === '') delete n[e.name]; else n[e.name] = Number(ev.target.value); return n; })}
+                                          placeholder="—" title={`Price per ${e.name} (till amount)`} aria-label={`Price per ${e.name}`}
+                                          className="w-16 border border-gold/50 rounded-sm px-1 text-xs font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[40px]" />
+                                      </span>
+                                    )}
+                                    <button type="button" onClick={() => setEditingDrink(null)}
+                                      className="font-dm text-xs font-semibold text-forest px-2 min-h-[40px] hover:underline">Done</button>
                                   </span>
+                                ) : (
+                                  <button type="button" onClick={() => setEditingDrink(e.key)}
+                                    aria-label={`Edit ${e.name}${showDrinkPrices ? ' type and price' : ' type'}`}
+                                    title={showDrinkPrices ? 'Change type or price' : 'Change type'}
+                                    className="w-10 h-10 -my-1.5 inline-flex items-center justify-center text-ink/65 hover:text-forest rounded-sm">
+                                    <Pencil className="w-3.5 h-3.5" aria-hidden />
+                                  </button>
                                 )}
                                 <button type="button"
                                   onClick={() => e.custom ? setRsCustomDrinks(prev => prev.filter((_, j) => j !== e.index)) : setRsSelectedDrinks(prev => prev.filter(x => x !== e.name))}
-                                  title={`Remove ${e.name}`} aria-label={`Remove ${e.name}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/75 hover:text-[#b3261e] rounded-sm">×</button>
+                                  title={`Remove ${e.name}`} aria-label={`Remove ${e.name}`} className="w-10 h-10 -my-1.5 inline-flex items-center justify-center text-ink/75 hover:text-[#b3261e] rounded-sm text-base">×</button>
                               </span>
                             );
                           })}
@@ -5055,7 +5118,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── CHECKLIST SECTION ───────────────────────────────────────────── */}
-        <section id="rb-checklist" data-print-section="checklist" className="scroll-mt-[120px]">
+        <section id="rb-checklist" data-print-section="checklist" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-3">
@@ -5070,7 +5133,7 @@ export default function RunsheetBuilder() {
                 )}
                 <button
                   onClick={() => { setShowChecklistPaste(true); setChecklistParsed(null); setChecklistPasteText(""); }}
-                  className="font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 min-h-[44px] hover:bg-gold/5"
+                  className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 min-h-[44px] hover:bg-gold/5"
                   title="Paste a to-do list and AI will turn it into checklist items"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> AI PASTE
@@ -5092,7 +5155,7 @@ export default function RunsheetBuilder() {
                       navigator.clipboard.writeText(url);
                       toast.success('Staff checklist link copied!');
                     }}
-                    className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/5 px-3 py-1 transition-colors"
+                    className="min-h-[40px] max-md:min-h-[44px] flex items-center gap-1.5 font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/5 px-3 py-1 transition-colors"
                   >
                     <Share2 className="w-3.5 h-3.5" /> SHARE LINK
                   </button>
@@ -5199,7 +5262,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── TABLE PLAN SECTION ──────────────────────────────────────────── */}
-        <section id="rb-tableplan" data-print-section="tableplan" className={`scroll-mt-[120px] ${linkedFloorPlan ? '' : 'no-print'}`}>
+        <section id="rb-tableplan" data-print-section="tableplan" className={`scroll-mt-[120px] md:scroll-mt-[140px] ${linkedFloorPlan ? '' : 'no-print'}`}>
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
@@ -5233,7 +5296,7 @@ export default function RunsheetBuilder() {
               {!floorPlansList?.length && (
                 <p className="text-xs text-ink/75 font-dm mt-2">
                   No floor plans yet.{' '}
-                  <a href="/floor-plan" className="text-forest underline">Create one in Floor Plan Builder</a>.
+                  <a href="/floor-plan" className="inline-flex items-center min-h-[40px] max-md:min-h-[44px] text-forest underline">Create one in Floor Plan Builder</a>.
                 </p>
               )}
             </div>
@@ -5297,7 +5360,7 @@ export default function RunsheetBuilder() {
               <div className="flex flex-col items-center justify-center py-16 text-ink/75">
                 <LayoutGrid className="w-12 h-12 mb-3 opacity-20" />
                 <p className="font-dm text-sm">Link a floor plan above to view it here.</p>
-                <a href="/floor-plan" className="mt-3 font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1">
+                <a href="/floor-plan" className="inline-flex items-center min-h-[40px] max-md:min-h-[44px] mt-3 font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1">
                   <Plus className="w-3 h-3" /> CREATE FLOOR PLAN
                 </a>
               </div>
@@ -5308,9 +5371,10 @@ export default function RunsheetBuilder() {
         {(() => {
           const proposalList = (leadProposals ?? allProposals ?? []) as any[];
           return (
-          <div className="dante-card mt-4 no-print">
+          <div id="rb-proposal" className="dante-card mt-4 no-print scroll-mt-[120px] md:scroll-mt-[140px]">
             <button
               onClick={() => setProposalSectionOpen(v => !v)}
+              aria-expanded={proposalSectionOpen}
               className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
             >
               <div className="flex items-center gap-2">
@@ -5405,62 +5469,8 @@ export default function RunsheetBuilder() {
           );
         })()}
 
-        {/* ── Floor Plan Link section ──────────────────────────────────── */}
-        <div className="dante-card mt-4 no-print">
-          <button
-            onClick={() => setFloorPlanSectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <LayoutGrid className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-widest text-sm text-forest">FLOOR PLAN</span>
-              {linkedFloorPlanId && <span className="text-xs text-forest font-dm">(linked)</span>}
-            </div>
-            {floorPlanSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/75" /> : <ChevronDown className="w-4 h-4 text-ink/75" />}
-          </button>
-          {floorPlanSectionOpen && (
-            <div className="px-5 pb-5 pt-2 space-y-3">
-              <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">SELECT FLOOR PLAN</label>
-                <select
-                  value={linkedFloorPlanId ?? ""}
-                  onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
-                >
-                  <option value="">— No floor plan —</option>
-                  {(floorPlansList ?? []).map((fp: any) => (
-                    <option key={fp.id} value={fp.id}>{fp.name}</option>
-                  ))}
-                </select>
-              </div>
-              {linkedFloorPlanId && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => scrollToSection('tableplan')}
-                    className="font-bebas tracking-widest text-[11px] text-forest hover:underline flex items-center gap-1"
-                  >
-                    <LayoutGrid className="w-3 h-3" /> VIEW IN TABLE PLAN
-                  </button>
-                  <span className="text-ink/45">•</span>
-                  <a
-                    href={`/floor-plan?id=${linkedFloorPlanId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-bebas tracking-widest text-[11px] text-forest hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" /> OPEN EDITOR
-                  </a>
-                </div>
-              )}
-              {!floorPlansList?.length && (
-                <p className="text-xs text-ink/75 font-dm">
-                  No floor plans yet.{' '}
-                  <a href="/floor-plan" className="text-forest underline">Create one</a>.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+        {/* The separate "Floor plan" picker that lived here duplicated the
+            Table Plan section above (same select, same links) — removed. */}
 
         {/* ── Staff Portal Links section ───────────────────────────────── */}
         {sheetId && (
@@ -5593,7 +5603,7 @@ export default function RunsheetBuilder() {
                 ) : (
                   <button
                     onClick={() => setCreatingStaffLink(true)}
-                    className="font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
+                    className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" aria-hidden /> New staff link
                   </button>
@@ -5603,8 +5613,10 @@ export default function RunsheetBuilder() {
           </div>
         )}
 
-        {/* ── Wedding Checklist — send a fill-in-yourself link to the couple ── */}
-        {sheetId && (
+        {/* ── Wedding Checklist — send a fill-in-yourself link to the couple ──
+            Only for weddings (or once a link exists): on any other event it
+            was one more box to scroll past. */}
+        {sheetId && (/wedding/i.test(eventType) || !!weddingChecklist) && (
           <div className="dante-card mt-4 no-print">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
@@ -5725,7 +5737,7 @@ export default function RunsheetBuilder() {
               <button
                 onClick={() => attachmentInputRef.current?.click()}
                 disabled={uploadingAttachment}
-                className="font-bebas tracking-widest text-xs text-forest hover:text-forest flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors disabled:opacity-50"
+                className="min-h-[40px] max-md:min-h-[44px] font-bebas tracking-widest text-xs text-forest hover:text-forest flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors disabled:opacity-50"
               >
                 <Plus className="w-3 h-3" /> {uploadingAttachment ? 'UPLOADING...' : 'ATTACH PDF'}
               </button>
@@ -5743,7 +5755,7 @@ export default function RunsheetBuilder() {
             and the Billing Instructions paragraph was a VENUE-WIDE setting with
             no per-event override at all — so seeing something wrong on the
             printed sheet gave you no way to work out where to change it. */}
-        <section id="rb-billing" className="scroll-mt-[120px]">
+        <section id="rb-billing" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div className="dante-card border-t-0 no-print">
             <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-4 sm:px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2 min-w-0">
@@ -5928,7 +5940,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── COSTS SECTION ───────────────────────────────────────────────── */}
-        <section id="rb-costs" className="scroll-mt-[120px]">
+        <section id="rb-costs" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div className="dante-card border-t-0 no-print">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
@@ -5978,8 +5990,75 @@ export default function RunsheetBuilder() {
               )}
             </div>
 
+            {/* Phone: each cost line as a small card — the six-column table
+                ran off the side of the screen. */}
+            <div className="md:hidden divide-y divide-gold/20 border-b border-gold/20">
+              {costItems.length === 0 && fnbCostMirror.length === 0 && (
+                <p className="px-4 py-8 text-center text-ink/75 font-dm text-sm">No cost items yet — add one below{linkedProposalId ? ' or import from the linked proposal' : ''}</p>
+              )}
+              {fnbCostMirror.map((it, i) => (
+                <div key={`m-fnbmirror-${(it as any)._tempId ?? i}`} className="px-4 py-3 bg-linen/25 font-dm">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-sm text-ink/90 min-w-0 break-words">{it.dishName || 'Menu item'}</span>
+                    <span className="flex-none font-semibold text-ink text-sm">{currency((Number(it.qty || 0) * Number(it.unitPrice ?? 0)))}</span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink/75">
+                    {it.qty} × {currency(Number(it.unitPrice ?? 0))} · Food &amp; Beverage · <span className="font-bebas tracking-widest text-forest">F&amp;B SHEET</span>
+                  </div>
+                </div>
+              ))}
+              {costItems.map((ci, idx) => (
+                <div key={`m-${ci._id ?? idx}`} className="px-4 py-3 space-y-2 font-dm">
+                  <div className="flex items-start gap-2">
+                    <input
+                      value={ci.label}
+                      onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))}
+                      placeholder="Item description..."
+                      aria-label={`Description of cost item ${idx + 1}`}
+                      className="flex-1 min-w-0 border border-gold/50 rounded-sm px-3 min-h-[44px] text-sm bg-white focus:outline-none focus:border-forest"
+                    />
+                    <button
+                      onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
+                      aria-label={`Remove cost item${ci.label ? `: ${ci.label}` : ''}`}
+                      className="flex-none w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/65 hover:bg-[#b3261e]/10 hover:text-[#b3261e]"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-[1fr_64px_88px] gap-2 items-center">
+                    <select
+                      aria-label={`Category for ${ci.label || `cost item ${idx + 1}`}`}
+                      value={ci.category || ''}
+                      onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, category: e.target.value } : x))}
+                      className="min-w-0 border border-gold/50 rounded-sm px-2 min-h-[44px] text-sm bg-white focus:outline-none focus:border-forest"
+                    >
+                      {!ci.category && <option value="">Uncategorised</option>}
+                      {['Food & Beverage', 'Bar & Beverages', 'Venue Hire', 'AV & Tech', 'Styling & Decor', 'Staffing', 'Additional', 'Other'].map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number" min={1} inputMode="numeric"
+                      aria-label={`Quantity for ${ci.label || `cost item ${idx + 1}`}`}
+                      value={ci.qty}
+                      onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, qty: Number(e.target.value) || 1 } : x))}
+                      className="border border-gold/50 rounded-sm px-2 min-h-[44px] text-sm text-center bg-white focus:outline-none focus:border-forest"
+                    />
+                    <input
+                      type="number" min={0} step={0.01} inputMode="decimal"
+                      aria-label={`Unit price for ${ci.label || `cost item ${idx + 1}`}`}
+                      value={ci.unitPrice}
+                      onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, unitPrice: Number(e.target.value) || 0 } : x))}
+                      className="border border-gold/50 rounded-sm px-2 min-h-[44px] text-sm text-right bg-white focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                  <div className="text-right text-sm font-semibold text-ink">{currency((ci.qty * ci.unitPrice))}</div>
+                </div>
+              ))}
+            </div>
+
             {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm font-dm">
                 <thead>
                   <tr className="border-b border-gold/20 bg-linen/30">
@@ -6037,10 +6116,11 @@ export default function RunsheetBuilder() {
                       <td className="px-4 py-2">
                         <select
                           aria-label={`Category for ${ci.label || `cost item ${idx + 1}`}`}
-                          value={ci.category}
+                          value={ci.category || ''}
                           onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, category: e.target.value } : x))}
                           className="w-full bg-transparent border-0 focus:outline-none text-ink/80 font-dm text-xs cursor-pointer"
                         >
+                          {!ci.category && <option value="">Uncategorised</option>}
                           {['Food & Beverage', 'Bar & Beverages', 'Venue Hire', 'AV & Tech', 'Styling & Decor', 'Staffing', 'Additional', 'Other'].map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
@@ -6090,7 +6170,7 @@ export default function RunsheetBuilder() {
             <div className="px-4 py-3 border-t border-gold/20">
               <button
                 onClick={() => setCostItems(prev => [...prev, { _id: `new-${Date.now()}`, label: '', qty: 1, unitPrice: 0, category: 'Other' }])}
-                className="font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
+                className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs font-semibold text-forest hover:text-forest flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" aria-hidden /> Add item
               </button>
@@ -6099,16 +6179,16 @@ export default function RunsheetBuilder() {
             {/* GST toggle + payment notes */}
             <div className="px-5 py-3 border-t border-gold/20 bg-linen/20 flex flex-col gap-3">
               {/* GST toggle */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="font-bebas tracking-widest text-[11px] text-ink/75">PRICES ARE</span>
                 <div className="flex rounded-sm overflow-hidden border border-gold/20">
                   <button
                     onClick={() => setGstInclusive(false)}
-                    className={`font-bebas tracking-widest text-[11px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/80 hover:bg-linen'}`}
+                    className={`min-h-[40px] max-md:min-h-[44px] font-bebas tracking-widest text-[11px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/80 hover:bg-linen'}`}
                   >GST EXCLUSIVE</button>
                   <button
                     onClick={() => setGstInclusive(true)}
-                    className={`font-bebas tracking-widest text-[11px] px-3 py-1.5 transition-colors ${gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/80 hover:bg-linen'}`}
+                    className={`min-h-[40px] max-md:min-h-[44px] font-bebas tracking-widest text-[11px] px-3 py-1.5 transition-colors ${gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/80 hover:bg-linen'}`}
                   >GST INCLUSIVE</button>
                 </div>
                 <span className="font-dm text-xs text-ink/65">{gstInclusive ? 'Prices already include 15% GST' : 'GST (15%) will be added on top'}</span>
@@ -6119,12 +6199,21 @@ export default function RunsheetBuilder() {
             {(costItems.length > 0 || fnbCostMirror.length > 0) && (() => {
               // Include the mirrored F&B priced food so the Costs-tab total is
               // the full client bill (food + manual cost lines), matching the BEO.
-              const entered = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0) + fnbCostMirrorTotal;
+              // Only food & beverage lines go on the client's bill (the run sheet
+              // and the balance use the same rule); other categories are the
+              // venue's own costs. The total used to include them, so it never
+              // matched the balance to collect.
+              const billedCosts = costItems.filter(ci => isFoodBeverageCost(ci));
+              const unbilledCosts = costItems.filter(ci => !isFoodBeverageCost(ci) && ci.qty * ci.unitPrice !== 0);
+              const unbilledTotal = unbilledCosts.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
+              const entered = billedCosts.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0) + fnbCostMirrorTotal;
               const subtotal = gstInclusive ? entered / 1.15 : entered;
               const gstAmt = gstInclusive ? entered - subtotal : entered * 0.15;
               const total = gstInclusive ? entered : entered + gstAmt;
               const byCategory = costItems.reduce((acc, ci) => {
-                acc[ci.category] = (acc[ci.category] ?? 0) + ci.qty * ci.unitPrice;
+                // Lines saved before categories existed have none — never print "undefined".
+                const cat = ci.category || 'Uncategorised';
+                acc[cat] = (acc[cat] ?? 0) + ci.qty * ci.unitPrice;
                 return acc;
               }, {} as Record<string, number>);
               if (fnbCostMirrorTotal > 0) {
@@ -6133,12 +6222,12 @@ export default function RunsheetBuilder() {
               return (
                 <div className="border-t border-gold/20 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
                   {/* Category breakdown */}
-                  <div className="space-y-1">
+                  <div className="space-y-1 md:min-w-[280px]">
                     <div className="font-bebas tracking-widest text-[11px] text-ink/75 mb-2">BY CATEGORY</div>
                     {Object.entries(byCategory).map(([cat, amt]) => (
                       <div key={cat} className="flex items-center gap-6 text-xs font-dm">
                         <span className="text-ink/75 w-36">{cat}</span>
-                        <span className="text-ink font-semibold">{currency((gstInclusive ? amt / 1.15 : amt))}<span className="font-normal text-ink/75 text-xs ml-1">ex GST</span></span>
+                        <span className="text-ink font-semibold whitespace-nowrap">{currency((gstInclusive ? amt / 1.15 : amt))}<span className="font-normal text-ink/75 text-xs ml-1">ex GST</span></span>
                       </div>
                     ))}
                   </div>
@@ -6153,15 +6242,18 @@ export default function RunsheetBuilder() {
                       <span>{currency(gstAmt)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-dm font-bold text-ink border-t border-gold/40 pt-1.5 mt-1.5">
-                      <span>Total (incl. GST)</span>
+                      <span>On the client's bill (incl. GST)</span>
                       <span>{currency(total)}</span>
                     </div>
-                    {/* Says what this total IS, so a difference from the balance
-                        above or the revenue tile below reads as a different
-                        basis rather than as one of them being wrong. */}
                     <div className="font-dm text-xs text-ink/75 pt-1">
-                      Priced F&amp;B + cost lines. Excludes the bar tab.
+                      Priced F&amp;B + food &amp; beverage lines. Excludes the bar tab.
                     </div>
+                    {unbilledTotal !== 0 && (
+                      <div className="font-dm text-xs text-ink/80 pt-2 mt-1 border-t border-dashed border-gold/40">
+                        <b className="font-semibold">Not billed: {currency(unbilledTotal)}</b>{gstInclusive ? '' : ' ex GST'} — {Array.from(new Set(unbilledCosts.map(ci => ci.category || 'Uncategorised'))).join(', ')}.
+                        {' '}Set a line's category to Food &amp; Beverage to put it on the bill.
+                      </div>
+                    )}
                   </div>
                 </div>
               );

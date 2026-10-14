@@ -89,11 +89,8 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
             Clear
           </ToolBtn>
         </div>
-      ) : (
-        <div className="px-3 py-1 border-b border-gold/20 bg-linen/20 font-dm text-[10px] text-ink/35 select-none">
-          Click to edit — bold, italic, highlight and alert
-        </div>
-      )}
+      ) : null /* The toolbar appears when you click in. A permanent "Click to
+         edit — bold, italic…" caption above every notes box read as content. */}
 
       {/* Editable area */}
       <div

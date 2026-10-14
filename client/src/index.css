@@ -504,7 +504,10 @@
   }
 
   /* ── Flex defaults ── */
-  .flex { min-width: 0; min-height: 0; }
+  /* :where() — zero specificity, so an explicit min-h-[44px] / min-w-[…] on a
+     flex element wins. As a plain .flex rule it beat them (same layer, later
+     in the file), which quietly shrank every 44px tap target to its text. */
+  :where(.flex) { min-width: 0; min-height: 0; }
 
   /* ── Minimum text size ──
      ~500 labels were set at 8–10px, below what's comfortably readable on a
