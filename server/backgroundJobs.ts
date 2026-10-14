@@ -7,6 +7,7 @@ import { startJobs } from "./jobs";
 export async function startBackgroundJobs() {
   // e.g. (await import("./followUps")).registerFollowUpJobs();
   (await import("./speedToLead")).registerSpeedToLeadJobs();
+  (await import("./partialEnquiries")).registerPartialEnquiryJobs();
   (await import("./inbox")).registerInboxJobs();
   (await import("./proposalExpiry")).registerProposalExpiryJob();
   (await import("./proposalDoubleCheck")).registerProposalDoubleCheckJob();
