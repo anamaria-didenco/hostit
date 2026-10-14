@@ -8,9 +8,9 @@
  * booking — so a failed check left an "accepted" proposal with no booking.
  */
 import { TRPCError } from "@trpc/server";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { getDb, getLeadById, addLeadActivity, updateLead } from "./db";
-import { proposals, bookings, contracts, clientPortalTokens, type Proposal } from "../drizzle/schema";
+import { proposals, bookings, runsheets, contracts, clientPortalTokens, type Proposal } from "../drizzle/schema";
 import { notifyVenue, bookingLink } from "./notify";
 import { buildVenueMailer, fmtNzd } from "./paymentsEmail";
 import { escapeHtml } from "./sanitizeHtml";
@@ -280,7 +280,37 @@ export async function respondToProposal(input: {
   if (claimed.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "This proposal has already been answered." });
 
   let bookingId: number;
+  // The venue may already have confirmed this enquiry (or accepted an earlier
+  // proposal), which makes a booking. Accepting must update THAT booking with
+  // the agreed details — inserting another gave one event two bookings, two
+  // calendar entries and split payments.
+  const [existing] = await db.select().from(bookings)
+    .where(and(eq(bookings.ownerId, proposal.ownerId), eq(bookings.leadId, proposal.leadId), ne(bookings.status, "finished")))
+    .orderBy(desc(bookings.id))
+    .limit(1);
+  const wasConfirmed = existing?.status === "confirmed";
   try {
+    if (existing) {
+      const eventDate = proposal.eventDate ? dayWithTimeFrom(proposal.eventDate, existing.eventDate) : existing.eventDate;
+      await db.update(bookings).set({
+        proposalId: proposal.id,
+        eventDate: eventDate ?? existing.eventDate,
+        eventEndDate: proposal.eventEndDate ?? existing.eventEndDate,
+        guestCount: proposal.guestCount ?? existing.guestCount,
+        spaceName: resolvedSpace,
+        // The accepted proposal is the agreed price — unless it has none.
+        totalNzd: Number(proposal.totalNzd ?? 0) > 0 ? proposal.totalNzd as any : existing.totalNzd,
+        depositNzd: Number(proposal.depositNzd ?? 0) > 0 ? proposal.depositNzd as any : existing.depositNzd,
+        status: "confirmed",
+        updatedAt: new Date(),
+      }).where(and(eq(bookings.id, existing.id), eq(bookings.ownerId, proposal.ownerId)));
+      // Keep its runsheets on the same day as the booking.
+      if (eventDate && existing.eventDate && eventDate.getTime() !== new Date(existing.eventDate).getTime()) {
+        await db.update(runsheets).set({ eventDate, updatedAt: new Date() })
+          .where(and(eq(runsheets.bookingId, existing.id), eq(runsheets.ownerId, proposal.ownerId)));
+      }
+      bookingId = existing.id;
+    } else {
     const [created] = await db.insert(bookings).values({
       ownerId: proposal.ownerId,
       leadId: proposal.leadId,
@@ -300,6 +330,7 @@ export async function respondToProposal(input: {
     }).returning({ id: bookings.id });
     if (!created) throw new Error("booking insert returned no row");
     bookingId = created.id;
+    }
   } catch (err) {
     // Put the proposal back so it never says "accepted" without a booking.
     console.error(`[proposals] booking for proposal ${proposal.id} failed; reverting accept:`, err);
@@ -327,7 +358,11 @@ export async function respondToProposal(input: {
   const { sendDepositPromptEmail } = await import("./depositPrompt");
   await sendDepositPromptEmail(bookingId, proposal.ownerId, { source: "proposals.respond→accepted" });
 
-  await updateLead(lead.id, proposal.ownerId, { status: "booked", updatedAt: new Date() });
+  // The enquiry shows the agreed date too (the booking's), so the Enquiries
+  // list and the calendar never disagree after an accept.
+  const [agreed] = await db.select({ eventDate: bookings.eventDate }).from(bookings)
+    .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, proposal.ownerId))).limit(1);
+  await updateLead(lead.id, proposal.ownerId, { status: "booked", ...(agreed?.eventDate ? { eventDate: agreed.eventDate } : {}), updatedAt: new Date() });
   await addLeadActivity({
     leadId: proposal.leadId,
     ownerId: proposal.ownerId,
@@ -349,8 +384,11 @@ export async function respondToProposal(input: {
     dedupeKey: `proposal_accepted:${proposal.id}`,
   });
   // Venue's "when a booking is confirmed" task rules (server/automatedTasks.ts).
-  const { fireTaskRules } = await import("./automatedTasks");
-  await fireTaskRules(proposal.ownerId, { trigger: "on_booking_confirmed", leadId: proposal.leadId, bookingId });
+  // Not again for a booking that was already confirmed — its tasks exist.
+  if (!wasConfirmed) {
+    const { fireTaskRules } = await import("./automatedTasks");
+    await fireTaskRules(proposal.ownerId, { trigger: "on_booking_confirmed", leadId: proposal.leadId, bookingId });
+  }
   const confirmationEmailed = await sendAcceptConfirmation(proposal, lead, bookingId);
   return { success: true, status: "accepted", confirmationEmailed };
 }

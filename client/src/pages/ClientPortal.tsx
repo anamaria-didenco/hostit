@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { safeHtml } from "@/lib/safeHtml";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -379,7 +380,7 @@ function ContractCard({ contract, portalToken }: { contract: PortalContract; por
         className="mx-6 my-4 max-h-96 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 leading-relaxed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f72e0]"
       >
         {contract.bodyHtml
-          ? <div className="contract-body space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold" dangerouslySetInnerHTML={{ __html: contract.bodyHtml }} />
+          ? <div className="contract-body space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold" dangerouslySetInnerHTML={{ __html: safeHtml(contract.bodyHtml) }} />
           : <div className="whitespace-pre-wrap">{contract.bodyText}</div>}
       </div>
 

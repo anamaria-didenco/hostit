@@ -53,6 +53,7 @@ import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance } fr
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import { isSharedMenu, SET_MENUS, setMenuCoursesText, setMenuSummary } from "@shared/eventMenus2026";
 import { eventBillingSteps } from "@shared/nowNext";
+import { paidTowardBookingBill } from "./eventPayments";
 import { renderRunSheetHtml, type RunSheetData, type RunSheetDish, type RunSheetFloorRow } from "./beoRunSheet";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
@@ -2148,6 +2149,7 @@ ${sheetsHtml}
         bookingTotal: bookingTotalNum, minimumSpend: minSpendAmt,
         depositAmount: depAmt, depositPaid: booking.depositPaid, depositApplied: termsDeposit,
         billingFood: termsFood,
+        paidToDate: await paidTowardBookingBill(booking.id, booking.ownerId),
       });
       const contra = bal.basis === "contra";
       const billingFull: NonNullable<RunSheetData["billing"]> = {
@@ -2182,6 +2184,8 @@ ${sheetsHtml}
           label: booking.depositPaid ? (bal.depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
           amount: bal.depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
         } : undefined,
+        // Recorded payments (not the deposit) come off what staff collect.
+        paid: !contra && bal.paidToDate > 0 ? { label: "Paid so far", amount: `− ${money0(bal.paidToDate)}` } : undefined,
         // What staff collect is owed on the contract: the larger of the
         // booking total, the minimum spend and what's itemised — the same
         // basis as the runsheet's Balance to collect. Drinks are billed
@@ -2197,7 +2201,7 @@ ${sheetsHtml}
         note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),
       };
       const billing: RunSheetData["billing"] = hideMoney
-        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, minimum: undefined, balance: undefined }
+        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, paid: undefined, minimum: undefined, balance: undefined }
         : billingFull;
 
       runSheetHtml = renderRunSheetHtml({

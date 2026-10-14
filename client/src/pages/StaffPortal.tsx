@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { safeHtml } from "@/lib/safeHtml";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
@@ -438,7 +439,7 @@ export default function StaffPortal() {
               <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">VENUE SETUP</h2>
             </div>
             <div className="px-5 py-4">
-              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.venueSetup }} />
+              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(runsheet.venueSetup) }} />
             </div>
           </div>
         )}
@@ -753,7 +754,7 @@ export default function StaffPortal() {
               <h2 className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</h2>
             </div>
             <div className="px-5 py-4">
-              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
+              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(runsheet.notes) }} />
             </div>
           </div>
         )}
@@ -762,7 +763,7 @@ export default function StaffPortal() {
         {(runsheet as any).footerText && (
           <div className="bg-linen/60 border border-gold/30 shadow-sm">
             <div className="px-5 py-4">
-              <div className="font-dm text-sm vf-rich-content text-ink/80" dangerouslySetInnerHTML={{ __html: (runsheet as any).footerText }} />
+              <div className="font-dm text-sm vf-rich-content text-ink/80" dangerouslySetInnerHTML={{ __html: safeHtml((runsheet as any).footerText) }} />
             </div>
           </div>
         )}

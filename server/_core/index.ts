@@ -518,8 +518,11 @@ async function startServer() {
         console.error(JSON.stringify({
           level: "error", source: "trpc", path, type, code: error.code,
           ownerId: (ctx as any)?.user?.id ?? null,
-          message: error.message,
-          stack: (error.cause as any)?.stack ?? error.stack,
+          // A failed query's message ends with the submitted values — keep
+          // the SQL and the database's reason, drop the params.
+          message: error.message.split(/\nparams:/)[0],
+          dbReason: (error.cause as any)?.cause?.message ?? (error.cause as any)?.detail ?? undefined,
+          stack: ((error.cause as any)?.stack ?? error.stack)?.split(/\nparams:/)[0],
         }));
       },
     })

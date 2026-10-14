@@ -130,7 +130,10 @@ export interface EventBalance {
   /** True when the paid deposit comes off this bill (applied to food or the
    *  total). Applied to drinks — the default — it comes off the bar bill. */
   depositOffThisBill: boolean;
-  /** contractTotal less the deposit when it comes off this bill. */
+  /** Payments already received toward this bill (not the deposit). */
+  paidToDate: number;
+  /** contractTotal less the deposit when it comes off this bill, less
+   *  payments already received. */
   balance: number;
 }
 
@@ -151,6 +154,9 @@ export function eventBalance(o: {
   depositApplied?: string | null;
   /** The food billing term. "contra" means nothing is owed on this bill. */
   billingFood?: string | null;
+  /** Recorded payments toward this bill, excluding the deposit — see
+   *  paidTowardEventBill in shared/paymentMath. */
+  paidToDate?: number | string | null;
 }): EventBalance {
   const food = fnbFoodLines(o.fnb, o.costItems).reduce((s, i) => s + num(i.qty) * num(i.unitPrice), 0);
   const costs = (o.costItems ?? []).filter(isFoodBeverageCost).reduce((s, ci) => s + num(ci.qty) * num(ci.unitPrice), 0);
@@ -159,7 +165,7 @@ export function eventBalance(o: {
   // A contra event is given in kind: the itemised figure is still its value,
   // but no minimum spend or booking total is owed and there's nothing to collect.
   if (o.billingFood === "contra") {
-    return { itemisedInclGst, contractTotal: 0, basis: "contra", depositOffThisBill: false, balance: 0 };
+    return { itemisedInclGst, contractTotal: 0, basis: "contra", depositOffThisBill: false, paidToDate: 0, balance: 0 };
   }
   const bookingTotal = num(o.bookingTotal);
   const minimumSpend = num(o.minimumSpend);
@@ -168,6 +174,7 @@ export function eventBalance(o: {
     : contractTotal === minimumSpend ? "minimum spend" : "booking total";
   const dep = num(o.depositAmount);
   const depositOffThisBill = dep > 0 && Boolean(o.depositPaid) && (o.depositApplied === "food" || o.depositApplied === "total");
-  const balance = Math.round(Math.max(0, contractTotal - (depositOffThisBill ? dep : 0)) * 100) / 100;
-  return { itemisedInclGst, contractTotal, basis, depositOffThisBill, balance };
+  const paidToDate = Math.max(0, num(o.paidToDate));
+  const balance = Math.round(Math.max(0, contractTotal - (depositOffThisBill ? dep : 0) - paidToDate) * 100) / 100;
+  return { itemisedInclGst, contractTotal, basis, depositOffThisBill, paidToDate, balance };
 }

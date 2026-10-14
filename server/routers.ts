@@ -8,6 +8,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { fitFnbItems } from "@shared/fnbFit";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
@@ -622,8 +623,8 @@ export const appRouter = router({
     startCapture: publicProcedure
       .input(z.object({
         ownerId: z.number(),
-        firstName: z.string().min(1).max(120),
-        lastName: z.string().max(120).optional(),
+        firstName: z.string().trim().min(1).max(100),
+        lastName: z.string().max(100).optional(),
         email: z.string().trim().email().max(254),
         phone: z.string().max(40).optional(),
         company: z.string().max(200).optional(),
@@ -690,12 +691,12 @@ export const appRouter = router({
         // valid one, leadId is ignored and a fresh lead is inserted — ids are
         // sequential, so an id alone would let anyone overwrite any enquiry.
         leadToken: z.string().max(64).optional(),
-        firstName: z.string().min(1).max(120),
-        lastName: z.string().max(120).optional(),
+        firstName: z.string().trim().min(1).max(100),
+        lastName: z.string().max(100).optional(),
         email: z.string().trim().email().max(254),
         phone: z.string().max(40).optional(),
         company: z.string().max(200).optional(),
-        eventType: z.string().max(120).optional(),
+        eventType: z.string().max(100).optional(),
         eventDate: z.string().max(40).optional(),
         // The enquirer explicitly chose "no date yet" — kept as its own flag
         // so the board can say "Date TBC" instead of a blank.
@@ -711,7 +712,7 @@ export const appRouter = router({
         eventDetail: z.string().max(255).optional(),
         invoicingNote: z.string().max(255).optional(),
         message: z.string().max(5000).optional(),
-        source: z.string().max(120).optional(),
+        source: z.string().max(100).optional(),
         // Ad-click attribution, read by the embed loader from the parent
         // page's URL at load time (the iframe can't see it — cross-origin)
         // and carried through as plain query params on the iframe src.
@@ -1408,6 +1409,47 @@ export const appRouter = router({
           minimumSpend: minimumSpend !== undefined ? (minimumSpend !== null ? String(minimumSpend) : null) : undefined,
           spaceName: spaceName !== undefined ? (spaceName?.trim() || null) : undefined,
         } as any);
+        // Once the enquiry has a live booking, the booking and its runsheets
+        // carry their own copies of these fields (calendar, BEO, staff link).
+        // Keep them in step — the booking→enquiry direction already does
+        // this in bookings.update, but an edit made here used to leave the
+        // event on its old date.
+        const bookingUpdates: Record<string, unknown> = {};
+        if (eventDate) bookingUpdates.eventDate = new Date(eventDate);
+        if (rest.guestCount !== undefined) bookingUpdates.guestCount = rest.guestCount;
+        if (spaceName !== undefined && spaceName?.trim()) bookingUpdates.spaceName = spaceName.trim();
+        if (rest.eventType !== undefined && rest.eventType !== null) bookingUpdates.eventType = rest.eventType;
+        if (rest.firstName !== undefined) bookingUpdates.firstName = rest.firstName;
+        if (rest.lastName !== undefined) bookingUpdates.lastName = rest.lastName;
+        if (rest.email !== undefined) bookingUpdates.email = rest.email;
+        if (minimumSpend !== undefined) bookingUpdates.minimumSpend = minimumSpend !== null ? String(minimumSpend) : null;
+        if (Object.keys(bookingUpdates).length > 0) {
+          const { getDb } = await import('./db');
+          const { bookings, runsheets } = await import('../drizzle/schema');
+          const { eq, and, inArray, or, isNull } = await import('drizzle-orm');
+          const db = await getDb();
+          if (db) {
+            const live = await db.select({ id: bookings.id }).from(bookings)
+              .where(and(eq(bookings.leadId, id), eq(bookings.ownerId, ctx.user.id), inArray(bookings.status, ['confirmed', 'tentative'])));
+            const ids = live.map(b => b.id);
+            if (ids.length) {
+              await db.update(bookings).set({ ...bookingUpdates, updatedAt: new Date() })
+                .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
+            }
+            const rsUpdates: Record<string, unknown> = {};
+            // Only the date, as bookings.update does: the runsheet's guest
+            // count is the kitchen's final number and is edited there.
+            if (bookingUpdates.eventDate) rsUpdates.eventDate = bookingUpdates.eventDate;
+            if (Object.keys(rsUpdates).length) {
+              // Runsheets linked to the booking, or started from this enquiry
+              // before a booking existed.
+              await db.update(runsheets).set(rsUpdates)
+                .where(and(eq(runsheets.ownerId, ctx.user.id), ids.length
+                  ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
+                  : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
+            }
+          }
+        }
         return { success: true };
       }),
 
@@ -1983,6 +2025,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         expiresAt: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ lead: input.leadId }, ctx.user.id);
         const token = nanoid(32);
         const proposal = await createProposal({
           ownerId: ctx.user.id,
@@ -2958,6 +3002,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ menuPackage: input.packageId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { menuItems } = await import('../drizzle/schema');
         const db = await getDb();
@@ -3968,6 +4014,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         })),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ proposal: input.proposalId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { quoteSettings, quoteItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4067,6 +4115,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         canvasData: z.any().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { floorPlans } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4235,7 +4285,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return { success: true };
       }),
 
-    list: protectedProcedure.query(async () => {
+    // VenueFlowHQ's own marketing waitlist — the platform admin's, never a
+    // venue's. Without the role check every venue account could read every
+    // signup's name and email.
+    list: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Not available for this account' });
       const { getDb } = await import('./db');
       const { waitlist } = await import('../drizzle/schema');
       const db = await getDb();
@@ -4303,6 +4357,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         name: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { checklistTemplates, checklistInstances } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4364,6 +4420,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         defaultItems: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ runsheet: input.runsheetId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { checklistInstances } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4514,6 +4572,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ lead: input.leadId, booking: input.bookingId, proposal: input.proposalId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { runsheets, runsheetItems } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -4608,6 +4668,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         paymentInstructions: z.string().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ proposal: input.proposalId, floorPlan: input.floorPlanId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { runsheets } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4687,9 +4749,27 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             await db.update(bookings).set({ ...bookingFields, updatedAt: new Date() })
               .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id)));
           }
-          if (rs?.leadId) {
-            await db.update(leads).set({ ...sharedLead, updatedAt: new Date() })
-              .where(and(eq(leads.id, rs.leadId), eq(leads.ownerId, ctx.user.id)));
+          // The enquiry: the runsheet's own link, or its booking's.
+          let leadId = rs?.leadId ?? null;
+          if (!leadId && rs?.bookingId) {
+            const [b] = await db.select({ leadId: bookings.leadId }).from(bookings)
+              .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+            leadId = b?.leadId ?? null;
+          }
+          if (leadId) {
+            // A day move reaches the enquiry too, keeping its start time —
+            // otherwise the Enquiries list kept showing the old date.
+            if (movedToDay) {
+              const { dayWithTimeFrom } = await import('@shared/eventDate');
+              const [cur] = await db.select({ eventDate: leads.eventDate }).from(leads)
+                .where(and(eq(leads.id, leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+              const next = dayWithTimeFrom(movedToDay, cur?.eventDate ?? null);
+              if (next) sharedLead.eventDate = next;
+            }
+            if (Object.keys(sharedLead).length > 0) {
+              await db.update(leads).set({ ...sharedLead, updatedAt: new Date() })
+                .where(and(eq(leads.id, leadId), eq(leads.ownerId, ctx.user.id)));
+            }
           }
         }
         return { success: true };
@@ -4710,6 +4790,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         highlight: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ runsheet: input.runsheetId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { runsheetItems } = await import('../drizzle/schema');
         const db = await getDb();
@@ -5062,10 +5144,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { payments, bookings } = await import('../drizzle/schema');
         const { eq, and, sum } = await import('drizzle-orm');
         const db = await getDb();
-        if (!db) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const };
+        if (!db) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const, paidTowardEventBill: 0 };
         const [booking] = await db.select().from(bookings)
           .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
-        if (!booking) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const };
+        if (!booking) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const, paidTowardEventBill: 0 };
         const pmts = await db.select().from(payments)
           .where(and(eq(payments.bookingId, input.bookingId), eq(payments.ownerId, ctx.user.id)));
         const { netPaid, derivePaymentStatus, round2 } = await import('../shared/paymentMath');
@@ -5078,7 +5160,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           depositNzd: Number(booking.depositNzd ?? 0),
           depositRequired: (booking as any).depositRequired !== false,
         });
-        return { totalPaid: net, outstanding, status, total };
+        const { paidTowardBookingBill } = await import('./eventPayments');
+        // What comes off the runsheet/BEO "balance to collect" (no deposit,
+        // no drinks-invoice payments) — see shared/paymentMath.
+        const paidTowardEventBill = await paidTowardBookingBill(input.bookingId, ctx.user.id);
+        return { totalPaid: net, outstanding, status, total, paidTowardEventBill };
       }),
     /** Every payment received across all events, for month-end reconciliation.
      *  Joined to its booking so the log reads as "who paid, for which event".
@@ -5842,47 +5928,56 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         items: z.array(z.object({
           id: z.number().optional(),
           section: z.enum(['foh', 'kitchen']),
-          course: z.string().nullable().optional(),
-          dishName: z.string(),
-          previousDishName: z.string().nullable().optional(),
+          // Limits match the fnb_items columns, so a value that can't be
+          // stored is rejected with a readable message before anything is
+          // touched — not half-way through replacing the list.
+          course: z.string().max(100).nullable().optional(),
+          dishName: z.string().max(255),
+          previousDishName: z.string().max(255).nullable().optional(),
           description: z.string().nullable().optional(),
           qty: z.number().int().default(1),
-          dietary: z.string().nullable().optional(),
-          serviceTime: z.string().nullable().optional(),
+          dietary: z.string().max(255).nullable().optional(),
+          serviceTime: z.string().max(10).nullable().optional(),
           prepNotes: z.string().nullable().optional(),
           platingNotes: z.string().nullable().optional(),
-          staffAssigned: z.string().nullable().optional(),
+          staffAssigned: z.string().max(255).nullable().optional(),
           sortOrder: z.number().int().default(0),
           unitPrice: z.number().nullable().optional(),
         })),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ runsheet: input.runsheetId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { fnbItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        // Delete all existing items for this runsheet owned by user, then re-insert
-        await db.delete(fnbItems).where(and(eq(fnbItems.runsheetId, input.runsheetId), eq(fnbItems.ownerId, ctx.user.id)));
-        if (input.items.length > 0) {
-          await db.insert(fnbItems).values(input.items.map((item, idx) => ({
-            runsheetId: input.runsheetId,
-            ownerId: ctx.user.id,
-            section: item.section,
-            course: item.course,
-            dishName: item.dishName,
-            previousDishName: item.previousDishName ?? null,
-            description: item.description,
-            qty: item.qty,
-            dietary: item.dietary,
-            serviceTime: item.serviceTime,
-            prepNotes: item.prepNotes,
-            platingNotes: item.platingNotes,
-            staffAssigned: item.staffAssigned,
-            sortOrder: item.sortOrder ?? idx,
-            unitPrice: item.unitPrice != null ? String(item.unitPrice) : null,
-          })));
-        }
+        // Replace the list in ONE transaction: if the insert fails, the delete
+        // rolls back and the kitchen keeps the list it had. (Without this a
+        // single bad row left the runsheet with no food at all.)
+        await db.transaction(async (tx) => {
+          await tx.delete(fnbItems).where(and(eq(fnbItems.runsheetId, input.runsheetId), eq(fnbItems.ownerId, ctx.user.id)));
+          if (input.items.length > 0) {
+            await tx.insert(fnbItems).values(input.items.map((item, idx) => ({
+              runsheetId: input.runsheetId,
+              ownerId: ctx.user.id,
+              section: item.section,
+              course: item.course,
+              dishName: item.dishName,
+              previousDishName: item.previousDishName ?? null,
+              description: item.description,
+              qty: item.qty,
+              dietary: item.dietary,
+              serviceTime: item.serviceTime,
+              prepNotes: item.prepNotes,
+              platingNotes: item.platingNotes,
+              staffAssigned: item.staffAssigned,
+              sortOrder: item.sortOrder ?? idx,
+              unitPrice: item.unitPrice != null ? String(item.unitPrice) : null,
+            })));
+          }
+        });
         return { success: true };
       }),
   }),
@@ -6275,6 +6370,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         priority: z.enum(['low', 'normal', 'high']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ lead: input.linkedLeadId, booking: input.linkedBookingId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { tasks } = await import('../drizzle/schema');
         const db = await getDb();
@@ -6332,6 +6429,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         linkedBookingId: z.number().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ lead: input.linkedLeadId, booking: input.linkedBookingId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { tasks } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -6470,6 +6569,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     create: protectedProcedure
       .input(z.object({ sectionId: z.number(), name: z.string(), description: z.string().optional(), pricePerPerson: z.string().optional(), priceFlat: z.string().optional(), pricingType: z.enum(['per_person','flat','per_hour']).optional(), imageUrl: z.string().optional(), hasSalesTax: z.boolean().optional(), hasAdminFee: z.boolean().optional(), hasGratuity: z.boolean().optional(), applyToMin: z.boolean().optional() }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ menuSection: input.sectionId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { standaloneMenuItems } = await import('../drizzle/schema');
         const db = await getDb();
@@ -6755,6 +6856,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ menuCategory: input.categoryId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { menuCategoryItems } = await import('../drizzle/schema');
         const db = await getDb();
@@ -6884,6 +6987,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         allergens: z.string().optional(),
       })))
       .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        for (const categoryId of Array.from(new Set(input.map(i => i.categoryId)))) {
+          await assertAllOwned({ menuCategory: categoryId }, ctx.user.id);
+        }
         const { getDb } = await import('./db');
         const { menuCategoryItems } = await import('../drizzle/schema');
         const db = await getDb();
@@ -6930,7 +7037,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         try {
           const parsed = JSON.parse(raw);
           const items = Array.isArray(parsed.fnbItems) ? parsed.fnbItems : (Array.isArray(parsed) ? parsed : []);
-          return { fnbItems: items.slice(0, 80), success: true };
+          return { fnbItems: fitFnbItems(items.slice(0, 80)), success: true };
         } catch {
           return { fnbItems: [], success: false, error: 'Failed to parse AI response' };
         }
@@ -6980,7 +7087,7 @@ Return ONLY valid JSON. Example structure:
           return {
             eventDetails: parsed.eventDetails ?? null,
             dietaries: Array.isArray(parsed.dietaries) ? parsed.dietaries : [],
-            fnbItems: Array.isArray(parsed.fnbItems) ? parsed.fnbItems.slice(0, 60) : [],
+            fnbItems: fitFnbItems(Array.isArray(parsed.fnbItems) ? parsed.fnbItems.slice(0, 60) : []),
             timelineItems: Array.isArray(parsed.timelineItems) ? healTimelineTitles(parsed.timelineItems.slice(0, 60)) : [],
             success: true,
           };
@@ -7096,6 +7203,8 @@ Return ONLY valid JSON.`;
         expiresAt: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { contracts } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -7230,6 +7339,8 @@ Return ONLY valid JSON.`;
         leadId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { eventBudgets } = await import('../drizzle/schema');
         const db = await getDb();
@@ -7340,6 +7451,8 @@ Return ONLY valid JSON.`;
     addToEvent: protectedProcedure
       .input(z.object({ name: z.string(), category: z.string().default('other'), quantity: z.number().default(1), notes: z.string().optional(), providedBy: z.enum(['venue','client']).default('venue'), bookingId: z.number().optional(), leadId: z.number().optional(), equipmentId: z.number().optional() }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId, equipment: input.equipmentId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { eventEquipment } = await import('../drizzle/schema');
         const db = await getDb();
@@ -7406,6 +7519,8 @@ Return ONLY valid JSON.`;
         leadId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { communications } = await import('../drizzle/schema');
         const db = await getDb();
@@ -7462,6 +7577,8 @@ Return ONLY valid JSON.`;
         name: z.string().default('Seating Chart'),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { seatingCharts } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -8414,6 +8531,8 @@ Return ONLY valid JSON.`;
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ dailyChecklist: input.checklistId }, ctx.user.id);
         const { getDb } = await import('./db');
         const { dailyChecklistItems } = await import('../drizzle/schema');
         const db = await getDb();

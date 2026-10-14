@@ -624,11 +624,13 @@ function SpacePricingFields<T extends SpacePricingForm>({ form, setForm }: { for
   );
 }
 
-function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl }: {
+function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl, isAdmin = false }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
   venueName?: string;
   venueLogoUrl?: string;
+  // The VenueFlowHQ marketing waitlist is the platform owner's, not a venue's.
+  isAdmin?: boolean;
 }) {
   // Grouped by what you're trying to do, not in the order they were built.
   const groups = [
@@ -642,7 +644,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { label: "Enquiries & sales", items: [
       { id: "lead-form", label: "Contact Form" },
       { id: "statuses", label: "Enquiry Statuses" },
-      { id: "waitlist", label: "Waitlist" },
+      ...(isAdmin ? [{ id: "waitlist", label: "Waitlist" }] : []),
       { id: "templates", label: "Templates" },
       { id: "follow-ups", label: "Follow-ups" },
       { id: "automated-tasks", label: "Automated Tasks" },
@@ -6138,7 +6140,7 @@ export default function Dashboard() {
           {tab === "settings" && (
             <div className="flex flex-col md:flex-row" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
               {/* Settings sidebar — like Perfect Venue */}
-              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} />
+              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} isAdmin={user?.role === 'admin'} />
               <div className="flex-1 overflow-auto p-4 md:p-8">
 
               {/* ── VENUE (unified: Details + Profile + Spaces) ─────── */}
@@ -9881,7 +9883,7 @@ export default function Dashboard() {
               </div>
               )}
 
-              {settingsSubTab === "waitlist" && <WaitlistPanel />}
+              {settingsSubTab === "waitlist" && user?.role === 'admin' && <WaitlistPanel />}
               {settingsSubTab === "follow-ups" && (
                 <FollowUpSettings onOpenEmailSettings={() => setSettingsSubTab("email")} onOpenVenueSettings={() => setSettingsSubTab("venue")} />
               )}

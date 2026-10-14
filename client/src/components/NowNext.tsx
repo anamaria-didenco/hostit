@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeHtml } from "@/lib/safeHtml";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { groupDrinks } from "@shared/drinkGroups";
 import { isSharedMenu } from "@shared/eventMenus2026";
@@ -337,7 +338,7 @@ export default function NowNext({
             {runsheet?.notes && (
               <section aria-label="Notes" className="bg-white border border-gold px-4 py-3">
                 <h2 className={`${label} mb-1`}>Notes</h2>
-                <div className="font-dm text-[17px] leading-relaxed text-ink vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
+                <div className="font-dm text-[17px] leading-relaxed text-ink vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(runsheet.notes) }} />
               </section>
             )}
             {runsheet?.kitchenNotes && (
@@ -349,7 +350,7 @@ export default function NowNext({
             {runsheet?.venueSetup && (
               <section aria-label="Set-up" className="bg-white border border-gold px-4 py-3">
                 <h2 className={`${label} mb-1`}>Set-up</h2>
-                <div className="font-dm text-[17px] leading-relaxed text-ink vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.venueSetup }} />
+                <div className="font-dm text-[17px] leading-relaxed text-ink vf-rich-content" dangerouslySetInnerHTML={{ __html: safeHtml(runsheet.venueSetup) }} />
               </section>
             )}
           </>
