@@ -81,10 +81,13 @@ function addDaysInput(days: number): string {
  * The drawer block. `onChanged` gets the fields that changed so the parent
  * can update its local copy of the lead without waiting for a refetch.
  */
-export function HoldPanel({ lead, defaultHoldDays, onChanged }: {
+export function HoldPanel({ lead, defaultHoldDays, onChanged, onAddDate }: {
   lead: LeadLike;
   defaultHoldDays?: number | null;
   onChanged?: (patch: Partial<LeadLike>) => void;
+  /** Opens the screen's date editor. Without it, "add a date first" was a
+   *  dead end: plain text with nothing to click. */
+  onAddDate?: () => void;
 }) {
   const utils = trpc.useUtils();
   const state = holdState(lead);
@@ -175,11 +178,16 @@ export function HoldPanel({ lead, defaultHoldDays, onChanged }: {
             className="inline-flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 rounded-sm border border-forest text-forest hover:bg-linen disabled:opacity-50 disabled:cursor-not-allowed">
             <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" /> HOLD THIS DATE
           </button>
-          {!canHold && (
+          {!canHold && (!lead.eventDate && onAddDate ? (
+            <button type="button" onClick={onAddDate}
+              className="font-dm text-xs font-semibold text-forest border border-forest/40 rounded-sm px-3 min-h-[40px] hover:bg-forest/5">
+              Add a date
+            </button>
+          ) : (
             <span className="font-dm text-xs text-stone-600">
               {!lead.eventDate ? "Add an event date first." : "Pick a space first."}
             </span>
-          )}
+          ))}
         </div>
       )}
       {realClashes.length > 0 && <ClashList clashes={realClashes} />}

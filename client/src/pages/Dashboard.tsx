@@ -1572,6 +1572,8 @@ export default function Dashboard() {
   };
   const toggleDrawerSection = (id: string) => setDrawerSections(prev => saveDrawerSections({ ...prev, [id]: !prev[id] }));
   const secOpen = (id: string) => !!drawerSections[id];
+  // Undated enquiries whose auto-opened DETAILS the user collapsed.
+  const [detailsClosedFor, setDetailsClosedFor] = useState<Set<number>>(new Set());
   const allDrawerSectionsOpen = DRAWER_SECTION_IDS.every(id => !!drawerSections[id]);
   const setAllDrawerSections = (open: boolean) => setDrawerSections(saveDrawerSections(Object.fromEntries(DRAWER_SECTION_IDS.map(id => [id, open]))));
   // Fullscreen-ish BEO preview layered over the side panel.
@@ -1812,7 +1814,7 @@ export default function Dashboard() {
       // changed rather than always saying "Event rescheduled".
       const v = (vars ?? {}) as any;
       let msg = "Event updated";
-      if (v.eventDate !== undefined) msg = "Event rescheduled";
+      if (v.eventDate !== undefined) msg = "Date saved";
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
@@ -1931,6 +1933,23 @@ export default function Dashboard() {
     const full = toDatetimeLocal(iso);
     if (!full) return "";
     return fmtEventTime(iso) ? full : localYmd(iso!);
+  }
+  // Open the enquiry's Event details form (list view) — the EDIT button, and
+  // "Add a date" next to Hold this date.
+  function startLeadDetailsEdit(lead: any) {
+    setEventDetailForm({
+      firstName: lead.firstName ?? '',
+      lastName: lead.lastName ?? '',
+      email: lead.email ?? '',
+      phone: lead.phone ?? '',
+      company: lead.company ?? '',
+      eventType: lead.eventType ?? '',
+      // Local date: toISOString() gave the UTC date, a day early for a morning event in NZ.
+      eventDate: lead.eventDate ? localYmd(lead.eventDate) : '',
+      guestCount: lead.guestCount ?? '',
+      budget: lead.budget ?? '',
+    });
+    setEditingEventDetails(true);
   }
   // The calendar date as the venue sees it. Date-only events are stored at UTC
   // midnight, which is already that date; timed ones are read in local time.
@@ -4437,21 +4456,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-bebas text-xs tracking-widest text-ink/70">EVENT DETAILS</h3>
                         {!editingEventDetails ? (
-                          <button onClick={() => {
-                            setEventDetailForm({
-                              firstName: selectedLead.firstName ?? '',
-                              lastName: selectedLead.lastName ?? '',
-                              email: selectedLead.email ?? '',
-                              phone: selectedLead.phone ?? '',
-                              company: selectedLead.company ?? '',
-                              eventType: selectedLead.eventType ?? '',
-                              // Local date: toISOString() gave the UTC date, a day early for a morning event in NZ.
-                              eventDate: selectedLead.eventDate ? localYmd(selectedLead.eventDate) : '',
-                              guestCount: selectedLead.guestCount ?? '',
-                              budget: selectedLead.budget ?? '',
-                            });
-                            setEditingEventDetails(true);
-                          }} className="text-xs text-ink/70 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
+                          <button onClick={() => startLeadDetailsEdit(selectedLead)} className="text-xs text-ink/70 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
                             <Edit2 className="w-3 h-3" /> EDIT
                           </button>
                         ) : (
@@ -4568,6 +4573,7 @@ export default function Dashboard() {
                               setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev);
                               refetchLeads();
                             }}
+                            onAddDate={() => startLeadDetailsEdit(selectedLead)}
                           />
                         </div>
                       )}
@@ -10152,6 +10158,11 @@ export default function Dashboard() {
                     setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, ...patch } : prev);
                     refetchLeads();
                   }}
+                  onAddDate={() => {
+                    // The date editor lives in DETAILS — open it there.
+                    setDrawerSections(prev => ({ ...prev, details: true }));
+                    setDrawerEdit({ field: "eventDate", value: "" });
+                  }}
                 />
               )}
               {/* Owner, returning-client / duplicate flags, client history, merge. */}
@@ -10178,12 +10189,22 @@ export default function Dashboard() {
               </div>
               <DrawerSection id="details" title="DETAILS" icon={<Calendar />}
                 summary={[
-                  selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : null,
+                  selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : 'No date yet',
                   selectedBooking.startTime ?? selectedBooking.eventTime ?? null,
                   selectedBooking.guestCount ? `${selectedBooking.guestCount} guests` : null,
                   selectedBooking.spaceName ?? null,
                 ].filter(Boolean).join(' · ')}
-                open={secOpen('details')} onToggle={() => toggleDrawerSection('details')}>
+                // An enquiry with no date shows DETAILS open, so "Add a date"
+                // is in view instead of behind a collapsed section.
+                open={secOpen('details') || (!selectedBooking.eventDate && !detailsClosedFor.has(selectedBooking.id))}
+                onToggle={() => {
+                  if (!selectedBooking.eventDate && !secOpen('details')) {
+                    // Collapsing the auto-opened section: remember it for this enquiry only.
+                    setDetailsClosedFor(prev => { const n = new Set(prev); n.has(selectedBooking.id) ? n.delete(selectedBooking.id) : n.add(selectedBooking.id); return n; });
+                    return;
+                  }
+                  toggleDrawerSection('details');
+                }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                 {/* DATE — always shown: it's the one detail every enquiry needs,
                     and a no-date enquiry (client said "flexible") used to hide
