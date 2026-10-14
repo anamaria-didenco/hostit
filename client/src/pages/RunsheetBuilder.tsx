@@ -1489,7 +1489,7 @@ export default function RunsheetBuilder() {
   }
 
   // Queries
-  const { data: existing } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
+  const { data: existing, isLoading: existingLoading, isError: existingError, refetch: refetchExisting } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
   // A runsheet opened from the "My runsheets" list (or a bookmark) has no
   // leadId in the URL but usually has one on the record — resolve the lead
   // from either so the client contact still prefills.
@@ -2183,7 +2183,17 @@ export default function RunsheetBuilder() {
         italic: item.italic,
         highlight: item.highlight,
       };
-      if (!item.id) await addItemMutation.mutateAsync({ runsheetId: id, ...payload });
+      if (!item.id) {
+        const created = await addItemMutation.mutateAsync({ runsheetId: id, ...payload });
+        if (created?.id) {
+          // Remember the new row's id straight away. It used to arrive only
+          // with a refetch, so on a slow connection the next autosave created
+          // the same row again (duplicate lines on the BEO and staff link).
+          item.id = created.id;
+          const tempId = item._tempId;
+          setItems(prev => prev.map(r => (!r.id && (r === item || (tempId && r._tempId === tempId))) ? { ...r, id: created.id } : r));
+        }
+      }
       else await updateItemMutation.mutateAsync({ id: item.id, ...payload });
     }
   }
@@ -2486,6 +2496,38 @@ export default function RunsheetBuilder() {
   if (!user) {
     window.location.href = getLoginUrl();
     return null;
+  }
+
+  // A saved runsheet must finish loading before it can be edited. Autosave
+  // sends every field, so typing into the still-empty form used to write
+  // blanks over the real notes, costs and contact details.
+  if (sheetId && existingLoading) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col items-center justify-center gap-3" role="status" aria-live="polite">
+        <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
+        <p className="font-dm text-sm text-ink/75">Loading the runsheet…</p>
+      </div>
+    );
+  }
+  if (sheetId && (existingError || !existing)) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center px-4">
+        <div className="bg-white border border-gold/30 max-w-md w-full p-6 text-center space-y-4">
+          <h1 className="font-bebas tracking-widest text-xl text-ink">{existingError ? "COULDN'T LOAD THIS RUNSHEET" : "RUNSHEET NOT FOUND"}</h1>
+          <p className="font-dm text-sm text-ink/75">
+            {existingError
+              ? "Check your connection and try again. Nothing has been changed."
+              : "It may have been deleted, or the link is wrong."}
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {existingError && (
+              <button onClick={() => refetchExisting()} className="font-bebas tracking-widest text-sm px-4 min-h-[44px] bg-forest text-cream hover:bg-forest/90">TRY AGAIN</button>
+            )}
+            <button onClick={() => navigate("/runsheet")} className="font-bebas tracking-widest text-sm px-4 min-h-[44px] border border-gold/40 text-forest hover:bg-linen">ALL RUNSHEETS</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Home screen: no runsheet selected ────────────────────────────────────────
@@ -7152,6 +7194,13 @@ export default function RunsheetBuilder() {
             // and file). Everything that used to point at it now points
             // here — do not reintroduce a second staff PDF.
             if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
+            // The BEO is rendered from what's saved. Save anything still
+            // waiting for autosave first, or an edit made seconds ago would
+            // be missing from the copy staff receive.
+            if (sheetId && (isDirty || coreSavingRef.current)) {
+              toast.loading('Saving your latest changes first…', { id: tId });
+              await handleSave();
+            }
             const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
             const filename = `${safeTitle} — BEO.pdf`;
             // Pull the operator's saved template (Venue Setup → Staff
