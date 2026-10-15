@@ -18,6 +18,9 @@ import { eq } from "drizzle-orm";
 import { selectedDrinkItems, drinkPriceLabel } from "../shared/drinksMenu";
 import { selectedSharedMenuSections } from "../shared/proposalSharedMenu";
 import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
+import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
+import { isPackageLine } from "@shared/proposalPackages";
+import type { ProposalMenu } from "./proposalMenus";
 
 // Bar option labels
 const BAR_LABELS: Record<string, string> = {
@@ -38,8 +41,11 @@ export function buildHtml(data: {
   venue: any;
   drinks: any;
   quoteData: { settings: any; items: any[] } | null;
+  /** The menu packages on the proposal, with their menus (see proposalMenus). */
+  menus?: ProposalMenu[];
 }): string {
   const { proposal, lead, venue, drinks, quoteData } = data;
+  const menus = data.menus ?? [];
   const lineItems: Array<{ description: string; qty: number; unitPrice: number; total: number }> =
     JSON.parse(proposal.lineItems ?? "[]");
 
@@ -49,6 +55,11 @@ export function buildHtml(data: {
   const deposit = Number(proposal.depositNzd ?? 0);
   const taxPct = Number(proposal.taxPercent ?? 15);
   const depositPct = Number(proposal.depositPercent ?? 25);
+
+  // A choice of menus: each priced on its own, and the client picks one.
+  const menuOptions = proposalMoney(lineItems, taxPct, depositPct, proposal.menuChoice).options;
+  const shownLines = lineItems.filter(l => !isEmptyLine(l) && !(menuOptions.length && isPackageLine(l.description)));
+  const menuFor = (line: string) => menus.find(m => m.line === line);
 
   const venueTz = venue?.timezone || DEFAULT_VENUE_TZ;
   const eventDate = proposal.eventDate
@@ -62,6 +73,7 @@ export function buildHtml(data: {
   const venueAddress = venue?.address ?? "";
   const venuePhone = venue?.phone ?? "";
   const venueEmail = venue?.email ?? "";
+  const venueWebsite = (venue?.website ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   const venueLogoUrl = venue?.logoUrl ?? "";
   const primaryColor = venue?.primaryColor ?? "#350513";
 
@@ -125,7 +137,7 @@ export function buildHtml(data: {
 
   // Quote / Min-Spend section HTML
   let quoteHtml = "";
-  if (quoteData?.settings) {
+  if (quoteData?.settings && (Number(quoteData.settings.minimumSpend ?? 0) > 0 || (quoteData.items ?? []).length > 0 || quoteData.settings.notes)) {
     const qs = quoteData.settings;
     const minSpend = Number(qs.minimumSpend ?? 0);
     const foodTotal = Number(qs.foodTotal ?? subtotal);
@@ -143,16 +155,16 @@ export function buildHtml(data: {
 
     quoteHtml = `
       <div class="section quote-section">
-        <h2 class="section-title">Minimum Spend &amp; Quote</h2>
-        <table class="totals-table">
+        <h2 class="section-title">${minSpend > 0 ? "Minimum Spend" : "Extras"}</h2>
+        ${minSpend > 0 ? `<table class="totals-table">
           <tr><td>Minimum Spend</td><td class="amount">${nzd(minSpend)}</td></tr>
           <tr><td>Food &amp; Beverage Total</td><td class="amount">${nzd(foodTotal)}</td></tr>
           ${autoBarTab && barTabAmount > 0 ? `<tr><td>Auto Bar Tab (remainder)</td><td class="amount">${nzd(barTabAmount)}</td></tr>` : ""}
           ${minSpend > 0 ? `<tr class="${foodTotal + barTabAmount >= minSpend ? 'met' : 'unmet'}">
             <td>Status</td>
-            <td class="amount">${foodTotal + barTabAmount >= minSpend ? "✓ Minimum met" : "⚠ Below minimum"}</td>
+            <td class="amount">${foodTotal + barTabAmount >= minSpend ? "Minimum met" : "Below minimum"}</td>
           </tr>` : ""}
-        </table>
+        </table>` : ""}
         ${qItems.length > 0 ? `
         <h3 class="subsection-title">Additional Items</h3>
         <table class="items-table">
@@ -173,11 +185,11 @@ export function buildHtml(data: {
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500&family=Bebas+Neue&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; }
+  body { font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; }
 
   /* Header */
   .header { background: ${primaryColor}; color: #f7f1e9; padding: 32px 48px; display: flex; justify-content: space-between; align-items: flex-start; }
-  .header-left h1 { font-family: 'Cormorant Garamond', serif; font-size: 28pt; font-weight: 600; line-height: 1.1; }
+  .header-left h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28pt; font-weight: 600; line-height: 1.1; }
   .header-left .subtitle { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.12em; font-size: 10pt; color: rgba(247,241,233,0.7); margin-top: 4px; }
   .header-right { text-align: right; font-size: 9pt; color: rgba(247,241,233,0.8); line-height: 1.8; }
   .header-right .venue-name { font-family: 'Bebas Neue', sans-serif; font-size: 13pt; letter-spacing: 0.1em; color: #f7f1e9; }
@@ -226,18 +238,20 @@ export function buildHtml(data: {
   .bar-option { font-size: 10pt; margin-bottom: 10px; color: #333; }
 
   /* Quote section */
-  .quote-section { background: #1a1a1a; color: #f7f1e9; padding: 20px; margin: 0 -48px 28px; padding-left: 48px; padding-right: 48px; }
-  .quote-section .section-title { color: #d4a853; border-color: #d4a853; }
-  .quote-section .totals-table { color: #f7f1e9; }
-  .quote-section .totals-table .amount { color: #d4a853; }
-  .quote-section .met td { color: #52b788 !important; }
-  .quote-section .unmet td { color: #e76f51 !important; }
-  .quote-section .subsection-title { color: #aaa; }
-  .quote-section .items-table thead tr { background: #333; }
-  .quote-section .items-table tbody tr:nth-child(even) { background: #222; }
-  .quote-section .items-table tbody td { color: #f7f1e9; }
-  .quote-section .item-desc { color: #aaa; }
-  .quote-notes { font-size: 9.5pt; color: #aaa; margin-top: 10px; font-style: italic; }
+  .quote-notes { font-size: 9.5pt; color: #666; margin-top: 10px; font-style: italic; }
+
+  /* Menu options + menus */
+  .options { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 4px; }
+  .options td { padding: 10px; border-bottom: 1px solid #e5e0d8; vertical-align: top; }
+  .options .opt-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
+  .options .opt-desc { color: #666; font-size: 9pt; margin-top: 2px; }
+  .options .opt-total { text-align: right; white-space: nowrap; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 15pt; font-weight: 600; color: ${primaryColor}; }
+  .options .opt-dep { text-align: right; white-space: nowrap; font-size: 8.5pt; color: #777; }
+  .choose-note { font-size: 9pt; color: #666; margin: 2px 0 6px; }
+  .menu-block { margin-top: 14px; break-inside: avoid; }
+  .menu-block h3 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
+  .menu-block .menu-desc { color: #666; font-size: 9.5pt; margin: 2px 0 6px; }
+  .menu-text { white-space: pre-line; font-size: 9.5pt; line-height: 1.55; color: #333; }
 
   /* Terms */
   .terms { font-size: 9pt; color: #666; line-height: 1.7; white-space: pre-line; }
@@ -259,7 +273,7 @@ export function buildHtml(data: {
   <div class="header-left">
     ${venueLogoUrl ? `<img src="${esc(venueLogoUrl)}" alt="${esc(venueName)}" class="logo" />` : ""}
     <h1>${esc(proposal.title)}</h1>
-    <div class="subtitle">Event Proposal</div>
+    <div class="subtitle">${esc(eventDate ?? "Event Proposal")}</div>
   </div>
   <div class="header-right">
     <div class="venue-name">${esc(venueName)}</div>
@@ -295,22 +309,45 @@ export function buildHtml(data: {
         <tr><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th></tr>
       </thead>
       <tbody>
-        ${lineItems.map((item) => `
+        ${shownLines.map((item) => `
         <tr>
-          <td class="item-name">${esc(item.description)}</td>
+          <td class="item-name">${esc(clientLineText(item.description))}</td>
           <td class="item-qty">${esc(item.qty)}</td>
-          <td class="item-price">${nzd(item.unitPrice)}</td>
-          <td class="item-price">${nzd(item.total)}</td>
+          <td class="item-price">${Number(item.unitPrice) === 0 ? "" : nzd(item.unitPrice)}</td>
+          <td class="item-price">${Number(item.total) === 0 ? "Included" : nzd(item.total)}</td>
         </tr>`).join("")}
       </tbody>
     </table>
+    ${menuOptions.length ? `
+    <h2 class="section-title" style="margin-top:22px;">Choose your menu</h2>
+    <p class="choose-note">Each price includes everything above and GST (${taxPct}%). Pick one when you accept.</p>
+    <table class="options"><tbody>
+      ${menuOptions.map(o => {
+        const m = menuFor(o.line);
+        return `<tr>
+          <td><div class="opt-name">${esc(o.name)}</div>${m?.description ? `<div class="opt-desc">${esc(m.description)}</div>` : ""}</td>
+          <td><div class="opt-total">${nzd(o.total)}</div><div class="opt-dep">Deposit ${nzd(o.deposit)} (${depositPct}%)</div></td>
+        </tr>`;
+      }).join("")}
+    </tbody></table>` : `
     <table class="totals-table" style="margin-top:12px; max-width:320px; margin-left:auto;">
       <tr><td>Subtotal</td><td class="amount">${nzd(subtotal)}</td></tr>
       <tr><td>GST (${taxPct}%)</td><td class="amount">${nzd(tax)}</td></tr>
       <tr class="total-row"><td>Total (incl. GST)</td><td class="amount">${nzd(total)}</td></tr>
-      <tr class="deposit-row"><td>Deposit Required (${depositPct}%)</td><td class="amount">${nzd(deposit)}</td></tr>
-    </table>
+      ${deposit > 0 ? `<tr class="deposit-row"><td>Deposit Required (${depositPct}%)</td><td class="amount">${nzd(deposit)}</td></tr>` : ""}
+    </table>`}
   </div>
+
+  ${menus.some(m => m.menu) ? `
+  <div class="section">
+    <h2 class="section-title">${menuOptions.length ? "The menus" : "Your menu"}</h2>
+    ${menus.filter(m => m.menu).map(m => `
+      <div class="menu-block">
+        <h3>${esc(m.name)}</h3>
+        ${m.description ? `<div class="menu-desc">${esc(m.description)}</div>` : ""}
+        <div class="menu-text">${esc(m.menu)}</div>
+      </div>`).join("")}
+  </div>` : ""}
 
   <!-- Drinks -->
   ${drinksHtml}
@@ -330,7 +367,7 @@ export function buildHtml(data: {
 
 <!-- Footer -->
 <div class="footer">
-  <div><strong>${venueName}</strong>${venueAddress ? ` · ${venueAddress}` : ""}</div>
+  <div><strong>${esc(venueName)}</strong>${[venueAddress, venuePhone, venueEmail, venueWebsite].filter(Boolean).map(v => ` · ${esc(v)}`).join("")}</div>
   <div>Generated ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: venueTz })}</div>
 </div>
 
@@ -366,6 +403,7 @@ export async function handleProposalPdf(req: Request, res: Response) {
       venue: venueRows[0] ?? null,
       drinks: drinksRows[0] ?? null,
       quoteData: qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null,
+      menus: await (await import("./proposalMenus")).proposalMenus(proposal.ownerId, proposal.lineItems),
     });
 
     // Generate PDF with Puppeteer's bundled Chromium (no system browser needed)

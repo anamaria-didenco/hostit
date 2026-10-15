@@ -16,7 +16,7 @@ import { SHARED_MENU_SECTIONS, selectedSharedMenuSections } from "@shared/propos
 import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } from "@shared/menuCatalogue";
 import { toLocalDateInput } from "@/lib/dateTime";
 import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNameFromLine, withoutDuplicatePackageLines } from "@shared/proposalPackages";
-import { isProposalLocked } from "@shared/proposalTotals";
+import { isProposalLocked, proposalMoney } from "@shared/proposalTotals";
 
 // Unsaved work is kept on this device until it's saved, so a reload, a closed
 // tab or a Back press doesn't lose a long proposal. Storage can be blocked
@@ -77,9 +77,11 @@ export default function ProposalBuilder() {
   const [eventDate, setEventDate] = useState("");
   const [guestCount, setGuestCount] = useState("");
   const [spaceName, setSpaceName] = useState("");
+  // Menu packages offered as a choice (the client picks one) rather than
+  // added together.
+  const [menuChoice, setMenuChoice] = useState(false);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "Venue Hire", qty: 1, unitPrice: 0, total: 0 },
-    { description: "Food & Beverage Package (per head)", qty: 0, unitPrice: 0, total: 0 },
   ]);
   const [taxPercent, setTaxPercent] = useState(15);
   const [depositPercent, setDepositPercent] = useState(25);
@@ -274,6 +276,13 @@ export default function ProposalBuilder() {
     if (lineDescriptions.has(description)) {
       setLineItems(prev => prev.filter(li => li.description !== description));
     } else {
+      // A second menu of the same kind is almost always an alternative
+      // ("Shared Franco or Tutto Franco"), so offer them as a choice.
+      const sameKind = (menuPackages ?? []).some(p => p.id !== pkg.id && p.type === pkg.type && lineDescriptions.has(packageLineDescription(p)));
+      if (sameKind && !menuChoice) {
+        setMenuChoice(true);
+        toast.info("Menus offered as options — each gets its own price, and the client picks one.");
+      }
       addPricingLine(description, covers || 1, pkg.pricePerHead ? Number(pkg.pricePerHead) : 0);
     }
   };
@@ -327,6 +336,7 @@ export default function ProposalBuilder() {
     setTermsAndConditions(p.termsAndConditions ?? "");
     setInternalNotes(p.internalNotes ?? "");
     setExpiresAt(p.expiresAt ? toLocalDateInput(p.expiresAt) : "");
+    setMenuChoice(!!p.menuChoice);
     // Read-only: open the drinks so what the client saw can still be read.
     if (isProposalLocked(p.status)) setDrinksSectionOpen(true);
     markSynced();
@@ -380,6 +390,8 @@ export default function ProposalBuilder() {
   const taxAmount = (subtotal * taxPercent) / 100;
   const total = subtotal + taxAmount;
   const deposit = (total * depositPercent) / 100;
+  // With a choice of menus, each is priced on its own (see proposalMoney).
+  const menuOptions = proposalMoney(lineItems, taxPercent, depositPercent, menuChoice).options;
 
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
     setLineItems(prev => {
@@ -408,7 +420,7 @@ export default function ProposalBuilder() {
   // ── Unsaved changes ─────────────────────────────────────────────────────────
   // "Saved" = what was last loaded or saved. Loading and filling in from the
   // enquiry call markSynced(), which takes the next render's values as saved.
-  const formState = { title, introMessage, eventDate, guestCount, spaceName, lineItems, taxPercent, depositPercent, termsAndConditions, internalNotes, expiresAt, minimumSpend, foodTotalOverride, autoBarTab, quoteNotes, hireItems };
+  const formState = { title, introMessage, eventDate, guestCount, spaceName, lineItems, taxPercent, depositPercent, termsAndConditions, internalNotes, expiresAt, minimumSpend, foodTotalOverride, autoBarTab, quoteNotes, hireItems, menuChoice };
   const drinksState = { barOption, tabAmount, selectedDrinks, customDrinks, selectedSampleItems };
   const formSnapshot = JSON.stringify(formState);
   const drinksSnapshot = JSON.stringify(drinksState);
@@ -479,7 +491,7 @@ export default function ProposalBuilder() {
       setGuestCount(f.guestCount ?? ""); setSpaceName(f.spaceName ?? "");
       if (Array.isArray(f.lineItems)) setLineItems(f.lineItems);
       setTaxPercent(Number(f.taxPercent ?? 15)); setDepositPercent(Number(f.depositPercent ?? 25));
-      setTermsAndConditions(f.termsAndConditions ?? ""); setInternalNotes(f.internalNotes ?? ""); setExpiresAt(f.expiresAt ?? "");
+      setTermsAndConditions(f.termsAndConditions ?? ""); setInternalNotes(f.internalNotes ?? ""); setExpiresAt(f.expiresAt ?? ""); setMenuChoice(!!f.menuChoice);
       setMinimumSpend(f.minimumSpend ?? ""); setFoodTotalOverride(f.foodTotalOverride ?? ""); setAutoBarTab(f.autoBarTab ?? true);
       setQuoteNotes(f.quoteNotes ?? ""); if (Array.isArray(f.hireItems)) setHireItems(f.hireItems);
       if (d) {
@@ -539,6 +551,7 @@ export default function ProposalBuilder() {
         depositNzd: allDeposit,
         termsAndConditions,
         internalNotes: internalNotes || undefined,
+        menuChoice,
       };
       let proposal: any;
       if (savedProposal) {
@@ -781,6 +794,15 @@ export default function ProposalBuilder() {
 
             {menuSectionOpen && (
               <div className="px-5 pb-5">
+                {selectedMenuPackageIds.length >= 2 && (
+                  <label className="flex items-start gap-3 mb-4 p-3 border-2 border-primary/40 bg-primary/5 cursor-pointer">
+                    <input type="checkbox" checked={menuChoice} onChange={e => setMenuChoice(e.target.checked)} className="mt-1 w-4 h-4 accent-primary" />
+                    <span className="font-dm text-sm text-ink">
+                      <b>Let the client choose one menu</b>
+                      <span className="block text-xs text-muted-foreground mt-0.5">Each menu is shown with its own total and deposit, and the client picks one when they accept. Untick to add the menus together.</span>
+                    </span>
+                  </label>
+                )}
                 {offeredPackages.length === 0 ? (
                   <div className="text-center py-6 border-2 border-dashed border-border">
                     <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -850,12 +872,12 @@ export default function ProposalBuilder() {
             </div>
 
             {/* Header */}
-            <div className="grid grid-cols-12 gap-2 mb-2">
-              <div className="col-span-5 font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
-              <div className="col-span-2 font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
-              <div className="col-span-2 font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
-              <div className="col-span-2 font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
-              <div className="col-span-1" />
+            <div className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 mb-2">
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
+              <div />
             </div>
 
             {doubledPackages.length > 0 && (
@@ -876,23 +898,23 @@ export default function ProposalBuilder() {
             )}
             <div className="space-y-2 mb-4">
               {lineItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5">
+                <div key={i} className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
+                  <div className="min-w-0">
                     <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <Input aria-label={`Quantity for ${item.description || `line item ${i + 1}`}`} type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <Input aria-label={`Unit price for ${item.description || `line item ${i + 1}`}`} type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
                   </div>
-                  <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
+                  <div className="text-right font-dm text-sm font-semibold text-ink whitespace-nowrap">
                     {currency(item.total)}
                   </div>
-                  <div className="col-span-1 flex justify-center">
+                  <div className="flex justify-center">
                     {lineItems.length > 1 && (
                       <button
                         onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
@@ -911,7 +933,7 @@ export default function ProposalBuilder() {
             <div className="border-t-2 border-dashed border-border pt-4 space-y-2">
               <div className="flex justify-between font-dm text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>{currency(subtotal)}</span>
+                <span>{menuOptions.length ? "Priced per menu" : currency(subtotal)}</span>
               </div>
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
@@ -920,12 +942,27 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
-                <span>{currency(taxAmount)}</span>
+                <span>{menuOptions.length ? "" : currency(taxAmount)}</span>
               </div>
+              {menuOptions.length ? (
+                <div className="border-t-2 border-border pt-2 space-y-2">
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground">CLIENT CHOOSES ONE MENU</div>
+                  {menuOptions.map(o => (
+                    <div key={o.line} className="flex justify-between items-baseline gap-3 font-dm text-sm border border-border bg-white px-3 py-2">
+                      <span className="font-semibold text-ink min-w-0">{o.name}</span>
+                      <span className="text-right whitespace-nowrap">
+                        <span className="font-alfa text-base text-primary">{currency(o.total)}</span>
+                        <span className="block text-xs text-muted-foreground">incl. GST · deposit {currency(o.deposit)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <div className="flex justify-between font-alfa text-lg text-ink border-t-2 border-border pt-2">
                 <span>TOTAL (NZD)</span>
                 <span className="text-primary">{currency(total)}</span>
               </div>
+              )}
               <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
@@ -933,7 +970,7 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
-                <span className="font-alfa text-lg text-ink">{currency(deposit)}</span>
+                <span className="font-alfa text-lg text-ink">{menuOptions.length ? <span className="font-dm text-xs text-muted-foreground">per menu, above</span> : currency(deposit)}</span>
               </div>
             </div>
           </div>
@@ -1419,7 +1456,7 @@ export default function ProposalBuilder() {
         </fieldset>
 
         {/* Right: Summary & Actions */}
-        <div className="space-y-4">
+        <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
 
           {/* Appearance — hidden; managed via Venue Settings */}
           {false && <div className="bg-cream-card border border-border shadow-sm">
@@ -1542,6 +1579,12 @@ export default function ProposalBuilder() {
                 <span>{guestCount || "—"}</span>
               </div>
               <div className="border-t border-border pt-2 mt-2">
+                {menuOptions.length ? menuOptions.map(o => (
+                  <div key={o.line} className="flex justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-0">{o.name}</span>
+                    <span className="font-alfa text-primary whitespace-nowrap">{currencyWhole(o.total)}</span>
+                  </div>
+                )) : (<>
                 <div className="flex justify-between font-alfa text-xl">
                   <span className="text-muted-foreground text-sm">TOTAL</span>
                   <span className="text-primary">{currencyWhole(total)}</span>
@@ -1550,6 +1593,7 @@ export default function ProposalBuilder() {
                   <span>Deposit ({depositPercent}%)</span>
                   <span>{currencyWhole(deposit)}</span>
                 </div>
+                </>)}
               </div>
             </div>
           </div>

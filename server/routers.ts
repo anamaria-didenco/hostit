@@ -16,7 +16,7 @@ import { followUpsRouter } from "./followUpsRouter";
 import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 import { inboxRouter } from "./inboxRouter";
 import { zonedDayBoundUtc } from "@shared/tz";
-import { isProposalLocked, proposalLockedMessage, proposalTotals } from "@shared/proposalTotals";
+import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/proposalTotals";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -2084,7 +2084,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const venue = await getVenueSettings(proposal.ownerId);
         // Internal notes are staff-only; never hand them to the client.
         const { internalNotes: _internal, ...publicProposal } = proposal;
-        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null };
+        const { proposalMenus } = await import('./proposalMenus');
+        const menus = await proposalMenus(proposal.ownerId, proposal.lineItems);
+        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null, menus };
       }),
 
     create: protectedProcedure
@@ -2111,6 +2113,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         termsAndConditions: z.string().optional(),
         internalNotes: z.string().optional(),
         expiresAt: z.string().optional(),
+        menuChoice: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -2118,7 +2121,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const token = nanoid(32);
         // With pricing lines, the money is worked out here from the lines —
         // never taken from the browser. (Defaults match the column defaults.)
-        const money = input.lineItems ? proposalTotals(input.lineItems, input.taxPercent ?? 15, input.depositPercent ?? 25) : null;
+        const money = input.lineItems ? proposalMoney(input.lineItems, input.taxPercent ?? 15, input.depositPercent ?? 25, input.menuChoice) : null;
         const proposal = await createProposal({
           ownerId: ctx.user.id,
           leadId: input.leadId,
@@ -2140,6 +2143,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           termsAndConditions: input.termsAndConditions,
           internalNotes: input.internalNotes,
           expiresAt: input.expiresAt ? proposalExpiryInstant(input.expiresAt) : undefined,
+          menuChoice: input.menuChoice === true,
         });
         return proposal;
       }),
@@ -2284,6 +2288,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         internalNotes: z.string().optional(),
         // "" clears the expiry; a YYYY-MM-DD date runs to the end of that NZ day.
         expiresAt: z.string().optional(),
+        menuChoice: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, lineItems, eventDate, expiresAt, subtotalNzd: _subtotal, taxPercent, taxNzd: _tax, totalNzd: _total, depositPercent, depositNzd: _deposit, ...rest } = input;
@@ -2295,17 +2300,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         // Re-total whenever the lines, GST % or deposit % change, filling in
         // whichever wasn't sent from what's saved.
-        let money: ReturnType<typeof proposalTotals> | null = null;
-        if (lineItems || taxPercent !== undefined || depositPercent !== undefined) {
+        let money: ReturnType<typeof proposalMoney> | null = null;
+        if (lineItems || taxPercent !== undefined || depositPercent !== undefined || rest.menuChoice !== undefined) {
           let savedLines: Array<{ description: string; qty: number; unitPrice: number; total: number }> = [];
           try {
             const parsed = JSON.parse(existing.lineItems ?? "[]");
             if (Array.isArray(parsed)) savedLines = parsed;
           } catch { /* no usable saved lines */ }
-          money = proposalTotals(
+          money = proposalMoney(
             lineItems ?? savedLines,
             taxPercent ?? Number(existing.taxPercent ?? 15),
             depositPercent ?? Number(existing.depositPercent ?? 25),
+            rest.menuChoice ?? existing.menuChoice,
           );
         }
         const nextExpiry = expiresAt === undefined ? undefined : expiresAt ? proposalExpiryInstant(expiresAt) : null;
@@ -2431,6 +2437,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         action: z.enum(["accepted", "declined"]),
         clientMessage: z.string().max(2000).optional(),
         declineReason: z.string().max(2000).optional(),
+        chosenMenu: z.string().max(300).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         enforceRateLimit('proposal:respond', getRequestIp(ctx.req), 20, 5 * 60_000);

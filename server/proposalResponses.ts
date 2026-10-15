@@ -211,6 +211,8 @@ export async function respondToProposal(input: {
   action: "accepted" | "declined";
   clientMessage?: string;
   declineReason?: string;
+  /** The menu picked, when the proposal offers a choice of menus. */
+  chosenMenu?: string;
 }): Promise<RespondResult> {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Something went wrong on our side. Please try again in a moment." });
@@ -285,11 +287,38 @@ export async function respondToProposal(input: {
     }
   }
 
+  // A choice of menus: the client must pick one, and the accepted proposal
+  // becomes that menu alone — so it, the booking and the deposit all show
+  // what they agreed to, not the cheapest option or the menus added up.
+  let chosen: { lineItems: string; subtotalNzd: string; taxNzd: string; totalNzd: string; depositNzd: string; menuChoice: false } | null = null;
+  let chosenName: string | null = null;
+  {
+    const { proposalMoney, linesForChosenMenu } = await import("@shared/proposalTotals");
+    let lines: Array<{ description: string; qty: number; unitPrice: number; total: number }> = [];
+    try { const parsed = JSON.parse(proposal.lineItems ?? "[]"); if (Array.isArray(parsed)) lines = parsed; } catch { /* no lines */ }
+    const taxPct = Number(proposal.taxPercent ?? 15);
+    const depPct = Number(proposal.depositPercent ?? 25);
+    const offered = proposalMoney(lines, taxPct, depPct, proposal.menuChoice).options;
+    if (offered.length >= 2) {
+      const pick = offered.find(o => o.line === input.chosenMenu || o.name === input.chosenMenu);
+      if (!pick) throw new TRPCError({ code: "BAD_REQUEST", message: "Please choose one of the menus before accepting." });
+      const money = proposalMoney(linesForChosenMenu(lines, pick.line), taxPct, depPct, false);
+      chosenName = pick.name;
+      chosen = {
+        lineItems: JSON.stringify(money.lineItems),
+        subtotalNzd: money.subtotal.toString(), taxNzd: money.tax.toString(),
+        totalNzd: money.total.toString(), depositNzd: money.deposit.toString(),
+        menuChoice: false,
+      };
+    }
+  }
+
   const claimed = await db.update(proposals)
-    .set({ status: "accepted", respondedAt: new Date(), clientMessage: message })
+    .set({ status: "accepted", respondedAt: new Date(), clientMessage: message, ...(chosen as any ?? {}) })
     .where(and(eq(proposals.id, proposal.id), inArray(proposals.status, ["sent", "viewed"])))
     .returning({ id: proposals.id });
   if (claimed.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "This proposal has already been answered." });
+  if (chosen) Object.assign(proposal, chosen);
 
   let bookingId: number;
   // The venue may already have confirmed this enquiry (or accepted an earlier
@@ -386,7 +415,7 @@ export async function respondToProposal(input: {
     leadId: proposal.leadId,
     ownerId: proposal.ownerId,
     type: "booking_created",
-    content: `${who} accepted proposal "${proposal.title}" — booking confirmed${message ? `. Message: "${message}"` : ""}`,
+    content: `${who} accepted proposal "${proposal.title}"${chosenName ? ` with the ${chosenName} menu` : ""} — booking confirmed${message ? `. Message: "${message}"` : ""}`,
   });
   const date = fmtNzDate(proposal.eventDate ?? lead.eventDate);
   await notifyVenue(proposal.ownerId, {
