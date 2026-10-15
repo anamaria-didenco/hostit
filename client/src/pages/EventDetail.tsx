@@ -26,6 +26,8 @@ import { currency } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
 import { DoubleBookedTag } from "@/components/DateHold";
 import LeadProposals from "@/components/LeadProposals";
+import RecordPaymentButton from "@/components/RecordPaymentDialog";
+import { savedToastLabel } from "@/lib/editToast";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -112,7 +114,8 @@ export default function EventDetail() {
       utils.bookings.clashes.invalidate();
       setEditing(false);
       if (vars.guestCount !== undefined && offerFoodRescale(data, { bookingId })) return;
-      toast.success("Event updated");
+      // Name the one thing that changed ("Date saved"); several say "Event updated".
+      toast.success(savedToastLabel(vars) ?? "Event updated");
     },
     onError: (e, vars) => {
       // Date/space already taken → "Save anyway?" instead of a dead-end error.
@@ -272,10 +275,14 @@ export default function EventDetail() {
                     </button>
                   </>
                 ) : isStaff ? null : (
-                  <button onClick={() => setEditing(true)}
-                    className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1">
-                    <Edit3 className="w-3 h-3" /> EDIT
-                  </button>
+                  <>
+                    <RecordPaymentButton bookingId={bookingId}
+                      className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1" />
+                    <button onClick={() => setEditing(true)}
+                      className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1">
+                      <Edit3 className="w-3 h-3" /> EDIT
+                    </button>
+                  </>
                 )}
               </div>
             </div>

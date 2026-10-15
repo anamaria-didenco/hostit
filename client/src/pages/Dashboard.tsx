@@ -63,6 +63,11 @@ import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
 import WalkthroughPanel from "@/components/WalkthroughPanel";
+import QuickNote from "@/components/QuickNote";
+import RecordPaymentButton from "@/components/RecordPaymentDialog";
+import ConfirmSpaceDialog from "@/components/ConfirmSpaceDialog";
+import EventNextSteps from "@/components/EventNextSteps";
+import { savedToastLabel } from "@/lib/editToast";
 import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
@@ -1175,6 +1180,7 @@ export default function Dashboard() {
   // return focus to whatever opened it (keyed on the booking id so inline
   // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
+  const showEmailModalRef = useRef(false);
   useEffect(() => {
     if (!selectedBooking) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -1193,6 +1199,8 @@ export default function Dashboard() {
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // The email composer opened over the panel: leave the panel alone.
+        if (showEmailModalRef.current) return;
         // An open dropdown/popover inside the panel handles its own Escape
         // (Radix marks it defaultPrevented); an open inline field edit is
         // cancelled. Only a bare Escape closes the whole panel — otherwise
@@ -1370,6 +1378,10 @@ export default function Dashboard() {
     { enabled: !!selectedLead?.id }
   );
   const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
+  // The enquiry's status as the server has it (the drawer flips its own copy
+  // the moment you pick one, before the change has actually gone through).
+  const drawerLeadServerStatus: string | undefined = drawerLeadId
+    ? (allLeads ?? []).find((l: any) => l?.id === drawerLeadId)?.status : undefined;
   // Opening an enquiry (list, board or drawer) means its alerts have been
   // seen — clear them so the bell only counts what still needs a look.
   const openedLeadId: number | null = selectedLead?.id ?? drawerLeadId ?? selectedBooking?.leadId ?? null;
@@ -1663,6 +1675,9 @@ export default function Dashboard() {
 
   // A guest change reaches the run sheet; offer to update its food too.
   const offerFoodRescale = useFoodRescaleOffer();
+  // Set by a calendar drag-and-drop, which really is a reschedule; every other
+  // date change says what it changed ("Date saved").
+  const dragRescheduleRef = useRef(false);
   const rescheduleLead = trpc.leads.update.useMutation({
     onSuccess: (data, vars) => {
       refetchLeads();
@@ -1672,11 +1687,15 @@ export default function Dashboard() {
       utils.dashboard.invalidate();
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       // Also used for the drawer's inline field edits, not only date moves.
-      toast.success(vars.eventDate !== undefined ? "Event rescheduled" : "Saved");
+      const dragged = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      toast.success(dragged ? "Event rescheduled" : (savedToastLabel(vars) ?? "Saved"));
     },
     onError: (err, vars) => {
+      const wasDrag = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
       // Date clash → "Book anyway?" (resends with allowClash), not a dead end.
-      if (promptClashOverride(err, () => rescheduleLead.mutate({ ...vars, allowClash: true }), { confirmLabel: "Move anyway" })) return;
+      if (promptClashOverride(err, () => { dragRescheduleRef.current = wasDrag; rescheduleLead.mutate({ ...vars, allowClash: true }); }, { confirmLabel: "Move anyway" })) return;
       toast.error(vars.eventDate !== undefined ? "Failed to reschedule" : "Failed to save change");
     },
   });
@@ -1698,8 +1717,10 @@ export default function Dashboard() {
       // changes and inline field edits — so tailor the toast to what actually
       // changed rather than always saying "Event rescheduled".
       const v = (vars ?? {}) as any;
-      let msg = "Event updated";
-      if (v.eventDate !== undefined) msg = "Date saved";
+      let msg = savedToastLabel(v) ?? "Event updated";
+      const dragged = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      if (dragged) msg = "Event rescheduled";
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
@@ -1712,7 +1733,9 @@ export default function Dashboard() {
       }
     },
     onError: (err, vars) => {
-      if (promptClashOverride(err, () => rescheduleBooking.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      const wasDrag = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      if (promptClashOverride(err, () => { dragRescheduleRef.current = wasDrag; rescheduleBooking.mutate({ ...vars, allowClash: true }); }, { confirmLabel: "Save anyway" })) return;
       toast.error("Failed to save change");
     },
   });
@@ -1743,6 +1766,7 @@ export default function Dashboard() {
         }
       }
     }
+    dragRescheduleRef.current = true;
     if (payload.type === 'booking') {
       rescheduleBooking.mutate({ id: payload.id, eventDate: newIso });
     } else {
@@ -1877,6 +1901,32 @@ export default function Dashboard() {
     });
     setEditingEventDetails(true);
   }
+  // Save the list panel's EVENT DETAILS form (the top SAVE on desktop, the
+  // sticky bar at the bottom of the form on a phone).
+  function saveLeadDetailsEdit(lead: any) {
+    const firstName = String(eventDetailForm.firstName ?? '').trim();
+    const email = String(eventDetailForm.email ?? '').trim();
+    if (!firstName) { toast.error("First name is required."); return; }
+    if (email && !looksLikeEmail(email)) { toast.error(BAD_EMAIL_MSG); return; }
+    updateLeadDetails.mutate({
+      id: lead.id,
+      firstName,
+      lastName: String(eventDetailForm.lastName ?? '').trim() || null,
+      email: email || undefined,
+      phone: String(eventDetailForm.phone ?? '').trim() || null,
+      company: String(eventDetailForm.company ?? '').trim() || null,
+      eventType: eventDetailForm.eventType || null,
+      // Keep the event's time when only the day changes; a date-only
+      // value used to wipe it.
+      eventDate: eventDetailForm.eventDate
+        ? (combineLocalDateTime(eventDetailForm.eventDate, lead.eventDate && fmtEventTime(lead.eventDate)
+            ? (() => { const d = new Date(lead.eventDate); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
+            : null) ?? eventDetailForm.eventDate)
+        : null,
+      guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
+      budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
+    });
+  }
   // The calendar date as the venue sees it. Date-only events are stored at UTC
   // midnight, which is already that date; timed ones are read in local time.
   function localYmd(iso: string | Date): string {
@@ -2002,6 +2052,9 @@ export default function Dashboard() {
   // (LostReasonDialog). Skip still marks it lost; cancel leaves it as it was.
   type UpdateStatusVars = Parameters<typeof updateStatusMut.mutate>[0];
   const [lostPrompt, setLostPrompt] = useState<null | { single?: UpdateStatusVars; bulkIds?: number[]; name?: string; prior?: string }>(null);
+  // Moving an enquiry with no space to Booked / Confirmed / Tentative asks for
+  // the space right there (ConfirmSpaceDialog), then carries on with the change.
+  const [spacePrompt, setSpacePrompt] = useState<null | { vars: UpdateStatusVars; name?: string; prior?: string }>(null);
   const updateStatus = {
     ...updateStatusMut,
     mutate: (vars: UpdateStatusVars) => {
@@ -2010,8 +2063,38 @@ export default function Dashboard() {
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
         return;
       }
+      if (['booked', 'confirmed', 'tentative'].includes(vars.status) && vars.spaceName === undefined) {
+        const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
+        // The open panel may hold a fresher copy than the list.
+        const open: any = [selectedBooking, selectedLead].find((x: any) => x && x.id === vars.id && (x._isLead || x === selectedLead));
+        const space = (open?.spaceName ?? l?.spaceName ?? '').toString().trim();
+        if ((l || open) && !space) {
+          const src = open ?? l;
+          setSpacePrompt({ vars, name: `${src.firstName ?? ''} ${src.lastName ?? ''}`.trim() || undefined, prior: l?.status ?? src.status });
+          return;
+        }
+      }
       updateStatusMut.mutate(vars);
     },
+  };
+  const confirmSpace = (spaceName: string) => {
+    const p = spacePrompt;
+    setSpacePrompt(null);
+    if (!p) return;
+    const patch = (prev: any) => prev && prev.id === p.vars.id ? { ...prev, spaceName } : prev;
+    setSelectedLead(patch);
+    setSelectedBooking((prev: any) => prev?._isLead ? patch(prev) : prev);
+    updateStatusMut.mutate({ ...p.vars, spaceName });
+  };
+  const cancelSpace = () => {
+    const p = spacePrompt;
+    setSpacePrompt(null);
+    // Undo any optimistic status the caller already showed.
+    if (p?.prior) {
+      const undo = (prev: any) => prev && prev.id === p.vars.id && prev.status === p.vars.status ? { ...prev, status: p.prior } : prev;
+      setSelectedLead(undo);
+      setSelectedBooking((prev: any) => prev?._isLead ? undo(prev) : prev);
+    }
   };
   const bulkUpdateStatus = {
     ...bulkUpdateStatusMut,
@@ -2351,6 +2434,7 @@ export default function Dashboard() {
 
   // Email compose state
   const [showEmailModal, setShowEmailModal] = useState(false);
+  showEmailModalRef.current = showEmailModal;
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
   // Set when the composer was opened from a client's email ("Reply"), so the
   // send threads under it (In-Reply-To / References). Cleared on close.
@@ -4128,10 +4212,6 @@ export default function Dashboard() {
                                     onChange={e => {
                                       const newStatus = e.target.value;
                                       if (newStatus === lead.status) return;
-                                      if (['booked','confirmed','tentative'].includes(newStatus) && !lead.spaceName?.trim()) {
-                                        toast.error('Pick an event space on this enquiry first.');
-                                        return;
-                                      }
                                       updateStatus.mutate({ id: lead.id, status: newStatus as any });
                                     }}
                                     title="Change status"
@@ -4488,6 +4568,12 @@ export default function Dashboard() {
                       </button>
                     </div>
                   </div>
+                  {/* Notes without scrolling to the activity log. */}
+                  {!isStaff && (
+                    <div className="mb-4 max-w-2xl">
+                      <QuickNote leadId={selectedLead.id} />
+                    </div>
+                  )}
                   {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
                   {!isStaff && (
                     <div className="-mt-1 mb-4 md:-mt-3 md:mb-6">
@@ -4522,32 +4608,9 @@ export default function Dashboard() {
                             <Edit2 className="w-3 h-3" /> EDIT
                           </button>
                         ) : (
-                          <div className="flex gap-2">
+                          <div className="hidden md:flex gap-2">
                             <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/60 hover:text-ink font-bebas tracking-widest">CANCEL</button>
-                            <button onClick={() => {
-                              const firstName = String(eventDetailForm.firstName ?? '').trim();
-                              const email = String(eventDetailForm.email ?? '').trim();
-                              if (!firstName) { toast.error("First name is required."); return; }
-                              if (email && !looksLikeEmail(email)) { toast.error(BAD_EMAIL_MSG); return; }
-                              updateLeadDetails.mutate({
-                                id: selectedLead.id,
-                                firstName,
-                                lastName: String(eventDetailForm.lastName ?? '').trim() || null,
-                                email: email || undefined,
-                                phone: String(eventDetailForm.phone ?? '').trim() || null,
-                                company: String(eventDetailForm.company ?? '').trim() || null,
-                                eventType: eventDetailForm.eventType || null,
-                                // Keep the event's time when only the day changes; a date-only
-                                // value used to wipe it.
-                                eventDate: eventDetailForm.eventDate
-                                  ? (combineLocalDateTime(eventDetailForm.eventDate, selectedLead.eventDate && fmtEventTime(selectedLead.eventDate)
-                                      ? (() => { const d = new Date(selectedLead.eventDate); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
-                                      : null) ?? eventDetailForm.eventDate)
-                                  : null,
-                                guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
-                                budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
-                              });
-                            }} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
+                            <button onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
                               {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
                             </button>
                           </div>
@@ -4594,6 +4657,16 @@ export default function Dashboard() {
                               />
                             </div>
                           ))}
+                          {/* Phone: Save / Cancel stay in view at the bottom of the
+                              form however far down the fields you are. */}
+                          <div className="md:hidden sticky bottom-0 -mx-4 -mb-4 mt-3 px-4 py-3 flex gap-2 bg-cream border-t border-gold/40 shadow-[0_-4px_8px_rgba(0,0,0,0.06)]">
+                            <button type="button" onClick={() => setEditingEventDetails(false)}
+                              className="flex-1 min-h-[44px] border border-ink/25 text-ink/80 font-bebas tracking-widest text-xs">CANCEL</button>
+                            <button type="button" onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending}
+                              className="flex-1 min-h-[44px] bg-forest-dark text-cream hover:bg-forest font-bebas tracking-widest text-xs disabled:opacity-50">
+                              {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4605,10 +4678,6 @@ export default function Dashboard() {
                       {!['booked','confirmed'].includes(selectedLead.status) && (
                         <button
                           onClick={() => {
-                            if (!selectedLead.spaceName?.trim()) {
-                              toast.error('Pick an event space on this enquiry before confirming.');
-                              return;
-                            }
                             updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any });
                           }}
                           className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs hover:bg-forest transition-colors">
@@ -4627,6 +4696,11 @@ export default function Dashboard() {
                             className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-forest/30 text-forest font-bebas tracking-widest text-xs hover:bg-forest/10 transition-colors">
                             <Calendar className="w-3.5 h-3.5" /> VIEW ON CALENDAR
                           </button>
+                          {!isStaff && (
+                            <EventNextSteps key={selectedLead.id} leadId={selectedLead.id} leadStatus={selectedLead.status}
+                              onOpenRunsheet={(bid) => setLocation(`/runsheet?bookingId=${bid}`)}
+                              onOpenSettings={() => { setTab("settings"); setSettingsSubTab("email"); }} />
+                          )}
                         </div>
                       )}
                       {!isStaff && (
@@ -4649,10 +4723,6 @@ export default function Dashboard() {
                           return (
                             <button key={stage.key}
                               onClick={() => {
-                                if (['booked','confirmed','tentative'].includes(stage.key) && !selectedLead.spaceName?.trim()) {
-                                  toast.error('Pick an event space on this enquiry first.');
-                                  return;
-                                }
                                 updateStatus.mutate({ id: selectedLead.id, status: stage.key as any });
                               }}
                               className="w-full text-left px-3 py-2 border font-bebas tracking-widest text-xs transition-all"
@@ -4827,9 +4897,11 @@ export default function Dashboard() {
           )}
 
           {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
-          {showEmailModal && selectedLead && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div role="dialog" aria-modal="true" className="bg-cream border-2 border-forest w-full max-w-lg shadow-2xl">
+          {/* Portalled to <body>: the event drawer makes #root inert while it is
+              open, and the composer can now open over the drawer. */}
+          {showEmailModal && selectedLead && createPortal(
+            <div className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <div role="dialog" aria-modal="true" aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
@@ -4908,6 +4980,8 @@ export default function Dashboard() {
                       value={emailForm.body}
                       onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
                       rows={8}
+                      autoFocus
+                      onFocus={e => { const el = e.currentTarget; if (el.selectionStart === 0 && el.selectionEnd === 0) el.setSelectionRange(el.value.length, el.value.length); }}
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
@@ -5019,7 +5093,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          )}
+          , document.body)}
           {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
@@ -9465,6 +9539,13 @@ export default function Dashboard() {
             </div>
             {!selectedBooking._isLead && drawerView === 'beo' ? (
               <>
+                {!isStaff && (
+                  <div className="flex-shrink-0 px-4 md:px-5 pt-3 bg-cream empty:hidden">
+                    <EventNextSteps key={`ns-b${selectedBooking.id}`} bookingId={selectedBooking.id}
+                      onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
+                      onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+                  </div>
+                )}
                 {/* Two jobs only: change it, or take the PDF. Everything else
                     (status, payments, Xero, cancel) is one tap further in. */}
                 <div className="flex-shrink-0 px-4 md:px-5 py-3 flex items-center gap-2 flex-wrap border-b border-gold bg-cream">
@@ -9480,6 +9561,10 @@ export default function Dashboard() {
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm">
                     <Download className="w-4 h-4" /> PDF
                   </button>
+                  {!isStaff && (
+                    <RecordPaymentButton bookingId={selectedBooking.id}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm" />
+                  )}
                   <button
                     onClick={() => setDrawerView('details')}
                     className="ml-auto font-dm text-sm font-semibold text-forest underline underline-offset-4 hover:no-underline px-1 py-2">
@@ -9528,6 +9613,10 @@ export default function Dashboard() {
                     className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs">
                     <ExternalLink className="hidden sm:block w-3.5 h-3.5" /> EVENT PAGE
                   </button>
+                  {!isStaff && (
+                    <RecordPaymentButton bookingId={selectedBooking.id}
+                      className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs" />
+                  )}
                 </div>
               )}
               {/* Status control + event type on one line. The coloured status
@@ -9542,8 +9631,9 @@ export default function Dashboard() {
                     if (newStatus === prevStatus) return;
                     // Rule: every event must have a space selected before it
                     // can move into a live state (booked/confirmed/tentative).
-                    const needsSpace = ['booked', 'confirmed', 'tentative'].includes(newStatus);
-                    if (needsSpace && !selectedBooking.spaceName?.trim()) {
+                    // (An enquiry with no space is asked for one by the status
+                    // change itself; a real event needs it filled in first.)
+                    if (!selectedBooking._isLead && ['booked', 'confirmed', 'tentative'].includes(newStatus) && !selectedBooking.spaceName?.trim()) {
                       setDrawerAddFields(prev => new Set(prev).add('space'));
                       toast.error('Pick a space first. The Space field is now showing under Details.', { duration: 5000 });
                       return;
@@ -9611,6 +9701,21 @@ export default function Dashboard() {
                   </Popover>
                 )}
               </div>
+              {/* Notes without leaving the drawer: type, Add, and the latest
+                  activity underneath. */}
+              {!isStaff && (selectedBooking._isLead || selectedBooking.leadId) && (
+                <QuickNote leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId} />
+              )}
+              {/* What to do now that it's an event. */}
+              {!isStaff && ((!selectedBooking._isLead) || ["booked", "confirmed"].includes(drawerLeadServerStatus ?? "")) && (
+                <EventNextSteps
+                  key={selectedBooking._isLead ? `ns-l${selectedBooking.id}` : `ns-b${selectedBooking.id}`}
+                  bookingId={selectedBooking._isLead ? null : selectedBooking.id}
+                  leadId={selectedBooking._isLead ? selectedBooking.id : null}
+                  leadStatus={selectedBooking._isLead ? drawerLeadServerStatus : selectedBooking.status}
+                  onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
+                  onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+              )}
               {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
               {selectedBooking._isLead && !isStaff && (
                 <LeadResponseInfo leadId={selectedBooking.id} readOnly={isTeamMember}
@@ -10290,8 +10395,8 @@ export default function Dashboard() {
                               email: selectedBooking.email,
                             } as any);
                             setEmailForm({ subject: `Re: Your event enquiry — ${selectedBooking.eventType || 'Event'}`, body: `Hi ${selectedBooking.firstName},\n\nThank you for your enquiry. ` });
+                            // The composer opens over the drawer, so you land back on this record.
                             setShowEmailModal(true);
-                            setSelectedBooking(null);
                           }}
                           className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                           <Mail className="w-3 h-3" /> EMAIL
@@ -10423,7 +10528,6 @@ export default function Dashboard() {
                     // Same hand-off as the drawer's EMAIL button: the composer works on selectedLead.
                     setSelectedLead({ id: selectedBooking.id, firstName: selectedBooking.firstName, lastName: selectedBooking.lastName, email: selectedBooking.email } as any);
                     openEmailReply(selectedBooking, reply);
-                    setSelectedBooking(null);
                   } : undefined} />
               )}
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
@@ -10971,6 +11075,11 @@ export default function Dashboard() {
       {/* Bulk Delete Confirmation */}
       {lostPrompt && (
         <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+      )}
+      {spacePrompt && (
+        <ConfirmSpaceDialog name={spacePrompt.name} spaces={spaces as any}
+          statusLabel={pipelineStages.find(s => s.key === spacePrompt.vars.status)?.label ?? spacePrompt.vars.status}
+          onConfirm={confirmSpace} onCancel={cancelSpace} />
       )}
 
       {showBulkDeleteConfirm && (
