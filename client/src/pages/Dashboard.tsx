@@ -19,6 +19,7 @@ import {
   Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw, ArrowLeft
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -1631,12 +1632,15 @@ export default function Dashboard() {
     });
   }
 
+  // A guest change reaches the run sheet; offer to update its food too.
+  const offerFoodRescale = useFoodRescaleOffer();
   const rescheduleLead = trpc.leads.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       refetchLeads();
       utils.leads.eventsByMonth.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.dashboard.invalidate();
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event rescheduled");
     },
     onError: (err, vars) => {
@@ -1650,7 +1654,7 @@ export default function Dashboard() {
     // need to refresh the lead-driven queries (events table, calendar
     // enquiry layer, dashboard tiles) — otherwise the table keeps the
     // stale row even after a successful save.
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.leads.list.invalidate();
@@ -1667,7 +1671,7 @@ export default function Dashboard() {
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
-      toast.success(msg);
+      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) toast.success(msg);
       // A save that went through after "Book anyway" — the inline editor had
       // rolled its optimistic value back, so put the saved one back in place.
       if (v.allowClash) {
@@ -1852,10 +1856,11 @@ export default function Dashboard() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const updateLeadDetails = trpc.leads.update.useMutation({
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       refetchLeads();
       setSelectedLead((prev: any) => prev ? { ...prev, ...vars } : prev);
       setEditingEventDetails(false);
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event details saved");
     },
     onError: (err, vars) => {

@@ -17,6 +17,7 @@ import { escapeHtml } from "./sanitizeHtml";
 import { publicBaseUrl } from "./publicUrl";
 import { dayWithTimeFrom } from "@shared/eventDate";
 import { changedElsewhere } from "./runsheetVersion";
+import { linkLeadRunsheets } from "./runsheetLinks";
 
 const NZ_TZ = "Pacific/Auckland";
 
@@ -348,6 +349,13 @@ export async function respondToProposal(input: {
     await db.update(proposals).set({ status: proposal.status, respondedAt: null, clientMessage: proposal.clientMessage })
       .where(eq(proposals.id, proposal.id));
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "We couldn't confirm your booking just now. Please try again, or contact the venue." });
+  }
+
+  // A run sheet already started from the enquiry belongs to this event now.
+  try {
+    await linkLeadRunsheets(db, proposal.ownerId, proposal.leadId, bookingId);
+  } catch (err) {
+    console.error("[proposals] linking run sheets after accept failed (non-fatal):", err);
   }
 
   // Date clash → flag the booking + urgent venue alert; never blocks the
