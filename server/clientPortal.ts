@@ -113,7 +113,7 @@ export async function ensureSigningPortal(ownerId: number, contract: Contract): 
     token,
     clientName: contract.clientName ?? null,
     clientEmail: contract.clientEmail ?? null,
-    permissions: JSON.stringify({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: true }),
+    permissions: JSON.stringify({ viewProposal: true, viewRunsheet: false, viewBudget: true, approveProposal: true, signContract: true }),
     expiresAt: null,
     createdAt: now,
   });

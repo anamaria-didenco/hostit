@@ -95,6 +95,9 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "inbox.",          // client email conversations + mailbox settings
   "holds.",          // date holds and clash checks name enquiries
   "winBack.",        // lost/quiet client lists with contact details
+  "team.",           // team access links are logins in their own right
+  "apiTokens.",      // API tokens act as the owner
+  "portal.",         // client portal links show the client's money
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];
@@ -116,6 +119,18 @@ const restrictStaff = t.middleware(async opts => {
 });
 
 export const protectedProcedure = t.procedure.use(requireUser).use(restrictStaff);
+
+/** The venue owner, or an extra login with full access — not a staff login
+ *  and not a team-access-link session. Only they manage who can sign in. */
+export function isAccountManager(ctx: { isStaff: boolean; isTeamMember: boolean }): boolean {
+  return !ctx.isStaff && !ctx.isTeamMember;
+}
+
+export function assertAccountManager(ctx: { isStaff: boolean; isTeamMember: boolean }): void {
+  if (!isAccountManager(ctx)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Only the venue owner can manage logins, team links and API tokens." });
+  }
+}
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {

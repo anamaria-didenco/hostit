@@ -2,6 +2,7 @@ import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -22,6 +23,8 @@ import EventSpendSection from "@/components/EventSpendSection";
 import { downloadBeo } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
+import NoTotalSet from "@/components/NoTotalSet";
+import { DoubleBookedTag } from "@/components/DateHold";
 import LeadProposals from "@/components/LeadProposals";
 
 const EVENT_TYPES = [
@@ -100,10 +103,15 @@ export default function EventDetail() {
     };
   };
 
+  // A guest change reaches the run sheet; offer to update its food too.
+  const offerFoodRescale = useFoodRescaleOffer();
   const updateBooking = trpc.bookings.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       utils.bookings.getById.invalidate({ id: bookingId });
+      // A save over a clash flags it as double-booked; a move can clear one.
+      utils.bookings.clashes.invalidate();
       setEditing(false);
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { bookingId })) return;
       toast.success("Event updated");
     },
     onError: (e, vars) => {
@@ -181,6 +189,7 @@ export default function EventDetail() {
     (s: number, p: any) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0
   );
   const outstanding = paymentSummary?.outstanding ?? Math.max(0, Number(booking.totalNzd ?? 0) - totalPaid);
+  const hasTotal = Number(booking.totalNzd ?? 0) > 0;
 
   // Send only what the user changed, so saving (say) the notes can't overwrite
   // a deposit, total or status someone else updated since the page loaded.
@@ -247,6 +256,7 @@ export default function EventDetail() {
                 <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
                   {getStatusInfo(booking.status).label.toUpperCase()}
                 </span>
+                <DoubleBookedTag flaggedAt={booking.clashFlaggedAt} className="!text-xs !px-3 !py-1" />
                 {editing ? (
                   <>
                     <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink flex items-center gap-1 px-2 py-1">
@@ -387,9 +397,9 @@ export default function EventDetail() {
                 </div>
                 <div className="flex items-start gap-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-bebas text-xs tracking-widest text-ink/65">EMAIL</div>
-                    <div className="font-dm text-sm text-ink">{booking.email}</div>
+                    <div className="font-dm text-sm text-ink break-all">{booking.email}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
@@ -418,9 +428,11 @@ export default function EventDetail() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">TOTAL</div>
-                <div className="font-cormorant text-2xl font-semibold text-ink">
-                  {currency(Number(booking.totalNzd ?? 0))}
-                </div>
+                {hasTotal ? (
+                  <div className="font-cormorant text-2xl font-semibold text-ink">
+                    {currency(Number(booking.totalNzd))}
+                  </div>
+                ) : <NoTotalSet />}
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">DEPOSIT</div>
@@ -434,17 +446,25 @@ export default function EventDetail() {
                   {currency(totalPaid)}
                 </div>
               </div>
-              <div className={`text-center p-3 border ${outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+              {/* With no total there is nothing to be outstanding against —
+                  "$0.00" read as "settled". */}
+              <div className={`text-center p-3 border ${!hasTotal ? 'bg-cream border-gold/20' : outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">OUTSTANDING</div>
-                <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
-                  {currency(outstanding)}
-                </div>
+                {hasTotal ? (
+                  <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
+                    {currency(outstanding)}
+                  </div>
+                ) : <NoTotalSet />}
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <span className={`font-bebas text-xs tracking-widest px-2 py-1 ${booking.depositPaid ? 'bg-blue-100 text-forest' : 'bg-amber-100 text-amber-700'}`}>
-                {booking.depositPaid ? "✓ DEPOSIT PAID" : "⚠ DEPOSIT PENDING"}
-              </span>
+              {booking.depositRequired === false ? (
+                <span className="font-bebas text-xs tracking-widest px-2 py-1 bg-cream border border-gold/20 text-ink/65">DEPOSIT NOT NEEDED</span>
+              ) : (
+                <span className={`font-bebas text-xs tracking-widest px-2 py-1 ${booking.depositPaid ? 'bg-blue-100 text-forest' : 'bg-amber-100 text-amber-700'}`}>
+                  {booking.depositPaid ? "✓ DEPOSIT PAID" : "⚠ DEPOSIT PENDING"}
+                </span>
+              )}
               <Link href={`/payments?bookingId=${bookingId}`}>
                 <button className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-3 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
                   <DollarSign className="w-3 h-3" /> MANAGE PAYMENTS
@@ -750,7 +770,9 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
   });
   // The client signs in their portal link for this event. Sending makes sure
   // that link exists (with signing on) and emails it when SMTP is set up.
-  const { data: portalLinks } = trpc.portal.list.useQuery({ bookingId });
+  // Client portal links aren't readable by a staff login.
+  const { isStaff: portalStaff } = useAuth();
+  const { data: portalLinks } = trpc.portal.list.useQuery({ bookingId }, { enabled: !portalStaff });
   const signingLink = (() => {
     const t = (portalLinks ?? []).find((t: any) => {
       try { return JSON.parse(t.permissions ?? '{}').signContract && (!t.expiresAt || Number(t.expiresAt) > Date.now()); } catch { return false; }
@@ -1185,10 +1207,12 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
 
 // ─── Client Portal Tab ────────────────────────────────────────────────────────
 function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) {
-  const { data: tokens, isLoading } = trpc.portal.list.useQuery({ bookingId });
+  // Client portal links aren't readable by a staff login.
+  const { isStaff: portalStaff } = useAuth();
+  const { data: tokens, isLoading } = trpc.portal.list.useQuery({ bookingId }, { enabled: !portalStaff });
   const utils = trpc.useUtils();
   const [showForm, setShowForm] = useState(false);
-  const [perms, setPerms] = useState({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false });
+  const [perms, setPerms] = useState({ viewProposal: true, viewRunsheet: false, viewBudget: true, approveProposal: true, signContract: false });
   const create = trpc.portal.create.useMutation({
     onSuccess: () => { utils.portal.list.invalidate({ bookingId }); setShowForm(false); toast.success('Client portal link created!'); },
     onError: () => toast.error("Couldn't create the portal link — try again"),
@@ -1206,7 +1230,7 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
     },
     onError: (e) => toast.error(e.message || 'Could not email the link'),
   });
-  const PERM_LABELS: Record<string, string> = { viewProposal: 'View Proposal', viewRunsheet: 'View Runsheet', viewBudget: 'View Budget', approveProposal: 'Approve Proposal', signContract: 'Sign Contract' };
+  const PERM_LABELS: Record<string, string> = { viewProposal: 'View Proposal', viewRunsheet: 'View Runsheet', viewBudget: 'View Payments', approveProposal: 'Approve Proposal', signContract: 'Sign Contract' };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">

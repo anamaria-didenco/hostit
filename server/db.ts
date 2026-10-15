@@ -240,6 +240,8 @@ export async function markLeadLost(
   if (["booked", "confirmed", "finished"].includes(lead.status ?? "")) {
     await db.update(bookings).set({ status: "cancelled" })
       .where(and(eq(bookings.leadId, leadId), eq(bookings.ownerId, ownerId), ne(bookings.status, "cancelled")));
+    // A cancelled event no longer double-books anything.
+    await (await import("./doubleBookings")).reconcileClashFlags(ownerId);
   }
   if (lead.status === "tentative") {
     // Leaving "tentative" ends the date hold (server/holds.ts).
@@ -518,6 +520,30 @@ export async function getDashboardStats(ownerId: number) {
     totalRevenueAllTime,
     pendingPayments,
   };
+}
+
+/**
+ * When a deposit-type payment is recorded and the booking has no deposit
+ * amount (null or 0), the payment defines the deposit: set depositNzd to the
+ * deposit-type total paid. Skipped when the venue marked the booking as not
+ * needing a deposit, and never overwrites an amount the venue already set.
+ */
+export async function adoptRecordedDepositAmount(bookingId: number, ownerId: number) {
+  const { bookings, payments } = await import('../drizzle/schema');
+  const { eq, and } = await import('drizzle-orm');
+  const db = await getDb();
+  if (!db) return;
+  const [booking] = await db.select({ depositNzd: bookings.depositNzd, depositRequired: bookings.depositRequired })
+    .from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
+  if (!booking || booking.depositRequired === false) return;
+  if (Number(booking.depositNzd ?? 0) > 0) return;
+  const pmts = await db.select({ amount: payments.amount, type: payments.type }).from(payments)
+    .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
+  const { depositPaidAmount } = await import('../shared/paymentMath');
+  const paid = depositPaidAmount(pmts);
+  if (paid <= 0) return;
+  await db.update(bookings).set({ depositNzd: paid.toFixed(2) })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
 }
 
 // Recalculates and persists `bookings.depositPaid` based on net payments

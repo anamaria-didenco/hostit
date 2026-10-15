@@ -47,7 +47,7 @@ import {
   getBookings, getBookingsByMonth, createBooking,
   EVENT_DATE_REQUIRED, cancelledBookingForLead, restoreClashQuery, restoreCancelledBooking,
   getDashboardStats,
-  syncDepositPaidFlag,
+  syncDepositPaidFlag, adoptRecordedDepositAmount,
 } from "./db";
 import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
 import { cleanLandingPage, parseAdClickAt } from "@shared/adAttribution";
@@ -161,7 +161,7 @@ export const appRouter = router({
         // sync with the sibling public endpoints (previously it omitted
         // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
         // info leak).
-        const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember;
+        const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember && !ctx.isStaff;
         if (!isRealOwner) {
           const safe: any = { ...vs };
           for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
@@ -246,7 +246,13 @@ export const appRouter = router({
         // Enquiry form: availability on the date picker + walkthrough booking.
         showAvailabilityOnForm: z.coerce.number().int().min(0).max(1).optional(),
         walkthroughEnabled: z.coerce.number().int().min(0).max(1).optional(),
-        walkthroughDays: z.string().regex(/^([0-6](,[0-6])*)?$/).optional(),
+        // Stored as "2,3,4". The venue details form holds the days as a list
+        // and sends the whole form, so take either shape — a list made every
+        // "Save venue details" fail.
+        walkthroughDays: z.union([
+          z.string().regex(/^([0-6](,[0-6])*)?$/),
+          z.array(z.number().int().min(0).max(6)),
+        ]).transform(v => Array.isArray(v) ? Array.from(new Set(v)).sort().join(',') : v).optional(),
         walkthroughStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
         walkthroughEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
         walkthroughSlotMinutes: z.coerce.number().int().min(10).max(240).optional(),
@@ -313,7 +319,17 @@ export const appRouter = router({
         }
         return saved;
       }),
-    getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
+    getOwn: protectedProcedure.query(async ({ ctx }) => {
+      const vs = await getVenueSettings(ctx.user.id);
+      // A staff login runs under the owner's id but must never be handed the
+      // mail, inbox or booking-system credentials. Removed (not nulled) so
+      // nothing the staff screens read changes shape.
+      if (vs && ctx.isStaff) {
+        const safe: any = { ...vs };
+        for (const k of ["smtpPass", "imapPass", "nbiApiKey", "nbiWebhookSecret"]) delete safe[k];
+        return safe as typeof vs;
+      }
+      return vs;
     }),
 
     upsert: protectedProcedure
@@ -1310,6 +1326,9 @@ export const appRouter = router({
         if (restorable) {
           await restoreCancelledBooking(restorable.id, ctx.user.id, input.status === 'finished' ? 'finished' : 'confirmed');
           await addLeadActivity({ leadId: input.id, ownerId: ctx.user.id, type: "status_change", content: "Cancelled event restored" });
+          // A run sheet started from the enquiry meanwhile joins the event.
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.id, restorable.id);
         }
 
         // When marking as booked, auto-create a booking record if one doesn't exist
@@ -1339,6 +1358,10 @@ export const appRouter = router({
               // lead status changes also appear in the NBI diary.
               const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
               if (newId) {
+                // A run sheet already started from the enquiry belongs to
+                // this event now — otherwise the event can't find it.
+                const { linkLeadRunsheets } = await import('./runsheetLinks');
+                await linkLeadRunsheets(null, ctx.user.id, input.id, newId);
                 const { pushBookingToNbi } = await import('./nowbookit');
                 await pushBookingToNbi(newId, ctx.user.id, { source: 'leads.updateStatus→booked' });
                 // Event confirmed → remind the events manager to send the deposit.
@@ -1347,6 +1370,21 @@ export const appRouter = router({
               }
             }
           }
+        }
+        // Booked over the clash warning → flag the event and what it clashes
+        // with; an event cancelled or brought back may end (or not) a clash.
+        if (input.allowClash || wasBooked !== isBooked || restorable) {
+          const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+          if (input.allowClash && isBooked) {
+            const { getDb } = await import('./db');
+            const { bookings } = await import('../drizzle/schema');
+            const { eq, and, ne } = await import('drizzle-orm');
+            const db = await getDb();
+            const live = db ? await db.select({ id: bookings.id }).from(bookings)
+              .where(and(eq(bookings.leadId, input.id), eq(bookings.ownerId, ctx.user.id), ne(bookings.status, 'cancelled'))) : [];
+            for (const b of live) await flagOverriddenClash(ctx.user.id, b.id);
+          }
+          await reconcileClashFlags(ctx.user.id);
         }
         // Automated task rules (Settings → Automated Tasks). Includes the
         // built-in 5-day follow-up when a lead moves to "function_pack_sent"
@@ -1420,6 +1458,11 @@ export const appRouter = router({
             throw new Error('This event is live — pick a different space instead of clearing it.');
           }
         }
+        // The guest count before this edit, to tell whether it changed (the
+        // drawer sends every field on each save).
+        const guestsBefore = rest.guestCount !== undefined
+          ? (await getLeadById(id, ctx.user.id))?.guestCount ?? null
+          : undefined;
         await updateLead(id, ctx.user.id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
@@ -1433,6 +1476,7 @@ export const appRouter = router({
         // this in bookings.update, but an edit made here used to leave the
         // event on its old date.
         const bookingUpdates: Record<string, unknown> = {};
+        let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
         if (eventDate) bookingUpdates.eventDate = new Date(eventDate);
         if (rest.guestCount !== undefined) bookingUpdates.guestCount = rest.guestCount;
         if (spaceName !== undefined && spaceName?.trim()) bookingUpdates.spaceName = spaceName.trim();
@@ -1453,11 +1497,15 @@ export const appRouter = router({
             if (ids.length) {
               await db.update(bookings).set({ ...bookingUpdates, updatedAt: new Date() })
                 .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
+              if (bookingUpdates.eventDate || bookingUpdates.spaceName) {
+                const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+                if (allowClash) for (const bid of ids) await flagOverriddenClash(ctx.user.id, bid);
+                await reconcileClashFlags(ctx.user.id);
+              }
             }
             const rsUpdates: Record<string, unknown> = {};
             // The date (and start time, when it has one), as bookings.update
-            // does: the runsheet's guest count is the kitchen's final number
-            // and is edited there.
+            // does. The guest count follows below, separately.
             if (bookingUpdates.eventDate) {
               rsUpdates.eventDate = bookingUpdates.eventDate;
               const { startTimeOf } = await import('@shared/eventDate');
@@ -1473,9 +1521,18 @@ export const appRouter = router({
                   ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
                   : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
             }
+            // Guests used to stop here: the runsheet's count was treated as
+            // the kitchen's own final number, so the event and the run sheet
+            // drifted apart (the kitchen cooked for the old number). It now
+            // follows the event, as a run sheet edit already flows back to
+            // it. The kitchen's concern is the food, and that is never
+            // changed silently: lines still at the old count are reported
+            // (foodRescale) for the person to update via fnb.rescaleGuests.
+            const { syncRunsheetGuests } = await import('./runsheetGuests');
+            foodRescale = await syncRunsheetGuests(db, ctx.user.id, { leadId: id }, guestsBefore, rest.guestCount);
           }
         }
-        return { success: true };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
       }),
 
     activity: protectedProcedure
@@ -1491,6 +1548,7 @@ export const appRouter = router({
         // in one transaction; refused if its event has payments or invoices.
         const { deleteLeadsCascade } = await import('./cascadeDelete');
         await deleteLeadsCascade(ctx.user.id, [input.id]);
+        await (await import('./doubleBookings')).reconcileClashFlags(ctx.user.id);
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -1833,7 +1891,11 @@ export const appRouter = router({
             }
             await db.update(leads).set({ status: input.status })
               .where(and(eq(leads.id, lead.id), eq(leads.ownerId, ctx.user.id)));
-            if (restorable) await restoreCancelledBooking(restorable.id, ctx.user.id);
+            if (restorable) {
+              await restoreCancelledBooking(restorable.id, ctx.user.id);
+              const { linkLeadRunsheets } = await import('./runsheetLinks');
+              await linkLeadRunsheets(db, ctx.user.id, lead.id, restorable.id);
+            }
             if (input.status === 'tentative' && lead.status !== 'tentative') await startHoldFromStatusChange(ctx.user.id, lead);
             ids.push(lead.id);
           }
@@ -2099,15 +2161,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         let emailedTo: string | null = null;
         if (proposal) {
           const priorStatus = (await getLeadById(proposal.leadId, ctx.user.id))?.status;
-          await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
+          // A revised proposal for a booked or held event (a menu change, say)
+          // mustn't send the enquiry back to "Proposal sent": its event stayed
+          // confirmed while the enquiry looked unbooked, and leaving Tentative
+          // would also release the date hold.
+          const keepsStatus = ['booked', 'confirmed', 'finished', 'tentative'].includes(priorStatus ?? '');
+          if (!keepsStatus) await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
             leadId: proposal.leadId,
             ownerId: ctx.user.id,
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
-          const { onLeadStatusChanged } = await import('./automatedTasks');
-          await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
+          if (!keepsStatus) {
+            const { onLeadStatusChanged } = await import('./automatedTasks');
+            await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
+          }
           // Set a follow-up a few days out so a quoted lead doesn't go cold —
           // sending a quote previously set no reminder at all. Only set one if
           // the lead doesn't already have a (future) follow-up pending.
@@ -2120,7 +2189,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               const [lead] = await db.select({ followUpDate: leads.followUpDate })
                 .from(leads).where(eq(leads.id, proposal.leadId)).limit(1);
               const hasFutureFollowUp = lead?.followUpDate && new Date(lead.followUpDate).getTime() > Date.now();
-              if (!hasFutureFollowUp) {
+              if (!keepsStatus && !hasFutureFollowUp) {
                 const followUpDate = new Date();
                 followUpDate.setDate(followUpDate.getDate() + 3);
                 await db.update(leads).set({ followUpDate }).where(eq(leads.id, proposal.leadId));
@@ -2482,6 +2551,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(found)), input.allowClash);
           const status = lead.status === 'finished' ? 'finished' : 'confirmed';
           await restoreCancelledBooking(found.id, ctx.user.id, status);
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.leadId, found.id);
+          if (input.allowClash) {
+            const { flagOverriddenClash } = await import('./doubleBookings');
+            await flagOverriddenClash(ctx.user.id, found.id);
+          }
           return { ...found, status };
         }
         // Rule: every event must have a space selected.
@@ -2506,6 +2581,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           spaceName: lead.spaceName,
           status: lead.status === 'finished' ? 'finished' : 'confirmed',
         } as any);
+        // A run sheet already started from the enquiry belongs to this event.
+        if (created) {
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.leadId, (created as any).id);
+        }
         // A lead added straight in as Confirmed lands here (no status change
         // fired the rule). Keyed by lead, so a lead already confirmed via
         // updateStatus doesn't get the task twice. Past events (legacy rows
@@ -2761,7 +2841,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         if (rest.billingFoodCustom !== undefined) updates.billingFoodCustom = rest.billingFoodCustom?.trim() || null;
         if (rest.billingDrinksCustom !== undefined) updates.billingDrinksCustom = rest.billingDrinksCustom?.trim() || null;
+        // The guest count before this edit, to tell whether it changed.
+        let guestsBefore: number | null | undefined;
+        if (rest.guestCount !== undefined) {
+          const [cur] = await db.select({ guestCount: bookings.guestCount }).from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          guestsBefore = cur?.guestCount ?? null;
+        }
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // New guest count → the event's run sheets too (food lines at the
+        // old count are reported, never changed here — see runsheetGuests.ts).
+        let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
+        if (rest.guestCount !== undefined) {
+          const { syncRunsheetGuests } = await import('./runsheetGuests');
+          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+        }
         // The runsheet keeps its own copy of the date (staff link, runsheet
         // header). Keep it in step so the event never shows two dates.
         if (updates.eventDate !== undefined) {
@@ -2857,6 +2951,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.depositNzd !== undefined && rest.depositPaid === undefined) {
           await syncDepositPaidFlag(id, ctx.user.id, { allowDowngrade: true });
         }
+        // Double-bookings: a save over the clash warning is remembered on both
+        // events (server/doubleBookings.ts); moving or cancelling either one
+        // clears flags whose clash has gone.
+        if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
+          const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+          if (allowClash) await flagOverriddenClash(ctx.user.id, id);
+          await reconcileClashFlags(ctx.user.id);
+        }
         // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──
         if (rest.status === 'confirmed') {
           const { pushBookingToNbi } = await import('./nowbookit');
@@ -2870,12 +2972,25 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
-        return { success: true };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
       }),
     byMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
       .query(async ({ input, ctx }) => {
         return getBookingsByMonth(ctx.user.id, input.year, input.month);
+      }),
+    /** Overview "Double-bookings to resolve": upcoming flagged events, one row per clashing pair. */
+    clashes: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { listDoubleBookings } = await import('./doubleBookings');
+        return listDoubleBookings(ctx.user.id);
+      }),
+    /** "Mark resolved": clears the double-booking flag on this event and the event(s) it clashes with. */
+    resolveClash: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { resolveClash } = await import('./doubleBookings');
+        return resolveClash(ctx.user.id, input.id);
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -2884,6 +2999,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // in one transaction; refused if it has payments or Xero invoices.
         const { deleteBookingCascade } = await import('./cascadeDelete');
         await deleteBookingCascade(ctx.user.id, input.id);
+        await (await import('./doubleBookings')).reconcileClashFlags(ctx.user.id);
         return { success: true };
       }),
 
@@ -3297,7 +3413,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
         // but always allow admins — including additional account logins
         // created via Settings → Team, which resolve to the workspace owner.
-        if (ctx.isTeamMember && ctx.user?.role !== 'admin') {
+        if (ctx.isTeamMember && ctx.teamRole !== 'admin') {
           throw new Error('Team members cannot send emails. Contact your venue manager.');
         }
         const { getDb } = await import('./db');
@@ -4368,7 +4484,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     // venue's. Without the role check every venue account could read every
     // signup's name and email.
     list: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Not available for this account' });
+      if (ctx.user.role !== 'admin' || ctx.isTeamMember || ctx.isStaff || ctx.loginId) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not available for this account' });
       const { getDb } = await import('./db');
       const { waitlist } = await import('../drizzle/schema');
       const db = await getDb();
@@ -4580,14 +4696,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({ leadId: z.number().optional(), bookingId: z.number().optional() }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { runsheets } = await import('../drizzle/schema');
-        const { eq, and, or } = await import('drizzle-orm');
+        const { runsheets, bookings } = await import('../drizzle/schema');
+        const { eq, and, or, isNull, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const conditions = [eq(runsheets.ownerId, ctx.user.id)];
-        if (input.leadId) conditions.push(eq(runsheets.leadId, input.leadId));
-        if (input.bookingId) conditions.push(eq(runsheets.bookingId, input.bookingId));
-        return db.select().from(runsheets).where(and(...conditions)).orderBy(runsheets.createdAt);
+        // An event's sheets and its enquiry's sheets are the same sheets:
+        // a sheet started from the enquiry may not be linked to the event
+        // yet, and one made on the event carries the enquiry only through
+        // the booking. Read both ways (see server/runsheetLinks.ts).
+        if (input.leadId) {
+          const ofLead = db.select({ id: bookings.id }).from(bookings)
+            .where(and(eq(bookings.leadId, input.leadId), eq(bookings.ownerId, ctx.user.id)));
+          conditions.push(or(eq(runsheets.leadId, input.leadId), inArray(runsheets.bookingId, ofLead))!);
+        }
+        if (input.bookingId) {
+          const [b] = await db.select({ leadId: bookings.leadId }).from(bookings)
+            .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          conditions.push(b?.leadId
+            ? or(eq(runsheets.bookingId, input.bookingId), and(eq(runsheets.leadId, b.leadId), isNull(runsheets.bookingId)))!
+            : eq(runsheets.bookingId, input.bookingId));
+        }
+        return db.select().from(runsheets).where(and(...conditions)).orderBy(runsheets.createdAt, runsheets.id);
       }),
 
     get: protectedProcedure
@@ -4747,10 +4877,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // which is guessable) — matches every other share token in this file.
         const crypto = await import('crypto');
         const token = crypto.randomBytes(24).toString('hex');
+        // Started from an enquiry that already has its event: link the sheet
+        // to that event too, so the event page, BEO and guest edits find it
+        // (see server/runsheetLinks.ts). Only when there's exactly one.
+        let bookingId = input.bookingId ?? null;
+        if (!bookingId && input.leadId) {
+          const { singleLiveBookingId } = await import('./runsheetLinks');
+          bookingId = await singleLiveBookingId(db, ctx.user.id, input.leadId);
+        }
         const [result] = await db.insert(runsheets).values({
           ownerId: ctx.user.id,
           leadId: input.leadId ?? null,
-          bookingId: input.bookingId ?? null,
+          bookingId,
           title: input.title,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           venueName: input.venueName ?? null,
@@ -4888,6 +5026,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
           if ((prevRs?.t ?? '') !== fields.eventStartTime) newStartTime = fields.eventStartTime;
         }
+        // What the sheet held before this save, so only values that actually
+        // changed here reach the event and enquiry (autosave sends every
+        // field each time).
+        const [beforeShared] = await db.select({ guestCount: runsheets.guestCount, eventType: runsheets.eventType, spaceName: runsheets.spaceName })
+          .from(runsheets).where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
         updateData.updatedAt = new Date();
         // Refused (CONFLICT) when someone else saved since this builder
         // loaded the sheet, so their edits aren't overwritten.
@@ -4906,9 +5049,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // count — would never show up on the dashboard.
         const sharedBooking: Record<string, any> = {};
         const sharedLead: Record<string, any> = {};
-        if (fields.guestCount !== undefined) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
-        if (fields.eventType !== undefined) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
-        if (fields.spaceName !== undefined) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
+        // Only values changed in THIS save. Pushing whatever the sheet held let
+        // a sheet with an old guest count (or no space) overwrite the event
+        // whenever anything else on it was edited.
+        const changed = (k: 'guestCount' | 'eventType' | 'spaceName') =>
+          fields[k] !== undefined && (fields[k] ?? null) !== ((beforeShared as any)?.[k] ?? null);
+        if (changed('guestCount')) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
+        if (changed('eventType')) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
+        if (changed('spaceName')) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
         if (movedToDay) sharedBooking._movedToDay = movedToDay;
         if (newStartTime) sharedBooking._startTime = newStartTime;
         if (Object.keys(sharedBooking).length > 0) {
@@ -5167,6 +5315,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           paidAt,
           notes: input.notes,
         }).returning({ id: payments.id });
+        // A deposit recorded against a booking with no deposit amount set is
+        // the deposit: take the amount from what was paid. Without this the
+        // flag sync below compares against $0 and never ticks, so the event
+        // kept reading "Deposit pending" after the deposit came in.
+        if (input.type === 'deposit') {
+          await adoptRecordedDepositAmount(input.bookingId, ctx.user.id);
+        }
         await syncDepositPaidFlag(input.bookingId, ctx.user.id);
         // Tell the caller whether this payment cleared the booking, so the UI
         // can say so (and the board can offer to tick the remaining chips).
@@ -6165,6 +6320,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           return claimed[0].version;
         });
         return { success: true, version };
+      }),
+    // The guest count changed and the person chose to update the food too:
+    // the event's food lines at exactly the old count move to the new one.
+    // Offered by the toast after bookings.update / leads.update report
+    // `foodRescale` — see server/runsheetGuests.ts.
+    rescaleGuests: protectedProcedure
+      .input(z.object({
+        bookingId: z.number().int().optional(),
+        leadId: z.number().int().optional(),
+        from: z.number().int().min(1),
+        to: z.number().int().min(1).max(100000),
+      }).refine(i => i.bookingId != null || i.leadId != null, { message: 'Which event?' }))
+      .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
+        const { rescaleFoodQuantities } = await import('./runsheetGuests');
+        const updated = await rescaleFoodQuantities(null, ctx.user.id, { bookingId: input.bookingId, leadId: input.leadId }, input.from, input.to);
+        return { updated };
       }),
   }),
 
@@ -7834,10 +8007,11 @@ Return ONLY valid JSON.`;
         permissions: z.object({
           viewProposal: z.boolean().default(true),
           viewRunsheet: z.boolean().default(false),
-          viewBudget: z.boolean().default(false),
+          // "View Payments" on the link form: the payments & balance section.
+          viewBudget: z.boolean().default(true),
           approveProposal: z.boolean().default(true),
           signContract: z.boolean().default(false),
-        }).default({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false }),
+        }).default({ viewProposal: true, viewRunsheet: false, viewBudget: true, approveProposal: true, signContract: false }),
         expiresAt: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -7943,19 +8117,33 @@ Return ONLY valid JSON.`;
         // the client's own money is exposed (sanitised fields, scoped to this
         // booking + its owner). Null when there is no booking yet.
         let paymentSummary: {
-          total: number; totalPaid: number; outstanding: number; credit: number;
+          total: number; totalSource: 'booking' | 'proposal' | null;
+          totalPaid: number; outstanding: number; credit: number;
           depositNzd: number; depositPaid: boolean; depositRequired: boolean;
           status: 'unpaid' | 'partial' | 'deposit_paid' | 'paid_in_full';
         } | null = null;
         let clientPayments: Array<{ id: number; amount: number; type: string; method: string; paidAt: string; notes: string | null }> = [];
         // How-to-pay shown to the client only while money is still owing.
         let paymentInstructions: string | null = null;
-        if (booking && row.bookingId) {
+        // The venue can switch payments off for a link ("View Payments"); then
+        // neither the summary nor the rows leave the server.
+        if (booking && row.bookingId && permissions.viewBudget !== false) {
           const pmts = await db.select().from(payments)
             .where(and(eq(payments.bookingId, row.bookingId), eq(payments.ownerId, row.ownerId)));
           const { netPaid, derivePaymentStatus, round2 } = await import('../shared/paymentMath');
           const net = netPaid(pmts);
-          const total = Number(booking.totalNzd ?? 0);
+          // No total on the booking yet: use the proposal the client accepted,
+          // so the page doesn't read "Event total $0.00" beside it. Neither ->
+          // 0, which the page shows as "To be confirmed".
+          let total = Number(booking.totalNzd ?? 0);
+          let totalSource: 'booking' | 'proposal' | null = total > 0 ? 'booking' : null;
+          if (!(total > 0) && leadId) {
+            const [accepted] = await db.select({ totalNzd: proposals.totalNzd }).from(proposals)
+              .where(and(eq(proposals.leadId, leadId), eq(proposals.ownerId, row.ownerId), eq(proposals.status, 'accepted')))
+              .orderBy(desc(proposals.createdAt), desc(proposals.id)).limit(1);
+            const proposalTotal = Number(accepted?.totalNzd ?? 0);
+            if (proposalTotal > 0) { total = proposalTotal; totalSource = 'proposal'; }
+          }
           const depositNzd = Number(booking.depositNzd ?? 0);
           const depositRequired = (booking as any).depositRequired !== false;
           const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
@@ -7963,7 +8151,7 @@ Return ONLY valid JSON.`;
           // credit rather than a silently-swallowed overpay.
           const credit = total > 0 ? round2(Math.max(0, net - total)) : 0;
           paymentSummary = {
-            total, totalPaid: net, outstanding, credit, depositNzd,
+            total, totalSource, totalPaid: net, outstanding, credit, depositNzd,
             depositPaid: Boolean((booking as any).depositPaid),
             depositRequired,
             status: derivePaymentStatus({ rows: pmts, total, depositNzd, depositRequired }),
@@ -8138,14 +8326,15 @@ Return ONLY valid JSON.`;
         let paymentsData: { id: number; amount: string; type: string; method: string; paidAt: Date; notes: string | null }[] = [];
         if (runsheet.bookingId) {
           const { payments } = await import('../drizzle/schema');
-          paymentsData = await db.select({
+          // What's been received, for collecting the balance on the night.
+          // Payment notes are left out — the link needs no login.
+          paymentsData = (await db.select({
             id: payments.id,
             amount: payments.amount,
             type: payments.type,
             method: payments.method,
             paidAt: payments.paidAt,
-            notes: payments.notes,
-          }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt);
+          }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt)).map(p => ({ ...p, notes: null }));
         }
         // Sanitise rich-text fields before they reach the PUBLIC staff portal,
         // which renders them via dangerouslySetInnerHTML. An operator (or a
@@ -8153,11 +8342,19 @@ Return ONLY valid JSON.`;
         // <img onerror=…> etc. and run script on the app origin for anyone
         // opening the shared link.
         const { cleanRichHtml } = await import('./sanitizeHtml');
+        // Only what the staff page shows. The link needs no login, so the
+        // runsheet's cost lines, client email, linked proposal and internal
+        // ids stay out of it.
+        const r = runsheet;
         const safeRunsheet = {
-          ...runsheet,
-          notes: cleanRichHtml((runsheet as any).notes),
-          venueSetup: cleanRichHtml((runsheet as any).venueSetup),
-          footerText: cleanRichHtml((runsheet as any).footerText),
+          id: r.id, bookingId: r.bookingId, title: r.title, updatedAt: r.updatedAt,
+          eventDate: r.eventDate, eventStartTime: r.eventStartTime, eventEndTime: r.eventEndTime,
+          eventType: r.eventType, guestCount: r.guestCount, venueName: r.venueName, spaceName: r.spaceName,
+          venueArea: r.venueArea, setupSummary: r.setupSummary, dietaries: r.dietaries, kitchenNotes: r.kitchenNotes,
+          drinksData: r.drinksData, fnbColumns: r.fnbColumns, attachments: r.attachments,
+          notes: cleanRichHtml(r.notes),
+          venueSetup: cleanRichHtml(r.venueSetup),
+          footerText: cleanRichHtml(r.footerText),
         };
         // Billing instructions for the Now & Next phone view: the same
         // "How this event is billed" steps the BEO prints, plus how to pay.
@@ -8197,7 +8394,7 @@ Return ONLY valid JSON.`;
             };
           }
         }
-        return { link, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
+        return { link: { id: link.id, label: link.label }, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
       }),
 
     // Protected: create a new staff portal link
@@ -9118,12 +9315,18 @@ Return ONLY valid JSON.`;
       const { eq, desc } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(teamMembers).where(eq(teamMembers.ownerId, ctx.user.id)).orderBy(desc(teamMembers.createdAt));
+      const rows = await db.select().from(teamMembers).where(eq(teamMembers.ownerId, ctx.user.id)).orderBy(desc(teamMembers.createdAt));
+      // Each access link IS a login: only the owner (and full-access logins)
+      // may see them. A staff login or team-link session could otherwise
+      // copy one and open a session with more access than their own.
+      const { isAccountManager } = await import('./_core/trpc');
+      return isAccountManager(ctx) ? rows : rows.map(r => ({ ...r, accessToken: '' }));
     }),
 
     create: protectedProcedure
       .input(z.object({ name: z.string().min(1), email: z.string().optional(), role: z.string().default('staff') }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { teamMembers } = await import('../drizzle/schema');
         const crypto = await import('crypto');
@@ -9145,6 +9348,7 @@ Return ONLY valid JSON.`;
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { teamMembers } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
@@ -9177,6 +9381,7 @@ Return ONLY valid JSON.`;
   }),
   apiTokens: router({
     list: protectedProcedure.query(async ({ ctx }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { apiTokens } = await import('../drizzle/schema');
       const { eq, desc } = await import('drizzle-orm');
@@ -9196,6 +9401,7 @@ Return ONLY valid JSON.`;
     create: protectedProcedure
       .input(z.object({ name: z.string().min(1).max(120) }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { apiTokens } = await import('../drizzle/schema');
         const cryptoMod = await import('crypto');
@@ -9218,6 +9424,7 @@ Return ONLY valid JSON.`;
     revoke: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { apiTokens } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
@@ -9360,6 +9567,7 @@ Return ONLY valid JSON.`;
   accountLogins: router({
     list: protectedProcedure
       .query(async ({ ctx }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const { getDb } = await import('./db');
         const { users: usersTable } = await import('../drizzle/schema');
@@ -9385,6 +9593,7 @@ Return ONLY valid JSON.`;
         isStaff: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const bcrypt = await import('bcryptjs');
         const { getDb } = await import('./db');
@@ -9417,6 +9626,7 @@ Return ONLY valid JSON.`;
     setPassword: protectedProcedure
       .input(z.object({ id: z.number(), password: z.string().min(8).max(200) }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const bcrypt = await import('bcryptjs');
         const { getDb } = await import('./db');
@@ -9436,6 +9646,7 @@ Return ONLY valid JSON.`;
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const { getDb } = await import('./db');
         const { users: usersTable } = await import('../drizzle/schema');

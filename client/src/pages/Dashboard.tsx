@@ -19,6 +19,7 @@ import {
   Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw, ArrowLeft
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -65,7 +66,7 @@ import WalkthroughPanel from "@/components/WalkthroughPanel";
 import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
-import { HoldPanel, HoldTag, DateClashChip, holdState, fmtHoldDay } from "@/components/DateHold";
+import { HoldPanel, HoldTag, DateClashChip, DoubleBookedTag, holdState, fmtHoldDay } from "@/components/DateHold";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
@@ -1075,6 +1076,13 @@ export default function Dashboard() {
   // left over from before the two were kept in step. The card hides itself
   // once each is settled.
   const { data: startTimeMismatches, refetch: refetchStartTimeMismatches } = trpc.runsheets.startTimeMismatches.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
+  // Double-bookings kept over the clash warning — the venue's to sort out, so
+  // staff (read-only) don't get the card.
+  const { data: doubleBookings } = trpc.bookings.clashes.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
+  const resolveClash = trpc.bookings.resolveClash.useMutation({
+    onSuccess: () => { toast.success("Marked resolved"); void utils.bookings.invalidate(); },
+    onError: (e) => toast.error(e.message || "Couldn't mark it resolved"),
+  });
   const alignStartTime = trpc.runsheets.alignStartTime.useMutation({
     onSuccess: (r) => { toast.success(`Start time set to ${fmtHhmm(r.time)}`); void refetchStartTimeMismatches(); void utils.bookings.invalidate(); void utils.leads.invalidate(); },
     onError: (e) => toast.error(e.message || "Couldn't change the start time"),
@@ -1456,6 +1464,9 @@ export default function Dashboard() {
   );
   const refreshDrawerPayments = async () => {
     await Promise.all([refetchDrawerPayments(), refetchDrawerPaymentSummary()]);
+    // Recording a deposit can tick the deposit paid (and set its amount) on
+    // the server; the calendar data carries it back into the open panel.
+    void utils.bookings.byMonth.invalidate();
   };
   const addDrawerPaymentMutation = trpc.payments.add.useMutation({
     onSuccess: async () => { toast.success('Payment recorded'); await refreshDrawerPayments(); setDrawerNewPayment({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' }); },
@@ -1585,6 +1596,22 @@ export default function Dashboard() {
     { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
     { enabled: !!user?.id && calendarView === 'week' }
   );
+  // The open event panel holds its own copy of the booking. Some fields
+  // change on the server as a side effect — the double-booked flag (saving
+  // over a clash, moving off one, "Mark resolved") and the deposit (recording
+  // a deposit payment) — so take those from the calendar data when it lands.
+  useEffect(() => {
+    if (!selectedBooking || selectedBooking._isLead) return;
+    const fresh: any = [...(monthBookings ?? []), ...(adjMonthBookings ?? []), ...(adjPrevMonthBookings ?? [])]
+      .find((b: any) => b?.id === selectedBooking.id);
+    if (!fresh) return;
+    const keys = ['clashFlaggedAt', 'depositPaid', 'depositNzd'] as const;
+    if (keys.some(k => String(fresh[k] ?? '') !== String(selectedBooking[k] ?? ''))) {
+      const patch = Object.fromEntries(keys.map(k => [k, fresh[k]]));
+      setSelectedBooking((prev: any) => prev && !prev._isLead && prev.id === fresh.id ? { ...prev, ...patch } : prev);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthBookings, adjMonthBookings, adjPrevMonthBookings, selectedBooking?.id]);
   // Titles for days, not events ("Robbie Williams concert day"). Staff see
   // them; only the venue's own logins can add or change them.
   const dayTitles = useDayTitles(calDate, !!user?.id);
@@ -1631,12 +1658,16 @@ export default function Dashboard() {
     });
   }
 
+  // A guest change reaches the run sheet; offer to update its food too.
+  const offerFoodRescale = useFoodRescaleOffer();
   const rescheduleLead = trpc.leads.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       refetchLeads();
       utils.leads.eventsByMonth.invalidate();
       utils.bookings.byMonth.invalidate();
+      utils.bookings.clashes.invalidate();
       utils.dashboard.invalidate();
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event rescheduled");
     },
     onError: (err, vars) => {
@@ -1650,9 +1681,10 @@ export default function Dashboard() {
     // need to refresh the lead-driven queries (events table, calendar
     // enquiry layer, dashboard tiles) — otherwise the table keeps the
     // stale row even after a successful save.
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
+      utils.bookings.clashes.invalidate();
       utils.leads.list.invalidate();
       utils.leads.eventsByMonth.invalidate();
       utils.dashboard.invalidate();
@@ -1667,7 +1699,7 @@ export default function Dashboard() {
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
-      toast.success(msg);
+      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) toast.success(msg);
       // A save that went through after "Book anyway" — the inline editor had
       // rolled its optimistic value back, so put the saved one back in place.
       if (v.allowClash) {
@@ -1852,10 +1884,11 @@ export default function Dashboard() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const updateLeadDetails = trpc.leads.update.useMutation({
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       refetchLeads();
       setSelectedLead((prev: any) => prev ? { ...prev, ...vars } : prev);
       setEditingEventDetails(false);
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event details saved");
     },
     onError: (err, vars) => {
@@ -1866,6 +1899,7 @@ export default function Dashboard() {
   const updateStatusMut = trpc.leads.updateStatus.useMutation({
     onSuccess: (data, variables) => {
       refetchLeads();
+      utils.bookings.clashes.invalidate();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
       // Moving to/from "tentative" starts/ends a date hold on the server.
       const holdPatch = { holdUntil: data?.holdUntil ?? null, ...(data?.holdUntil ? {} : { holdNote: null }) };
@@ -2569,7 +2603,7 @@ export default function Dashboard() {
   // Team members
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', email: '', role: 'staff' });
-  const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id });
+  const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id && !isStaff });
   const teamById = useMemo(() => new Map<number, { name: string }>((teamList ?? []).map((m: any) => [m.id, m])), [teamList]);
   const createTeamMember = trpc.team.create.useMutation({ onSuccess: () => { refetchTeam(); setTeamForm({ name: '', email: '', role: 'staff' }); setShowTeamForm(false); toast.success('Team member added!'); } });
   const deleteTeamMember = trpc.team.delete.useMutation({ onSuccess: () => { refetchTeam(); toast.success('Team member removed'); } });
@@ -3445,6 +3479,45 @@ export default function Dashboard() {
                             <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'runsheet' })}
                               className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
                               USE {fmtHhmm(m.runsheetTime).toUpperCase()}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Double-bookings to resolve — events kept on a taken date and
+                  space ("Save anyway"). Hidden when there are none. */}
+              {!isStaff && doubleBookings && doubleBookings.length > 0 && (
+                <section aria-label="Double-bookings to resolve" className="dante-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    {/* The count is left off on a phone: with this long title it ran off the card. */}
+                    <SectionHead title="Double-bookings to resolve" meta={<span className="hidden sm:inline">{doubleBookings.length} clash{doubleBookings.length !== 1 ? 'es' : ''}</span>} />
+                    <p className="font-dm text-xs text-ink/70 mt-1">These events share a date and space. Move one, or mark it resolved once you've sorted it out.</p>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {doubleBookings.map(pair => {
+                      const busy = resolveClash.isPending && resolveClash.variables?.id === pair.a.bookingId;
+                      const side = (x: NonNullable<typeof pair.b>) => x.bookingId
+                        ? <button onClick={() => setLocation(`/event/${x.bookingId}`)} className="font-dm text-sm font-semibold text-ink hover:underline text-left break-words">{x.name}</button>
+                        : <span className="font-dm text-sm font-semibold text-ink break-words">{x.name} <span className="font-normal text-ink/70">({x.kind === 'hold' ? 'date on hold' : 'enquiry'})</span></span>;
+                      return (
+                        <div key={pair.key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                          <div className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline gap-x-1.5">
+                              {side(pair.a)}
+                              {pair.b && <><span className="font-dm text-xs text-ink/60">and</span>{side(pair.b)}</>}
+                            </span>
+                            <span className="block font-dm text-xs text-ink/70">
+                              {formatEventDate(pair.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}{pair.spaceName ? ` · ${pair.spaceName}` : ''}{!pair.b ? ` · ${pair.summary}` : ''}
+                            </span>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            <button disabled={busy} onClick={() => pair.a.bookingId && resolveClash.mutate({ id: pair.a.bookingId })}
+                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
+                              {busy ? 'SAVING…' : 'MARK RESOLVED'}
                             </button>
                           </div>
                         </div>
@@ -5200,11 +5273,12 @@ export default function Dashboard() {
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
                                           style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
                                           className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
-                                          title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
                                           {/* Status in words too, not only the chip colour. */}
                                           {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
+                                          {!isLead && <DoubleBookedTag flaggedAt={ev.clashFlaggedAt} compact />}
                                           {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
                                           <span className="truncate font-semibold text-[10px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
                                         </button>
@@ -5333,6 +5407,7 @@ export default function Dashboard() {
                                     {e.spaceName ? ` · ${e.spaceName}` : ''}
                                   </div>
                                 </div>
+                                {e._kind === 'booking' && <DoubleBookedTag flaggedAt={e.clashFlaggedAt} />}
                                 {e._kind === 'lead' && holdState(e) === 'held' ? <HoldTag until={e.holdUntil} /> : (
                                 <span className={`font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
                                   {getStatusInfo(e.status).label.toUpperCase()}
@@ -5584,8 +5659,9 @@ export default function Dashboard() {
                                   {item._type === 'lead' && holdState(item) === 'held'
                                     ? <HoldTag until={item.holdUntil} />
                                     : <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
-                                  {item._type === 'booking' && (
-                                    <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· PAID' : '· PENDING'}</span>
+                                  {item._type === 'booking' && <DoubleBookedTag flaggedAt={item.clashFlaggedAt} />}
+                                  {item._type === 'booking' && item.depositRequired !== false && (
+                                    <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
                                   )}
                                 </div>
                                 {/* Actions */}
@@ -5815,6 +5891,7 @@ export default function Dashboard() {
                                       {b.eventType}
                                     </span>
                                   )}
+                                  <DoubleBookedTag flaggedAt={b.clashFlaggedAt} />
                                 </div>
                                 <div className="flex items-center gap-3 mt-1 text-xs font-dm text-ink/60 flex-wrap">
                                   {b.startTime && (
@@ -7611,8 +7688,8 @@ export default function Dashboard() {
                 <p className="font-dm text-sm text-ink/70 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
                 <div className="space-y-4">
 
-                  {/* ── Claude / MCP ── */}
-                  <ApiTokensSection />
+                  {/* ── Claude / MCP ── (API tokens act as the owner) */}
+                  {!isTeamMember && <ApiTokensSection />}
 
                   {/* ── NowBookIt ── */}
                   <div className="dante-card overflow-hidden">
@@ -8177,6 +8254,16 @@ export default function Dashboard() {
               {settingsSubTab === "team" && (() => {
                 const ROLES = [{ value: 'staff', label: 'Staff' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
                 const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
+                // Logins and access links are managed by the owner only — the
+                // server refuses these for a team-link session.
+                if (isTeamMember) return (
+                  <div className="max-w-3xl mx-auto">
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Team</h1>
+                    <div className="dante-card p-5">
+                      <p className="font-dm text-sm text-ink/70">Only the venue owner can add or remove logins and team access links.</p>
+                    </div>
+                  </div>
+                );
                 return (
                 <div className="max-w-3xl mx-auto">
                   <AccountLoginsSection />
@@ -9310,8 +9397,11 @@ export default function Dashboard() {
               <div className="min-w-0">
                 {/* text-cream/NN opacity modifiers don't compile in this theme
                     (they fall back to dark ink on navy) — use opacity-* instead. */}
-                <div className="font-bebas tracking-widest text-xs text-cream opacity-75 mb-0.5">
-                  {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : 'BOOKING'}
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className="font-bebas tracking-widest text-xs text-cream opacity-75">
+                    {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : 'BOOKING'}
+                  </span>
+                  {!selectedBooking._isLead && <DoubleBookedTag flaggedAt={selectedBooking.clashFlaggedAt} />}
                 </div>
                 <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-xl leading-tight">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
                 {(() => {
@@ -9831,7 +9921,7 @@ export default function Dashboard() {
               {/* Financials + billing terms — bookings only, one collapsible block. */}
               {!selectedBooking._isLead && (
               <DrawerSection id="money" title="FINANCIALS & BILLING" icon={<DollarSign />}
-                summary={isStaff ? undefined : `Total ${currency(Number(selectedBooking.totalNzd ?? 0))} · Deposit ${selectedBooking.depositRequired === false ? 'not needed' : selectedBooking.depositPaid ? 'paid' : 'pending'}`}
+                summary={isStaff ? undefined : `${Number(selectedBooking.totalNzd ?? 0) > 0 ? `Total ${currency(Number(selectedBooking.totalNzd))}` : 'No total set'} · Deposit ${selectedBooking.depositRequired === false ? 'not needed' : selectedBooking.depositPaid ? 'paid' : 'pending'}`}
                 open={secOpen('money')} onToggle={() => toggleDrawerSection('money')}>
               <div className="space-y-3">
               {/* Financials — bookings only. Total/Deposit are click-to-edit;
@@ -9867,10 +9957,17 @@ export default function Dashboard() {
                                 className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                             </div>
                           ) : (
+                            field === 'totalNzd' && !(Number(raw ?? 0) > 0) ? (
+                              <button type="button" tabIndex={-1} onClick={startEdit}
+                                className={`${DRAWER_VALUE_BTN} font-dm text-sm italic text-ink/55 py-1.5`}>
+                                No total set
+                              </button>
+                            ) : (
                             <button type="button" tabIndex={-1} onClick={startEdit}
                               className={`${DRAWER_VALUE_BTN} font-cormorant text-2xl font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]`}>
                               {currency(Number(raw ?? 0))}
                             </button>
+                            )
                           )}
                         </div>
                       );
@@ -10206,22 +10303,32 @@ export default function Dashboard() {
                     </div>
                     <button aria-label="Close payments panel" onClick={() => setDrawerPaymentsOpen(false)} className="text-cream/50 hover:text-cream"><X className="w-4 h-4" /></button>
                   </div>
-                  {drawerPaymentSummary && (
+                  {drawerPaymentSummary && (() => {
+                    // No total → nothing to be outstanding against; "$0.00"
+                    // there read as "settled".
+                    const hasTotal = Number(drawerPaymentSummary.total ?? 0) > 0;
+                    const noTotal = <div className="font-dm text-xs sm:text-sm italic text-ink/55 py-1">No total set</div>;
+                    return (
                     <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
                       <div className="px-2 py-3 sm:p-3 text-center min-w-0">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/70">TOTAL VALUE</div>
-                        <div className="font-cormorant text-base sm:text-lg font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.total ?? 0))}</div>
+                        {hasTotal
+                          ? <div className="font-cormorant text-base sm:text-lg font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.total))}</div>
+                          : noTotal}
                       </div>
                       <div className="px-2 py-3 sm:p-3 text-center bg-green-50/60 min-w-0">
                         <div className="font-bebas tracking-widest text-[10px] text-green-700">PAID</div>
                         <div className="font-cormorant text-base sm:text-lg font-semibold text-green-700 [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.totalPaid))}</div>
                       </div>
-                      <div className={`px-2 py-3 sm:p-3 text-center min-w-0 ${drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
-                        <div className={`font-bebas tracking-widest text-[10px] ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
-                        <div className={`font-cormorant text-base sm:text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] break-words ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>{currency(Number(drawerPaymentSummary.outstanding))}</div>
+                      <div className={`px-2 py-3 sm:p-3 text-center min-w-0 ${!hasTotal ? '' : drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
+                        <div className={`font-bebas tracking-widest text-[10px] ${!hasTotal ? 'text-ink/70' : drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
+                        {hasTotal
+                          ? <div className={`font-cormorant text-base sm:text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] break-words ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>{currency(Number(drawerPaymentSummary.outstanding))}</div>
+                          : noTotal}
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                   {/* Payment history */}
                   {drawerPayments && drawerPayments.length > 0 && (
                     <div className="divide-y divide-gold/10 max-h-40 overflow-y-auto">
