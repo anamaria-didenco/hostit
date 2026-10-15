@@ -7,7 +7,7 @@
  * and the venue's own published prices only — never a client's name or
  * details. The pure logic it leans on is in enquiryConversion.ts.
  */
-import { and, eq, gte, inArray, isNotNull, lt, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lt, ne, notInArray, sql } from "drizzle-orm";
 import { getDb, addLeadActivity } from "./db";
 import { bookings, eventSpaces, leads, tasks, venueSettings } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -156,24 +156,34 @@ export async function getWalkthroughRequestOptions(ownerId: number) {
 const TASK_PREFIX_REQUEST = "Arrange a walkthrough with ";
 const TASK_PREFIX_CONFIRMED = "Walkthrough with ";
 
-/** One open walkthrough task per lead — created, or updated in place. */
-async function upsertWalkthroughTask(ownerId: number, leadId: number, task: { title: string; description: string; dueDate: number }) {
+/** Matches a walkthrough task's title (requested or confirmed). */
+export const isWalkthroughTask = () =>
+  sql`(${tasks.title} LIKE ${TASK_PREFIX_REQUEST + "%"} OR ${tasks.title} LIKE ${TASK_PREFIX_CONFIRMED + "%"})`;
+
+/**
+ * One open walkthrough task per lead — created, or updated in place. Holds a
+ * per-lead lock for the transaction, so a double-submitted request (or a
+ * confirm racing it) can't both see "no task yet" and insert two. Extra open
+ * copies left from before are removed.
+ */
+export async function upsertWalkthroughTask(ownerId: number, leadId: number, task: { title: string; description: string; dueDate: number }) {
   const db = await getDb();
   if (!db) return;
   const ts = Date.now();
-  const [existing] = await db.select({ id: tasks.id }).from(tasks)
-    .where(and(
-      eq(tasks.ownerId, ownerId), eq(tasks.linkedLeadId, leadId), eq(tasks.completed, false),
-      sql`(${tasks.title} LIKE ${TASK_PREFIX_REQUEST + "%"} OR ${tasks.title} LIKE ${TASK_PREFIX_CONFIRMED + "%"})`,
-    ))
-    .limit(1);
-  if (existing) {
-    await db.update(tasks).set({ ...task, updatedAt: ts }).where(eq(tasks.id, existing.id));
-  } else {
-    await db.insert(tasks).values({
-      ownerId, ...task, linkedLeadId: leadId, priority: "high", completed: false, createdAt: ts, updatedAt: ts,
-    });
-  }
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`walkthrough-task:${ownerId}:${leadId}`}))`);
+    const open = await tx.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.ownerId, ownerId), eq(tasks.linkedLeadId, leadId), eq(tasks.completed, false), isWalkthroughTask()))
+      .orderBy(asc(tasks.id));
+    if (open.length > 0) {
+      await tx.update(tasks).set({ ...task, updatedAt: ts }).where(eq(tasks.id, open[0].id));
+      if (open.length > 1) await tx.delete(tasks).where(inArray(tasks.id, open.slice(1).map(t => t.id)));
+    } else {
+      await tx.insert(tasks).values({
+        ownerId, ...task, linkedLeadId: leadId, priority: "high", completed: false, createdAt: ts, updatedAt: ts,
+      });
+    }
+  });
 }
 
 const personName = (l: { firstName: string; lastName?: string | null }) => `${l.firstName}${l.lastName ? " " + l.lastName : ""}`;

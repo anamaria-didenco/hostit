@@ -6,7 +6,7 @@
 import { and, desc, eq, gte, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { addLeadActivity, getDb, getLeadById } from "./db";
 import {
-  bookings, clientPortalTokens, contacts, leadActivity, leads, proposals, teamMembers, venueSettings,
+  automatedTaskRuns, bookings, clientPortalTokens, contacts, leadActivity, leads, proposals, teamMembers, venueSettings,
   runsheets, tasks, contracts, eventBudgets, eventEquipment, communications, seatingCharts, venueNotifications,
   type Lead,
 } from "../drizzle/schema";
@@ -14,6 +14,7 @@ import { publicBaseUrl } from "./publicUrl";
 import { buildVenueMailer, fmtNzd } from "./paymentsEmail";
 import { escapeHtml } from "./sanitizeHtml";
 import { leadLink } from "./notify";
+import { isWalkthroughTask } from "./enquiryForm";
 import { blankTemplateVars, substituteTemplateVars, type TemplateLinkVars } from "../client/src/lib/templateVars";
 import {
   BOOKED_STATUSES, CLOSED_STATUSES, computeClientFlags, normaliseEmail, normalisePhone, sameClient, type ClientFlag,
@@ -219,6 +220,30 @@ export async function mergeLeads(ownerId: number, keepId: number, mergeId: numbe
     await tx.update(proposals).set({ leadId: keepId }).where(and(eq(proposals.leadId, mergeId), eq(proposals.ownerId, ownerId)));
     await tx.update(bookings).set({ leadId: keepId }).where(and(eq(bookings.leadId, mergeId), eq(bookings.ownerId, ownerId)));
     await tx.update(runsheets).set({ leadId: keepId }).where(and(eq(runsheets.leadId, mergeId), eq(runsheets.ownerId, ownerId)));
+    // Automated tasks stay one per lead: where both enquiries got the same
+    // rule's task (or a walkthrough task), the duplicate's open copy goes and
+    // the rest of its rule runs move across.
+    const dropTaskIds: number[] = [];
+    const keepRules = new Set((await tx.select({ ruleKey: automatedTaskRuns.ruleKey }).from(automatedTaskRuns)
+      .where(and(eq(automatedTaskRuns.ownerId, ownerId), eq(automatedTaskRuns.subjectKey, `lead:${keepId}`)))).map(r => r.ruleKey));
+    const dupeRuns = await tx.select().from(automatedTaskRuns)
+      .where(and(eq(automatedTaskRuns.ownerId, ownerId), eq(automatedTaskRuns.subjectKey, `lead:${mergeId}`)));
+    for (const run of dupeRuns) {
+      if (keepRules.has(run.ruleKey)) {
+        if (run.taskId) dropTaskIds.push(run.taskId);
+        await tx.delete(automatedTaskRuns).where(eq(automatedTaskRuns.id, run.id));
+      } else {
+        await tx.update(automatedTaskRuns).set({ subjectKey: `lead:${keepId}` }).where(eq(automatedTaskRuns.id, run.id));
+      }
+    }
+    const openWalkthrough = (leadId: number) => and(eq(tasks.ownerId, ownerId), eq(tasks.linkedLeadId, leadId), eq(tasks.completed, false), isWalkthroughTask());
+    const [keepWalkthrough] = await tx.select({ id: tasks.id }).from(tasks).where(openWalkthrough(keepId)).limit(1);
+    if (keepWalkthrough) {
+      dropTaskIds.push(...(await tx.select({ id: tasks.id }).from(tasks).where(openWalkthrough(mergeId))).map(t => t.id));
+    }
+    if (dropTaskIds.length) {
+      await tx.delete(tasks).where(and(inArray(tasks.id, dropTaskIds), eq(tasks.ownerId, ownerId), eq(tasks.completed, false)));
+    }
     await tx.update(tasks).set({ linkedLeadId: keepId }).where(and(eq(tasks.linkedLeadId, mergeId), eq(tasks.ownerId, ownerId)));
     await tx.update(contracts).set({ leadId: keepId }).where(and(eq(contracts.leadId, mergeId), eq(contracts.ownerId, ownerId)));
     await tx.update(eventBudgets).set({ leadId: keepId }).where(and(eq(eventBudgets.leadId, mergeId), eq(eventBudgets.ownerId, ownerId)));

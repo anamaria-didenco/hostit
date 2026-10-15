@@ -272,6 +272,16 @@ export async function respondToProposal(input: {
   if (!resolvedSpace) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This proposal isn't quite ready to accept yet — the venue still needs to set the event space. Please contact them and they'll sort it out." });
   }
+  // Same for the date: a booking made without one used "now" and was closed
+  // as finished the next day. An existing booking already has its date.
+  if (!proposal.eventDate && !lead.eventDate) {
+    const [dated] = await db.select({ id: bookings.id }).from(bookings)
+      .where(and(eq(bookings.ownerId, proposal.ownerId), eq(bookings.leadId, proposal.leadId), ne(bookings.status, "finished")))
+      .limit(1);
+    if (!dated) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This proposal isn't quite ready to accept yet — the venue still needs to set the event date. Please contact them and they'll sort it out." });
+    }
+  }
 
   const claimed = await db.update(proposals)
     .set({ status: "accepted", respondedAt: new Date(), clientMessage: message })
