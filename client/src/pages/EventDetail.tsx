@@ -1,5 +1,5 @@
 import BookingInvoices from "@/components/BookingInvoices";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
@@ -30,6 +30,27 @@ const EVENT_TYPES = [
   "Baby Shower", "Hen's Party", "Fundraiser", "Other"
 ];
 
+// The edit form's values for a booking. Also kept as the baseline that Save
+// diffs against, so only fields the user actually touched are sent.
+function formFromBooking(booking: any) {
+  return {
+    firstName: booking.firstName ?? "",
+    lastName: booking.lastName ?? "",
+    email: booking.email ?? "",
+    eventType: booking.eventType ?? "",
+    eventDate: booking.eventDate ? toLocalDateInput(booking.eventDate) : "",
+    eventTime: booking.eventDate ? extractEventTimeHHMM(booking.eventDate) : "",
+    eventEndDate: booking.eventEndDate ? toLocalDateInput(booking.eventEndDate) : "",
+    eventEndTime: booking.eventEndDate ? extractEventTimeHHMM(booking.eventEndDate) : "",
+    guestCount: booking.guestCount ?? "",
+    spaceName: booking.spaceName ?? "",
+    totalNzd: booking.totalNzd ?? "",
+    depositNzd: booking.depositNzd ?? "",
+    depositPaid: booking.depositPaid ?? false,
+    status: booking.status ?? "confirmed",
+    notes: booking.notes ?? "",
+  };
+}
 
 export default function EventDetail() {
   const [, params] = useRoute("/event/:id");
@@ -40,9 +61,11 @@ export default function EventDetail() {
   const [editing, setEditing] = useState(false);
   const [beoPreviewOpen, setBeoPreviewOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [baseline, setBaseline] = useState<any>({});
+  const filledForId = useRef<number | null>(null);
 
   const utils = trpc.useUtils();
-  const { data: booking, isLoading } = trpc.bookings.getById.useQuery(
+  const { data: booking, isLoading, isError, refetch, isFetching } = trpc.bookings.getById.useQuery(
     { id: bookingId },
     { enabled: !!user?.id && bookingId > 0 }
   );
@@ -108,32 +131,37 @@ export default function EventDetail() {
     onError: (e) => toast.error(e.message ?? "Failed to revoke"),
   });
 
+  // Re-fill the form from the latest booking only while not editing (or when
+  // it's a different event) — a refetch mid-edit must not wipe what's typed.
   useEffect(() => {
-    if (booking) {
-      setForm({
-        firstName: booking.firstName ?? "",
-        lastName: booking.lastName ?? "",
-        email: booking.email ?? "",
-        eventType: booking.eventType ?? "",
-        eventDate: booking.eventDate ? toLocalDateInput(booking.eventDate) : "",
-        eventTime: booking.eventDate ? extractEventTimeHHMM(booking.eventDate) : "",
-        eventEndDate: booking.eventEndDate ? toLocalDateInput(booking.eventEndDate) : "",
-        eventEndTime: booking.eventEndDate ? extractEventTimeHHMM(booking.eventEndDate) : "",
-        guestCount: booking.guestCount ?? "",
-        spaceName: booking.spaceName ?? "",
-        totalNzd: booking.totalNzd ?? "",
-        depositNzd: booking.depositNzd ?? "",
-        depositPaid: booking.depositPaid ?? false,
-        status: booking.status ?? "confirmed",
-        notes: booking.notes ?? "",
-      });
-    }
-  }, [booking]);
+    if (!booking) return;
+    if (editing && filledForId.current === booking.id) return;
+    const f = formFromBooking(booking);
+    setForm(f);
+    setBaseline(f);
+    filledForId.current = booking.id;
+  }, [booking, editing]);
 
   if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="font-bebas tracking-widest text-ink/65 text-sm">LOADING EVENT...</div>
+      </div>
+    );
+  }
+
+  // A failed load isn't "not found" — offer a retry instead.
+  if (!booking && isError) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="font-cormorant text-2xl text-ink">Couldn't load this event</div>
+        <p className="font-dm text-sm text-ink/70">Check your connection and try again.</p>
+        <div className="flex items-center gap-3">
+          <button onClick={() => refetch()} disabled={isFetching} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 disabled:opacity-50">
+            {isFetching ? "TRYING..." : "TRY AGAIN"}
+          </button>
+          <Link href="/dashboard"><button className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-4 py-2">BACK TO DASHBOARD</button></Link>
+        </div>
       </div>
     );
   }
@@ -154,25 +182,30 @@ export default function EventDetail() {
   );
   const outstanding = paymentSummary?.outstanding ?? Math.max(0, Number(booking.totalNzd ?? 0) - totalPaid);
 
+  // Send only what the user changed, so saving (say) the notes can't overwrite
+  // a deposit, total or status someone else updated since the page loaded.
   const handleSave = () => {
-    updateBooking.mutate({
-      id: bookingId,
-      firstName: form.firstName,
-      lastName: form.lastName,
-      email: form.email,
-      eventType: form.eventType || undefined,
-      eventDate: combineLocalDateTime(form.eventDate, form.eventTime),
-      eventEndDate: form.eventEndDate
+    const changed = (k: string) => String(form[k] ?? "") !== String(baseline[k] ?? "");
+    const patch: Parameters<typeof updateBooking.mutate>[0] = { id: bookingId };
+    if (changed("firstName")) patch.firstName = form.firstName;
+    if (changed("lastName")) patch.lastName = form.lastName;
+    if (changed("email")) patch.email = form.email;
+    if (changed("eventType")) patch.eventType = form.eventType || undefined;
+    if (changed("eventDate") || changed("eventTime")) patch.eventDate = combineLocalDateTime(form.eventDate, form.eventTime);
+    if (changed("eventEndDate") || changed("eventEndTime")) {
+      patch.eventEndDate = form.eventEndDate
         ? combineLocalDateTime(form.eventEndDate, form.eventEndTime)
-        : null,
-      guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-      spaceName: form.spaceName || null,
-      totalNzd: form.totalNzd ? parseFloat(form.totalNzd) : null,
-      depositNzd: form.depositNzd ? parseFloat(form.depositNzd) : null,
-      depositPaid: form.depositPaid,
-      status: form.status,
-      notes: form.notes || null,
-    });
+        : null;
+    }
+    if (changed("guestCount")) patch.guestCount = form.guestCount ? parseInt(form.guestCount) : null;
+    if (changed("spaceName")) patch.spaceName = form.spaceName || null;
+    if (changed("totalNzd")) patch.totalNzd = form.totalNzd ? parseFloat(form.totalNzd) : null;
+    if (changed("depositNzd")) patch.depositNzd = form.depositNzd ? parseFloat(form.depositNzd) : null;
+    if (changed("depositPaid")) patch.depositPaid = form.depositPaid;
+    if (changed("status")) patch.status = form.status;
+    if (changed("notes")) patch.notes = form.notes || null;
+    if (Object.keys(patch).length === 1) { setEditing(false); return; }
+    updateBooking.mutate(patch);
   };
 
   const statusColor = getStatusInfo(booking.status).color;
@@ -622,8 +655,12 @@ function CommsTab({ bookingId }: { bookingId: number }) {
   const [form, setForm] = useState({ type: 'note' as const, subject: '', body: '', direction: 'internal' as const, contactName: '', contactEmail: '' });
   const create = trpc.comms.create.useMutation({
     onSuccess: () => { utils.comms.list.invalidate({ bookingId }); setShowForm(false); setForm({ type: 'note', subject: '', body: '', direction: 'internal', contactName: '', contactEmail: '' }); toast.success('Log entry added'); },
+    onError: () => toast.error("Couldn't add the log entry — try again"),
   });
-  const del = trpc.comms.delete.useMutation({ onSuccess: () => utils.comms.list.invalidate({ bookingId }) });
+  const del = trpc.comms.delete.useMutation({
+    onSuccess: () => utils.comms.list.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't delete the log entry — try again"),
+  });
   const TYPE_ICONS: Record<string, string> = { note: '📝', email: '📧', call: '📞', sms: '💬', meeting: '🤝' };
   const TYPE_COLORS: Record<string, string> = { note: 'bg-gray-100 text-gray-600', email: 'bg-blue-100 text-blue-700', call: 'bg-green-100 text-green-700', sms: 'bg-purple-100 text-purple-700', meeting: 'bg-amber-100 text-amber-700' };
   return (
@@ -709,6 +746,7 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
   const [form, setForm] = useState({ title: '', body: '', clientName: (booking?.firstName ?? '') + ' ' + (booking?.lastName ?? ''), clientEmail: booking?.email ?? '' });
   const create = trpc.contracts.create.useMutation({
     onSuccess: () => { utils.contracts.list.invalidate({ bookingId }); setShowForm(false); toast.success('Contract created'); },
+    onError: () => toast.error("Couldn't create the contract — try again"),
   });
   // The client signs in their portal link for this event. Sending makes sure
   // that link exists (with signing on) and emails it when SMTP is set up.
@@ -730,7 +768,10 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
     },
     onError: (e) => toast.error(e.message || 'Could not send the contract'),
   });
-  const del = trpc.contracts.delete.useMutation({ onSuccess: () => utils.contracts.list.invalidate({ bookingId }) });
+  const del = trpc.contracts.delete.useMutation({
+    onSuccess: () => utils.contracts.list.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't delete the contract — try again"),
+  });
   const STATUS_COLORS: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', signed: 'bg-green-100 text-green-700', declined: 'bg-red-100 text-red-700', expired: 'bg-gray-100 text-gray-400' };
   return (
     <div className="space-y-4">
@@ -838,9 +879,16 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
   const [form, setForm] = useState({ name: '', category: 'venue', type: 'expense' as const, estimatedAmount: '', actualAmount: '' });
   const create = trpc.budgets.create.useMutation({
     onSuccess: () => { utils.budgets.list.invalidate({ bookingId }); setShowForm(false); setForm({ name: '', category: 'venue', type: 'expense', estimatedAmount: '', actualAmount: '' }); toast.success('Budget item added'); },
+    onError: () => toast.error("Couldn't add the budget item — try again"),
   });
-  const update = trpc.budgets.update.useMutation({ onSuccess: () => utils.budgets.list.invalidate({ bookingId }) });
-  const del = trpc.budgets.delete.useMutation({ onSuccess: () => utils.budgets.list.invalidate({ bookingId }) });
+  const update = trpc.budgets.update.useMutation({
+    onSuccess: () => utils.budgets.list.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't save the actual amount — try again"),
+  });
+  const del = trpc.budgets.delete.useMutation({
+    onSuccess: () => utils.budgets.list.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't delete the budget item — try again"),
+  });
   const income = (items ?? []).filter((i: any) => i.type === 'income');
   const expenses = (items ?? []).filter((i: any) => i.type === 'expense');
   const totalEstIncome = income.reduce((s: number, i: any) => s + Number(i.estimatedAmount ?? 0), 0);
@@ -953,9 +1001,16 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
   const [form, setForm] = useState({ name: '', category: 'av', quantity: '1', notes: '' });
   const add = trpc.equipment.addToEvent.useMutation({
     onSuccess: () => { utils.equipment.listEvent.invalidate({ bookingId }); setShowForm(false); setForm({ name: '', category: 'av', quantity: '1', notes: '' }); toast.success('Equipment added'); },
+    onError: () => toast.error("Couldn't add the equipment — try again"),
   });
-  const updateItem = trpc.equipment.updateEvent.useMutation({ onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }) });
-  const del = trpc.equipment.deleteEvent.useMutation({ onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }) });
+  const updateItem = trpc.equipment.updateEvent.useMutation({
+    onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't update the equipment status — try again"),
+  });
+  const del = trpc.equipment.deleteEvent.useMutation({
+    onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't delete the equipment — try again"),
+  });
   const STATUS_COLORS: Record<string, string> = { needed: 'bg-yellow-100 text-yellow-700', confirmed: 'bg-blue-100 text-blue-700', delivered: 'bg-green-100 text-green-700', returned: 'bg-gray-100 text-gray-500' };
   const CATEGORIES = ['av', 'furniture', 'linen', 'lighting', 'catering', 'decor', 'transport', 'other'];
   return (
@@ -1033,7 +1088,10 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
 function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any }) {
   const { data: chart } = trpc.seating.get.useQuery({ bookingId });
   const utils = trpc.useUtils();
-  const save = trpc.seating.save.useMutation({ onSuccess: () => { utils.seating.get.invalidate({ bookingId }); toast.success('Seating chart saved'); } });
+  const save = trpc.seating.save.useMutation({
+    onSuccess: () => { utils.seating.get.invalidate({ bookingId }); toast.success('Seating chart saved'); },
+    onError: () => toast.error("Couldn't save the seating chart — try again"),
+  });
   const [tables, setTables] = useState<any[]>([]);
   const [dragging, setDragging] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -1133,8 +1191,12 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
   const [perms, setPerms] = useState({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false });
   const create = trpc.portal.create.useMutation({
     onSuccess: () => { utils.portal.list.invalidate({ bookingId }); setShowForm(false); toast.success('Client portal link created!'); },
+    onError: () => toast.error("Couldn't create the portal link — try again"),
   });
-  const del = trpc.portal.delete.useMutation({ onSuccess: () => utils.portal.list.invalidate({ bookingId }) });
+  const del = trpc.portal.delete.useMutation({
+    onSuccess: () => utils.portal.list.invalidate({ bookingId }),
+    onError: () => toast.error("Couldn't delete the portal link — try again"),
+  });
   const emailLink = trpc.portal.emailLink.useMutation({
     onSuccess: (r) => {
       if (r.emailSent) toast.success(`Portal link emailed to ${r.to}`);

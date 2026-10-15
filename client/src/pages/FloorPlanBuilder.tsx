@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -18,7 +18,7 @@ import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
  * Inventory tab lists those items for placing on the canvas.
  */
 export default function FloorPlanBuilder() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   const params = new URLSearchParams(window.location.search);
@@ -29,10 +29,24 @@ export default function FloorPlanBuilder() {
   const [savedPlanId, setSavedPlanId] = useState<number | undefined>(initialPlanId);
   const [shareToken, setShareToken] = useState<string | undefined>(undefined);
 
-  const { data: existingPlan, isLoading } = trpc.floorPlans.get.useQuery(
+  const planQuery = trpc.floorPlans.get.useQuery(
     { id: initialPlanId! },
     { enabled: !!initialPlanId && !!user },
   );
+  // Opened from an event (?bookingId only): pick up that event's latest plan
+  // so saves update it, instead of starting blank and adding a new row each time.
+  // Looked up once per visit: a refetch that turned up a just-saved plan would
+  // change the editor key below and remount it, dropping unsaved changes.
+  const eventPlansQuery = trpc.floorPlans.list.useQuery(
+    { bookingId: bookingId! },
+    { enabled: !initialPlanId && !!bookingId && !!user, refetchOnWindowFocus: false, refetchOnReconnect: false },
+  );
+  const eventPlan = useMemo(() => [...(eventPlansQuery.data ?? [])].sort(
+    (a: any, b: any) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime(),
+  )[0], [eventPlansQuery.data]);
+  const existingPlan = initialPlanId ? planQuery.data : eventPlan;
+  // Save into the plan on screen; only a brand-new plan creates a row.
+  const planId = savedPlanId ?? existingPlan?.id;
 
   const savePlan = trpc.floorPlans.save.useMutation({
     onSuccess: (data: any) => { if (data?.id) setSavedPlanId(data.id); toast.success("Floor plan saved!"); },
@@ -40,11 +54,30 @@ export default function FloorPlanBuilder() {
   });
 
   // Wait for an existing plan to load before mounting the editor, so its
-  // initialData (read once on mount) is correct.
-  if (initialPlanId && isLoading) {
+  // initialData (read once on mount) is correct — including when a cached copy
+  // from an earlier visit is being refreshed.
+  const activeQuery = initialPlanId ? planQuery : bookingId ? eventPlansQuery : null;
+  if (activeQuery && (authLoading || activeQuery.isLoading || (activeQuery.isFetching && !activeQuery.isFetchedAfterMount))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-gray-400 text-lg animate-pulse">Loading floor plan…</div>
+      </div>
+    );
+  }
+  // A failed load must not fall through to a blank editor — saving that would
+  // overwrite the plan or start a duplicate. (A failed background refetch keeps
+  // its data, so the editor stays up.)
+  if (activeQuery?.isError && activeQuery.data === undefined) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gray-100 px-4 text-center">
+        <div className="text-gray-700 text-lg">Couldn't load the floor plan.</div>
+        <button
+          onClick={() => activeQuery.refetch()}
+          disabled={activeQuery.isFetching}
+          className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 disabled:opacity-50"
+        >
+          {activeQuery.isFetching ? "TRYING..." : "TRY AGAIN"}
+        </button>
       </div>
     );
   }
@@ -70,12 +103,12 @@ export default function FloorPlanBuilder() {
           initialData={(existingPlan?.canvasData as CanvasData | undefined) ?? undefined}
           name={existingPlan?.name ?? "Floor Plan"}
           bgImageUrl={(existingPlan as any)?.bgImageUrl ?? undefined}
-          planId={savedPlanId}
+          planId={planId}
           shareToken={(existingPlan as any)?.shareToken ?? shareToken}
           isSaving={savePlan.isPending}
           onShareTokenGenerated={(t: string) => setShareToken(t)}
           onSave={(canvasData: CanvasData, name: string, bgImageUrl?: string) => {
-            savePlan.mutate({ id: savedPlanId, bookingId, name, canvasData, bgImageUrl } as any);
+            savePlan.mutate({ id: planId, bookingId, name, canvasData, bgImageUrl } as any);
           }}
         />
       </div>
