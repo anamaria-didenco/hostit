@@ -348,8 +348,16 @@ export async function updateProposal(id: number, ownerId: number, data: Partial<
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 // Auto-mark confirmed events as 'finished' once the event date is more than
-// 1 day in the past. Runs cheaply on every list/byMonth fetch.
+// 1 day in the past. Checked on list/byMonth fetches, but at most every few
+// minutes per venue: the dashboard fetches bookings several times per render
+// and every 30s, and each check was an UPDATE. A day's resolution doesn't
+// need more.
+const AUTO_FINISH_EVERY_MS = 5 * 60 * 1000;
+const autoFinishLastRun = new Map<number, number>();
 async function autoFinishPastBookings(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, ownerId: number) {
+  const now = Date.now();
+  if (!process.env.VITEST && now - (autoFinishLastRun.get(ownerId) ?? 0) < AUTO_FINISH_EVERY_MS) return;
+  autoFinishLastRun.set(ownerId, now);
   try {
     // Flip confirmed → finished once the event's effective end (eventEndDate
     // when set, else eventDate) is more than 24 h in the past. Multi-day

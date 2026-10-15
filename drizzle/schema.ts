@@ -407,7 +407,10 @@ export const proposals = pgTable("proposals", {
   declineReason: text("declineReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Migration 0086.
+  leadIdx: index("proposals_lead_idx").on(t.leadId),
+}));
 
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
@@ -613,7 +616,11 @@ export const runsheets = pgTable("runsheets", {
   attachments: json("attachments").$type<{ id: string; name: string; url: string; size: number; contentType: string; uploadedAt: number }[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Migration 0086.
+  bookingIdx: index("runsheets_booking_idx").on(t.bookingId),
+  leadIdx: index("runsheets_lead_idx").on(t.leadId),
+}));
 export type Runsheet = typeof runsheets.$inferSelect;
 export type InsertRunsheet = typeof runsheets.$inferInsert;
 
