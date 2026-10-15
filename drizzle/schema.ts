@@ -614,6 +614,11 @@ export const runsheets = pgTable("runsheets", {
   contactPhone: varchar("contactPhone", { length: 50 }),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   attachments: json("attachments").$type<{ id: string; name: string; url: string; size: number; contentType: string; uploadedAt: number }[]>(),
+  // Edit-conflict protection (migration 0087): bumped by every save of the
+  // sheet; lastEditorId is the open builder that saved last. See
+  // runsheets.update.
+  version: integer("version").default(0).notNull(),
+  lastEditorId: varchar("lastEditorId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (t) => ({

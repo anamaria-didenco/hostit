@@ -89,6 +89,14 @@ const PIPELINE_STAGES = [
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Relative "time ago" for enquiry cards (uses lead.createdAt).
+/** "18:30" → "6:30 pm". */
+function fmtHhmm(hhmm: string | null | undefined): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? '');
+  if (!m) return hhmm ?? '';
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 function fmtAgo(date: any): string {
   if (!date) return "";
   const then = new Date(date).getTime();
@@ -1063,6 +1071,14 @@ export default function Dashboard() {
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
+  // Upcoming events whose runsheet start time disagrees with the event's —
+  // left over from before the two were kept in step. The card hides itself
+  // once each is settled.
+  const { data: startTimeMismatches, refetch: refetchStartTimeMismatches } = trpc.runsheets.startTimeMismatches.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
+  const alignStartTime = trpc.runsheets.alignStartTime.useMutation({
+    onSuccess: (r) => { toast.success(`Start time set to ${fmtHhmm(r.time)}`); void refetchStartTimeMismatches(); void utils.bookings.invalidate(); void utils.leads.invalidate(); },
+    onError: (e) => toast.error(e.message || "Couldn't change the start time"),
+  });
   // Phone month agenda: earlier days of the current month start folded away, so
   // the list opens at today instead of a run of finished events.
   const [showPastAgenda, setShowPastAgenda] = useState(false);
@@ -3404,6 +3420,39 @@ export default function Dashboard() {
                   </section>
                 );
               })()}
+
+              {/* Start times to check — hidden when there are none. */}
+              {startTimeMismatches && startTimeMismatches.length > 0 && (
+                <section aria-label="Start times to check" className="dante-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    <SectionHead title="Start times to check" meta={`${startTimeMismatches.length} event${startTimeMismatches.length !== 1 ? 's' : ''}`} />
+                    <p className="font-dm text-xs text-ink/70 mt-1">The event and its run sheet have different start times. Pick the right one and both will match.</p>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {startTimeMismatches.map(m => {
+                      const busy = alignStartTime.isPending && alignStartTime.variables?.runsheetId === m.runsheetId;
+                      return (
+                        <div key={m.runsheetId} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                          <button onClick={() => setLocation(`/runsheet?id=${m.runsheetId}`)} className="min-w-0 flex-1 text-left hover:underline">
+                            <span className="block font-dm text-sm font-semibold text-ink break-words">{[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}</span>
+                            <span className="block font-dm text-xs text-ink/70">{formatEventDate(m.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })} · event {fmtHhmm(m.bookingTime)}, run sheet {fmtHhmm(m.runsheetTime)}</span>
+                          </button>
+                          <div className="flex gap-2 shrink-0">
+                            <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'event' })}
+                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
+                              USE {fmtHhmm(m.bookingTime).toUpperCase()}
+                            </button>
+                            <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'runsheet' })}
+                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
+                              USE {fmtHhmm(m.runsheetTime).toUpperCase()}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               {/* Phone: today first. On a phone the seven KPI tiles used to fill
                   the screen before anything about tonight. */}

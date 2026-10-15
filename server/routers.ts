@@ -1467,7 +1467,8 @@ export const appRouter = router({
             if (Object.keys(rsUpdates).length) {
               // Runsheets linked to the booking, or started from this enquiry
               // before a booking existed.
-              await db.update(runsheets).set(rsUpdates)
+              const { changedElsewhere } = await import('./runsheetVersion');
+              await db.update(runsheets).set({ ...rsUpdates, ...changedElsewhere() })
                 .where(and(eq(runsheets.ownerId, ctx.user.id), ids.length
                   ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
                   : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
@@ -2769,7 +2770,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // Its start time too, when the event has one — the runsheet header
           // and staff link show the runsheet's own copy.
           const start = startTimeOf(updates.eventDate as Date);
-          await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}) })
+          const { changedElsewhere } = await import('./runsheetVersion');
+          await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}), ...changedElsewhere() })
             .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id)));
         }
         // A cancelled event's draft invoices must not sit in Xero waiting to
@@ -4605,6 +4607,91 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return { ...sheet, items };
       }),
 
+    // The open builder polls this to notice another save (someone else, or
+    // another tab) before it saves over it. See server/runsheetVersion.ts.
+    versionCheck: protectedProcedure
+      .input(z.object({ id: z.number(), editorId: z.string().max(64) }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [row] = await db.select({ version: runsheets.version, lastEditorId: runsheets.lastEditorId })
+          .from(runsheets).where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!row) return null;
+        return { version: row.version, mine: row.lastEditorId === input.editorId };
+      }),
+
+    // Upcoming events whose runsheet start time disagrees with the event's own
+    // start time — left over from before the two were kept in step (F-08).
+    // Shown on the Overview until each one is settled.
+    startTimeMismatches: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheets, bookings } = await import('../drizzle/schema');
+        const { eq, and, gte, ne, isNotNull } = await import('drizzle-orm');
+        const { startTimeOf } = await import('@shared/eventDate');
+        const db = await getDb();
+        if (!db) return [];
+        const rows = await db.select({
+          runsheetId: runsheets.id, title: runsheets.title, runsheetTime: runsheets.eventStartTime,
+          bookingId: bookings.id, eventDate: bookings.eventDate, firstName: bookings.firstName, lastName: bookings.lastName,
+        }).from(runsheets)
+          .innerJoin(bookings, and(eq(bookings.id, runsheets.bookingId), eq(bookings.ownerId, ctx.user.id)))
+          .where(and(
+            eq(runsheets.ownerId, ctx.user.id),
+            isNotNull(runsheets.eventStartTime),
+            ne(bookings.status, 'cancelled'),
+            gte(bookings.eventDate, new Date(Date.now() - 24 * 3600_000)),
+          ))
+          .orderBy(bookings.eventDate);
+        return rows
+          .map(r => ({ ...r, bookingTime: startTimeOf(r.eventDate) }))
+          .filter(r => r.runsheetTime && r.bookingTime && r.runsheetTime !== r.bookingTime);
+      }),
+
+    // Settle one of those: keep the event's start time (the runsheet takes
+    // it) or the runsheet's (the event and enquiry move to it).
+    alignStartTime: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), keep: z.enum(['event', 'runsheet']) }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheets, bookings, leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { startTimeOf, withStartTime } = await import('@shared/eventDate');
+        const { changedElsewhere } = await import('./runsheetVersion');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [rs] = await db.select({ bookingId: runsheets.bookingId, time: runsheets.eventStartTime }).from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs?.bookingId) throw new TRPCError({ code: 'NOT_FOUND', message: "This runsheet isn't linked to an event." });
+        const [b] = await db.select({ eventDate: bookings.eventDate, leadId: bookings.leadId }).from(bookings)
+          .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!b) throw new TRPCError({ code: 'NOT_FOUND', message: "This runsheet's event no longer exists." });
+        const sameEvent = and(eq(runsheets.bookingId, rs.bookingId), eq(runsheets.ownerId, ctx.user.id));
+        if (input.keep === 'event') {
+          const time = startTimeOf(b.eventDate);
+          if (!time) throw new TRPCError({ code: 'BAD_REQUEST', message: "The event has no start time to use." });
+          await db.update(runsheets).set({ eventStartTime: time, updatedAt: new Date(), ...changedElsewhere() }).where(sameEvent);
+          return { time };
+        }
+        const time = rs.time ?? '';
+        const next = withStartTime(b.eventDate, time);
+        if (!time || !next || startTimeOf(next) !== time) throw new TRPCError({ code: 'BAD_REQUEST', message: "The runsheet's start time isn't a valid time." });
+        await db.update(bookings).set({ eventDate: next, updatedAt: new Date() })
+          .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        await db.update(runsheets).set({ eventDate: next, eventStartTime: time, updatedAt: new Date(), ...changedElsewhere() }).where(sameEvent);
+        if (b.leadId) {
+          const [l] = await db.select({ eventDate: leads.eventDate }).from(leads)
+            .where(and(eq(leads.id, b.leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+          const leadNext = l?.eventDate ? withStartTime(l.eventDate, time) : next;
+          await db.update(leads).set({ eventDate: leadNext, updatedAt: new Date() })
+            .where(and(eq(leads.id, b.leadId), eq(leads.ownerId, ctx.user.id)));
+        }
+        return { time };
+      }),
+
     create: protectedProcedure
       .input(z.object({
         title: z.string(),
@@ -4743,6 +4830,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
         paymentInstructions: z.string().optional().nullable(),
+        // Edit-conflict protection — see server/runsheetVersion.ts.
+        expectedVersion: z.number().int().optional(),
+        editorId: z.string().max(64).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -4799,12 +4889,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if ((prevRs?.t ?? '') !== fields.eventStartTime) newStartTime = fields.eventStartTime;
         }
         updateData.updatedAt = new Date();
-        const saved = await db.update(runsheets).set(updateData)
-          .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
-          .returning({ id: runsheets.id });
-        // Nothing matched (deleted, or not this account's): say so, rather
-        // than letting the screen show "All changes saved".
-        if (saved.length === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'This runsheet no longer exists — it may have been deleted.' });
+        // Refused (CONFLICT) when someone else saved since this builder
+        // loaded the sheet, so their edits aren't overwritten.
+        const { builderSave, throwSaveRefused } = await import('./runsheetVersion');
+        const guarded = builderSave(input.expectedVersion, input.editorId);
+        const saved = await db.update(runsheets).set({ ...updateData, ...guarded.set })
+          .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id), guarded.guard))
+          .returning({ id: runsheets.id, version: runsheets.version });
+        // Nothing matched: a conflict, or the sheet is gone (deleted, or not
+        // this account's) — say so, rather than showing "All changes saved".
+        if (saved.length === 0) await throwSaveRefused(db, id, ctx.user.id);
 
         // Cascade shared event fields back to the linked booking + lead. The
         // dashboard / events table read from bookings & leads (NOT the
@@ -4866,7 +4960,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             }
           }
         }
-        return { success: true };
+        return { success: true, version: saved[0].version };
       }),
 
     addItem: protectedProcedure
@@ -6024,19 +6118,30 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           sortOrder: z.number().int().default(0),
           unitPrice: z.number().nullable().optional(),
         })),
+        // Edit-conflict protection — see server/runsheetVersion.ts.
+        expectedVersion: z.number().int().optional(),
+        editorId: z.string().max(64).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
         await assertAllOwned({ runsheet: input.runsheetId }, ctx.user.id);
         const { getDb } = await import('./db');
-        const { fnbItems } = await import('../drizzle/schema');
+        const { fnbItems, runsheets } = await import('../drizzle/schema');
+        const { builderSave, throwSaveRefused } = await import('./runsheetVersion');
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         // Replace the list in ONE transaction: if the insert fails, the delete
         // rolls back and the kitchen keeps the list it had. (Without this a
         // single bad row left the runsheet with no food at all.)
-        await db.transaction(async (tx) => {
+        // The food list is part of the sheet: claim the next version first, so
+        // a list someone else saved in the meantime isn't replaced.
+        const guarded = builderSave(input.expectedVersion, input.editorId);
+        const version = await db.transaction(async (tx) => {
+          const claimed = await tx.update(runsheets).set({ ...guarded.set, updatedAt: new Date() })
+            .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id), guarded.guard))
+            .returning({ version: runsheets.version });
+          if (claimed.length === 0) await throwSaveRefused(tx, input.runsheetId, ctx.user.id);
           await tx.delete(fnbItems).where(and(eq(fnbItems.runsheetId, input.runsheetId), eq(fnbItems.ownerId, ctx.user.id)));
           if (input.items.length > 0) {
             await tx.insert(fnbItems).values(input.items.map((item, idx) => ({
@@ -6057,8 +6162,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               unitPrice: item.unitPrice != null ? String(item.unitPrice) : null,
             })));
           }
+          return claimed[0].version;
         });
-        return { success: true };
+        return { success: true, version };
       }),
   }),
 

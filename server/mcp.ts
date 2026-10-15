@@ -480,7 +480,8 @@ export function buildServer(ctx: McpCtx): McpServer {
           .where(and(eq(leads.id, finalLeadId), eq(leads.ownerId, ctx.ownerId))).limit(1);
         if (l?.eventDate) patch.eventDate = l.eventDate;
       }
-      await db.update(runsheets).set(patch)
+      const { changedElsewhere } = await import("./runsheetVersion");
+      await db.update(runsheets).set({ ...patch, ...changedElsewhere() })
         .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId)));
       const [updated] = await db.select().from(runsheets)
         .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId)));
