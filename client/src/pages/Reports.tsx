@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from "recharts";
-import { TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download, AlertCircle } from "lucide-react";
+import { TrendingUp, DollarSign, Users, Calendar, Settings, Download, AlertCircle } from "lucide-react";
 import { parseCustomStatuses, statusChipClasses, statusSwatch } from "@/components/StatusManager";
 import { currencyWhole } from "@/lib/money";
 import { isRealEnquiry, isImportedBooking, WON_LEAD_STATUSES } from "@shared/conversion";
@@ -15,6 +15,7 @@ import {
   PeriodPicker, ConversionSummaryCard, FunnelCard, TrendCard, SpeedTiles, BySourceCard,
   PipelineCard, LostReasonsCard, fmtSource, type PeriodChoice,
 } from "@/components/ConversionReport";
+import YearGoalsReport from "@/components/YearGoalsReport";
 
 // Soft row/background wash from a status swatch, so a table row's tint matches
 // its badge exactly. Low alpha keeps text comfortably above AA on the wash.
@@ -29,16 +30,34 @@ const TABS = [
   { key: "events", label: "Events" },
   { key: "enquiries", label: "Conversion" },
   { key: "revenue", label: "Revenue" },
+  { key: "goals", label: "Goals" },
   { key: "proposals", label: "Proposals" },
 ];
 
-// Same restrained source palette as the Analytics page: navy, amber, teal, then
+// Same restrained source palette as the Goals tab: navy, amber, teal, then
 // muted supporting hues, so neighbouring slices stay distinguishable.
 const BRAND_COLORS = ["#2f5488", "#d4952b", "#3f8f8f", "#8a94a6", "#b5626a", "#6d5aa0", "#a9b4c8"];
 
 export default function Reports() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("overview");
+  // ?rtab=goals (where the old /analytics page redirects) opens that sub-tab.
+  const [tab, setTab] = useState(() => {
+    const rtab = new URLSearchParams(window.location.search).get("rtab");
+    return TABS.some(t => t.key === rtab) ? rtab! : "overview";
+  });
+  // Drop ?rtab once read, so coming back to Reports later starts on Overview,
+  // and on a phone scroll the tab strip so the opened sub-tab is in view.
+  const tabStripRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("rtab")) {
+      url.searchParams.delete("rtab");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+    const strip = tabStripRef.current;
+    const active = strip?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (strip && active) strip.scrollLeft = active.offsetLeft - strip.offsetLeft - 16;
+  }, []);
   // The venue's own status palette (same source the board and calendar use),
   // so every status reads in one colour language across the whole app.
   const { data: venueSettings } = trpc.venue.get.useQuery(
@@ -116,9 +135,6 @@ export default function Reports() {
         <div>
           <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
           <p className="font-dm text-sm text-sage mt-0.5">Analytics and performance insights for your venue</p>
-          <Link href="/analytics" className="inline-flex items-center gap-1 mt-2 font-bebas tracking-widest text-xs text-primary hover:underline min-h-[24px]">
-            REVENUE GOALS &amp; YEARLY FUNNEL <ArrowUpRight className="w-3 h-3" aria-hidden />
-          </Link>
         </div>
         {tab === "overview" && (
           <div className="relative">
@@ -156,7 +172,7 @@ export default function Reports() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-0 mb-6 border-b border-border overflow-x-auto">
+      <div ref={tabStripRef} className="flex gap-0 mb-6 border-b border-border overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -331,7 +347,8 @@ export default function Reports() {
                 <h2 className="font-cormorant text-lg font-semibold text-ink">Confirmed Bookings</h2>
                 <span className="font-dm text-xs text-sage">{(allBookings ?? []).length} events</span>
               </div>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px]">
                 <thead>
                   <tr className="border-b border-border bg-linen">
                     {["Event Name", "Date", "Type", "Guests", "Space", "Value", "Status"].map(h => (
@@ -358,6 +375,7 @@ export default function Reports() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -444,7 +462,8 @@ export default function Reports() {
                 <Download className="w-3.5 h-3.5" /> Export CSV
               </button>
             </div>
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="border-b border-border bg-linen">
                   {["Event", "Date", "Guests", "Value", "Status"].map(h => (
@@ -466,9 +485,13 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
+
+      {/* ── GOALS (the old /analytics page) ── */}
+      {tab === "goals" && <YearGoalsReport />}
 
       {/* ── PROPOSALS ── */}
       {tab === "proposals" && (() => {
@@ -527,7 +550,8 @@ export default function Reports() {
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="font-cormorant text-lg font-semibold text-ink">Recent Proposals</h2>
               </div>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px]">
                 <thead>
                   <tr className="border-b border-border bg-linen">
                     {["Client", "Event Type", "Event Date", "Guests", "Stage"].map(h => (
@@ -551,6 +575,7 @@ export default function Reports() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           {proposalLeads.length === 0 && (
