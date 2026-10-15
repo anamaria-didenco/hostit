@@ -1468,6 +1468,11 @@ export const appRouter = router({
         // hold it follow the change (server/runsheetContacts.ts).
         const contactEdited = rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined || rest.phone !== undefined;
         const contactBefore = contactEdited ? await getLeadById(id, ctx.user.id) : undefined;
+        // The space before this edit, so run sheet copies that still hold it
+        // follow the change (server/runsheetSpace.ts).
+        const spaceBefore = spaceName !== undefined
+          ? (await getLeadById(id, ctx.user.id))?.spaceName ?? null
+          : undefined;
         if (rest.firstName !== undefined && !rest.firstName.trim()) throw new Error('First name is required.');
         await updateLead(id, ctx.user.id, {
           ...rest,
@@ -1483,6 +1488,10 @@ export const appRouter = router({
         // event on its old date.
         const bookingUpdates: Record<string, unknown> = {};
         let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
+        // Human labels for the other records this edit also touched, so the UI
+        // can say what else changed (see the `cascaded` field on the result).
+        const cascaded = new Set<string>();
+        let runsheetTouched = false;
         if (eventDate) bookingUpdates.eventDate = new Date(eventDate);
         if (rest.guestCount !== undefined) bookingUpdates.guestCount = rest.guestCount;
         if (spaceName !== undefined && spaceName?.trim()) bookingUpdates.spaceName = spaceName.trim();
@@ -1503,6 +1512,7 @@ export const appRouter = router({
             if (ids.length) {
               await db.update(bookings).set({ ...bookingUpdates, updatedAt: new Date() })
                 .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
+              cascaded.add('event');
               if (bookingUpdates.eventDate || bookingUpdates.spaceName) {
                 const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
                 if (allowClash) for (const bid of ids) await flagOverriddenClash(ctx.user.id, bid);
@@ -1511,7 +1521,7 @@ export const appRouter = router({
             }
             const rsUpdates: Record<string, unknown> = {};
             // The date (and start time, when it has one), as bookings.update
-            // does. The guest count follows below, separately.
+            // does. The guest count and space follow below, separately.
             if (bookingUpdates.eventDate) {
               rsUpdates.eventDate = bookingUpdates.eventDate;
               const { startTimeOf } = await import('@shared/eventDate');
@@ -1522,10 +1532,20 @@ export const appRouter = router({
               // Runsheets linked to the booking, or started from this enquiry
               // before a booking existed.
               const { changedElsewhere } = await import('./runsheetVersion');
-              await db.update(runsheets).set({ ...rsUpdates, ...changedElsewhere() })
+              const r = await db.update(runsheets).set({ ...rsUpdates, ...changedElsewhere() })
                 .where(and(eq(runsheets.ownerId, ctx.user.id), ids.length
                   ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
-                  : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
+                  : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))))
+                .returning({ id: runsheets.id });
+              if (r.length) runsheetTouched = true;
+            }
+            // The space, to run sheet copies that still hold the old room
+            // (match old value — server/runsheetSpace.ts). leads.update already
+            // pushes space to the booking above; this reaches the run sheet.
+            if (spaceName !== undefined) {
+              const { syncRunsheetSpace } = await import('./runsheetSpace');
+              const n = await syncRunsheetSpace(db, ctx.user.id, { leadId: id }, spaceBefore, spaceName);
+              if (n > 0) runsheetTouched = true;
             }
             // Guests used to stop here: the runsheet's count was treated as
             // the kitchen's own final number, so the event and the run sheet
@@ -1536,16 +1556,29 @@ export const appRouter = router({
             // (foodRescale) for the person to update via fnb.rescaleGuests.
             const { syncRunsheetGuests } = await import('./runsheetGuests');
             foodRescale = await syncRunsheetGuests(db, ctx.user.id, { leadId: id }, guestsBefore, rest.guestCount);
+            if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) runsheetTouched = true;
+            // Proposals aren't auto-updated — warn when the guest count changed
+            // and a proposal exists, so it isn't mistaken for current.
+            if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) {
+              const { proposals } = await import('../drizzle/schema');
+              const [p] = await db.select({ id: proposals.id }).from(proposals)
+                .where(and(eq(proposals.leadId, id), eq(proposals.ownerId, ctx.user.id))).limit(1);
+              if (p) cascaded.add('proposals still show the old guests');
+            }
           }
         }
         if (contactBefore) {
           const { getDb } = await import('./db');
           const db = await getDb();
           const { syncRunsheetContacts } = await import('./runsheetContacts');
-          if (db) await syncRunsheetContacts(db, ctx.user.id, { leadId: id }, contactBefore,
-            { firstName: rest.firstName, lastName: rest.lastName, email: rest.email, phone: rest.phone });
+          if (db) {
+            const n = await syncRunsheetContacts(db, ctx.user.id, { leadId: id }, contactBefore,
+              { firstName: rest.firstName, lastName: rest.lastName, email: rest.email, phone: rest.phone });
+            if (n > 0) runsheetTouched = true;
+          }
         }
-        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
+        if (runsheetTouched) cascaded.add('run sheet');
+        return { success: true, ...(foodRescale ? { foodRescale } : {}), ...(cascaded.size ? { cascaded: [...cascaded] } : {}) };
       }),
 
     activity: protectedProcedure
@@ -2872,6 +2905,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
           guestsBefore = cur?.guestCount ?? null;
         }
+        // The space before this edit, so run sheet copies that still hold it
+        // follow the change (server/runsheetSpace.ts).
+        let spaceBefore: string | null | undefined;
+        if (rest.spaceName !== undefined) {
+          const [cur] = await db.select({ spaceName: bookings.spaceName }).from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          spaceBefore = cur?.spaceName ?? null;
+        }
         // The client's contact before this edit, for run sheet copies of it.
         let contactBefore: { firstName: string | null; lastName: string | null; email: string | null; leadId: number | null } | undefined;
         if (rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined) {
@@ -2880,10 +2921,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
         }
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // Human labels for records this edit also touched, so the UI can say
+        // what else changed (and warn about what didn't follow). See part of
+        // the `cascaded` field below.
+        const cascaded = new Set<string>();
+        let runsheetTouched = false;
         if (contactBefore) {
           const { syncRunsheetContacts } = await import('./runsheetContacts');
-          await syncRunsheetContacts(db, ctx.user.id, { bookingId: id, leadId: contactBefore.leadId }, contactBefore,
+          const n = await syncRunsheetContacts(db, ctx.user.id, { bookingId: id, leadId: contactBefore.leadId }, contactBefore,
             { firstName: rest.firstName, lastName: rest.lastName, email: rest.email });
+          if (n > 0) runsheetTouched = true;
         }
         // New guest count → the event's run sheets too (food lines at the
         // old count are reported, never changed here — see runsheetGuests.ts).
@@ -2891,6 +2938,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.guestCount !== undefined) {
           const { syncRunsheetGuests } = await import('./runsheetGuests');
           foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+          if (guestsBefore !== rest.guestCount) runsheetTouched = true;
+        }
+        // New space → the event's run sheets too, but only copies that still
+        // hold the old room (server/runsheetSpace.ts).
+        if (rest.spaceName !== undefined) {
+          const { syncRunsheetSpace } = await import('./runsheetSpace');
+          const n = await syncRunsheetSpace(db, ctx.user.id, { bookingId: id }, spaceBefore, rest.spaceName);
+          if (n > 0) runsheetTouched = true;
         }
         // The runsheet keeps its own copy of the date (staff link, runsheet
         // header). Keep it in step so the event never shows two dates.
@@ -2901,9 +2956,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // and staff link show the runsheet's own copy.
           const start = startTimeOf(updates.eventDate as Date);
           const { changedElsewhere } = await import('./runsheetVersion');
-          await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}), ...changedElsewhere() })
-            .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id)));
+          const r = await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}), ...changedElsewhere() })
+            .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id))).returning({ id: runsheets.id });
+          if (r.length) runsheetTouched = true;
         }
+        if (runsheetTouched) cascaded.add('run sheet');
         // A cancelled event's draft invoices must not sit in Xero waiting to
         // be approved by accident. Best-effort: drafts are deleted in Xero and
         // dropped from our ledger; an approved or paid invoice is left alone
@@ -2951,6 +3008,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (rest.lastName !== undefined) leadUpdates.lastName = rest.lastName;
           if (rest.email !== undefined) leadUpdates.email = rest.email;
           if (rest.eventType !== undefined) leadUpdates.eventType = rest.eventType;
+          // The space, so the enquiry and its table row stop showing the old
+          // room (this was the weakest link in the booking→lead cascade).
+          if (rest.spaceName !== undefined) leadUpdates.spaceName = rest.spaceName?.trim() || null;
           // Cascade status too: if a booking is cancelled, the lead should
           // become 'lost'; confirmed/tentative map back to booked/tentative
           // so the Events table doesn't show a "Confirmed" pill for a row
@@ -2976,6 +3036,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             leadUpdates.updatedAt = new Date();
             await db.update(leads).set(leadUpdates)
               .where(and(eq(leads.id, bookingRow.leadId), eq(leads.ownerId, ctx.user.id)));
+            cascaded.add('enquiry');
+          }
+          // Proposals aren't auto-updated — warn when the guest count changed
+          // and a proposal exists, so it isn't mistaken for current.
+          if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) {
+            const { proposals } = await import('../drizzle/schema');
+            const [p] = await db.select({ id: proposals.id }).from(proposals)
+              .where(and(eq(proposals.leadId, bookingRow.leadId), eq(proposals.ownerId, ctx.user.id))).limit(1);
+            if (p) cascaded.add('proposals still show the old guests');
           }
         }
         // Re-sync depositPaid from recorded payments ONLY when the deposit
@@ -3008,7 +3077,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
-        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}), ...(cascaded.size ? { cascaded: [...cascaded] } : {}) };
       }),
     byMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))

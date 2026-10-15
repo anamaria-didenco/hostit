@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
+import { showCascadedToast } from "@/lib/cascadedToast";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -113,6 +114,7 @@ export default function EventDetail() {
       setEditing(false);
       if (vars.guestCount !== undefined && offerFoodRescale(data, { bookingId })) return;
       toast.success("Event updated");
+      showCascadedToast(data);
     },
     onError: (e, vars) => {
       // Date/space already taken → "Save anyway?" instead of a dead-end error.
