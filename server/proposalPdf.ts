@@ -248,11 +248,9 @@ export function buildHtml(data: {
   .quote-notes { font-size: 9.5pt; color: #666; margin-top: 10px; font-style: italic; }
 
   /* Photos */
-  .photos { display: grid; grid-template-columns: repeat(${Math.min(3, Math.max(1, photos.length - 1))}, 1fr); gap: 6px; margin-bottom: 24px; }
+  .photos { display: grid; grid-template-columns: repeat(${Math.min(4, Math.max(1, photos.length))}, 1fr); gap: 6px; margin-bottom: 24px; }
   .photos figure { margin: 0; break-inside: avoid; }
-  .photos figure:first-child { grid-column: 1 / -1; }
-  .photos img { width: 100%; height: 150px; object-fit: cover; display: block; }
-  .photos figure:first-child img { height: 260px; }
+  .photos img { width: 100%; height: ${photos.length <= 2 ? 200 : photos.length === 3 ? 160 : 120}px; object-fit: cover; display: block; }
   .photos figcaption { font-size: 8.5pt; color: #777; margin-top: 3px; }
 
   /* Menu options + menus */
