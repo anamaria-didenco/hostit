@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle, Send, Mail } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import { currency } from "@/lib/money";
+import NoTotalSet from "@/components/NoTotalSet";
 import BookingInvoices from "@/components/BookingInvoices";
 
 const PAYMENT_TYPES = [
@@ -185,6 +186,7 @@ export default function PaymentTracker() {
   }
 
   const fmtNZD = (n: number) => currency(n);
+  const hasTotal = Number(summary?.total ?? 0) > 0;
 
   return (
     <div role="main" className="min-h-screen bg-cream">
@@ -242,19 +244,23 @@ export default function PaymentTracker() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="text-center p-4 bg-cream">
                 <div className="font-bebas tracking-widest text-xs text-ink/70 mb-1">TOTAL BOOKING VALUE</div>
-                <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(summary.total ?? 0)}</div>
+                {hasTotal
+                  ? <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(summary.total ?? 0)}</div>
+                  : <NoTotalSet className="font-dm text-sm italic text-ink/55 py-1.5" />}
               </div>
               <div className="text-center p-4 bg-green-50">
                 <div className="font-bebas tracking-widest text-xs text-green-700 mb-1">TOTAL PAID</div>
                 <div className="font-cormorant text-2xl font-semibold text-green-700">{fmtNZD(summary.totalPaid)}</div>
               </div>
-              <div className={`text-center p-4 ${summary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
-                <div className={`font-bebas tracking-widest text-xs mb-1 ${summary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
+              <div className={`text-center p-4 ${!hasTotal ? "bg-cream" : summary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                <div className={`font-bebas tracking-widest text-xs mb-1 ${!hasTotal ? "text-ink/70" : summary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
                   OUTSTANDING
                 </div>
-                <div className={`font-cormorant text-2xl font-semibold ${summary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
-                  {fmtNZD(summary.outstanding)}
-                </div>
+                {hasTotal ? (
+                  <div className={`font-cormorant text-2xl font-semibold ${summary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>
+                    {fmtNZD(summary.outstanding)}
+                  </div>
+                ) : <NoTotalSet className="font-dm text-sm italic text-ink/55 py-1.5" />}
               </div>
             </div>
 {((summary.total ?? 0) > 0) && (

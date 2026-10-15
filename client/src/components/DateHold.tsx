@@ -57,6 +57,33 @@ export function DateClashChip({ clashes, className = "" }: { clashes: ClientClas
   );
 }
 
+/**
+ * "Double-booked" — an event saved over a clash warning (or accepted onto a
+ * taken date) that nobody has resolved yet. Pass the booking's clashFlaggedAt.
+ */
+export function DoubleBookedTag({ flaggedAt, compact = false, className = "" }: { flaggedAt: unknown; compact?: boolean; className?: string }) {
+  if (!flaggedAt) return null;
+  const title = "Double-booked: another event has this date and space. Resolve it from the Overview.";
+  // Compact (month-grid chips): a red marker only — the words left no room
+  // for the event's name in a month cell. The tooltip says it in full.
+  if (compact) {
+    return (
+      <span title={title} role="img" aria-label="Double-booked"
+        className={`inline-flex items-center justify-center w-4 h-4 rounded-sm bg-red-50 text-red-700 border border-red-200 flex-shrink-0 ${className}`}>
+        <AlertCircle className="w-3 h-3" aria-hidden="true" />
+      </span>
+    );
+  }
+  return (
+    <span
+      title={title}
+      aria-label={title}
+      className={`inline-flex items-center gap-1 font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm bg-red-50 text-red-800 border border-red-200 whitespace-nowrap flex-shrink-0 ${className}`}>
+      <AlertCircle className="w-3 h-3" aria-hidden="true" /> DOUBLE-BOOKED
+    </span>
+  );
+}
+
 type LeadLike = {
   id: number;
   status: string;

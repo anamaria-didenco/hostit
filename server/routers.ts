@@ -47,7 +47,7 @@ import {
   getBookings, getBookingsByMonth, createBooking,
   EVENT_DATE_REQUIRED, cancelledBookingForLead, restoreClashQuery, restoreCancelledBooking,
   getDashboardStats,
-  syncDepositPaidFlag,
+  syncDepositPaidFlag, adoptRecordedDepositAmount,
 } from "./db";
 import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
 import { cleanLandingPage, parseAdClickAt } from "@shared/adAttribution";
@@ -1371,6 +1371,21 @@ export const appRouter = router({
             }
           }
         }
+        // Booked over the clash warning → flag the event and what it clashes
+        // with; an event cancelled or brought back may end (or not) a clash.
+        if (input.allowClash || wasBooked !== isBooked || restorable) {
+          const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+          if (input.allowClash && isBooked) {
+            const { getDb } = await import('./db');
+            const { bookings } = await import('../drizzle/schema');
+            const { eq, and, ne } = await import('drizzle-orm');
+            const db = await getDb();
+            const live = db ? await db.select({ id: bookings.id }).from(bookings)
+              .where(and(eq(bookings.leadId, input.id), eq(bookings.ownerId, ctx.user.id), ne(bookings.status, 'cancelled'))) : [];
+            for (const b of live) await flagOverriddenClash(ctx.user.id, b.id);
+          }
+          await reconcileClashFlags(ctx.user.id);
+        }
         // Automated task rules (Settings → Automated Tasks). Includes the
         // built-in 5-day follow-up when a lead moves to "function_pack_sent"
         // (unless the venue has its own rule for that status).
@@ -1482,6 +1497,11 @@ export const appRouter = router({
             if (ids.length) {
               await db.update(bookings).set({ ...bookingUpdates, updatedAt: new Date() })
                 .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
+              if (bookingUpdates.eventDate || bookingUpdates.spaceName) {
+                const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+                if (allowClash) for (const bid of ids) await flagOverriddenClash(ctx.user.id, bid);
+                await reconcileClashFlags(ctx.user.id);
+              }
             }
             const rsUpdates: Record<string, unknown> = {};
             // The date (and start time, when it has one), as bookings.update
@@ -1528,6 +1548,7 @@ export const appRouter = router({
         // in one transaction; refused if its event has payments or invoices.
         const { deleteLeadsCascade } = await import('./cascadeDelete');
         await deleteLeadsCascade(ctx.user.id, [input.id]);
+        await (await import('./doubleBookings')).reconcileClashFlags(ctx.user.id);
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -2532,6 +2553,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           await restoreCancelledBooking(found.id, ctx.user.id, status);
           const { linkLeadRunsheets } = await import('./runsheetLinks');
           await linkLeadRunsheets(null, ctx.user.id, input.leadId, found.id);
+          if (input.allowClash) {
+            const { flagOverriddenClash } = await import('./doubleBookings');
+            await flagOverriddenClash(ctx.user.id, found.id);
+          }
           return { ...found, status };
         }
         // Rule: every event must have a space selected.
@@ -2926,6 +2951,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.depositNzd !== undefined && rest.depositPaid === undefined) {
           await syncDepositPaidFlag(id, ctx.user.id, { allowDowngrade: true });
         }
+        // Double-bookings: a save over the clash warning is remembered on both
+        // events (server/doubleBookings.ts); moving or cancelling either one
+        // clears flags whose clash has gone.
+        if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
+          const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
+          if (allowClash) await flagOverriddenClash(ctx.user.id, id);
+          await reconcileClashFlags(ctx.user.id);
+        }
         // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──
         if (rest.status === 'confirmed') {
           const { pushBookingToNbi } = await import('./nowbookit');
@@ -2946,6 +2979,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .query(async ({ input, ctx }) => {
         return getBookingsByMonth(ctx.user.id, input.year, input.month);
       }),
+    /** Overview "Double-bookings to resolve": upcoming flagged events, one row per clashing pair. */
+    clashes: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { listDoubleBookings } = await import('./doubleBookings');
+        return listDoubleBookings(ctx.user.id);
+      }),
+    /** "Mark resolved": clears the double-booking flag on this event and the event(s) it clashes with. */
+    resolveClash: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { resolveClash } = await import('./doubleBookings');
+        return resolveClash(ctx.user.id, input.id);
+      }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -2953,6 +2999,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // in one transaction; refused if it has payments or Xero invoices.
         const { deleteBookingCascade } = await import('./cascadeDelete');
         await deleteBookingCascade(ctx.user.id, input.id);
+        await (await import('./doubleBookings')).reconcileClashFlags(ctx.user.id);
         return { success: true };
       }),
 
@@ -5268,6 +5315,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           paidAt,
           notes: input.notes,
         }).returning({ id: payments.id });
+        // A deposit recorded against a booking with no deposit amount set is
+        // the deposit: take the amount from what was paid. Without this the
+        // flag sync below compares against $0 and never ticks, so the event
+        // kept reading "Deposit pending" after the deposit came in.
+        if (input.type === 'deposit') {
+          await adoptRecordedDepositAmount(input.bookingId, ctx.user.id);
+        }
         await syncDepositPaidFlag(input.bookingId, ctx.user.id);
         // Tell the caller whether this payment cleared the booking, so the UI
         // can say so (and the board can offer to tick the remaining chips).
@@ -7953,10 +8007,11 @@ Return ONLY valid JSON.`;
         permissions: z.object({
           viewProposal: z.boolean().default(true),
           viewRunsheet: z.boolean().default(false),
-          viewBudget: z.boolean().default(false),
+          // "View Payments" on the link form: the payments & balance section.
+          viewBudget: z.boolean().default(true),
           approveProposal: z.boolean().default(true),
           signContract: z.boolean().default(false),
-        }).default({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false }),
+        }).default({ viewProposal: true, viewRunsheet: false, viewBudget: true, approveProposal: true, signContract: false }),
         expiresAt: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -8062,19 +8117,33 @@ Return ONLY valid JSON.`;
         // the client's own money is exposed (sanitised fields, scoped to this
         // booking + its owner). Null when there is no booking yet.
         let paymentSummary: {
-          total: number; totalPaid: number; outstanding: number; credit: number;
+          total: number; totalSource: 'booking' | 'proposal' | null;
+          totalPaid: number; outstanding: number; credit: number;
           depositNzd: number; depositPaid: boolean; depositRequired: boolean;
           status: 'unpaid' | 'partial' | 'deposit_paid' | 'paid_in_full';
         } | null = null;
         let clientPayments: Array<{ id: number; amount: number; type: string; method: string; paidAt: string; notes: string | null }> = [];
         // How-to-pay shown to the client only while money is still owing.
         let paymentInstructions: string | null = null;
-        if (booking && row.bookingId) {
+        // The venue can switch payments off for a link ("View Payments"); then
+        // neither the summary nor the rows leave the server.
+        if (booking && row.bookingId && permissions.viewBudget !== false) {
           const pmts = await db.select().from(payments)
             .where(and(eq(payments.bookingId, row.bookingId), eq(payments.ownerId, row.ownerId)));
           const { netPaid, derivePaymentStatus, round2 } = await import('../shared/paymentMath');
           const net = netPaid(pmts);
-          const total = Number(booking.totalNzd ?? 0);
+          // No total on the booking yet: use the proposal the client accepted,
+          // so the page doesn't read "Event total $0.00" beside it. Neither ->
+          // 0, which the page shows as "To be confirmed".
+          let total = Number(booking.totalNzd ?? 0);
+          let totalSource: 'booking' | 'proposal' | null = total > 0 ? 'booking' : null;
+          if (!(total > 0) && leadId) {
+            const [accepted] = await db.select({ totalNzd: proposals.totalNzd }).from(proposals)
+              .where(and(eq(proposals.leadId, leadId), eq(proposals.ownerId, row.ownerId), eq(proposals.status, 'accepted')))
+              .orderBy(desc(proposals.createdAt), desc(proposals.id)).limit(1);
+            const proposalTotal = Number(accepted?.totalNzd ?? 0);
+            if (proposalTotal > 0) { total = proposalTotal; totalSource = 'proposal'; }
+          }
           const depositNzd = Number(booking.depositNzd ?? 0);
           const depositRequired = (booking as any).depositRequired !== false;
           const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
@@ -8082,7 +8151,7 @@ Return ONLY valid JSON.`;
           // credit rather than a silently-swallowed overpay.
           const credit = total > 0 ? round2(Math.max(0, net - total)) : 0;
           paymentSummary = {
-            total, totalPaid: net, outstanding, credit, depositNzd,
+            total, totalSource, totalPaid: net, outstanding, credit, depositNzd,
             depositPaid: Boolean((booking as any).depositPaid),
             depositRequired,
             status: derivePaymentStatus({ rows: pmts, total, depositNzd, depositRequired }),
