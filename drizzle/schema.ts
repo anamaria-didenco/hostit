@@ -45,6 +45,10 @@ export const users = pgTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  // When this user last loaded their dashboard (epoch ms). Drives the
+  // "Since you were last here" feed (dashboard.sinceLastSeen). Null until the
+  // first visit is recorded — treated as "nothing new yet". Migration 0097.
+  lastSeenAt: bigint("lastSeenAt", { mode: "number" }),
 });
 
 export type User = typeof users.$inferSelect;

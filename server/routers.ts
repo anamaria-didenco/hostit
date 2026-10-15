@@ -6766,6 +6766,35 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     stats: protectedProcedure.query(async ({ ctx }) => {
       return getDashboardStats(ctx.user.id);
     }),
+    // "Since you were last here": what changed since this user last loaded the
+    // dashboard. Reads the stored lastSeenAt only — the bump is markSeen below,
+    // so a visit always shows what happened since the PREVIOUS visit. Blocked
+    // for staff by the dashboard.* read rule in _core/trpc.ts.
+    sinceLastSeen: protectedProcedure.query(async ({ ctx }) => {
+      const { sinceLastSeen } = await import("./sinceLastSeen");
+      return sinceLastSeen(ctx.user.id);
+    }),
+    // Stamp "last visited" to now, throttled server-side so rapid reloads don't
+    // keep moving the mark (which would empty the feed). Returns whether it
+    // actually moved, for anyone who cares.
+    markSeen: protectedProcedure.mutation(async ({ ctx }) => {
+      const { markDashboardSeen } = await import("./sinceLastSeen");
+      return markDashboardSeen(ctx.user.id);
+    }),
+  }),
+  // ─── Availability by space ───────────────────────────────────────────────
+  availability: router({
+    // Per-space free/busy for a date (optional inclusive range). Reuses the
+    // clash logic in server/availability.ts; scoped to the owner.
+    forDate: protectedProcedure
+      .input(z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        const { availabilityForDate } = await import("./availability");
+        return availabilityForDate(ctx.user.id, input.date, input.dateTo);
+      }),
   }),
   // ─── Tasks ────────────────────────────────────────────────────────────────
   tasks: router({

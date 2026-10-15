@@ -387,6 +387,30 @@ export async function respondToProposal(input: {
     console.error("[proposals] linking run sheets after accept failed (non-fatal):", err);
   }
 
+  // If a run sheet already exists for this event, its food sheet won't reflect
+  // the just-accepted proposal's menu. We never change the food silently —
+  // instead surface a notification so the venue can pull it in from the run
+  // sheet builder (where the banner offers the same action). Never throws.
+  try {
+    const [rs] = await db.select({ id: runsheets.id }).from(runsheets)
+      .where(and(eq(runsheets.ownerId, proposal.ownerId), eq(runsheets.bookingId, bookingId)))
+      .orderBy(desc(runsheets.id)).limit(1);
+    if (rs) {
+      await notifyVenue(proposal.ownerId, {
+        kind: "menu_to_pull",
+        title: `Pull the proposal menu into ${who}'s food sheet`,
+        body: `"${proposal.title}" was accepted and this event already has a run sheet, so its food sheet may be out of date. Open the run sheet and pull the proposal's menu in.`,
+        leadId: proposal.leadId,
+        bookingId,
+        link: `/runsheet?id=${rs.id}&bookingId=${bookingId}`,
+        dedupeKey: `menu_to_pull:${rs.id}:${proposal.id}`,
+        email: false,
+      });
+    }
+  } catch (err) {
+    console.error("[proposals] menu_to_pull notification failed (non-fatal):", err);
+  }
+
   // Date clash → flag the booking + urgent venue alert; never blocks the
   // client (they accepted what the venue offered). Also ends any date hold.
   try {
