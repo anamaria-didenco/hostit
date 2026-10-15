@@ -10,7 +10,7 @@ import { venueBrand } from "@shared/brand";
 /** Proposal photos: owner adds/captions/reorders/removes; served only with the proposal's token. */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 991000 + Math.floor(Math.random() * 8999);
+const OWNER = 980000 + Math.floor(Math.random() * 9999);
 const PNG_1PX = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 function ctx(id = OWNER): TrpcContext {
@@ -38,7 +38,7 @@ d("proposal photos (DB)", () => {
 
   beforeAll(async () => {
     const db = (await getDb())!;
-    await db.insert(venueSettings).values({ id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any, ownerId: OWNER, name: "Photo Venue", slug: `photo-${OWNER}` });
+    await db.insert(venueSettings).values({ id: OWNER as any, ownerId: OWNER, name: "Photo Venue", slug: `photo-${OWNER}` });
     const [lead] = await db.insert(leads).values({ ownerId: OWNER, firstName: "Pic", email: "p@example.com", status: "new", source: "manual" }).returning();
     const p = await owner.proposals.create({ leadId: lead.id, title: "With photos" } as any);
     proposalId = p.id;

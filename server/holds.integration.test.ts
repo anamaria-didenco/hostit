@@ -14,7 +14,7 @@ import { runHoldExpiryJob } from "./holds";
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 970000 + Math.floor(Math.random() * 9999);
+const OWNER = 920000 + Math.floor(Math.random() * 9999);
 
 function ctx(): TrpcContext {
   return {
@@ -51,7 +51,7 @@ d("date holds + double-booking guard (DB)", () => {
     const db = (await getDb())!;
     // Explicit id: copied dev databases can have this sequence behind the rows.
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Holds Test Venue", slug: `holds-test-${OWNER}`,
     });
   });

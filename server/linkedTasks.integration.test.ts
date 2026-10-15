@@ -13,7 +13,7 @@ import { automatedTaskRuns, bookings, leadActivity, leads, tasks, teamMembers, v
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 975000 + Math.floor(Math.random() * 9999);
+const OWNER = 940000 + Math.floor(Math.random() * 9999);
 const DAY = 86_400_000;
 
 function ctx(actorName?: string): TrpcContext {
@@ -57,7 +57,7 @@ d("linked, assigned and follow-up tasks (DB)", () => {
   beforeAll(async () => {
     const db = (await getDb())!;
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Linked Tasks Venue", slug: `linked-tasks-${OWNER}`,
     });
     const [m] = await db.insert(teamMembers).values({

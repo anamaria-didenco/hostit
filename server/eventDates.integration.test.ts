@@ -13,7 +13,7 @@ import { eventDayKey, formatEventTime, zonedWallTimeToDate } from "@shared/event
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 960000 + Math.floor(Math.random() * 9999);
+const OWNER = 910000 + Math.floor(Math.random() * 9999);
 const NZ = "Pacific/Auckland";
 
 function ctx(): TrpcContext {
@@ -34,7 +34,7 @@ d("event dates (DB)", () => {
   beforeAll(async () => {
     const db = (await getDb())!;
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Dates Test Venue", slug: `dates-test-${OWNER}`,
     });
   });

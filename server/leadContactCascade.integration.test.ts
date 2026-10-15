@@ -13,7 +13,7 @@ import { leads, bookings, runsheets, venueSettings } from "../drizzle/schema";
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 960000 + Math.floor(Math.random() * 9999);
+const OWNER = 930000 + Math.floor(Math.random() * 9999);
 
 function ctx(): TrpcContext {
   return {
@@ -34,7 +34,7 @@ d("enquiry contact edits cascade (DB)", () => {
   beforeAll(async () => {
     const db = (await getDb())!;
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Contact Test Venue", slug: `contact-test-${OWNER}`,
     });
     const at = new Date("2099-05-01T06:00:00Z");

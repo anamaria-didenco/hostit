@@ -14,7 +14,7 @@ import { menuBody } from "./proposalMenus";
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 990000 + Math.floor(Math.random() * 9999);
+const OWNER = 970000 + Math.floor(Math.random() * 9999);
 
 function ctx(): TrpcContext {
   return {
@@ -31,7 +31,7 @@ d("proposal menu choice (DB)", () => {
 
   beforeAll(async () => {
     const db = (await getDb())!;
-    await db.insert(venueSettings).values({ id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any, ownerId: OWNER, name: "Menu Test Venue", slug: `menu-test-${OWNER}` });
+    await db.insert(venueSettings).values({ id: OWNER as any, ownerId: OWNER, name: "Menu Test Venue", slug: `menu-test-${OWNER}` });
     await db.insert(menuPackages).values([
       { ownerId: OWNER, name: "Shared", type: "food", pricePerHead: "80", description: "Three courses", chefNotes: "SHARED · $80 pp\nThree courses\n\nTO START\nFocaccia" },
       { ownerId: OWNER, name: "Tutto", type: "food", pricePerHead: "110", description: "Shared plus canapés" },
