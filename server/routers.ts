@@ -1455,9 +1455,15 @@ export const appRouter = router({
                 .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
             }
             const rsUpdates: Record<string, unknown> = {};
-            // Only the date, as bookings.update does: the runsheet's guest
-            // count is the kitchen's final number and is edited there.
-            if (bookingUpdates.eventDate) rsUpdates.eventDate = bookingUpdates.eventDate;
+            // The date (and start time, when it has one), as bookings.update
+            // does: the runsheet's guest count is the kitchen's final number
+            // and is edited there.
+            if (bookingUpdates.eventDate) {
+              rsUpdates.eventDate = bookingUpdates.eventDate;
+              const { startTimeOf } = await import('@shared/eventDate');
+              const start = startTimeOf(bookingUpdates.eventDate as Date);
+              if (start) rsUpdates.eventStartTime = start;
+            }
             if (Object.keys(rsUpdates).length) {
               // Runsheets linked to the booking, or started from this enquiry
               // before a booking existed.
@@ -2759,7 +2765,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // header). Keep it in step so the event never shows two dates.
         if (updates.eventDate !== undefined) {
           const { runsheets } = await import('../drizzle/schema');
-          await db.update(runsheets).set({ eventDate: updates.eventDate as Date })
+          const { startTimeOf } = await import('@shared/eventDate');
+          // Its start time too, when the event has one — the runsheet header
+          // and staff link show the runsheet's own copy.
+          const start = startTimeOf(updates.eventDate as Date);
+          await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}) })
             .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id)));
         }
         // A cancelled event's draft invoices must not sit in Xero waiting to
@@ -4779,6 +4789,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.gstInclusive !== undefined) updateData.gstInclusive = fields.gstInclusive;
         if (fields.paymentNotes !== undefined) updateData.paymentNotes = fields.paymentNotes;
         if (fields.paymentInstructions !== undefined) updateData.paymentInstructions = fields.paymentInstructions;
+        // A start time that actually changed (autosave sends it every time)
+        // moves the event's time on the booking and enquiry too — otherwise
+        // the Event page and the runsheet showed two different start times.
+        let newStartTime: string | null = null;
+        if (fields.eventStartTime) {
+          const [prevRs] = await db.select({ t: runsheets.eventStartTime }).from(runsheets)
+            .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+          if ((prevRs?.t ?? '') !== fields.eventStartTime) newStartTime = fields.eventStartTime;
+        }
         updateData.updatedAt = new Date();
         const saved = await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
@@ -4797,6 +4816,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.eventType !== undefined) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
         if (fields.spaceName !== undefined) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
         if (movedToDay) sharedBooking._movedToDay = movedToDay;
+        if (newStartTime) sharedBooking._startTime = newStartTime;
         if (Object.keys(sharedBooking).length > 0) {
           const { bookings, leads } = await import('../drizzle/schema');
           const [rs] = await db.select({ bookingId: runsheets.bookingId, leadId: runsheets.leadId })
@@ -4804,13 +4824,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
             .limit(1);
           if (rs?.bookingId) {
-            const { _movedToDay, ...bookingFields } = sharedBooking;
-            if (_movedToDay) {
-              // Moving the day in the runsheet moves the event, keeping its start time.
-              const { dayWithTimeFrom } = await import('@shared/eventDate');
+            const { _movedToDay, _startTime, ...bookingFields } = sharedBooking;
+            if (_movedToDay || _startTime) {
+              // Moving the day in the runsheet moves the event, keeping its
+              // start time; a new start time moves the time on that day.
+              const { dayWithTimeFrom, withStartTime } = await import('@shared/eventDate');
               const [cur] = await db.select({ eventDate: bookings.eventDate }).from(bookings)
                 .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
-              const next = dayWithTimeFrom(_movedToDay, cur?.eventDate ?? null);
+              let next = _movedToDay ? dayWithTimeFrom(_movedToDay, cur?.eventDate ?? null) : (cur?.eventDate ?? null);
+              if (next && _startTime) next = withStartTime(next, _startTime);
               if (next) {
                 bookingFields.eventDate = next;
                 await db.update(runsheets).set({ eventDate: next })
@@ -4830,11 +4852,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (leadId) {
             // A day move reaches the enquiry too, keeping its start time —
             // otherwise the Enquiries list kept showing the old date.
-            if (movedToDay) {
-              const { dayWithTimeFrom } = await import('@shared/eventDate');
+            if (movedToDay || newStartTime) {
+              const { dayWithTimeFrom, withStartTime } = await import('@shared/eventDate');
               const [cur] = await db.select({ eventDate: leads.eventDate }).from(leads)
                 .where(and(eq(leads.id, leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
-              const next = dayWithTimeFrom(movedToDay, cur?.eventDate ?? null);
+              let next = movedToDay ? dayWithTimeFrom(movedToDay, cur?.eventDate ?? null) : (cur?.eventDate ?? null);
+              if (next && newStartTime) next = withStartTime(next, newStartTime);
               if (next) sharedLead.eventDate = next;
             }
             if (Object.keys(sharedLead).length > 0) {
@@ -6700,6 +6723,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
   }),
   // ─── Quickstart Progress ──────────────────────────────────────────────────
   quickstart: router({
+    // What a new venue still has to set up, worked out from its real data
+    // (nothing to tick by hand). The Overview shows the steps until all done.
+    setupStatus: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { venueSettings, eventSpaces, menuCategoryItems } = await import('../drizzle/schema');
+      const { eq, count } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return null;
+      const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+      const [{ n: spaces }] = await db.select({ n: count() }).from(eventSpaces).where(eq(eventSpaces.ownerId, ctx.user.id));
+      const [{ n: menuItems }] = await db.select({ n: count() }).from(menuCategoryItems).where(eq(menuCategoryItems.ownerId, ctx.user.id));
+      const name = (vs?.name ?? '').trim();
+      return {
+        venueDetails: !!name && !['my venue', 'your venue'].includes(name.toLowerCase()),
+        spaces: Number(spaces) > 0,
+        menu: Number(menuItems) > 0,
+        email: !!(vs?.smtpHost && vs?.smtpUser),
+        notifications: !!vs?.notificationEmail,
+      };
+    }),
     get: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import('./db');
       const { quickstartProgress } = await import('../drizzle/schema');

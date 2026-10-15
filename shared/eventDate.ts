@@ -86,3 +86,23 @@ export function dayWithTimeFrom(
   const [y, m, d] = eventDayKey(dayD, tz).split("-").map(Number);
   return zonedWallTimeToDate(y, m, d, t.h, t.mi, tz);
 }
+
+/** "18:30" — the start time of a timed value in the venue's zone; "" for a
+ *  date-only value. The runsheet keeps its start time in this form. */
+export function startTimeOf(v: Date | string | null | undefined, tz: string = DEFAULT_VENUE_TZ): string {
+  const d = asDate(v);
+  if (!d || isDateOnly(d)) return "";
+  const p = partsIn(d, tz);
+  return `${String(p.h).padStart(2, "0")}:${String(p.mi).padStart(2, "0")}`;
+}
+
+/** The event's calendar day at a "HH:MM" start time in the venue's zone.
+ *  A blank or invalid time returns the value unchanged. */
+export function withStartTime(v: Date | string | null | undefined, hhmm: string | null | undefined, tz: string = DEFAULT_VENUE_TZ): Date | null {
+  const d = asDate(v);
+  if (!d) return null;
+  const m = String(hhmm ?? "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return d;
+  const [y, mo, day] = eventDayKey(d, tz).split("-").map(Number);
+  return zonedWallTimeToDate(y, mo, day, Number(m[1]), Number(m[2]), tz);
+}

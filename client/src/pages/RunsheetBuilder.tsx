@@ -1560,6 +1560,13 @@ export default function RunsheetBuilder() {
     {},
     { enabled: !sheetId && !leadId && !bookingId && !isNewMode }
   );
+  // Delete from "My runsheets". The server removes the sheet's rows, food,
+  // checklists and staff links with it.
+  const [confirmDeleteRsId, setConfirmDeleteRsId] = useState<number | null>(null);
+  const deleteRunsheetMutation = trpc.runsheets.delete.useMutation({
+    onSuccess: () => { setConfirmDeleteRsId(null); utils.runsheets.list.invalidate(); toast.success("Runsheet deleted"); },
+    onError: (e) => toast.error(e.message || "Couldn't delete the runsheet"),
+  });
 
   // Effective booking ID — from URL param, or from the loaded runsheet record
   const effectiveBookingId: number | undefined = bookingId ?? (existing as any)?.bookingId ?? undefined;
@@ -2605,10 +2612,10 @@ export default function RunsheetBuilder() {
                 const db_ = b.eventDate ? new Date(b.eventDate).getTime() : 0;
                 return db_ - da || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
               }).map(rs => (
+                <div key={rs.id} className="flex items-stretch gap-2">
                 <button
-                  key={rs.id}
                   onClick={() => navigate(`/runsheet?id=${rs.id}`)}
-                  className="w-full text-left bg-white border border-gold/20 hover:border-forest/40 hover:shadow-sm transition-all px-5 py-4 flex items-center gap-4 group"
+                  className="flex-1 min-w-0 text-left bg-white border border-gold/20 hover:border-forest/40 hover:shadow-sm transition-all px-5 py-4 flex items-center gap-4 group"
                 >
                   <div className="w-1 self-stretch bg-forest/20 group-hover:bg-forest transition-colors flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -2645,6 +2652,21 @@ export default function RunsheetBuilder() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-ink/65 group-hover:text-forest flex-shrink-0 transition-colors" />
                 </button>
+                {confirmDeleteRsId === rs.id ? (
+                  <div className="flex flex-col sm:flex-row items-stretch gap-1 bg-white border border-[#b3261e]/40 p-1">
+                    <button onClick={() => deleteRunsheetMutation.mutate({ id: rs.id })} disabled={deleteRunsheetMutation.isPending}
+                      className="font-bebas tracking-widest text-xs px-3 min-h-[44px] bg-[#b3261e] text-white disabled:opacity-50">
+                      {deleteRunsheetMutation.isPending ? "DELETING…" : "DELETE"}
+                    </button>
+                    <button onClick={() => setConfirmDeleteRsId(null)} className="font-bebas tracking-widest text-xs px-3 min-h-[44px] text-ink/75 hover:bg-linen">KEEP</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteRsId(rs.id)} aria-label={`Delete runsheet ${rs.title || rs.id}`} title="Delete this runsheet"
+                    className="w-11 flex-shrink-0 inline-flex items-center justify-center bg-white border border-gold/20 text-ink/60 hover:text-[#b3261e] hover:border-[#b3261e]/40">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                </div>
               ))}
             </div>
           )}

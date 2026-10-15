@@ -84,3 +84,27 @@ describe("userFacingMessage (no database text reaches the browser)", () => {
     expect(userFacingMessage(err)).toBe("First name is too long (100 characters at most).");
   });
 });
+
+import { startTimeOf, withStartTime, eventDayKey } from "@shared/eventDate";
+
+describe("start time kept in step (F-08)", () => {
+  it("reads a timed value's NZ start time, and none for date-only", () => {
+    // 6:30 pm NZDT on Sat 24 Oct 2026 = 05:30 UTC
+    expect(startTimeOf(new Date("2026-10-24T05:30:00Z"))).toBe("18:30");
+    expect(startTimeOf(new Date("2026-10-24T00:00:00Z"))).toBe("");
+    expect(startTimeOf(null)).toBe("");
+  });
+  it("puts a start time on the event's NZ day, across daylight saving", () => {
+    const winter = withStartTime(new Date("2026-06-20T00:00:00Z"), "18:30")!; // NZST, UTC+12
+    expect(winter.toISOString()).toBe("2026-06-20T06:30:00.000Z");
+    const summer = withStartTime(new Date("2026-12-05T00:00:00Z"), "18:30")!; // NZDT, UTC+13
+    expect(summer.toISOString()).toBe("2026-12-05T05:30:00.000Z");
+    expect(eventDayKey(summer, "Pacific/Auckland")).toBe("2026-12-05");
+    expect(startTimeOf(summer)).toBe("18:30");
+  });
+  it("leaves the value alone for a blank or invalid time", () => {
+    const d = new Date("2026-12-05T05:30:00Z");
+    expect(withStartTime(d, "")!.getTime()).toBe(d.getTime());
+    expect(withStartTime(d, "25:00")!.getTime()).toBe(d.getTime());
+  });
+});
