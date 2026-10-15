@@ -1464,6 +1464,11 @@ export const appRouter = router({
         const guestsBefore = rest.guestCount !== undefined
           ? (await getLeadById(id, ctx.user.id))?.guestCount ?? null
           : undefined;
+        // The client's contact before this edit: run sheet copies that still
+        // hold it follow the change (server/runsheetContacts.ts).
+        const contactEdited = rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined || rest.phone !== undefined;
+        const contactBefore = contactEdited ? await getLeadById(id, ctx.user.id) : undefined;
+        if (rest.firstName !== undefined && !rest.firstName.trim()) throw new Error('First name is required.');
         await updateLead(id, ctx.user.id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
@@ -1532,6 +1537,13 @@ export const appRouter = router({
             const { syncRunsheetGuests } = await import('./runsheetGuests');
             foodRescale = await syncRunsheetGuests(db, ctx.user.id, { leadId: id }, guestsBefore, rest.guestCount);
           }
+        }
+        if (contactBefore) {
+          const { getDb } = await import('./db');
+          const db = await getDb();
+          const { syncRunsheetContacts } = await import('./runsheetContacts');
+          if (db) await syncRunsheetContacts(db, ctx.user.id, { leadId: id }, contactBefore,
+            { firstName: rest.firstName, lastName: rest.lastName, email: rest.email, phone: rest.phone });
         }
         return { success: true, ...(foodRescale ? { foodRescale } : {}) };
       }),
@@ -2860,7 +2872,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
           guestsBefore = cur?.guestCount ?? null;
         }
+        // The client's contact before this edit, for run sheet copies of it.
+        let contactBefore: { firstName: string | null; lastName: string | null; email: string | null; leadId: number | null } | undefined;
+        if (rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined) {
+          if (rest.firstName !== undefined && !rest.firstName.trim()) throw new Error('First name is required.');
+          [contactBefore] = await db.select({ firstName: bookings.firstName, lastName: bookings.lastName, email: bookings.email, leadId: bookings.leadId })
+            .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        }
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        if (contactBefore) {
+          const { syncRunsheetContacts } = await import('./runsheetContacts');
+          await syncRunsheetContacts(db, ctx.user.id, { bookingId: id, leadId: contactBefore.leadId }, contactBefore,
+            { firstName: rest.firstName, lastName: rest.lastName, email: rest.email });
+        }
         // New guest count → the event's run sheets too (food lines at the
         // old count are reported, never changed here — see runsheetGuests.ts).
         let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
