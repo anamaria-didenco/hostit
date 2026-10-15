@@ -16,6 +16,7 @@ import { followUpsRouter } from "./followUpsRouter";
 import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 import { inboxRouter } from "./inboxRouter";
 import { zonedDayBoundUtc } from "@shared/tz";
+import { isProposalLocked, proposalLockedMessage, proposalTotals } from "@shared/proposalTotals";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -2028,6 +2029,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { assertAllOwned } = await import('./ownership');
         await assertAllOwned({ lead: input.leadId }, ctx.user.id);
         const token = nanoid(32);
+        // With pricing lines, the money is worked out here from the lines —
+        // never taken from the browser. (Defaults match the column defaults.)
+        const money = input.lineItems ? proposalTotals(input.lineItems, input.taxPercent ?? 15, input.depositPercent ?? 25) : null;
         const proposal = await createProposal({
           ownerId: ctx.user.id,
           leadId: input.leadId,
@@ -2039,13 +2043,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : undefined,
           guestCount: input.guestCount,
           spaceName: input.spaceName,
-          lineItems: input.lineItems ? JSON.stringify(input.lineItems) : undefined,
-          subtotalNzd: input.subtotalNzd?.toString() as any,
+          lineItems: money ? JSON.stringify(money.lineItems) : undefined,
+          subtotalNzd: (money ? money.subtotal : input.subtotalNzd)?.toString() as any,
           taxPercent: input.taxPercent?.toString() as any,
-          taxNzd: input.taxNzd?.toString() as any,
-          totalNzd: input.totalNzd?.toString() as any,
+          taxNzd: (money ? money.tax : input.taxNzd)?.toString() as any,
+          totalNzd: (money ? money.total : input.totalNzd)?.toString() as any,
           depositPercent: input.depositPercent?.toString() as any,
-          depositNzd: input.depositNzd?.toString() as any,
+          depositNzd: (money ? money.deposit : input.depositNzd)?.toString() as any,
           termsAndConditions: input.termsAndConditions,
           internalNotes: input.internalNotes,
           expiresAt: input.expiresAt ? proposalExpiryInstant(input.expiresAt) : undefined,
@@ -2171,6 +2175,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           unitPrice: z.number(),
           total: z.number(),
         })).optional(),
+        // Still accepted from older browsers but ignored: the money is worked
+        // out here from the lines, GST % and deposit %.
         subtotalNzd: z.number().optional(),
         taxPercent: z.number().optional(),
         taxNzd: z.number().optional(),
@@ -2186,9 +2192,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         expiresAt: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, lineItems, eventDate, expiresAt, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        const { id, lineItems, eventDate, expiresAt, subtotalNzd: _subtotal, taxPercent, taxNzd: _tax, totalNzd: _total, depositPercent, depositNzd: _deposit, ...rest } = input;
         const existing = await getProposalById(id, ctx.user.id);
         if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Proposal not found' });
+        // The client answered this version — it stays exactly as they saw it.
+        if (isProposalLocked(existing.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: proposalLockedMessage(existing.status) });
+        }
+        // Re-total whenever the lines, GST % or deposit % change, filling in
+        // whichever wasn't sent from what's saved.
+        let money: ReturnType<typeof proposalTotals> | null = null;
+        if (lineItems || taxPercent !== undefined || depositPercent !== undefined) {
+          let savedLines: Array<{ description: string; qty: number; unitPrice: number; total: number }> = [];
+          try {
+            const parsed = JSON.parse(existing.lineItems ?? "[]");
+            if (Array.isArray(parsed)) savedLines = parsed;
+          } catch { /* no usable saved lines */ }
+          money = proposalTotals(
+            lineItems ?? savedLines,
+            taxPercent ?? Number(existing.taxPercent ?? 15),
+            depositPercent ?? Number(existing.depositPercent ?? 25),
+          );
+        }
         const nextExpiry = expiresAt === undefined ? undefined : expiresAt ? proposalExpiryInstant(expiresAt) : null;
         // Moving the expiry into the future re-opens an expired proposal.
         const reopen = existing.status === 'expired' && nextExpiry && nextExpiry.getTime() > Date.now();
@@ -2197,14 +2222,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           ...(nextExpiry !== undefined ? { expiresAt: nextExpiry } : {}),
           ...(reopen ? { status: existing.viewedAt ? 'viewed' as const : 'sent' as const } : {}),
           updatedAt: new Date(),
-          lineItems: lineItems ? JSON.stringify(lineItems) : undefined,
+          lineItems: lineItems && money ? JSON.stringify(money.lineItems) : undefined,
           eventDate: eventDate ? new Date(eventDate) : undefined,
-          subtotalNzd: subtotalNzd?.toString() as any,
           taxPercent: taxPercent?.toString() as any,
-          taxNzd: taxNzd?.toString() as any,
-          totalNzd: totalNzd?.toString() as any,
           depositPercent: depositPercent?.toString() as any,
-          depositNzd: depositNzd?.toString() as any,
+          ...(money ? {
+            subtotalNzd: money.subtotal.toString() as any,
+            taxNzd: money.tax.toString() as any,
+            totalNzd: money.total.toString() as any,
+            depositNzd: money.deposit.toString() as any,
+          } : {}),
         });
         return { success: true };
       }),
@@ -2244,6 +2271,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Verify proposal belongs to owner
         const proposal = await getProposalById(input.proposalId, ctx.user.id);
         if (!proposal) throw new Error('Not found');
+        if (isProposalLocked(proposal.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: proposalLockedMessage(proposal.status) });
+        }
         // Upsert
         const existing = await db.select().from(proposalDrinks)
           .where(and(eq(proposalDrinks.proposalId, input.proposalId), eq(proposalDrinks.ownerId, ctx.user.id)))
@@ -4016,6 +4046,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
         await assertAllOwned({ proposal: input.proposalId }, ctx.user.id);
+        const proposal = await getProposalById(input.proposalId, ctx.user.id);
+        if (proposal && isProposalLocked(proposal.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: proposalLockedMessage(proposal.status) });
+        }
         const { getDb } = await import('./db');
         const { quoteSettings, quoteItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');

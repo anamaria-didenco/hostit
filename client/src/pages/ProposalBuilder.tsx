@@ -16,6 +16,26 @@ import { SHARED_MENU_SECTIONS, selectedSharedMenuSections } from "@shared/propos
 import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } from "@shared/menuCatalogue";
 import { toLocalDateInput } from "@/lib/dateTime";
 import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNameFromLine, withoutDuplicatePackageLines } from "@shared/proposalPackages";
+import { isProposalLocked } from "@shared/proposalTotals";
+
+// Unsaved work is kept on this device until it's saved, so a reload, a closed
+// tab or a Back press doesn't lose a long proposal. Storage can be blocked
+// (private mode), so every access is guarded.
+const draftKey = (proposalId: number, leadId: number) =>
+  proposalId ? `venueflow:proposal-draft:p${proposalId}` : `venueflow:proposal-draft:lead${leadId}`;
+function readLocalDraft(key: string): { savedAt: number; data: string } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed.data === "string" ? parsed : null;
+  } catch { return null; }
+}
+function writeLocalDraft(key: string, data: string) {
+  try { localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data })); } catch { /* storage unavailable */ }
+}
+function clearLocalDraft(key: string) {
+  try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
+}
 
 interface LineItem {
   description: string;
@@ -37,6 +57,16 @@ export default function ProposalBuilder() {
   const { data: existingDrinks } = trpc.proposals.getDrinks.useQuery({ proposalId: editId }, { enabled: !!editId && !!user });
   const { data: existingQuote } = trpc.quote.get.useQuery({ proposalId: editId }, { enabled: !!editId && !!user });
   const leadId = (parseInt(query.get("leadId") ?? "0") || 0) || existingProposal?.leadId || 0;
+
+  // A new proposal is always for an enquiry, and every "Create proposal"
+  // button passes one. Opened without one (an old bookmark or a typed URL) the
+  // page showed "For —" with nobody to send it to, so send them to Enquiries.
+  const noEnquiry = !editId && !leadId;
+  useEffect(() => {
+    if (!noEnquiry || !user) return;
+    toast("Open an enquiry and choose Create Proposal to start one.");
+    setLocation("/dashboard?tab=enquiries", { replace: true });
+  }, [noEnquiry, user]);
 
   const { data: lead } = trpc.leads.get.useQuery({ id: leadId }, { enabled: !!leadId && !!user });
   const { data: venueSettings } = trpc.venue.get.useQuery({ ownerId: user?.id }, { enabled: !!user });
@@ -191,19 +221,20 @@ export default function ProposalBuilder() {
   };
   const removeCustomDrink = (i: number) => setCustomDrinks(prev => prev.filter((_, idx) => idx !== i));
 
-  const saveDrinks = trpc.proposals.saveDrinks.useMutation({
-    onSuccess: () => toast.success("Drinks selection saved!"),
-    onError: () => toast.error("Failed to save drinks selection"),
+  const saveDrinks = trpc.proposals.saveDrinks.useMutation();
+  const drinksPayload = () => ({
+    barOption,
+    tabAmount: tabAmount ? parseFloat(tabAmount) : undefined,
+    selectedDrinks: [...selectedDrinks],
+    customDrinks,
+    selectedSampleItems: [...selectedSampleItems],
   });
   const handleSaveDrinks = () => {
     if (!savedProposal) return toast.error("Save the proposal first, then save drinks.");
-    saveDrinks.mutate({
-      proposalId: savedProposal.id,
-      barOption,
-      tabAmount: tabAmount ? parseFloat(tabAmount) : undefined,
-      selectedDrinks: [...selectedDrinks],
-      customDrinks,
-      selectedSampleItems: [...selectedSampleItems],
+    const drinksAtSave = drinksSnapshot;
+    saveDrinks.mutate({ proposalId: savedProposal.id, ...drinksPayload() }, {
+      onSuccess: () => { setDrinksBaseline(drinksAtSave); toast.success("Drinks selection saved!"); },
+      onError: (e) => toast.error(e.message || "Failed to save drinks selection"),
     });
   };
 
@@ -271,6 +302,7 @@ export default function ProposalBuilder() {
       setTitle(`${lead.eventType || "Event"} Proposal — ${lead.firstName} ${lead.lastName ?? ""}`);
       if (lead.eventDate) setEventDate(toLocalDateInput(lead.eventDate));
       if (lead.guestCount) setGuestCount(String(lead.guestCount));
+      markSynced();
     }
   }, [lead]);
 
@@ -295,6 +327,9 @@ export default function ProposalBuilder() {
     setTermsAndConditions(p.termsAndConditions ?? "");
     setInternalNotes(p.internalNotes ?? "");
     setExpiresAt(p.expiresAt ? toLocalDateInput(p.expiresAt) : "");
+    // Read-only: open the drinks so what the client saw can still be read.
+    if (isProposalLocked(p.status)) setDrinksSectionOpen(true);
+    markSynced();
   }, [existingProposal]);
   const loadedDrinks = useRef(false);
   useEffect(() => {
@@ -305,6 +340,7 @@ export default function ProposalBuilder() {
     setSelectedDrinks((existingDrinks.selectedDrinks as string[] | null) ?? []);
     setCustomDrinks((existingDrinks.customDrinks as any[] | null) ?? []);
     setSelectedSampleItems((existingDrinks.selectedSampleItems as string[] | null) ?? []);
+    markSynced();
   }, [existingDrinks]);
   const loadedQuote = useRef(false);
   useEffect(() => {
@@ -318,10 +354,11 @@ export default function ProposalBuilder() {
       setQuoteNotes(qs.notes ?? "");
     }
     setHireItems(existingQuote.items.map((it: any) => ({ name: it.name ?? "", description: it.description ?? "", qty: Number(it.qty ?? 1), unitPrice: Number(it.unitPrice ?? 0) })));
+    markSynced();
   }, [existingQuote]);
 
   useEffect(() => {
-    if (venueSettings?.depositPercent && !editId) setDepositPercent(Number(venueSettings.depositPercent));
+    if (venueSettings?.depositPercent && !editId) { setDepositPercent(Number(venueSettings.depositPercent)); markSynced(); }
     if (venueSettings?.themeKey) setAppearanceThemeKey(venueSettings.themeKey);
     if (venueSettings?.logoUrl) setAppearanceLogoUrl(venueSettings.logoUrl);
     if (venueSettings?.coverImageUrl) setAppearanceVenuePhotoUrl(venueSettings.coverImageUrl);
@@ -336,6 +373,7 @@ export default function ProposalBuilder() {
       : lead?.spaceName ? spaces.find(s => s.name === lead.spaceName) : undefined;
     if (fromLead) setSpaceName(fromLead.name);
     else if (spaces.length === 1) setSpaceName(spaces[0].name);
+    markSynced();
   }, [spaces, lead]);
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
@@ -360,10 +398,106 @@ export default function ProposalBuilder() {
     onSuccess: (data) => { setSavedProposal(data); },
   });
   const updateProposal = trpc.proposals.update.useMutation();
-  const saving = createProposal.isPending || updateProposal.isPending || saveQuote.isPending;
+  const saving = createProposal.isPending || updateProposal.isPending || saveQuote.isPending || saveDrinks.isPending;
   const status: string | undefined = savedProposal?.status;
-  // Accepted / declined proposals are the client's answer — they can't be re-sent.
-  const canSend = !!savedProposal && !["accepted", "declined"].includes(status ?? "");
+  // Accepted / declined proposals are the client's answer — they can't be
+  // re-sent or changed (the server refuses too), so the page is read-only.
+  const locked = isProposalLocked(status);
+  const canSend = !!savedProposal && !locked;
+
+  // ── Unsaved changes ─────────────────────────────────────────────────────────
+  // "Saved" = what was last loaded or saved. Loading and filling in from the
+  // enquiry call markSynced(), which takes the next render's values as saved.
+  const formState = { title, introMessage, eventDate, guestCount, spaceName, lineItems, taxPercent, depositPercent, termsAndConditions, internalNotes, expiresAt, minimumSpend, foodTotalOverride, autoBarTab, quoteNotes, hireItems };
+  const drinksState = { barOption, tabAmount, selectedDrinks, customDrinks, selectedSampleItems };
+  const formSnapshot = JSON.stringify(formState);
+  const drinksSnapshot = JSON.stringify(drinksState);
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
+  const [drinksBaseline, setDrinksBaseline] = useState<string | null>(null);
+  const [syncTick, setSyncTick] = useState(0);
+  const markSynced = () => setSyncTick(t => t + 1);
+  useEffect(() => { markSynced(); }, []);
+  useEffect(() => {
+    if (!syncTick) return;
+    setFormBaseline(formSnapshot);
+    setDrinksBaseline(drinksSnapshot);
+  }, [syncTick]);
+  const dirty = !locked && formBaseline !== null && (formSnapshot !== formBaseline || drinksSnapshot !== drinksBaseline);
+  // The values an autosave failed on — not retried until something changes.
+  const [autosaveFailedOn, setAutosaveFailedOn] = useState<string | null>(null);
+
+  // Drafts save themselves. Sent proposals don't: the client's page shows
+  // saved changes straight away, so half-done edits wait for "Save Changes".
+  const canAutosave = !!savedProposal && status === "draft";
+
+  // A copy on this device until saved — keyed by the proposal, or by the
+  // enquiry before the proposal's first save.
+  const localKey = savedProposal ? draftKey(savedProposal.id, 0) : (!editId && leadId ? draftKey(0, leadId) : null);
+  const localDraftData = JSON.stringify({ form: formState, drinks: drinksState });
+  const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; data: string } | null>(null);
+  const draftCheckedFor = useRef<string | null>(null);
+  useEffect(() => {
+    // (A new proposal waits for the enquiry, which fills in the title etc.)
+    if (!localKey || locked || formBaseline === null || (!savedProposal && !lead) || draftCheckedFor.current === localKey) return;
+    draftCheckedFor.current = localKey;
+    const found = readLocalDraft(localKey);
+    if (!found) return;
+    if (found.data === localDraftData) clearLocalDraft(localKey);
+    else setPendingDraft(found);
+  }, [localKey, locked, formBaseline, lead]);
+  useEffect(() => {
+    if (!localKey || !dirty || pendingDraft) return;
+    const t = setTimeout(() => writeLocalDraft(localKey, localDraftData), 500);
+    return () => clearTimeout(t);
+  }, [localKey, localDraftData, dirty, pendingDraft]);
+  // Leaving inside the app (Back, Dashboard) doesn't fire beforeunload, so
+  // keep the latest unsaved copy when the page closes.
+  const latestDraft = useRef({ key: localKey, data: localDraftData, keep: false });
+  latestDraft.current = { key: localKey, data: localDraftData, keep: dirty && !pendingDraft };
+  useEffect(() => () => {
+    const d = latestDraft.current;
+    if (d.key && d.keep) writeLocalDraft(d.key, d.data);
+  }, []);
+  // Reloading or closing the tab with unsaved changes asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      const d = latestDraft.current;
+      if (d.key && d.keep) writeLocalDraft(d.key, d.data);
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    try {
+      const { form: f, drinks: d } = JSON.parse(pendingDraft.data);
+      setTitle(f.title ?? ""); setIntroMessage(f.introMessage ?? ""); setEventDate(f.eventDate ?? "");
+      setGuestCount(f.guestCount ?? ""); setSpaceName(f.spaceName ?? "");
+      if (Array.isArray(f.lineItems)) setLineItems(f.lineItems);
+      setTaxPercent(Number(f.taxPercent ?? 15)); setDepositPercent(Number(f.depositPercent ?? 25));
+      setTermsAndConditions(f.termsAndConditions ?? ""); setInternalNotes(f.internalNotes ?? ""); setExpiresAt(f.expiresAt ?? "");
+      setMinimumSpend(f.minimumSpend ?? ""); setFoodTotalOverride(f.foodTotalOverride ?? ""); setAutoBarTab(f.autoBarTab ?? true);
+      setQuoteNotes(f.quoteNotes ?? ""); if (Array.isArray(f.hireItems)) setHireItems(f.hireItems);
+      if (d) {
+        setBarOption(d.barOption ?? "cash_bar"); setTabAmount(d.tabAmount ?? "");
+        setSelectedDrinks(Array.isArray(d.selectedDrinks) ? d.selectedDrinks : []);
+        setCustomDrinks(Array.isArray(d.customDrinks) ? d.customDrinks : []);
+        setSelectedSampleItems(Array.isArray(d.selectedSampleItems) ? d.selectedSampleItems : []);
+      }
+      toast.success(canAutosave ? "Unsaved changes restored" : "Unsaved changes restored — save to keep them");
+    } catch {
+      toast.error("Couldn't restore those changes");
+    }
+    setPendingDraft(null);
+  };
+  const discardDraft = () => {
+    if (localKey) clearLocalDraft(localKey);
+    setPendingDraft(null);
+  };
 
   const sendProposal = trpc.proposals.send.useMutation({
     onSuccess: (data) => {
@@ -376,8 +510,12 @@ export default function ProposalBuilder() {
   });
 
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
-  const handleSave = async (opts: { quiet?: boolean } = {}): Promise<any | null> => {
+  const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
     if (!leadId) { toast.error("No enquiry selected"); return null; }
+    if (locked) return null;
+    const formAtSave = formSnapshot;
+    const drinksAtSave = drinksSnapshot;
+    const keyAtSave = localKey;
     // Picked packages are already pricing lines (see toggleMenuPackage).
     const allLineItems = lineItems;
     const allSubtotal = allLineItems.reduce((s, i) => s + i.total, 0);
@@ -425,13 +563,36 @@ export default function ProposalBuilder() {
         notes: quoteNotes,
         items: hireItems.map((item, i) => ({ type: 'hire', name: item.name, description: item.description, qty: item.qty, unitPrice: item.unitPrice, sortOrder: i })),
       });
+      // Drinks save with everything else once they've been changed.
+      if (drinksAtSave !== drinksBaseline) await saveDrinks.mutateAsync({ proposalId: proposal.id, ...drinksPayload() });
+      setFormBaseline(formAtSave);
+      setDrinksBaseline(drinksAtSave);
+      setAutosaveFailedOn(null);
+      if (keyAtSave) clearLocalDraft(keyAtSave);
       if (!opts.quiet) toast.success(savedProposal ? "Changes saved" : "Proposal saved");
       return proposal;
     } catch (e: any) {
-      toast.error(e?.message || "Failed to save proposal");
+      if (opts.auto) setAutosaveFailedOn(formAtSave + drinksAtSave);
+      else toast.error(e?.message || "Failed to save proposal");
       return null;
     }
   };
+
+  // Autosave a draft ~1.5s after the last change.
+  useEffect(() => {
+    if (!dirty || !canAutosave || saving || autosaveFailedOn === formSnapshot + drinksSnapshot) return;
+    const t = setTimeout(() => { void handleSave({ quiet: true, auto: true }); }, 1500);
+    return () => clearTimeout(t);
+  }, [formSnapshot, drinksSnapshot, dirty, canAutosave, saving, autosaveFailedOn]);
+
+  // Short enough for the phone header; the hint says what to do.
+  const saveState: { label: string; hint: string; cls: string } | null =
+    locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-gray-500" }
+    : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-gray-500" }
+    : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-red-700" }
+    : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-amber-700" }
+    : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-sage-dark" }
+    : null;
 
   // Sending always saves first, so the client never gets a stale version.
   const handleSend = async () => {
@@ -461,6 +622,8 @@ export default function ProposalBuilder() {
     </div>
   );
 
+  if (noEnquiry) return null; // on the way to Enquiries (see above)
+
   return (
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
@@ -476,8 +639,13 @@ export default function ProposalBuilder() {
         <div className="hidden sm:flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
-        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0 sr-only sm:not-sr-only">{savedProposal ? "Edit Proposal" : "Proposal Builder"}</h1>
+        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0 sr-only sm:not-sr-only">{locked ? "View Proposal" : savedProposal ? "Edit Proposal" : "Proposal Builder"}</h1>
         <div className="ml-auto flex items-center gap-2">
+          {saveState && (
+            <span role="status" title={saveState.hint} className={`font-inter text-[11px] whitespace-nowrap ${saveState.cls}`}>
+              {saveState.label}<span className="sr-only">. {saveState.hint}</span>
+            </span>
+          )}
           {savedProposal?.publicToken && (
             <Button
               onClick={handleDownloadPdf}
@@ -490,10 +658,12 @@ export default function ProposalBuilder() {
               {pdfLoading ? "PDF..." : "PDF"}
             </Button>
           )}
-          <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-            variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
-            {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
-          </Button>
+          {!locked && (
+            <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
+              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
+              {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
+            </Button>
+          )}
           {canSend && (
             <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
               className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
@@ -504,8 +674,19 @@ export default function ProposalBuilder() {
       </header>
 
       <main className="max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
-        {/* Left: Form */}
-        <div className="lg:col-span-2 space-y-5">
+        {/* Left: Form (read-only once the client has answered) */}
+        <fieldset disabled={locked} className="lg:col-span-2 space-y-5 min-w-0">
+          {pendingDraft && (
+            <div role="alert" className="bg-amber-50 border-2 border-amber-200 p-4 font-dm text-sm text-amber-900">
+              <p className="m-0">
+                You have changes from {new Date(pendingDraft.savedAt).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })} that weren't saved. Restore them?
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button size="sm" onClick={restoreDraft} className="bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs">Restore changes</Button>
+                <Button size="sm" variant="outline" onClick={discardDraft} className="font-inter rounded-lg text-xs bg-transparent">Discard</Button>
+              </div>
+            </div>
+          )}
           {/* Editing an existing proposal */}
           {!!editId && existingLoading && (
             <div className="bg-cream-card border border-border p-4 font-dm text-sm text-muted-foreground">Loading proposal…</div>
@@ -520,7 +701,7 @@ export default function ProposalBuilder() {
           {/* Lead Info Banner */}
           {lead && (
             <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
-              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}</div>
+              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{locked ? "PROPOSAL FOR" : savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}</div>
               <div className="font-alfa text-lg text-ink">{lead.firstName} {lead.lastName}</div>
               <div className="font-dm text-sm text-muted-foreground">{lead.email} · {lead.eventType || "Event"}</div>
             </div>
@@ -561,7 +742,7 @@ export default function ProposalBuilder() {
               <div className="sm:col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT SPACE</label>
                 {spaces && spaces.length > 0 ? (
-                  <Select value={spaceName} onValueChange={setSpaceName}>
+                  <Select value={spaceName} onValueChange={setSpaceName} disabled={locked}>
                     <SelectTrigger aria-label="Event space" className="rounded-none border-2 focus:ring-0 focus:border-primary h-10">
                       <SelectValue placeholder="Select a space…" />
                     </SelectTrigger>
@@ -682,13 +863,15 @@ export default function ProposalBuilder() {
                 <p className="font-dm text-sm text-red-900">
                   <b>{doubledPackages.map(d => packageNameFromLine(d.description)).join(" and ")}</b>{" "}
                   {doubledPackages.length === 1 ? "is" : "are"} on this proposal twice, so the total is too high. An earlier bug caused this; it's fixed now.
-                  {(status === "accepted") && " The client has already accepted this total, so check with them before you change it."}
+                  {locked && ` The client has already ${status} this total, so talk to them and start a new proposal if it needs fixing.`}
                 </p>
-                <button type="button" onClick={() => setLineItems(prev => withoutDuplicatePackageLines(prev))}
-                  className="bg-red-800 text-white font-dm text-sm font-semibold px-3 py-2 hover:bg-red-900">
-                  Remove the extra {doubledPackages.reduce((n, d) => n + d.extra, 0) === 1 ? "line" : "lines"}
-                </button>
-                <span className="font-dm text-xs text-red-900 ml-2">Then save.</span>
+                {!locked && (<>
+                  <button type="button" onClick={() => setLineItems(prev => withoutDuplicatePackageLines(prev))}
+                    className="bg-red-800 text-white font-dm text-sm font-semibold px-3 py-2 hover:bg-red-900">
+                    Remove the extra {doubledPackages.reduce((n, d) => n + d.extra, 0) === 1 ? "line" : "lines"}
+                  </button>
+                  <span className="font-dm text-xs text-red-900 ml-2">Then save.</span>
+                </>)}
               </div>
             )}
             <div className="space-y-2 mb-4">
@@ -1077,14 +1260,16 @@ export default function ProposalBuilder() {
                 </div>
 
                 {/* Save Drinks Button */}
-                <Button
-                  onClick={handleSaveDrinks}
-                  disabled={saveDrinks.isPending}
-                  className="w-full bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest rounded-none h-10 gap-2"
-                >
-                  <Wine className="w-4 h-4" />
-                  {saveDrinks.isPending ? "SAVING DRINKS..." : "SAVE DRINKS SELECTION"}
-                </Button>
+                {!locked && (
+                  <Button
+                    onClick={handleSaveDrinks}
+                    disabled={saveDrinks.isPending}
+                    className="w-full bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest rounded-none h-10 gap-2"
+                  >
+                    <Wine className="w-4 h-4" />
+                    {saveDrinks.isPending ? "SAVING DRINKS..." : "SAVE DRINKS SELECTION"}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1231,7 +1416,7 @@ export default function ProposalBuilder() {
               placeholder="Notes for your team only..." rows={2}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
-        </div>
+        </fieldset>
 
         {/* Right: Summary & Actions */}
         <div className="space-y-4">
@@ -1331,7 +1516,7 @@ export default function ProposalBuilder() {
           {/* Expiry */}
           <div className="bg-cream-card border border-border p-4 shadow-sm">
             <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
-            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} disabled={locked}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm" />
             <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
@@ -1371,10 +1556,12 @@ export default function ProposalBuilder() {
 
           {/* Actions */}
           <div className="space-y-2">
-            <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
-              {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
-            </Button>
+            {!locked && (
+              <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
+                {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
+              </Button>
+            )}
             {canSend && (
               <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
                 className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2">
@@ -1445,16 +1632,17 @@ const fmtWhen = (d: string | Date) => new Date(d).toLocaleString("en-NZ", { day:
 /** Shown when editing a saved proposal: where it's at, and what editing it means. */
 function ProposalStatusPanel({ proposal }: { proposal: any }) {
   const st = PROPOSAL_STATUS_TEXT[proposal.status] ?? PROPOSAL_STATUS_TEXT.draft;
+  const locked = isProposalLocked(proposal.status);
   const note =
-    proposal.status === "accepted" ? "The client accepted this proposal and the booking was created from it. Saving changes here won't change the booking."
-    : proposal.status === "declined" ? "The client declined this proposal. Start a new proposal to offer something different."
+    proposal.status === "accepted" ? "The client accepted this proposal and the booking was created from it. It can't be changed, so it always matches what they agreed to."
+    : proposal.status === "declined" ? "The client declined this proposal, so it can't be changed."
     : proposal.status === "expired" ? "This proposal has expired. Set a new expiry date, save, and resend it to re-open it."
     : proposal.status === "sent" || proposal.status === "viewed" ? "The client already has the link — saved changes show on their page straight away."
     : "Not sent yet — only your team can see it.";
   return (
     <div className="bg-white border-2 border-border p-4">
       <div className="flex items-center gap-2 flex-wrap mb-1">
-        <span className="font-bebas text-xs tracking-widest text-muted-foreground">EDITING SAVED PROPOSAL</span>
+        <span className="font-bebas text-xs tracking-widest text-muted-foreground">{locked ? "READ-ONLY PROPOSAL" : "EDITING SAVED PROPOSAL"}</span>
         <span className={`font-dm text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
       </div>
       <div className="font-dm text-xs text-ink">
@@ -1469,6 +1657,12 @@ function ProposalStatusPanel({ proposal }: { proposal: any }) {
         <p className="font-dm text-xs text-ink mt-1">Their reason: “{proposal.declineReason}”</p>
       )}
       <p className="font-dm text-xs text-muted-foreground mt-1">{note}</p>
+      {locked && proposal.leadId && (
+        // A full page load, so the new proposal starts from a clean form.
+        <a href={`/proposals/new?leadId=${proposal.leadId}`} className="inline-block mt-2 font-dm text-xs font-semibold text-primary underline underline-offset-2">
+          Start a new proposal for this enquiry
+        </a>
+      )}
     </div>
   );
 }
