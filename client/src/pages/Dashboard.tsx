@@ -1236,6 +1236,9 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
+  // Phone month agenda: earlier days of the current month start folded away, so
+  // the list opens at today instead of a run of finished events.
+  const [showPastAgenda, setShowPastAgenda] = useState(false);
   const [showJumpDate, setShowJumpDate] = useState(false);
   const calSwipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
 
@@ -1485,7 +1488,12 @@ export default function Dashboard() {
     if (!idStr) { leadIdParamApplied.current = true; return; }
     const id = parseInt(idStr, 10);
     const lead = allLeads.find((l: any) => l && l.id === id);
-    if (lead) setSelectedLead(lead);
+    // Open it the way this view opens enquiries: the table (the desktop
+    // default) uses the drawer, so setting selectedLead alone showed nothing.
+    if (lead) {
+      setTab("enquiries");
+      if (leadViewMode === "list") setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+    }
     leadIdParamApplied.current = true;
   }, [allLeads]);
   // Alerts bell: open an alert's link in place. Enquiry links open that
@@ -1933,6 +1941,15 @@ export default function Dashboard() {
     const full = toDatetimeLocal(iso);
     if (!full) return "";
     return fmtEventTime(iso) ? full : localYmd(iso!);
+  }
+  // A short status word for month-view chips, so status isn't colour alone.
+  // Confirmed is the default and gets none.
+  function monthChipTag(ev: any): string {
+    if (ev._kind === 'lead') return 'ENQ';
+    if (ev.status === 'tentative') return 'TBC';
+    if (ev.status === 'finished') return 'DONE';
+    if (ev.status === 'cancelled') return 'CXL';
+    return '';
   }
   // Open the enquiry's Event details form (list view) — the EDIT button, and
   // "Add a date" next to Hold this date.
@@ -3551,6 +3568,47 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Phone: today first. On a phone the seven KPI tiles used to fill
+                  the screen before anything about tonight. */}
+              {(() => {
+                const sameDay = (d: Date, t: Date) => d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
+                const now = new Date();
+                const todays = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
+                  .filter((e: any) => e.eventDate && !['cancelled','lost','declined'].includes(e.status) && sameDay(new Date(e.eventDate), now))
+                  .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+                return (
+                  <section aria-label="Today" className="md:hidden dante-card overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                      <SectionHead title="Today" meta={todays.length ? `${todays.length} event${todays.length !== 1 ? 's' : ''}` : undefined} className="flex-1" />
+                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary min-h-[44px]">Calendar</button>
+                    </div>
+                    {todays.length === 0 ? (
+                      <p className="px-4 py-3 font-dm text-sm text-sage">No events today.</p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {todays.map((e: any) => (
+                          <button key={`${e._type}-${e.id}`}
+                            onClick={() => { const full = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e); openEventDrawer(e._type === 'booking' ? full : { ...full, _isLead: true }); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] text-left hover:bg-linen">
+                            <span className="font-dm text-sm tabular-nums text-ink/70 w-16 shrink-0">{fmtEventTime(e.eventDate) || '—'}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-serif text-sm font-semibold text-foreground truncate">{e.firstName} {e.lastName}</span>
+                              <span className="block font-sans text-xs text-muted-foreground truncate">{[e.eventType, e.guestCount ? `${e.guestCount} guests` : null, e.spaceName].filter(Boolean).join(' · ')}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {newEnquiries.length > 0 && (
+                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }}
+                        className="w-full text-left px-4 py-3 min-h-[44px] border-t border-border font-dm text-sm font-semibold text-forest hover:bg-linen">
+                        {newEnquiries.length} new enquir{newEnquiries.length === 1 ? 'y' : 'ies'} waiting →
+                      </button>
+                    )}
+                  </section>
+                );
+              })()}
+
               {/* KPI Cards — clickable, route to relevant tab */}
               {visibleStats.length > 0 && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -4035,7 +4093,10 @@ export default function Dashboard() {
                                       className="w-3.5 h-3.5 accent-forest cursor-pointer" />
                                   </td>
                                 )}
-                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">
+                                {/* Long names (some carry a company and address)
+                                    wrap within a sensible width instead of
+                                    pushing Status and Follow-up off-screen. */}
+                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink min-w-[180px] max-w-[320px] break-words">
                                   {/* A real button so the enquiry is reachable and
                                       openable from the keyboard — the row's onClick
                                       only serves the mouse. stopPropagation avoids
@@ -4168,17 +4229,21 @@ export default function Dashboard() {
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
                       className={`flex-1 min-w-0 p-3 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
                       style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
-                      {/* Row 1: name + status badge */}
-                      <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                      {/* Row 1: name + status badge. The chips sit on their
+                          own wrapping row — on a phone they used to squeeze the
+                          name to "Z.." and push the status off the edge. */}
+                      <div className="flex items-start gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
+                        <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 whitespace-nowrap ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                          {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mb-0.5 min-w-0 empty:hidden">
                         {isPartialLead(lead) && <PartialChip />}
                         {replyStatus.get(lead.id)?.direction === 'in'
                           ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
                           : leadNeedsReply(lead) && <NeedsReplyChip />}
                         <LeadRowBadges lead={lead} teamById={teamById} />
-                        <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
-                        </div>
                       </div>
                       {/* Row 2: email */}
                       <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
@@ -5350,7 +5415,10 @@ export default function Dashboard() {
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
-                                          <span className="truncate font-semibold text-[10px] leading-snug">{ev.firstName} {ev.lastName ? ev.lastName[0] + '.' : ''}</span>
+                                          {/* Status in words too, not only the chip colour. */}
+                                          {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
+                                          {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
+                                          <span className="truncate font-semibold text-[10px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
                                         </button>
                                         {/* The hover-only 14px "×" delete that used to sit on every chip is gone:
                                             it was a pixel-sized, destructive control on top of the event name.
@@ -5432,7 +5500,22 @@ export default function Dashboard() {
                     // A titled day shows even with no events on it.
                     titledDays.forEach(k => { grouped[k] ||= []; });
                     const todayKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
-                    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([key, events]) => {
+                    const days = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+                    // In the current month, days before today fold behind one button.
+                    const isCurrentMonth = todayKey.startsWith(monthPrefix);
+                    const pastDays = isCurrentMonth ? days.filter(([k]) => k < todayKey) : [];
+                    const pastEvents = pastDays.reduce((n, [, evs]) => n + evs.length, 0);
+                    const visibleDays = pastDays.length && !showPastAgenda ? days.filter(([k]) => k >= todayKey) : days;
+                    const pastToggle = pastDays.length > 0 ? (
+                      <button key="past-toggle" type="button" onClick={() => setShowPastAgenda(v => !v)}
+                        className="w-full min-h-[44px] font-bebas tracking-widest text-xs text-forest border border-dashed border-gold/40 bg-white hover:bg-linen">
+                        {showPastAgenda ? 'HIDE EARLIER DAYS' : `SHOW ${pastDays.length} EARLIER DAY${pastDays.length !== 1 ? 'S' : ''} · ${pastEvents} EVENT${pastEvents !== 1 ? 'S' : ''}`}
+                      </button>
+                    ) : null;
+                    if (visibleDays.length === 0) return [pastToggle, (
+                      <p key="none-ahead" className="font-dm text-sm text-sage text-center py-6">Nothing else on this month.</p>
+                    )];
+                    return [pastToggle, ...visibleDays.map(([key, events]) => {
                       const d = new Date(key + 'T00:00:00');
                       const isToday = key === todayKey;
                       return (
@@ -5472,7 +5555,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       );
-                    });
+                    })];
                   })()}
                 </div>
               )}
