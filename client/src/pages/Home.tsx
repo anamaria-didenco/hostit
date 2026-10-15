@@ -185,6 +185,9 @@ export default function Home() {
                 <a href={getLoginUrl()}>
                   <Button variant="paper">Sign in</Button>
                 </a>
+                <Button asChild variant="paper" className="hidden sm:inline-flex">
+                  <Link href="/signup">Sign up</Link>
+                </Button>
                 <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap">
                   <span className="sm:hidden">Waitlist</span>
                   <span className="hidden sm:inline">Join waitlist</span>
