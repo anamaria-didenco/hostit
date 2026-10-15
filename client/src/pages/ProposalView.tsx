@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { currency } from "@/lib/money";
 import { DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
 import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
+import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
+import { isPackageLine } from "@shared/proposalPackages";
 
 interface LineItem {
   description: string;
@@ -119,6 +121,8 @@ export default function ProposalView() {
   const [showAccept, setShowAccept] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
   const [clientMessage, setClientMessage] = useState("");
+  // The menu picked, when the proposal offers a choice of menus.
+  const [chosenMenu, setChosenMenu] = useState<string | null>(null);
   const [responded, setResponded] = useState<"accepted" | "declined" | null>(null);
   // Only true when the server actually emailed the client a confirmation.
   const [confirmationEmailed, setConfirmationEmailed] = useState(false);
@@ -178,6 +182,13 @@ export default function ProposalView() {
     try { return JSON.parse(proposal.lineItems ?? "[]"); } catch { return []; }
   })();
 
+  // A choice of menus: each priced on its own, the client picks one.
+  const menuOptions = proposalMoney(lineItems, Number(proposal.taxPercent ?? 15), Number(proposal.depositPercent ?? 25), (proposal as any).menuChoice).options;
+  const menus: Array<{ line: string; name: string; description: string | null; menu: string | null }> = (data as any).menus ?? [];
+  const menuFor = (line: string) => menus.find(m => m.line === line);
+  const shownLines = lineItems.filter(l => !isEmptyLine(l) && !(menuOptions.length && isPackageLine(l.description)));
+  const chosenOption = menuOptions.find(o => o.line === chosenMenu) ?? null;
+
   const isExpired = proposal.expiresAt && new Date(proposal.expiresAt) < new Date();
   const canRespond = ["sent", "viewed"].includes(proposal.status) && !isExpired && !responded;
   const alreadyResponded = responded ?? (["accepted", "declined"].includes(proposal.status) ? proposal.status as any : null);
@@ -210,13 +221,13 @@ export default function ProposalView() {
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
             ) : (
-              <span className="font-bold text-white text-xl tracking-tight">VenueFlowHQ</span>
+              <span className="font-playfair text-2xl font-bold" style={{ color: T.headerText }}>{venue?.name ?? ""}</span>
             )}
           </div>
           <div className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.headerMuted }}>EVENT PROPOSAL</div>
           {venue && (
             <div className="pt-4" style={{ borderTop: `1px solid ${T.headerText}18` }}>
-              <div className="font-playfair text-2xl font-bold" style={{ color: T.headerText }}>{venue.name}</div>
+              {venueLogo && <div className="font-playfair text-2xl font-bold" style={{ color: T.headerText }}>{venue.name}</div>}
               {venue.tagline && <div className="font-inter text-sm italic mt-0.5" style={{ color: T.headerMuted }}>{venue.tagline}</div>}
               {venue.city && (
                 <div className="flex items-center gap-1.5 mt-2 text-xs" style={{ color: T.headerMuted }}>
@@ -308,20 +319,55 @@ export default function ProposalView() {
             </div>
             <div className="p-6" style={{ backgroundColor: T.card }}>
               <div className="space-y-3 mb-4">
-                {lineItems.map((item, i) => (
+                {shownLines.map((item, i) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b border-dashed last:border-0" style={{ borderColor: T.border }}>
                     <div>
-                      <div className="font-playfair font-medium text-sm" style={{ color: T.ink }}>{item.description}</div>
+                      <div className="font-playfair font-medium text-sm" style={{ color: T.ink }}>{clientLineText(item.description)}</div>
                       {item.qty > 1 && (
                         <div className="font-inter text-xs" style={{ color: T.stone }}>{item.qty} × {currency(Number(item.unitPrice))}</div>
                       )}
                     </div>
                     <div className="font-inter text-sm font-semibold" style={{ color: T.ink }}>
-                      {currency(Number(item.total))}
+                      {Number(item.total) === 0 ? "Included" : currency(Number(item.total))}
                     </div>
                   </div>
                 ))}
               </div>
+              {menuOptions.length > 0 ? (
+                <div className="pt-4 space-y-3" style={{ borderTop: `2px solid ${T.border}` }}>
+                  <div>
+                    <div className="font-bebas text-sm tracking-widest" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
+                    <div className="font-inter text-xs" style={{ color: T.stone }}>Each price includes everything above and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
+                  </div>
+                  {menuOptions.map(o => {
+                    const m = menuFor(o.line);
+                    const picked = chosenMenu === o.line;
+                    return (
+                      <div key={o.line} className="rounded-sm" style={{ border: `2px solid ${picked ? T.accent : T.border}`, backgroundColor: picked ? T.header + '0d' : T.card }}>
+                        <label className={`flex items-start gap-3 p-4 ${canRespond ? 'cursor-pointer' : ''}`}>
+                          {canRespond && (
+                            <input type="radio" name="menu-choice" checked={picked} onChange={() => setChosenMenu(o.line)} className="mt-1.5 w-4 h-4" style={{ accentColor: T.accent }} />
+                          )}
+                          <span className="flex-1 min-w-0">
+                            <span className="flex justify-between items-baseline gap-3">
+                              <span className="font-playfair text-lg font-bold" style={{ color: T.ink }}>{o.name}</span>
+                              <span className="font-playfair text-xl font-bold whitespace-nowrap" style={{ color: T.accent }}>{currency(o.total)}</span>
+                            </span>
+                            {m?.description && <span className="block font-inter text-sm mt-0.5" style={{ color: T.stone }}>{m.description}</span>}
+                            <span className="block font-inter text-xs mt-1" style={{ color: T.stone }}>Deposit to secure: {currency(o.deposit)} ({Number(proposal.depositPercent ?? 25)}%)</span>
+                          </span>
+                        </label>
+                        {m?.menu && (
+                          <details className="px-4 pb-4">
+                            <summary className="cursor-pointer font-bebas text-xs tracking-widest" style={{ color: T.header }}>SEE THE MENU</summary>
+                            <pre className="mt-2 font-inter text-sm whitespace-pre-wrap break-words" style={{ color: T.ink }}>{m.menu}</pre>
+                          </details>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
               <div className="pt-4 space-y-2" style={{ borderTop: `2px solid ${T.border}` }}>
                 {proposal.subtotalNzd && (
                   <div className="flex justify-between font-inter text-sm" style={{ color: T.stone }}>
@@ -349,6 +395,25 @@ export default function ProposalView() {
                   </div>
                 )}
               </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* The menu itself, for a proposal without a choice of menus */}
+        {menuOptions.length === 0 && menus.some(m => m.menu) && (
+          <div className="mb-6 overflow-hidden rounded-sm" style={{ border: `1px solid ${T.cardBorder}` }}>
+            <div className="px-6 py-3" style={{ backgroundColor: T.header }}>
+              <h2 className="font-bebas text-sm tracking-widest m-0" style={{ color: T.headerText }}>YOUR MENU</h2>
+            </div>
+            <div className="p-6 space-y-5" style={{ backgroundColor: T.card }}>
+              {menus.filter(m => m.menu).map(m => (
+                <div key={m.line}>
+                  <div className="font-playfair text-lg font-bold" style={{ color: T.ink }}>{m.name}</div>
+                  {m.description && <div className="font-inter text-sm mt-0.5" style={{ color: T.stone }}>{m.description}</div>}
+                  <pre className="mt-2 font-inter text-sm whitespace-pre-wrap break-words" style={{ color: T.ink }}>{m.menu}</pre>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -459,7 +524,9 @@ export default function ProposalView() {
             <h3 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h3>
             <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
               Accept this proposal to confirm your booking.
-              {Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
+              {menuOptions.length > 0
+                ? (chosenOption ? <> With the {chosenOption.name} menu, a deposit of {currency(chosenOption.deposit)} NZD secures your date.</> : <> Choose your menu above first.</>)
+                : Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setShowAccept(true)}
@@ -501,8 +568,10 @@ export default function ProposalView() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="font-inter text-sm" style={{ color: T.stone }}>
-              By confirming, you're booking this event as set out in the proposal.
-              {Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
+              By confirming, you're booking this event as set out in the proposal{chosenOption ? <>, with the <b>{chosenOption.name}</b> menu ({currency(chosenOption.total)} incl. GST)</> : ""}.
+              {chosenOption
+                ? <> A deposit of {currency(chosenOption.deposit)} NZD secures your date.</>
+                : menuOptions.length === 0 && Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
               {" "}The venue team is told straight away and will be in touch about the next steps.
             </p>
             <div>
@@ -511,8 +580,11 @@ export default function ProposalView() {
                 placeholder="Any questions or notes for the venue team..."
                 rows={3} className="rounded-none border-2 focus-visible:ring-0 resize-none text-sm font-inter" />
             </div>
-            <Button onClick={() => respond.mutate({ token: token!, action: "accepted", clientMessage: clientMessage || undefined })}
-              disabled={respond.isPending}
+            {menuOptions.length > 0 && !chosenOption && (
+              <p role="alert" className="font-inter text-sm font-semibold" style={{ color: T.accent }}>Please choose a menu first — close this and pick one under Pricing.</p>
+            )}
+            <Button onClick={() => respond.mutate({ token: token!, action: "accepted", clientMessage: clientMessage || undefined, chosenMenu: chosenOption?.line })}
+              disabled={respond.isPending || (menuOptions.length > 0 && !chosenOption)}
               className="w-full font-bebas tracking-widest rounded-none h-11 gap-2"
               style={{ backgroundColor: T.header, color: T.headerText }}>
               <CheckCircle className="w-4 h-4" />

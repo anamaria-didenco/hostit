@@ -637,6 +637,13 @@
       "when": 1792024054401,
       "tag": "0090_portal_payments_visible",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1792024054402,
+      "tag": "0091_proposal_menu_choice",
+      "breakpoints": true
     }
   ]
 }

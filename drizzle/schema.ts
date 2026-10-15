@@ -405,6 +405,8 @@ export const proposals = pgTable("proposals", {
   clientMessage: text("clientMessage"),
   // Optional "why" the client gave when declining on the public proposal page.
   declineReason: text("declineReason"),
+  // Menu packages offered as a choice, not added together (migration 0091).
+  menuChoice: boolean("menuChoice").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (t) => ({
