@@ -602,6 +602,13 @@
       "when": 1779801512085,
       "tag": "0085_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1792024054397,
+      "tag": "0086_more_fk_indexes",
+      "breakpoints": true
     }
   ]
 }
