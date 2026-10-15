@@ -67,6 +67,11 @@ import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
 import { HoldPanel, HoldTag, DateClashChip, DoubleBookedTag, holdState, fmtHoldDay } from "@/components/DateHold";
+import GlobalFinder from "@/components/GlobalFinder";
+import EventSearchResults from "@/components/EventSearchResults";
+import MovedNote from "@/components/MovedNote";
+import { leadMatchesSearch } from "@/lib/leadSearch";
+import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
@@ -862,7 +867,7 @@ export default function Dashboard() {
   const _qp = new URLSearchParams(window.location.search);
   const _rawTab = _qp.get('tab');
   const _rawSub = _qp.get('sub');
-  const _initTab: DashTab = isDashTab(_rawTab) ? _rawTab : "overview";
+  const _initTab: DashTab = isDashTab(_rawTab) ? (_rawTab === "pipeline" ? "enquiries" : _rawTab) : "overview";
   // (staff are redirected off restricted tabs by the effect below)
   const _initSubTab: SettingsSubTab = isSettingsSubTab(_rawSub) ? _rawSub : "venue";
   const [tab, setTab] = useState<DashTab>(_initTab);
@@ -960,6 +965,13 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [actionsMenuOpen]);
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // Enquiries whose status was just changed inline: kept in the list, marked
+  // "Moved to <Status> · Undo", until the next tab / filter / search change.
+  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; at: number }>>({});
+  const rowPosRef = useRef<Map<number, number>>(new Map());
+  const statusPriorRef = useRef<Record<number, string>>({});
+  const statusRowAtRef = useRef<Record<number, number>>({});
+  const undoingRef = useRef<Set<number>>(new Set());
   // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
   const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
@@ -1008,6 +1020,9 @@ export default function Dashboard() {
   }, [isDesktop]);
   // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
   const [followUpOnly, setFollowUpOnly] = useState(false);
+  useEffect(() => {
+    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
+  }, [tab, leadsSubTab, leadStatusFilter, leadDateFilter, followUpOnly, showPartialOnly, leadOwnerFilter, leadSearch, leadViewMode]);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -1260,8 +1275,10 @@ export default function Dashboard() {
 
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads, isError: leadsError } = trpc.leads.list.useQuery(
-    // Server filters by a single status; multi-select filters fan out client-side.
-    { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
+    // Always the full list: status filters are applied client-side (below).
+    // Fetching only the filtered status made the tab counts, the search and a
+    // just-moved row all lose every enquiry outside the chosen status.
+    {},
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
   // leadId → date clashes with a booking or hold, for the "Date clash" chips.
@@ -1345,8 +1362,9 @@ export default function Dashboard() {
     // Open it the way this view opens enquiries: the table (the desktop
     // default) uses the drawer, so setting selectedLead alone showed nothing.
     if (lead) {
-      setTab("enquiries");
-      if (leadViewMode === "list") setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+      // An explicit ?tab= (a record opened over the Calendar, say) stays put.
+      if (!qp.get('tab')) setTab("enquiries");
+      if (leadViewMode === "list" && (qp.get('tab') ?? 'enquiries') === 'enquiries') setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
     }
     leadIdParamApplied.current = true;
   }, [allLeads]);
@@ -1936,6 +1954,18 @@ export default function Dashboard() {
   });
   const updateStatusMut = trpc.leads.updateStatus.useMutation({
     onSuccess: (data, variables) => {
+      // Keep the row where it is, marked "Moved to … · Undo" (or drop the mark
+      // when this change WAS the undo). See movedRows.
+      const wasUndo = undoingRef.current.delete(variables.id);
+      const from = statusPriorRef.current[variables.id];
+      delete statusPriorRef.current[variables.id];
+      setMovedRows(prev => {
+        if (wasUndo) { if (!prev[variables.id]) return prev; const { [variables.id]: _gone, ...rest } = prev; return rest; }
+        // Only a row that was on screen can stay on screen.
+        const at = prev[variables.id]?.at ?? statusRowAtRef.current[variables.id];
+        if (!from || from === variables.status || at === undefined) return prev;
+        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, at } };
+      });
       refetchLeads();
       utils.bookings.clashes.invalidate();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
@@ -1965,6 +1995,7 @@ export default function Dashboard() {
     },
     onError: (err, variables) => {
       suppressStatusToast.current = false;
+      undoingRef.current.delete(variables.id);
       if (getClashes(err)) {
         // Undo the optimistic status flip, then ask "Book anyway?".
         const prior = (allLeads ?? []).find((l: any) => l.id === variables.id)?.status;
@@ -2004,14 +2035,29 @@ export default function Dashboard() {
   const [lostPrompt, setLostPrompt] = useState<null | { single?: UpdateStatusVars; bulkIds?: number[]; name?: string; prior?: string }>(null);
   const updateStatus = {
     ...updateStatusMut,
-    mutate: (vars: UpdateStatusVars) => {
+    mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
+      const priorStatus: string | undefined = (allLeads ?? []).find((x: any) => x?.id === vars.id)?.status;
+      if (priorStatus) statusPriorRef.current[vars.id] = priorStatus;
+      const rowAt = rowPosRef.current.get(vars.id);
+      if (rowAt !== undefined) statusRowAtRef.current[vars.id] = rowAt;
       if (vars.status === 'lost' && vars.lostReason === undefined) {
         const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
         return;
       }
-      updateStatusMut.mutate(vars);
+      updateStatusMut.mutate(vars, callOpts);
     },
+  };
+  // Undo for a row marked "Moved to …": the same server path as any status
+  // change (holds/bookings are created or cancelled there), so a refusal comes
+  // back as an error and is shown, and the mark stays.
+  const undoMove = (leadId: number) => {
+    const m = movedRows[leadId];
+    if (!m) return;
+    undoingRef.current.add(leadId);
+    updateStatus.mutate({ id: leadId, status: m.from as any }, {
+      onError: (err: any) => { if (!getClashes(err)) toast.error(err?.message || "Couldn't undo that status change"); },
+    });
   };
   const bulkUpdateStatus = {
     ...bulkUpdateStatusMut,
@@ -2031,6 +2077,7 @@ export default function Dashboard() {
   const cancelLost = () => {
     const p = lostPrompt;
     setLostPrompt(null);
+    undoingRef.current.clear();
     // Undo any optimistic "lost" the caller already showed.
     if (p?.single && p.prior) {
       const undo = (prev: any) => prev && prev.id === p.single!.id && prev.status === 'lost' ? { ...prev, status: p.prior } : prev;
@@ -2151,6 +2198,34 @@ export default function Dashboard() {
       markRead.mutate({ id: lead.id });
     }
   }
+
+  // ── Browser history (Back/Forward through tabs and records) + Cmd/Ctrl-K finder ──
+  const [finderOpen, setFinderOpen] = useState(false);
+  const openLeadFromUrlOrFinder = async (id: number): Promise<boolean> => {
+    const lead: any = (allLeads ?? []).find((l: any) => l && l.id === id) ?? await utils.leads.get.fetch({ id }).catch(() => null);
+    if (!lead) { toast.error("That enquiry no longer exists."); return false; }
+    openEventDrawer({ ...lead, _isLead: true });
+    return true;
+  };
+  const openBookingFromUrl = async (id: number): Promise<boolean> => {
+    const b: any = await utils.bookings.getById.fetch({ id }).catch(() => null);
+    if (!b) { toast.error("That event no longer exists."); return false; }
+    openEventDrawer(b);
+    return true;
+  };
+  useDashboardHistory<DashTab>({
+    tab,
+    setTab,
+    normalizeTab: raw => !isDashTab(raw) ? null : raw === "pipeline" ? "enquiries" : isStaff && raw !== "calendar" && raw !== "tasks" ? "calendar" : raw,
+    isTabAllowed: t => t !== "pipeline" && (!isStaff || t === "calendar" || t === "tasks"),
+    drawer: selectedBooking
+      ? { kind: selectedBooking._isLead ? "lead" : "booking", id: selectedBooking.id }
+      : selectedLead ? { kind: "lead", id: selectedLead.id } : null,
+    closeDrawer: () => { setSelectedBooking(null); setSelectedLead(null); },
+    openLead: openLeadFromUrlOrFinder,
+    openBooking: openBookingFromUrl,
+    leadsLoaded: !!allLeads,
+  });
 
   const parseEnquiryMutation = trpc.leads.parseEnquiryText.useMutation({
     onSuccess: (result) => {
@@ -2904,11 +2979,13 @@ export default function Dashboard() {
   const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
 
   // Auto-switch to "all" when there are no new enquiries
+  // (Not while a just-moved row is pinned: switching tabs would unpin it.)
+  const movedCount = Object.keys(movedRows).length;
   useEffect(() => {
-    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new") {
+    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new" && movedCount === 0) {
       setLeadsSubTab("all");
     }
-  }, [newEnquiries.length, allLeads]);
+  }, [newEnquiries.length, allLeads, movedCount]);
 
   function applyDateFilter(list: any[]) {
     if (leadDateFilter === "all") return list;
@@ -2955,18 +3032,27 @@ export default function Dashboard() {
 
   // When the user has picked one or more statuses, fetch+filter from the full
   // enquiry set. Multiple selections OR together.
-  const leadsToShow = leadStatusFilter.length > 0
+  // Typing in the search box searches EVERYTHING: every status, every date,
+  // every filter. (It used to search only the current tab and date window, so
+  // a past or already-quoted client was "not found" under New + Upcoming.)
+  const searching = leadSearch.trim().length > 0;
+  // Rows just moved to another status stay put (marked "Moved to … · Undo")
+  // until the next tab/filter/search change, instead of vanishing: they are
+  // taken out of the filtered list and put back at the row they were on.
+  const pinnedMoves = allEnquiries.filter((l: any) => movedRows[l.id]);
+  const leadsToShow = searching
+    ? allEnquiries
+    : leadStatusFilter.length > 0
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const followUpNowMs = Date.now();
-  const filteredLeads = leadsToShow
-    .filter((l: any) => (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
-    .filter((l: any) => !showPartialOnly || isPartialLead(l))
-    .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
-    .filter((l: any) => leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter)
-    .filter((l: any) =>
-      !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
-    )
+  const sortedLeads = leadsToShow
+    .filter((l: any) => !movedRows[l.id])
+    .filter((l: any) => searching ? true : (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
+    .filter((l: any) => searching || !showPartialOnly || isPartialLead(l))
+    .filter((l: any) => searching || !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
+    .filter((l: any) => searching || (leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter))
+    .filter((l: any) => !searching || leadMatchesSearch(l, leadSearch))
     .slice()
     .sort((a: any, b: any) => {
       let cmp = 0;
@@ -2989,6 +3075,13 @@ export default function Dashboard() {
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
     });
+  const filteredLeads = pinnedMoves.length === 0 ? sortedLeads : (() => {
+    const out = sortedLeads.slice();
+    pinnedMoves.slice().sort((a: any, b: any) => movedRows[a.id].at - movedRows[b.id].at)
+      .forEach((l: any) => out.splice(Math.min(movedRows[l.id].at, out.length), 0, l));
+    return out;
+  })();
+  rowPosRef.current = new Map(filteredLeads.map((l: any, i: number) => [l.id, i]));
   const followUpCount = allEnquiries.filter((l: any) => leadFollowUpState(l, followUpNowMs).needs).length;
 
   // Calendar
@@ -3273,6 +3366,8 @@ export default function Dashboard() {
   return (
     <div className="h-screen bg-background font-inter flex flex-col md:flex-row overflow-hidden">
       <a href="#vf-main" className="skip-link">Skip to content</a>
+      <GlobalFinder open={finderOpen} onOpenChange={setFinderOpen} isStaff={isStaff} stages={pipelineStages}
+        onOpenLead={id => { void openLeadFromUrlOrFinder(id); }} onOpenEvent={id => setLocation(`/event/${id}`)} />
       {/* ── TOP NAVIGATION BAR (mobile only — desktop uses the sidebar) ──────── */}
       <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
@@ -3327,6 +3422,10 @@ export default function Dashboard() {
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {/* Alerts bell — one instance per viewport so browser alerts never double. Staff logins can't read alerts. */}
+          <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event" title="Find"
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+            <Search className="w-4 h-4 text-gray-500" aria-hidden="true" />
+          </button>
           {!isStaff && !isDesktop && <NotificationBell variant="light" onOpenLink={openAlertLink} side="bottom" align="end" />}
           <ThemeSwitcher />
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
@@ -3346,6 +3445,10 @@ export default function Dashboard() {
         <div className="h-[62px] flex items-center px-[18px] border-b" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <button onClick={() => setTab("overview" as any)} aria-label="VenueFlow — go to dashboard" className="flex items-center focus:outline-none">
             <img src="/venueflow-logo-white.png" alt="VenueFlow" className="h-7 w-auto" />
+          </button>
+          <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event (Ctrl or Cmd + K)" title="Find (Ctrl/Cmd + K)"
+            className="ml-auto w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white transition-colors">
+            <Search className="w-4 h-4" aria-hidden="true" style={{ color: '#bcc8db' }} />
           </button>
         </div>
         {/* Nav */}
@@ -3799,7 +3902,7 @@ export default function Dashboard() {
                           <div className="relative flex min-w-0">
                           <div className="flex gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {newEnquiries.length > 0 && (
-                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
+                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("new"); setSelectedLead(null); }}
                               className={tabCls(leadsSubTab === "new" && !followUpOnly)}>
                               NEW
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" && !followUpOnly ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
@@ -3817,7 +3920,7 @@ export default function Dashboard() {
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-800 text-white"}`}>{followUpCount}</span>
                             )}
                           </button>
-                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
                             className={tabCls(isAll && !followUpOnly)}>
                             ALL
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll && !followUpOnly ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
@@ -4011,8 +4114,11 @@ export default function Dashboard() {
                       title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}>
                       <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
                     </button>
-                    <span className="font-dm text-xs text-ink/60 ml-auto">{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
+                    <span className="font-dm text-xs text-ink/60 ml-auto">{searching && <span className="mr-2">Searching every status and date.</span>}{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
                   </div>
+                )}
+                {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                  <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
                 {/* Bulk select all bar */}
                 {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
@@ -4044,7 +4150,7 @@ export default function Dashboard() {
                     {filteredLeads.length === 0 ? (
                       <div className="p-12 text-center">
                         <MessageSquare className="w-10 h-10 text-sage/30 mx-auto mb-3" />
-                        <p className="font-dm text-sage text-sm">No records found</p>
+                        <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No records found"}</p>
                       </div>
                     ) : (
                       <table className="w-full text-sm border-collapse min-w-[700px]">
@@ -4132,7 +4238,9 @@ export default function Dashboard() {
                                         toast.error('Pick an event space on this enquiry first.');
                                         return;
                                       }
-                                      updateStatus.mutate({ id: lead.id, status: newStatus as any });
+                                      updateStatus.mutate({ id: lead.id, status: newStatus as any }, {
+                                        onError: (err: any) => { if (!getClashes(err)) toast.error(err?.message || "Couldn't change the status"); },
+                                      });
                                     }}
                                     title="Change status"
                                     aria-label={`Change status for ${lead.firstName} ${lead.lastName ?? ""}`.trim()}
@@ -4146,6 +4254,10 @@ export default function Dashboard() {
                                       <option key={s.key} value={s.key}>{s.label}</option>
                                     ))}
                                   </select>
+                                  {movedRows[lead.id] && (
+                                    <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
+                                      busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/70 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
@@ -4199,16 +4311,15 @@ export default function Dashboard() {
                   ) : filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
-                      <p className="font-dm text-sage text-sm">No leads found</p>
+                      <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No leads found"}</p>
                     </div>
                   ) : filteredLeads.map((lead: any) => (
                     // shrink-0: the global `.flex { min-height:0 }` reset (index.css)
                     // otherwise lets flexbox squash these rows — a tall stack of flex
                     // children in a fixed-height flex column — down to ~0px, so the
                     // content overlaps instead of the list scrolling. Keep natural height.
-                    <div key={lead.id} className={`flex items-stretch shrink-0 ${
-                      selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''
-                    }`}>
+                    <div key={lead.id} className={`shrink-0 ${selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''}`}>
+                    <div className="flex items-stretch">
                       {bulkSelectMode && (
                         <label className="flex items-center px-3 cursor-pointer">
                           <input type="checkbox"
@@ -4276,6 +4387,13 @@ export default function Dashboard() {
                           })()}
                     </button>
                       </div>
+                    {movedRows[lead.id] && (
+                      <div className="px-4 pb-2 border-l-4" style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
+                        <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
+                          busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
+                      </div>
+                    )}
+                    </div>
                   ))}
                 </div>}
 

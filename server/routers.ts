@@ -2504,6 +2504,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
   }),
 
+  // ─── Global finder (Cmd/Ctrl-K and the Enquiries search) ─────────────────
+  // Not on the staff denylist (they may search events), so the staff limits
+  // live in searchGlobal itself: events only, no contact details.
+  search: router({
+    global: protectedProcedure
+      .input(z.object({ q: z.string().max(100), limit: z.number().int().min(1).max(50).default(8) }))
+      .query(async ({ input, ctx }) => {
+        const { searchGlobal } = await import('./globalSearch');
+        return searchGlobal(ctx.user.id, input.q, { staff: ctx.isStaff, limit: input.limit });
+      }),
+  }),
+
   bookings: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return getBookings(ctx.user.id);
