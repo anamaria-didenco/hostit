@@ -2,6 +2,7 @@ import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -100,10 +101,13 @@ export default function EventDetail() {
     };
   };
 
+  // A guest change reaches the run sheet; offer to update its food too.
+  const offerFoodRescale = useFoodRescaleOffer();
   const updateBooking = trpc.bookings.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       utils.bookings.getById.invalidate({ id: bookingId });
       setEditing(false);
+      if (vars.guestCount !== undefined && offerFoodRescale(data, { bookingId })) return;
       toast.success("Event updated");
     },
     onError: (e, vars) => {

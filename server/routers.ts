@@ -1326,6 +1326,9 @@ export const appRouter = router({
         if (restorable) {
           await restoreCancelledBooking(restorable.id, ctx.user.id, input.status === 'finished' ? 'finished' : 'confirmed');
           await addLeadActivity({ leadId: input.id, ownerId: ctx.user.id, type: "status_change", content: "Cancelled event restored" });
+          // A run sheet started from the enquiry meanwhile joins the event.
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.id, restorable.id);
         }
 
         // When marking as booked, auto-create a booking record if one doesn't exist
@@ -1355,6 +1358,10 @@ export const appRouter = router({
               // lead status changes also appear in the NBI diary.
               const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
               if (newId) {
+                // A run sheet already started from the enquiry belongs to
+                // this event now — otherwise the event can't find it.
+                const { linkLeadRunsheets } = await import('./runsheetLinks');
+                await linkLeadRunsheets(null, ctx.user.id, input.id, newId);
                 const { pushBookingToNbi } = await import('./nowbookit');
                 await pushBookingToNbi(newId, ctx.user.id, { source: 'leads.updateStatus→booked' });
                 // Event confirmed → remind the events manager to send the deposit.
@@ -1436,6 +1443,11 @@ export const appRouter = router({
             throw new Error('This event is live — pick a different space instead of clearing it.');
           }
         }
+        // The guest count before this edit, to tell whether it changed (the
+        // drawer sends every field on each save).
+        const guestsBefore = rest.guestCount !== undefined
+          ? (await getLeadById(id, ctx.user.id))?.guestCount ?? null
+          : undefined;
         await updateLead(id, ctx.user.id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
@@ -1449,6 +1461,7 @@ export const appRouter = router({
         // this in bookings.update, but an edit made here used to leave the
         // event on its old date.
         const bookingUpdates: Record<string, unknown> = {};
+        let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
         if (eventDate) bookingUpdates.eventDate = new Date(eventDate);
         if (rest.guestCount !== undefined) bookingUpdates.guestCount = rest.guestCount;
         if (spaceName !== undefined && spaceName?.trim()) bookingUpdates.spaceName = spaceName.trim();
@@ -1472,8 +1485,7 @@ export const appRouter = router({
             }
             const rsUpdates: Record<string, unknown> = {};
             // The date (and start time, when it has one), as bookings.update
-            // does: the runsheet's guest count is the kitchen's final number
-            // and is edited there.
+            // does. The guest count follows below, separately.
             if (bookingUpdates.eventDate) {
               rsUpdates.eventDate = bookingUpdates.eventDate;
               const { startTimeOf } = await import('@shared/eventDate');
@@ -1489,9 +1501,18 @@ export const appRouter = router({
                   ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
                   : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
             }
+            // Guests used to stop here: the runsheet's count was treated as
+            // the kitchen's own final number, so the event and the run sheet
+            // drifted apart (the kitchen cooked for the old number). It now
+            // follows the event, as a run sheet edit already flows back to
+            // it. The kitchen's concern is the food, and that is never
+            // changed silently: lines still at the old count are reported
+            // (foodRescale) for the person to update via fnb.rescaleGuests.
+            const { syncRunsheetGuests } = await import('./runsheetGuests');
+            foodRescale = await syncRunsheetGuests(db, ctx.user.id, { leadId: id }, guestsBefore, rest.guestCount);
           }
         }
-        return { success: true };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
       }),
 
     activity: protectedProcedure
@@ -1849,7 +1870,11 @@ export const appRouter = router({
             }
             await db.update(leads).set({ status: input.status })
               .where(and(eq(leads.id, lead.id), eq(leads.ownerId, ctx.user.id)));
-            if (restorable) await restoreCancelledBooking(restorable.id, ctx.user.id);
+            if (restorable) {
+              await restoreCancelledBooking(restorable.id, ctx.user.id);
+              const { linkLeadRunsheets } = await import('./runsheetLinks');
+              await linkLeadRunsheets(db, ctx.user.id, lead.id, restorable.id);
+            }
             if (input.status === 'tentative' && lead.status !== 'tentative') await startHoldFromStatusChange(ctx.user.id, lead);
             ids.push(lead.id);
           }
@@ -2505,6 +2530,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(found)), input.allowClash);
           const status = lead.status === 'finished' ? 'finished' : 'confirmed';
           await restoreCancelledBooking(found.id, ctx.user.id, status);
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.leadId, found.id);
           return { ...found, status };
         }
         // Rule: every event must have a space selected.
@@ -2529,6 +2556,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           spaceName: lead.spaceName,
           status: lead.status === 'finished' ? 'finished' : 'confirmed',
         } as any);
+        // A run sheet already started from the enquiry belongs to this event.
+        if (created) {
+          const { linkLeadRunsheets } = await import('./runsheetLinks');
+          await linkLeadRunsheets(null, ctx.user.id, input.leadId, (created as any).id);
+        }
         // A lead added straight in as Confirmed lands here (no status change
         // fired the rule). Keyed by lead, so a lead already confirmed via
         // updateStatus doesn't get the task twice. Past events (legacy rows
@@ -2784,7 +2816,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         if (rest.billingFoodCustom !== undefined) updates.billingFoodCustom = rest.billingFoodCustom?.trim() || null;
         if (rest.billingDrinksCustom !== undefined) updates.billingDrinksCustom = rest.billingDrinksCustom?.trim() || null;
+        // The guest count before this edit, to tell whether it changed.
+        let guestsBefore: number | null | undefined;
+        if (rest.guestCount !== undefined) {
+          const [cur] = await db.select({ guestCount: bookings.guestCount }).from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          guestsBefore = cur?.guestCount ?? null;
+        }
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // New guest count → the event's run sheets too (food lines at the
+        // old count are reported, never changed here — see runsheetGuests.ts).
+        let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
+        if (rest.guestCount !== undefined) {
+          const { syncRunsheetGuests } = await import('./runsheetGuests');
+          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+        }
         // The runsheet keeps its own copy of the date (staff link, runsheet
         // header). Keep it in step so the event never shows two dates.
         if (updates.eventDate !== undefined) {
@@ -2893,7 +2939,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
-        return { success: true };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
       }),
     byMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
@@ -4603,14 +4649,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({ leadId: z.number().optional(), bookingId: z.number().optional() }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { runsheets } = await import('../drizzle/schema');
-        const { eq, and, or } = await import('drizzle-orm');
+        const { runsheets, bookings } = await import('../drizzle/schema');
+        const { eq, and, or, isNull, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const conditions = [eq(runsheets.ownerId, ctx.user.id)];
-        if (input.leadId) conditions.push(eq(runsheets.leadId, input.leadId));
-        if (input.bookingId) conditions.push(eq(runsheets.bookingId, input.bookingId));
-        return db.select().from(runsheets).where(and(...conditions)).orderBy(runsheets.createdAt);
+        // An event's sheets and its enquiry's sheets are the same sheets:
+        // a sheet started from the enquiry may not be linked to the event
+        // yet, and one made on the event carries the enquiry only through
+        // the booking. Read both ways (see server/runsheetLinks.ts).
+        if (input.leadId) {
+          const ofLead = db.select({ id: bookings.id }).from(bookings)
+            .where(and(eq(bookings.leadId, input.leadId), eq(bookings.ownerId, ctx.user.id)));
+          conditions.push(or(eq(runsheets.leadId, input.leadId), inArray(runsheets.bookingId, ofLead))!);
+        }
+        if (input.bookingId) {
+          const [b] = await db.select({ leadId: bookings.leadId }).from(bookings)
+            .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          conditions.push(b?.leadId
+            ? or(eq(runsheets.bookingId, input.bookingId), and(eq(runsheets.leadId, b.leadId), isNull(runsheets.bookingId)))!
+            : eq(runsheets.bookingId, input.bookingId));
+        }
+        return db.select().from(runsheets).where(and(...conditions)).orderBy(runsheets.createdAt, runsheets.id);
       }),
 
     get: protectedProcedure
@@ -4770,10 +4830,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // which is guessable) — matches every other share token in this file.
         const crypto = await import('crypto');
         const token = crypto.randomBytes(24).toString('hex');
+        // Started from an enquiry that already has its event: link the sheet
+        // to that event too, so the event page, BEO and guest edits find it
+        // (see server/runsheetLinks.ts). Only when there's exactly one.
+        let bookingId = input.bookingId ?? null;
+        if (!bookingId && input.leadId) {
+          const { singleLiveBookingId } = await import('./runsheetLinks');
+          bookingId = await singleLiveBookingId(db, ctx.user.id, input.leadId);
+        }
         const [result] = await db.insert(runsheets).values({
           ownerId: ctx.user.id,
           leadId: input.leadId ?? null,
-          bookingId: input.bookingId ?? null,
+          bookingId,
           title: input.title,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           venueName: input.venueName ?? null,
@@ -6188,6 +6256,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           return claimed[0].version;
         });
         return { success: true, version };
+      }),
+    // The guest count changed and the person chose to update the food too:
+    // the event's food lines at exactly the old count move to the new one.
+    // Offered by the toast after bookings.update / leads.update report
+    // `foodRescale` — see server/runsheetGuests.ts.
+    rescaleGuests: protectedProcedure
+      .input(z.object({
+        bookingId: z.number().int().optional(),
+        leadId: z.number().int().optional(),
+        from: z.number().int().min(1),
+        to: z.number().int().min(1).max(100000),
+      }).refine(i => i.bookingId != null || i.leadId != null, { message: 'Which event?' }))
+      .mutation(async ({ input, ctx }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ booking: input.bookingId, lead: input.leadId }, ctx.user.id);
+        const { rescaleFoodQuantities } = await import('./runsheetGuests');
+        const updated = await rescaleFoodQuantities(null, ctx.user.id, { bookingId: input.bookingId, leadId: input.leadId }, input.from, input.to);
+        return { updated };
       }),
   }),
 
