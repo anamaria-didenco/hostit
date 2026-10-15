@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
-import { FileText, Pencil, ExternalLink } from "lucide-react";
+import { FileText, Pencil, ExternalLink, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 /**
  * The proposals on an enquiry, newest first: where each one is at (sent,
- * opened, answered), with Edit and the client's view. Used in the lead panel
- * on the dashboard and on the event page.
+ * opened, answered), with Edit, the client's view and Delete (asks first; an
+ * accepted proposal made the booking, so it can't be deleted). Used in the
+ * lead panel on the dashboard and on the event page.
  */
 const STATUS: Record<string, { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "bg-stone-100 text-stone-700" },
@@ -35,6 +38,18 @@ export function proposalTimeline(p: { status: string; sentAt?: string | Date | n
 export default function LeadProposals({ leadId, compact = false, onNavigate }: { leadId: number; compact?: boolean; onNavigate?: () => void }) {
   const [, setLocation] = useLocation();
   const { data: proposals, isLoading } = trpc.proposals.byLead.useQuery({ leadId }, { enabled: !!leadId });
+  const utils = trpc.useUtils();
+  // The proposal waiting on "Delete this proposal?" — one at a time.
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const remove = trpc.proposals.delete.useMutation({
+    onSuccess: () => {
+      setConfirmId(null);
+      utils.proposals.byLead.invalidate({ leadId });
+      utils.proposals.list.invalidate();
+      toast.success("Proposal deleted");
+    },
+    onError: (err) => toast.error(err.message || "Couldn't delete the proposal"),
+  });
 
   if (isLoading) return compact ? null : (
     <div className="dante-card p-4 mb-4"><p className="font-dm text-xs text-stone-600">Loading proposals…</p></div>
@@ -67,6 +82,16 @@ export default function LeadProposals({ leadId, compact = false, onNavigate }: {
                   className="font-bebas tracking-widest text-xs px-2 py-1.5 border border-stone-300 text-forest hover:bg-stone-50 flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest">
                   <Pencil className="w-3 h-3" aria-hidden /> EDIT
                 </button>
+                {p.status !== "accepted" && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(p.id)}
+                    aria-label={`Delete proposal: ${p.title}`}
+                    title="Delete"
+                    className="px-2 py-1.5 border border-stone-300 text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest">
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                )}
                 {p.status !== "draft" && p.publicToken && (
                   <a
                     href={`/proposal/${p.publicToken}`}
@@ -80,6 +105,29 @@ export default function LeadProposals({ leadId, compact = false, onNavigate }: {
                 )}
               </div>
             </div>
+            {confirmId === p.id && (
+              <div role="alert" className="mt-2 border-t border-stone-200 pt-2 flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-dm text-xs text-stone-800">
+                  Delete this proposal?{p.status !== "draft" ? " The client's link will stop working." : ""}
+                </span>
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => remove.mutate({ id: p.id })}
+                    disabled={remove.isPending}
+                    className="font-bebas tracking-widest text-xs px-2 py-1.5 bg-red-700 text-white hover:bg-red-800 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest">
+                    {remove.isPending ? "DELETING…" : "DELETE"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(null)}
+                    disabled={remove.isPending}
+                    className="font-bebas tracking-widest text-xs px-2 py-1.5 border border-stone-300 text-stone-700 hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest">
+                    KEEP
+                  </button>
+                </span>
+              </div>
+            )}
           </li>
         );
       })}

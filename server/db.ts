@@ -398,6 +398,38 @@ export async function createBooking(data: InsertBooking) {
   return result[0] ?? null;
 }
 
+/** A confirmed event needs its date: a booking made without one used "now",
+ *  and the auto-finish above closed it the next day (audit F-20). */
+export const EVENT_DATE_REQUIRED = "Add the event date before confirming this enquiry.";
+
+/**
+ * The event to bring back when a cancelled/lost enquiry is confirmed again
+ * (audit F-20): its most recent cancelled booking, but only when it has no
+ * live one. Null when there's nothing to restore.
+ */
+export async function cancelledBookingForLead(leadId: number, ownerId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(bookings)
+    .where(and(eq(bookings.leadId, leadId), eq(bookings.ownerId, ownerId)))
+    .orderBy(desc(bookings.id));
+  if (rows.some(b => b.status !== 'cancelled')) return null;
+  return rows[0] ?? null;
+}
+
+/** Date-clash query for bringing a cancelled booking back on its own date and space. */
+export function restoreClashQuery(b: { id: number; leadId: number | null; eventDate: Date; eventEndDate: Date | null; spaceName: string | null }) {
+  return { start: b.eventDate, end: b.eventEndDate, spaceName: b.spaceName, excludeLeadId: b.leadId, excludeBookingId: b.id };
+}
+
+/** Un-cancel a booking (callers run the date-clash check first). */
+export async function restoreCancelledBooking(id: number, ownerId: number, status: 'confirmed' | 'finished' = 'confirmed') {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(bookings).set({ status, updatedAt: new Date() })
+    .where(and(eq(bookings.id, id), eq(bookings.ownerId, ownerId), eq(bookings.status, 'cancelled')));
+}
+
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();

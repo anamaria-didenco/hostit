@@ -117,7 +117,7 @@ afterAll(async () => {
 });
 
 async function newLead(tag: string) {
-  const lead = await owner.leads.submit({ ownerId: 1, firstName: "Flow", lastName: tag, email: `flow-${tag}-${Date.now()}@example.com`, eventType: "Birthday", guestCount: 30 });
+  const lead = await owner.leads.submit({ ownerId: 1, firstName: "Flow", lastName: tag, email: `flow-${tag}-${Date.now()}@example.com`, eventType: "Birthday", eventDate: "2027-02-20", guestCount: 30 });
   made.leads.push(lead.id);
   return lead;
 }

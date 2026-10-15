@@ -45,6 +45,7 @@ import {
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
+  EVENT_DATE_REQUIRED, cancelledBookingForLead, restoreClashQuery, restoreCancelledBooking,
   getDashboardStats,
   syncDepositPaidFlag,
 } from "./db";
@@ -1231,6 +1232,10 @@ export const appRouter = router({
         if (['booked', 'confirmed', 'tentative'].includes(input.status) && !priorLead.spaceName?.trim()) {
           throw new Error('Please set an event space on this enquiry before changing its status to ' + input.status + '.');
         }
+        // Same for the date: confirming without one made an event for "now".
+        if (['booked', 'confirmed'].includes(input.status) && !priorLead.eventDate) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: EVENT_DATE_REQUIRED });
+        }
 
         // Double-booking guard: confirming or holding a date checks the
         // calendar first. A clash comes back as CONFLICT with the clash list;
@@ -1241,6 +1246,14 @@ export const appRouter = router({
           const { findClashes, assertNoClashes } = await import('./availability');
           const { clashSpace } = await import('./holds');
           assertNoClashes(await findClashes(ctx.user.id, clashSpace(priorLead)), input.allowClash);
+        }
+        // Confirming a cancelled/lost enquiry again brings its cancelled event
+        // back (rather than leaving it cancelled behind a "booked" enquiry).
+        // The event's own date and space get the same clash check first.
+        const restorable = isBooked && !wasBooked ? await cancelledBookingForLead(input.id, ctx.user.id) : null;
+        if (restorable) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(restorable)), input.allowClash);
         }
 
         let holdUntil: Date | null = null;
@@ -1294,6 +1307,10 @@ export const appRouter = router({
               ));
           }
         }
+        if (restorable) {
+          await restoreCancelledBooking(restorable.id, ctx.user.id, input.status === 'finished' ? 'finished' : 'confirmed');
+          await addLeadActivity({ leadId: input.id, ownerId: ctx.user.id, type: "status_change", content: "Cancelled event restored" });
+        }
 
         // When marking as booked, auto-create a booking record if one doesn't exist
         if (input.status === "booked") {
@@ -1313,7 +1330,7 @@ export const appRouter = router({
                 lastName: lead.lastName ?? undefined,
                 email: lead.email,
                 eventType: lead.eventType ?? undefined,
-                eventDate: lead.eventDate ?? new Date(),
+                eventDate: lead.eventDate!,
                 guestCount: lead.guestCount ?? undefined,
                 spaceName: lead.spaceName,
                 status: "confirmed",
@@ -1463,22 +1480,10 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { leads } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return;
-         await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
-        // The client's emails go with the enquiry.
-        const { leadMessages } = await import('../drizzle/schema');
-        await db.delete(leadMessages).where(and(eq(leadMessages.leadId, input.id), eq(leadMessages.ownerId, ctx.user.id)));
-        // So do its open to-dos (e.g. its walkthrough task) — they'd otherwise
-        // sit in Tasks pointing at nothing. Ones tied to an event stay.
-        const { tasks } = await import('../drizzle/schema');
-        const { isNull } = await import('drizzle-orm');
-        await db.delete(tasks).where(and(
-          eq(tasks.linkedLeadId, input.id), eq(tasks.ownerId, ctx.user.id), eq(tasks.completed, false), isNull(tasks.linkedBookingId),
-        ));
+        // Takes its proposals, events, runsheets, tasks, emails etc. with it,
+        // in one transaction; refused if its event has payments or invoices.
+        const { deleteLeadsCascade } = await import('./cascadeDelete');
+        await deleteLeadsCascade(ctx.user.id, [input.id]);
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -1772,6 +1777,19 @@ export const appRouter = router({
             throw new Error(`Please set an event space on ${missing.length} enquir${missing.length === 1 ? 'y' : 'ies'} before bulk-changing status to ${input.status}.`);
           }
         }
+        // And a date before confirming (an event without one was made for "now").
+        if (['booked', 'confirmed'].includes(input.status)) {
+          const rows = await db.select({ id: leads.id, eventDate: leads.eventDate })
+            .from(leads)
+            .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+          const undated = rows.filter(r => !r.eventDate).length;
+          if (undated > 0) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: undated === 1 ? EVENT_DATE_REQUIRED : `Add the event date to ${undated} enquiries before confirming them.`,
+            });
+          }
+        }
         await markBulkStatusResponse(ctx.user.id, input.ids, input.status);
         // Double-booking guard: when the batch confirms or holds dates, check
         // each lead in turn (so two selected leads on the same date/space are
@@ -1796,8 +1814,19 @@ export const appRouter = router({
                 continue;
               }
             }
+            // Confirming a cancelled/lost enquiry again brings its cancelled
+            // event back, on its own date — clash-checked like the lead.
+            const restorable = input.status !== 'tentative' && !already ? await cancelledBookingForLead(lead.id, ctx.user.id) : null;
+            if (restorable) {
+              const clashes = (await findClashes(ctx.user.id, restoreClashQuery(restorable))).filter(c => c.certainty === 'clash');
+              if (clashes.length) {
+                skipped.push({ id: lead.id, name: [lead.firstName, lead.lastName].filter(Boolean).join(' '), clashes: clashes.map(c => c.summary) });
+                continue;
+              }
+            }
             await db.update(leads).set({ status: input.status })
               .where(and(eq(leads.id, lead.id), eq(leads.ownerId, ctx.user.id)));
+            if (restorable) await restoreCancelledBooking(restorable.id, ctx.user.id);
             if (input.status === 'tentative' && lead.status !== 'tentative') await startHoldFromStatusChange(ctx.user.id, lead);
             ids.push(lead.id);
           }
@@ -1885,29 +1914,11 @@ export const appRouter = router({
     bulkDelete: protectedProcedure
       .input(z.object({ ids: z.array(z.number()).min(1) }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { leads, leadActivity } = await import('../drizzle/schema');
-        const { eq, and, inArray } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { deleted: 0 };
-        // Only delete leadActivity for leads this owner actually owns —
-        // otherwise a user could wipe another tenant's activity log by
-        // passing their lead IDs. We confirm ownership first, then delete
-        // activity + leads in the same owner-scoped set.
-        const owned = await db.select({ id: leads.id }).from(leads)
-          .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
-        const ownedIds = owned.map(r => r.id);
-        if (ownedIds.length === 0) return { deleted: 0 };
-        await db.delete(leadActivity).where(and(
-          inArray(leadActivity.leadId, ownedIds),
-          eq(leadActivity.ownerId, ctx.user.id),
-        ));
-        const { leadMessages } = await import('../drizzle/schema');
-        await db.delete(leadMessages)
-          .where(and(inArray(leadMessages.leadId, ownedIds), eq(leadMessages.ownerId, ctx.user.id)));
-        await db.delete(leads)
-          .where(and(inArray(leads.id, ownedIds), eq(leads.ownerId, ctx.user.id)));
-        return { deleted: ownedIds.length };
+        // Same cascade as a single delete, owner-scoped (another venue's ids
+        // are ignored). If any selected event has money on it, nothing is
+        // deleted and the message says how many to cancel instead.
+        const { deleteLeadsCascade } = await import('./cascadeDelete');
+        return { deleted: await deleteLeadsCascade(ctx.user.id, input.ids) };
       }),
 
     parseEnquiryText: protectedProcedure
@@ -2246,12 +2257,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { proposals } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return;
-        await db.delete(proposals).where(and(eq(proposals.id, input.id), eq(proposals.ownerId, ctx.user.id)));
+        // Takes its quote items, drinks and quote settings too, so the
+        // client's link stops working. An accepted proposal is refused.
+        const { deleteProposalCascade } = await import('./cascadeDelete');
+        await deleteProposalCascade(ctx.user.id, input.id);
         return { success: true };
       }),
 
@@ -2444,19 +2453,38 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
      * is auto-created so the rich event drawer can show full quick actions.
      */
     ensureForLead: protectedProcedure
-      .input(z.object({ leadId: z.number() }))
+      // allowClash: the user has seen the date-clash warning and chosen to go ahead.
+      .input(z.object({ leadId: z.number(), allowClash: z.boolean().optional() }))
       .mutation(async ({ input, ctx }) => {
         const existing = await getBookings(ctx.user.id);
-        const found = existing.find((b: any) => b.leadId === input.leadId);
-        if (found) return found;
+        const found = existing.find((b: any) => b.leadId === input.leadId && b.status !== 'cancelled')
+          ?? existing.find((b: any) => b.leadId === input.leadId);
+        if (found && found.status !== 'cancelled') return found;
         const lead = await getLeadById(input.leadId, ctx.user.id);
         if (!lead) throw new Error('Lead not found');
-        if (!['booked', 'confirmed', 'finished'].includes(lead.status ?? '')) {
+        const leadBooked = ['booked', 'confirmed', 'finished'].includes(lead.status ?? '');
+        if (found && !leadBooked) return found;
+        if (!leadBooked) {
           throw new Error('Lead is not booked yet');
+        }
+        // The enquiry is booked but its event was cancelled (e.g. it went to
+        // Lost and back): bring that event back, after the same clash check
+        // as everywhere else, rather than handing back a cancelled booking.
+        if (found) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(found)), input.allowClash);
+          const status = lead.status === 'finished' ? 'finished' : 'confirmed';
+          await restoreCancelledBooking(found.id, ctx.user.id, status);
+          return { ...found, status };
         }
         // Rule: every event must have a space selected.
         if (!lead.spaceName?.trim()) {
           throw new Error('Please set an event space on this enquiry before opening the event.');
+        }
+        // And a date: without one the event was made for "now" and closed
+        // as finished the next day.
+        if (!lead.eventDate) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: EVENT_DATE_REQUIRED });
         }
         const created = await createBooking({
           ownerId: ctx.user.id,
@@ -2465,7 +2493,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           lastName: lead.lastName ?? undefined,
           email: lead.email,
           eventType: lead.eventType ?? undefined,
-          eventDate: lead.eventDate ?? new Date(),
+          eventDate: lead.eventDate,
           eventEndDate: lead.eventEndDate ?? undefined,
           guestCount: lead.guestCount ?? undefined,
           spaceName: lead.spaceName,
@@ -2840,12 +2868,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { bookings } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        await db.delete(bookings).where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        // Takes its runsheets, checklists, floor plan, contracts etc. with it,
+        // in one transaction; refused if it has payments or Xero invoices.
+        const { deleteBookingCascade } = await import('./cascadeDelete');
+        await deleteBookingCascade(ctx.user.id, input.id);
         return { success: true };
       }),
 
@@ -4900,24 +4926,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { runsheets, runsheetItems } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        // Confirm the runsheet belongs to this owner BEFORE cascading the
-        // child rows — otherwise a guessed ID would let one tenant wipe
-        // another tenant's runsheet items.
-        const [own] = await db.select({ id: runsheets.id }).from(runsheets)
-          .where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id)))
-          .limit(1);
-        if (!own) return { success: true };
-        await db.delete(runsheetItems).where(and(
-          eq(runsheetItems.runsheetId, input.id),
-          eq(runsheetItems.ownerId, ctx.user.id),
-        ));
-        await db.delete(runsheets)
-          .where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id)));
+        // Ownership is confirmed BEFORE the child rows (timeline, F&B,
+        // checklists, staff links, wedding checklist) go, in one transaction.
+        const { deleteRunsheetCascade } = await import('./cascadeDelete');
+        await deleteRunsheetCascade(ctx.user.id, input.id);
         return { success: true };
       }),
 

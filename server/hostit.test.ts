@@ -365,8 +365,8 @@ describe("follow-up dates", () => {
     pastDate.setDate(pastDate.getDate() - 1);
     await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: pastDate.toISOString().split("T")[0] });
     // Every event must have a space before it can be booked (see leads.updateStatus
-    // validation). Set one before moving status to booked.
-    await caller.leads.update({ id: lead.id, spaceName: "Main Hall" });
+    // validation), and a date (F-20). Set them before moving status to booked.
+    await caller.leads.update({ id: lead.id, spaceName: "Main Hall", eventDate: "2027-01-15" });
     await caller.leads.updateStatus({ id: lead.id, status: "booked" });
     const overdue = await caller.leads.overdue();
     const overdueIds = overdue.map((l: any) => l.id);

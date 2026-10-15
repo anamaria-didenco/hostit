@@ -197,7 +197,8 @@ describe.skipIf(!hasDb)("enquiry reply & chase logging", () => {
   });
 
   it("booking confirmed fires once whether via the lead or the booking", async () => {
-    const lead: any = await caller().leads.create({ firstName: "Conf", email: "conf@client.test", spaceName: "Main Room" });
+    // Confirming needs a date (F-20); today, so the days-before sweep below finds it.
+    const lead: any = await caller().leads.create({ firstName: "Conf", email: "conf@client.test", spaceName: "Main Room", eventDate: new Date().toISOString() });
     await caller().leads.updateStatus({ id: lead.id, status: "booked" });
     const db = (await getDb())!;
     const [b] = await db.select().from(bookings).where(and(eq(bookings.ownerId, OWNER), eq(bookings.leadId, lead.id)));

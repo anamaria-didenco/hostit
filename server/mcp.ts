@@ -415,7 +415,7 @@ export function buildServer(ctx: McpCtx): McpServer {
     { id: z.number() },
     async ({ id }) => {
       const { getDb } = await import("./db");
-      const { runsheets, runsheetItems, fnbItems, staffPortalLinks } = await import("../drizzle/schema");
+      const { runsheets } = await import("../drizzle/schema");
       const { eq, and } = await import("drizzle-orm");
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
@@ -423,15 +423,9 @@ export function buildServer(ctx: McpCtx): McpServer {
       const [rs] = await db.select().from(runsheets)
         .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId))).limit(1);
       if (!rs) return ok({ success: false, error: "Runsheet not found or not owned by you" });
-      // Delete dependents then runsheet — ownerId-scoped on every statement (defense in depth)
-      await db.delete(runsheetItems)
-        .where(and(eq(runsheetItems.runsheetId, id), eq(runsheetItems.ownerId, ctx.ownerId)));
-      await db.delete(fnbItems)
-        .where(and(eq(fnbItems.runsheetId, id), eq(fnbItems.ownerId, ctx.ownerId)));
-      await db.delete(staffPortalLinks)
-        .where(and(eq(staffPortalLinks.runsheetId, id), eq(staffPortalLinks.ownerId, ctx.ownerId)));
-      await db.delete(runsheets)
-        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      // Same cascade as the app (items, F&B, checklists, staff links), one transaction.
+      const { deleteRunsheetCascade } = await import("./cascadeDelete");
+      await deleteRunsheetCascade(ctx.ownerId, id);
       return ok({ success: true, deletedId: id, deletedTitle: rs.title });
     }
   );
