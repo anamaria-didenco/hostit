@@ -1489,7 +1489,10 @@ export default function RunsheetBuilder() {
   }
 
   // Queries
-  const { data: existing, isLoading: existingLoading, isError: existingError, refetch: refetchExisting } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
+  // No refetch on window focus: the form holds the document while it's being
+  // edited, and a focus refetch used to pour the server copy over text that
+  // was still being typed (see the load effect below).
+  const { data: existing, isLoading: existingLoading, isError: existingError, refetch: refetchExisting } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId, refetchOnWindowFocus: false });
   // A runsheet opened from the "My runsheets" list (or a bookmark) has no
   // leadId in the URL but usually has one on the record — resolve the lead
   // from either so the client contact still prefills.
@@ -1769,8 +1772,20 @@ export default function RunsheetBuilder() {
     setFnbPasteText('');
     setFnbParsedItems([]);
   }
+  // Which sheet the form was last filled from, and a live view of unsaved
+  // channels for the load effect (it can't read state from a later render).
+  const hydratedSheetRef = useRef<number | null>(null);
+  const dirtyRef = useRef(dirtyChannels);
+  dirtyRef.current = dirtyChannels;
   useEffect(() => {
     if (existing) {
+      // Fill the form from the server the first time this sheet loads. A
+      // later copy (an attachment added, "Save now") is only applied when
+      // nothing is waiting to save — otherwise it would overwrite what's being
+      // typed with the older server version.
+      const firstLoad = hydratedSheetRef.current !== (existing as any).id;
+      if (!firstLoad && (dirtyRef.current.size > 0 || coreSavingRef.current)) return;
+      hydratedSheetRef.current = (existing as any).id;
       setTitle(existing.title);
       setEventDate(existing.eventDate ? new Date(existing.eventDate).toLocaleDateString("en-CA") : "");
       setVenueName(existing.venueName ?? "");
@@ -1786,7 +1801,17 @@ export default function RunsheetBuilder() {
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
-      if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
+      // Normalise cost rows to the editor's shape. A row missing _id or label
+      // (written by another path, or an older shape using name/price) used to
+      // make every autosave of the sheet fail validation — notes and all.
+      if ((existing as any).costItems) setCostItems(((existing as any).costItems as any[]).map((ci, i): CostItem => ({
+        ...ci,
+        _id: ci._id || `ci-${Date.now()}-${i}`,
+        label: String(ci.label ?? ci.name ?? ''),
+        qty: Number(ci.qty ?? 1) || 0,
+        unitPrice: Number(ci.unitPrice ?? ci.price ?? 0) || 0,
+        category: ci.category ?? '',
+      })));
       setGstInclusive((existing as any).gstInclusive ?? false);
       setPaymentNotes((existing as any).paymentNotes ?? "");
       setPaymentInstructions((existing as any).paymentInstructions ?? "");
@@ -2008,15 +2033,16 @@ export default function RunsheetBuilder() {
   const silentUpdateMutation = trpc.runsheets.update.useMutation({
     onError: () => toast.error("Auto-save failed — click Save now"),
   });
+  // No refetch after adding or deleting a row: the new row's id is written
+  // back by persistTimelineItems and a deleted row is already gone locally. A
+  // refetch here raced with typing and reverted it.
   const addItemMutation = trpc.runsheets.addItem.useMutation({
-    onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
     onError: () => toast.error("Failed to add item"),
   });
   const updateItemMutation = trpc.runsheets.updateItem.useMutation({
     onError: () => toast.error("Failed to update item"),
   });
   const deleteItemMutation = trpc.runsheets.deleteItem.useMutation({
-    onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
     onError: () => toast.error("Failed to delete item"),
   });
 
