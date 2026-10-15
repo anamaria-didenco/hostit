@@ -333,6 +333,13 @@ export const appRouter = router({
       return vs;
     }),
 
+    // Mark the one-screen welcome intro as seen for this account, so it only
+    // ever shows once (stored per account, not per browser).
+    dismissWelcome: protectedProcedure.mutation(async ({ ctx }) => {
+      await upsertVenueSettings(ctx.user.id, { welcomeSeenAt: new Date() } as any);
+      return { success: true };
+    }),
+
     upsert: protectedProcedure
       .input(z.object({
         name: z.string().optional(),

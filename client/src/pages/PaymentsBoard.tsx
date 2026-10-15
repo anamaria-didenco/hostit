@@ -7,6 +7,9 @@ import PaymentsReceived from "@/components/PaymentsReceived";
 import XeroEventInvoices from "@/components/XeroEventInvoices";
 import XeroEventPayments from "@/components/XeroEventPayments";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
+import { fmtDate as fmtDateTz } from "@/lib/dateTime";
+import { currencyWhole } from "@/lib/money";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -56,11 +59,11 @@ interface SentInvoice {
   createdAt: string;
 }
 
-const fmtNZD = (n: number) =>
-  n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// Money and dates route through the shared formatters so the board reads the
+// same as the rest of the app (whole dollars here, no cents noise).
+const fmtNZD = (n: number) => currencyWhole(n);
 
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "No date";
+const fmtDate = (iso: string | null) => (iso ? fmtDateTz(iso, "weekday") : "No date");
 
 // Chip palette by state.
 const CHIP = {
@@ -264,18 +267,14 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
 
   return (
     <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="font-cormorant text-3xl font-semibold text-ink flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-forest" aria-hidden="true" /> Payments
-          </h1>
-          {/* Hidden on phones: it pushed the first booking below the screen. */}
-          <p className="hidden sm:block font-dm text-sm text-sage mt-0.5">
-            Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+      <PageHeader
+        className="mb-4"
+        icon={<DollarSign className="w-6 h-6 text-forest" aria-hidden="true" />}
+        title="Payments"
+        // Hidden on phones: it pushed the first booking below the screen.
+        subtitleClassName="hidden sm:block"
+        subtitle="Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night."
+        actions={<>
         {xeroStatus?.connected && (
           <button
             onClick={() => syncXero.mutate({ force: true })}
@@ -320,8 +319,8 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
           />
         </div>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* View switcher — a real tab set: arrow keys / Home / End move between tabs. */}
       <div className="flex gap-1.5 mb-4 border-b border-gold/20 overflow-x-auto" role="tablist" aria-label="Payments view">
@@ -465,7 +464,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
 }
 
 function jumpLabel(r: Row) {
-  return `${r.name}${r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}` : ""}`;
+  return `${r.name}${r.eventDate ? ` — ${fmtDateTz(r.eventDate, "short")}` : ""}`;
 }
 
 // Every invoice sent through to Xero, newest first — the "what have we billed
@@ -495,7 +494,7 @@ function depositEntries(rows: Row[]): DepositEntry[] {
     if (!inv && emailedAt == null) continue;
     const invAt = inv ? new Date(inv.createdAt).getTime() : null;
     const sentAt = Math.max(emailedAt ?? 0, invAt ?? 0);
-    const day = (t: number) => new Date(t).toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+    const day = (t: number) => fmtDateTz(t, "dayMonth");
     const how: string[] = [];
     if (emailedAt != null) how.push(`Request emailed ${day(emailedAt)}`);
     if (inv) how.push(`Xero ${inv.invoiceNumber ?? "invoice"}${inv.status === "DRAFT" ? " (draft — not sent from Xero yet)" : ""} ${day(invAt!)}`);
@@ -702,7 +701,7 @@ function SentInvoices({ rows, q, loading, onOpen }: { rows: Row[]; q: string; lo
                       {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
                     </div>
                     <div className="font-dm text-xs text-sage truncate">
-                      {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
+                      {row.name} · {fmtDate(row.eventDate)} · sent {fmtDateTz(inv.createdAt, "dayMonth")}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
                     </div>
                   </div>
                   <span className="font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>

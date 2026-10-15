@@ -227,6 +227,10 @@ export const venueSettings = pgTable("venue_settings", {
   // "Christmas party"]) for the "Same time next year" win-back list. Null =
   // the built-in defaults in shared/winBack.ts.
   winBackAnnualTypes: text("winBackAnnualTypes"),
+  // When the one-screen "welcome to VenueFlowHQ" intro was dismissed, per
+  // account. Null = never seen (a brand-new self-serve signup), so it shows
+  // once and then stays dismissed.
+  welcomeSeenAt: timestamp("welcomeSeenAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

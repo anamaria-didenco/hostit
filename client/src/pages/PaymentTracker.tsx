@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { toLocalDateInput } from "@/lib/dateTime";
+import { toLocalDateInput, fmtDate } from "@/lib/dateTime";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatusBadge } from "@/components/ui/badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle, Send, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, DollarSign, Send, Mail } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import { currency } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
@@ -28,24 +30,10 @@ const PAYMENT_METHODS = [
   { value: "other", label: "Other" },
 ];
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    unpaid: { label: "Unpaid", cls: "bg-red-100 text-red-700", icon: <AlertCircle className="w-3.5 h-3.5" /> },
-    partial: { label: "Partial", cls: "bg-amber-100 text-amber-700", icon: <Clock className="w-3.5 h-3.5" /> },
-    deposit_paid: { label: "Deposit Paid", cls: "bg-blue-100 text-blue-700", icon: <Clock className="w-3.5 h-3.5" /> },
-    paid_in_full: { label: "Paid in Full", cls: "bg-green-100 text-green-700", icon: <CheckCircle className="w-3.5 h-3.5" /> },
-  };
-  const s = map[status] ?? map.unpaid;
-  return (
-    <span className={`inline-flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1 ${s.cls}`}>
-      {s.icon} {s.label}
-    </span>
-  );
-}
-
 export default function PaymentTracker() {
   const [, navigate] = useLocation();
   const { user, loading: authLoading } = useAuth();
+  const confirm = useConfirm();
 
   const params = new URLSearchParams(window.location.search);
   const bookingId = params.get("bookingId") ? Number(params.get("bookingId")) : null;
@@ -213,7 +201,7 @@ export default function PaymentTracker() {
             {booking && (
               <span className="font-dm text-sm text-cream truncate">
                 {booking.firstName} {booking.lastName}
-                {booking.eventDate && <span className="opacity-75"> · {new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                {booking.eventDate && <span className="opacity-75"> · {fmtDate(booking.eventDate)}</span>}
               </span>
             )}
           </h1>
@@ -414,7 +402,7 @@ export default function PaymentTracker() {
                       <div className="text-xs text-ink/70 font-dm">
                         {PAYMENT_TYPES.find(t => t.value === p.type)?.label} ·{" "}
                         {PAYMENT_METHODS.find(m => m.value === p.method)?.label} ·{" "}
-                        {new Date(p.paidAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                        {fmtDate(p.paidAt)}
                       </div>
                       {p.notes && <div className="text-xs text-ink/65 font-dm mt-0.5">{p.notes}</div>}
                     </div>
@@ -430,7 +418,14 @@ export default function PaymentTracker() {
                       <Mail className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
-                      onClick={() => { if (confirm("Remove this payment? This can't be undone.")) deleteMutation.mutate({ id: p.id }); }}
+                      onClick={async () => {
+                        if (await confirm({
+                          title: "Remove this payment?",
+                          description: "This can't be undone.",
+                          confirmLabel: "Remove",
+                          tone: "destructive",
+                        })) deleteMutation.mutate({ id: p.id });
+                      }}
                       aria-label={`Remove ${fmtNZD(Number(p.amount))} ${PAYMENT_TYPES.find(t => t.value === p.type)?.label ?? "payment"}`}
                       className="p-1.5 text-ink/65 hover:text-red-500 transition-colors"
                     >

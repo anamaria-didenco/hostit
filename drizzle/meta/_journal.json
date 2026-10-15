@@ -665,6 +665,13 @@
       "when": 1792024054408,
       "tag": "0097_user_last_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792024054410,
+      "tag": "0099_welcome_seen",
+      "breakpoints": true
     }
   ]
 }

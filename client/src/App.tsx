@@ -4,9 +4,12 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import Home from "./pages/Home";
 import EmbedDocs from "./pages/EmbedDocs";
 import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Welcome from "./pages/Welcome";
 import Dashboard from "./pages/Dashboard";
 import ProposalBuilder from "./pages/ProposalBuilder";
 import ProposalView from "./pages/ProposalView";
@@ -33,6 +36,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/embed-docs" component={EmbedDocs} />
       <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
+      <Route path="/welcome" component={Welcome} />
       <Route path="/enquire" component={LeadForm} />
       <Route path="/enquire/:slug" component={LeadForm} />
       <Route path="/proposal/:token" component={ProposalView} />
@@ -73,8 +78,10 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <ConfirmProvider>
+            <Toaster />
+            <Router />
+          </ConfirmProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
