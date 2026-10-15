@@ -33,7 +33,6 @@ import LostReasonDialog from "@/components/LostReasonDialog";
 import EmailTemplatesSettings from "@/components/EmailTemplatesSettings";
 import LeadClientPanel, { LeadRowBadges } from "@/components/LeadClientPanel";
 import WinBackPanel from "@/components/WinBackPanel";
-import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
 import StatusManager, { parseCustomStatuses, getStatusClasses, getStatusCalClasses, getStatusBarClasses, getStatusDayClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -165,154 +164,6 @@ function NeedsReplyChip() {
   );
 }
 
-// ── Overview Widget Sub-Components ──────────────────────────────────────────────
-
-function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar, onCreateEvent }: {
-  month: number; year: number; firstDay: number; daysInMonth: number;
-  monthBookings: any; monthLeadEvents: any;
-  onPrev: () => void; onNext: () => void;
-  onDayClick: (dayBookings: any[], dayLeads: any[]) => void;
-  onViewCalendar: () => void;
-  onCreateEvent?: (date: string) => void;
-}) {
-  const [showLegend, setShowLegend] = React.useState(true);
-  const [startDay, setStartDay] = React.useState<0 | 1>(0); // 0=Sun, 1=Mon
-  const [showSettings, setShowSettings] = React.useState(false);
-
-  // Reorder days based on startDay
-  const DAY_LABELS_SUN = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
-  const DAY_LABELS_MON = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
-  const dayLabels = startDay === 1 ? DAY_LABELS_MON : DAY_LABELS_SUN;
-
-  // Adjust firstDay offset for Monday start
-  const adjustedFirstDay = startDay === 1 ? (firstDay === 0 ? 6 : firstDay - 1) : firstDay;
-
-  return (
-    <div className="dante-card shadow-sm">
-      <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gold/15">
-        <button aria-label="Previous month" onClick={onPrev} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-        <div className="flex items-center gap-2">
-          <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
-          <button
-            onClick={() => setShowSettings(v => !v)}
-            className={`p-1 transition-colors ${showSettings ? 'text-gold' : 'text-ink/65 hover:text-ink/60'}`}
-            title="Calendar settings"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <button aria-label="Next month" onClick={onNext} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
-      </div>
-
-      {/* Settings panel */}
-      {showSettings && (
-        <div className="px-4 py-3 border-b border-gold/15 bg-linen/50 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-bebas tracking-widest text-[10px] text-ink/70">START WEEK ON</span>
-            <div className="flex">
-              <button
-                onClick={() => setStartDay(0)}
-                className={`font-bebas tracking-widest text-xs px-2.5 py-1 border transition-colors ${
-                  startDay === 0 ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-sage hover:border-forest hover:text-forest'
-                }`}
-              >SUN</button>
-              <button
-                onClick={() => setStartDay(1)}
-                className={`font-bebas tracking-widest text-xs px-2.5 py-1 border border-l-0 transition-colors ${
-                  startDay === 1 ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-sage hover:border-forest hover:text-forest'
-                }`}
-              >MON</button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-bebas tracking-widest text-[10px] text-ink/70">LEGEND</span>
-            <button
-              onClick={() => setShowLegend(v => !v)}
-              className={`font-bebas tracking-widest text-xs px-2.5 py-1 border transition-colors ${
-                showLegend ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-sage hover:border-forest hover:text-forest'
-              }`}
-            >
-              {showLegend ? 'VISIBLE' : 'HIDDEN'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showLegend && (
-        <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-forest inline-block" />Confirmed</span>
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Finished</span>
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
-        </div>
-      )}
-      <div className="p-3">
-        <div className="grid grid-cols-7 mb-1">
-          {dayLabels.map(d => (
-            <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/70 py-1">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-0.5">
-          {[...Array(adjustedFirstDay)].map((_, i) => <div key={`e-${i}`} />)}
-          {[...Array(daysInMonth)].map((_, i) => {
-            const day = i + 1;
-            const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-            const dayBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
-            const _bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
-            const dayLeads = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
-            const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
-            const hasFinished = dayBookings.some((b: any) => b.status === 'finished');
-            const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
-            const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
-            const hasEnquiry = dayLeads.length > 0;
-            const cellBg = hasConfirmed ? 'bg-blue-50 border-blue-300' : hasFinished ? 'bg-stone-100 border-stone-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
-            const isEmpty = dayBookings.length === 0 && dayLeads.length === 0;
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            return (
-              <div
-                key={day}
-                onClick={() => {
-                  if (!isEmpty) {
-                    onDayClick(dayBookings, dayLeads);
-                  } else if (onCreateEvent) {
-                    onCreateEvent(dateStr);
-                  }
-                }}
-                className={`group relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(!isEmpty || onCreateEvent) ? 'cursor-pointer' : ''} ${isEmpty && onCreateEvent ? 'hover:bg-forest/5 hover:border-forest/30' : ''}`}
-              >
-                <span className={`font-serif text-xs leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isToday ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground font-semibold' : 'text-ink/70'}`}>{day}</span>
-                {/* + icon shown on empty cells when onCreateEvent is wired */}
-                {isEmpty && onCreateEvent && (
-                  <span className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <Plus className="w-3.5 h-3.5 text-forest/60" />
-                  </span>
-                )}
-                <div className="flex flex-wrap gap-0.5 mt-auto">
-                  {dayBookings.slice(0, 3).map((b: any) => (
-                    <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'finished' ? 'bg-stone-400' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
-                  ))}
-                  {dayLeads.slice(0, 2).map((l: any) => (
-                    holdState(l) === 'held'
-                      ? <span key={l.id} title="Date on hold" className="w-2 h-2 rounded-full flex-shrink-0 border-[1.5px] border-dashed border-amber-700 bg-white" />
-                      : <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
-                  ))}
-                </div>
-                {dayBookings.slice(0, 1).map((b: any) => (
-                  <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-forest' : b.status === 'finished' ? 'text-stone-500' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="p-3 border-t border-gold/15">
-        <button onClick={onViewCalendar} className="w-full font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors py-1">VIEW FULL CALENDAR →</button>
-      </div>
-    </div>
-  );
-}
-
 // ── Kanban Stage Customisation Dialog ─────────────────────────────────────
 function KanbanSettingsDialog({
   open, onClose, allStages, currentPrefs, onSave,
@@ -402,35 +253,6 @@ function KanbanSettingsDialog({
   );
 }
 
-function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: any; onViewLeads: () => void; stages?: { key: string; label: string; color: string }[] }) {
-  const stageList = stages ?? PIPELINE_STAGES;
-  const counts = stageList.map(s => ({
-    ...s,
-    count: (allLeads ?? []).filter(Boolean).filter((l: any) => l.status === s.key).length,
-  }));
-  const total = (allLeads ?? []).filter(Boolean).length;
-  return (
-    <div className="dante-card shadow-sm p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-cormorant text-lg font-semibold text-ink">Pipeline Snapshot</h2>
-        <button onClick={onViewLeads} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
-      </div>
-      <div className="space-y-2">
-        {counts.map(s => (
-          <div key={s.key} className="flex items-center gap-3">
-            <span className={`font-bebas text-xs tracking-widest w-28 flex-shrink-0 ${s.color.split(' ').find(c => c.startsWith('text-')) ?? 'text-ink'}`}>{s.label}</span>
-            <div className="flex-1 bg-gold/10 h-2 overflow-hidden">
-              <div className={`h-2 transition-all ${s.color.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-gold'}`}
-                style={{ width: total > 0 ? `${(s.count / total) * 100}%` : '0%' }} />
-            </div>
-            <span className="font-serif text-sm text-ink/60 w-6 text-right [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{s.count}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/70"><span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{total}</span> total leads</div>
-    </div>
-  );
-}
 
 // ── Helper: redirects the "menu" top-level tab to Settings > Menu & Catalogue ──
 function MenuTabRedirect({ setTab, setSettingsSubTab }: {
@@ -655,9 +477,9 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
       { id: "staff-emails", label: "BEO Email Recipients" },
       { id: "team", label: "Team" },
     ]},
+    // Billing was a static placeholder card — removed until there's real billing.
     { label: "Account", items: [
       { id: "integrations", label: "Integrations" },
-      { id: "billing", label: "Billing" },
     ]},
   ];
   const items = groups.flatMap(g => g.items);
@@ -1012,12 +834,15 @@ export default function Dashboard() {
     try { await logout(); } catch { /* session already gone — fall through */ }
     window.location.href = "/login";
   };
-  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
+  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"menu"|"settings"|"tasks"|"reports"|"payments";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist"|"follow-ups";
   // "expressbook" is left out on purpose: the feature is unfinished, so an
   // old ?tab=expressbook link falls back to the overview.
-  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","floor-plans","statuses","waitlist","follow-ups"];
+  // "contacts" and "expressbook" are gone: Contacts was an empty, unlinked
+  // list (repeat clients show on their enquiries instead) and Express Book is
+  // unfinished. Old links fall back to the overview.
+  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","menu","settings","tasks","reports","payments"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","group-settings","floor-plans","statuses","waitlist","follow-ups"];
   // "profile" and "email-settings" are mock-ups whose buttons do nothing, so
   // they're no longer reachable by URL (?sub=profile falls back to Venue).
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
@@ -1236,6 +1061,9 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
+  // New-venue setup steps (worked out from real data); the card hides itself
+  // once everything is done.
+  const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
   // Phone month agenda: earlier days of the current month start folded away, so
   // the list opens at today instead of a run of finished events.
   const [showPastAgenda, setShowPastAgenda] = useState(false);
@@ -1638,13 +1466,11 @@ export default function Dashboard() {
       enquiries: "Enquiries",
       pipeline: "Pipeline",
       calendar: "Calendar",
-      contacts: "Contacts",
       menu: "Menu",
       settings: "Settings",
       tasks: "Tasks",
       reports: "Reports",
       payments: "Payments",
-      expressbook: "Express book",
     };
     const label = TAB_TITLES[tab] ?? "Dashboard";
     const venueName = (venueSettings as any)?.name;
@@ -1710,7 +1536,7 @@ export default function Dashboard() {
       : pipelineStages;
     return ordered.filter(s => !visible.length || visible.includes(s.key));
   }, [pipelineStages, kanbanStagePrefs, showClosedStages]);
-  const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
+
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings, isError: monthBookingsError, refetch: refetchMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
@@ -2779,25 +2605,6 @@ export default function Dashboard() {
     onError: () => toast.error('Bulk update failed'),
   });
 
-  // Bar menu state
-  const { data: barMenuItemsList, refetch: refetchBarMenu } = trpc.barMenu.list.useQuery(undefined, { enabled: isAuthenticated });
-  const [showBarItemForm, setShowBarItemForm] = useState(false);
-  const [barItemForm, setBarItemForm] = useState({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" });
-  const [editingBarItemId, setEditingBarItemId] = useState<number|null>(null);
-
-  const addBarItem = trpc.barMenu.add.useMutation({
-    onSuccess: () => { refetchBarMenu(); setShowBarItemForm(false); setBarItemForm({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" }); setEditingBarItemId(null); toast.success("Drink added!"); },
-    onError: () => toast.error("Failed to add drink"),
-  });
-  const updateBarItem = trpc.barMenu.update.useMutation({
-    onSuccess: () => { refetchBarMenu(); setShowBarItemForm(false); setEditingBarItemId(null); toast.success("Drink updated!"); },
-    onError: () => toast.error("Failed to update drink"),
-  });
-  const deleteBarItem = trpc.barMenu.delete.useMutation({
-    onSuccess: () => { refetchBarMenu(); toast.success("Drink deleted"); },
-    onError: () => toast.error("Failed to delete drink"),
-  });
-
   // ── Floor Plans state ──────────────────────────────────────────────────
   const [editingFloorPlan, setEditingFloorPlan] = useState<any>(null); // null = list view, object = editor
   const { data: floorPlansList, refetch: refetchFloorPlans } = trpc.floorPlans.list.useQuery(
@@ -3567,6 +3374,37 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* Setup steps for a new venue — hidden once everything is done. */}
+              {setupStatus && (() => {
+                const steps = [
+                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
+                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
+                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); } },
+                  { key: 'email', label: 'Connect your email', sub: 'Email — so replies and proposals send from you', go: () => { setTab('settings'); setSettingsSubTab('email'); } },
+                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
+                ] as const;
+                const todo = steps.filter(st => !(setupStatus as any)[st.key]);
+                if (todo.length === 0) return null;
+                return (
+                  <section aria-label="Set up your venue" className="dante-card overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+                      <SectionHead title="Set up your venue" meta={`${steps.length - todo.length} of ${steps.length} done`} className="flex-1" />
+                    </div>
+                    <div className="divide-y divide-border">
+                      {todo.map(st => (
+                        <button key={st.key} onClick={st.go} className="w-full text-left px-4 py-3 min-h-[44px] hover:bg-linen flex items-center justify-between gap-3">
+                          <span className="min-w-0">
+                            <span className="block font-dm text-sm font-semibold text-ink">{st.label}</span>
+                            <span className="block font-dm text-xs text-ink/70">{st.sub}</span>
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-ink/50 flex-shrink-0" aria-hidden />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
 
               {/* Phone: today first. On a phone the seven KPI tiles used to fill
                   the screen before anything about tonight. */}
@@ -6170,37 +6008,6 @@ export default function Dashboard() {
               </div>{/* end swipe wrapper */}
             </div>
           )}
-          {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
-          {tab === "contacts" && (
-            <div className="p-6">
-              <div className="mb-6">
-                <h1 className="font-cormorant text-3xl font-semibold text-ink">Contacts</h1>
-                <p className="font-dm text-sm text-sage mt-0.5">All contacts from enquiries and bookings</p>
-              </div>
-              {(contacts ?? []).length === 0 ? (
-                <div className="border border-dashed border-gold/20 p-12 text-center max-w-md">
-                  <Users className="w-12 h-12 text-sage/20 mx-auto mb-4" />
-                  <div className="font-cormorant text-xl text-sage/40 mb-2">No contacts yet</div>
-                  <p className="font-dmtext-ink/60 text-xsm">Contacts are created automatically when leads are submitted.</p>
-                </div>
-              ) : (
-                <div className="dante-card max-w-2xl">
-                  <div className="divide-y divide-border/40">
-                    {(contacts ?? []).map((c: any) => (
-                      <div key={c.id} className="p-4 flex items-center justify-between">
-                        <div>
-                          <div className="font-cormorant font-semibold text-base text-ink">{c.firstName} {c.lastName}</div>
-                          <div className="font-dm text-xs text-ink/60">{c.email}{c.phone ? ` · ${c.phone}` : ""}</div>
-                          {c.company && <div className="font-dm text-xs text-ink/60">{c.company}</div>}
-                        </div>
-                        <div className="font-dm text-xs text-ink/70">{new Date(c.createdAt).toLocaleDateString("en-NZ")}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* ── MENU tab: redirect to Settings > Menu & Catalogue ─────────── */}
           {tab === "menu" && <MenuTabRedirect setTab={setTab} setSettingsSubTab={setSettingsSubTab} />}
@@ -6226,36 +6033,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── EXPRESS BOOK ─────────────────────────────────────────────────── */}
-          {tab === "expressbook" && (
-            <div className="p-6 max-w-2xl">
-              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Express Book</h1>
-              <p className="font-dm text-sm text-sage mb-6">Allow clients to book directly without going through the enquiry process.</p>
-              <div className="dante-card p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <ExternalLink className="w-5 h-5 text-burgundy" />
-                  <h2 className="font-cormorant text-xl font-semibold text-ink">Your Express Book Link</h2>
-                </div>
-                <div className="flex items-center gap-2 mb-4">
-                  <input readOnly value={`${window.location.origin}/book`}
-                    className="flex-1 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-linen" />
-                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/book`); toast.success("Link copied!"); }}
-                    className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark transition-colors flex items-center gap-1">
-                    <Copy className="w-3 h-3" /> COPY
-                  </button>
-                </div>
-                <p className="font-dm text-xs text-sage">Share this link on your website, social media, or in emails to let clients book directly.</p>
-              </div>
-              <div className="mt-4 dante-card p-5">
-                <h2 className="font-bebas text-xs tracking-widest text-sage mb-3">PREVIEW</h2>
-                <Link href="/book">
-                  <button className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2.5 hover:bg-burg-dark transition-colors flex items-center gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5" /> VIEW EXPRESS BOOK FORM
-                  </button>
-                </Link>
-              </div>
-            </div>
-          )}
 
           {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
           {tab === "settings" && (
@@ -8172,7 +7949,7 @@ export default function Dashboard() {
               <div className="max-w-3xl mx-auto">
               <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Taxes & Fees</h1>
               <div className="dante-card p-5">
-                <p className="font-dm text-sm text-ink/70 mb-4">Configure GST/VAT and service fees that apply to your proposals and invoices.</p>
+                <p className="font-dm text-sm text-ink/70 mb-4">Proposals, run sheets and Xero invoices use New Zealand GST at 15%. It's set for you and can't be changed here.</p>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between py-3 border-b border-gold/10">
                     <div>
@@ -8684,185 +8461,7 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* ── EMAIL SETTINGS ──────────────────────────────── */}
-              {settingsSubTab === "email-settings" && (
-              <div className="max-w-3xl mx-auto space-y-6">
-                <h1 className="font-cormorant text-3xl font-semibold text-ink">Email</h1>
-                {/* Automated Reminder Emails */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Automated Reminder Emails</h2>
-                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px]">
-                    <thead><tr className="border-b border-gray-100">
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Send When</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Event Types</th>
-                    </tr></thead>
-                    <tbody>
-                      {[{name:'Final Guest Count Reminder',when:'Off',type:'All Events'},{name:'Post-Event Feedback and Thank You',when:'Off',type:'All Events'},{name:'Remaining Balance Reminder',when:'Off',type:'All Events'}].map((row,i) => (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="p-3 text-sm text-gray-700">{row.name}</td>
-                          <td className="p-3 text-sm text-gray-500">{row.when}</td>
-                          <td className="p-3 text-sm text-gray-500">{row.type}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-                {/* System Emails */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="p-4 border-b border-gray-200"><h2 className="font-semibold text-gray-800">System Emails</h2></div>
-                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
-                  {['Additional Payment','Contact Form Responses','No Action','Pay Deposit','Pay Remaining Balance','Sign Agreement & Pay Deposit'].map((name,i) => (
-                    <div key={i} className="p-3 border-b border-gray-50 text-sm text-gray-700 hover:bg-gray-50">{name}</div>
-                  ))}
-                </div>
-                {/* Template Emails */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Template Emails</h2>
-                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
-                  {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
-                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
-                      <span className="text-sm text-gray-700">{name}</span>
-                      <button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ))}
-                </div>
-                {/* Venue Out of Office */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="p-4 border-b border-gray-200"><h2 className="font-semibold text-gray-800">Venue Out of Office Email</h2></div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px]">
-                    <thead><tr className="border-b border-gray-100">
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Start Date</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">End Date</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Status</th>
-                    </tr></thead>
-                    <tbody>
-                      <tr className="border-b border-gray-50">
-                        <td className="p-3 text-sm text-gray-700">Out of Office</td>
-                        <td className="p-3 text-sm text-gray-500">—</td>
-                        <td className="p-3 text-sm text-gray-500">—</td>
-                        <td className="p-3"><span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Off</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-                {/* Attachment Library */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Attachment Library</h2>
-                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px]">
-                    <thead><tr className="border-b border-gray-100">
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">From Action</th>
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Size</th>
-                    </tr></thead>
-                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
-                  </table>
-                  </div>
-                </div>
-                {/* AI Reply Customisation */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-3">AI Reply Customisation</h2>
-                  <textarea className="w-full border border-gray-200 rounded p-3 text-sm text-gray-700 h-24 resize-none" placeholder="Prompt" />
-                  <p className="text-xs text-gray-400 mt-2">Customise the AI so that messages sent to your venue are tailored to your business. For example, you can tell the AI about your venue, your events program, and any other relevant information.</p>
-                </div>
-                {/* Customer Feedback */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-3">Customer Feedback &amp; Reviews</h2>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="rounded" defaultChecked />
-                    <span className="text-sm text-gray-700">Customer Feedback (Request feedback from customers a day after their event is completed.)</span>
-                  </label>
-                </div>
-              </div>
-              )}
 
-              {/* ── PROFILE ─────────────────────────────────────── */}
-              {settingsSubTab === "profile" && (
-              <div className="max-w-3xl mx-auto space-y-6">
-                <h1 className="font-cormorant text-3xl font-semibold text-ink">Profile</h1>
-                {/* Account Details */}
-                <div className="bg-white border border-gray-200 rounded p-6">
-                  <h2 className="font-semibold text-gray-800 mb-4">Account Details</h2>
-                  <div className="flex flex-col items-center mb-6">
-                    <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:border-burgundy/50 transition-colors">
-                      <Camera className="w-6 h-6 text-gray-400 mb-1" />
-                      <span className="text-xs text-gray-400">Upload Image</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-xs text-gray-500 mb-1">First Name</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="First Name" /></div>
-                    <div><label className="block text-xs text-gray-500 mb-1">Last Name</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Last Name" /></div>
-                  </div>
-                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Email</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Email" /></div>
-                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Phone</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Phone" /><p className="text-xs text-gray-400 mt-1">By providing your phone number, you agree to receive text messages. Message and data rates may apply.</p></div>
-                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Scheduling Link</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Scheduling Link" /></div>
-                </div>
-                {/* Email Signature */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-3">Email Signature</h2>
-                  <button className="border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Edit</button>
-                </div>
-                {/* Connect Google Calendar */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-3">Connect Google Calendar</h2>
-                  <button className="bg-teal-500 hover:bg-teal-600 text-white text-sm px-4 py-2 rounded">Connect Google Calendar</button>
-                  <div className="flex gap-6 mt-3">
-                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" /><span className="text-sm text-gray-700">Show Lead &amp; Qualified</span></label>
-                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" /><span className="text-sm text-gray-700">Show Proposal Sent</span></label>
-                  </div>
-                </div>
-                {/* Notifications */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-3">Notifications</h2>
-                  <div className="mb-3">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Email</p>
-                    <div className="flex flex-wrap gap-4">
-                      {['New Leads','Payments','Weekly Digest','Customer Feedback'].map((n,i) => (
-                        <label key={i} className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" defaultChecked={n==='Customer Feedback'} /><span className="text-sm text-gray-700">{n}</span></label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Text Message</p>
-                    <p className="text-sm text-gray-400">To receive text messages, add a phone number to your account.</p>
-                  </div>
-                </div>
-                {/* Password */}
-                {/* Hidden until built: this panel is fully disabled/greyed and
-                    stamped "coming soon". Gated behind `false` so it doesn't read
-                    as half-finished; re-enable when password change is wired up. */}
-                {false && (
-                <div className="bg-white border border-gray-200 rounded p-4 opacity-60">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-semibold text-gray-800">Password</h2>
-                    <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded">Coming soon</span>
-                  </div>
-                  <div className="max-w-sm space-y-3 pointer-events-none">
-                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="Old Password" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
-                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="New Password" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
-                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="New Password Confirmation" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
-                    <button disabled className="btn-forest text-cream text-sm font-bebas tracking-widest px-6 py-2 opacity-50 cursor-not-allowed">Change Password</button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-3">Password change is being wired up — for now, contact your admin to reset your password.</p>
-                </div>
-                )}
-              </div>
-              )}
 
               {/* ── GROUP CONTACT FORM ──────────────────────────── */}
 
@@ -9218,273 +8817,6 @@ export default function Dashboard() {
                 )}
 
                 {/* ── PACKAGES TAB ── */}
-                {menuSettingsSection === 'packages' && (<div className="max-w-3xl mx-auto space-y-6">
-                <p className="font-dm text-sm text-ink/60 mb-2">Create F&amp;B packages with pricing. These packages can be selected in proposals and runsheets.</p>
-
-                {/* Menu Sections */}
-                <div className="bg-white border border-gray-200 rounded mb-6">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Menu Sections</h2>
-                    <button onClick={() => setShowSectionForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  {showSectionForm && (
-                    <form onSubmit={e => { e.preventDefault(); createMenuSection.mutate(sectionForm); }} className="p-4 border-b border-gray-100 bg-gray-50 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SECTION NAME *</label>
-                          <Input required value={sectionForm.name} onChange={e => setSectionForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Dinner, Catering" className="rounded-none border border-gold/30 text-sm" />
-                        </div>
-                        <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SALES CATEGORY</label>
-                          <select value={sectionForm.salesCategory} onChange={e => setSectionForm(f => ({ ...f, salesCategory: e.target.value }))} className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm bg-white">
-                            <option value="">None</option>
-                            {(salesCategoriesList ?? []).map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 flex-wrap">
-                        {(['hasSalesTax','hasAdminFee','hasGratuity','applyToMin'] as const).map(field => (
-                          <label key={field} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                            <input type="checkbox" checked={sectionForm[field]} onChange={e => setSectionForm(f => ({ ...f, [field]: e.target.checked }))} className="rounded" />
-                            {field === 'hasSalesTax' ? 'Sales Tax' : field === 'hasAdminFee' ? 'Admin Fee' : field === 'hasGratuity' ? 'Gratuity' : 'Apply To Min'}
-                          </label>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="submit" disabled={createMenuSection.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">SAVE SECTION</button>
-                        <button type="button" onClick={() => setShowSectionForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
-                      </div>
-                    </form>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">#</th>
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
-                        <th className="text-center p-3 text-xs font-medium text-gray-500">Sales Tax</th>
-                        <th className="text-center p-3 text-xs font-medium text-gray-500">Admin Fee</th>
-                        <th className="text-center p-3 text-xs font-medium text-gray-500">Gratuity</th>
-                        <th className="text-center p-3 text-xs font-medium text-gray-500">Apply To Min</th>
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">Sales Category</th>
-                        <th className="p-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(menuSectionsList ?? []).length === 0 && (
-                        <tr><td colSpan={8} className="p-6 text-center text-sm text-gray-400">No menu sections yet. Click Add to create one.</td></tr>
-                      )}
-                      {(menuSectionsList ?? []).map((s: any, i: number) => (
-                        <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="p-3 text-sm text-gray-500">{i + 1}</td>
-                          <td className="p-3 text-sm font-medium text-gray-800">{s.name}</td>
-                          <td className="p-3 text-center">{s.hasSalesTax ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.hasAdminFee ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.hasGratuity ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.applyToMin ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-sm text-gray-500">{s.salesCategory || 'None'}</td>
-                          <td className="p-3 text-right"><button aria-label="Delete section" onClick={() => deleteMenuSection.mutate({ id: s.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* Sales Categories */}
-                <div className="bg-white border border-gray-200 rounded mb-6">
-                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Sales Categories</h2>
-                    <button onClick={() => setShowCategoryForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  {showCategoryForm && (
-                    <form onSubmit={e => { e.preventDefault(); createSalesCategory.mutate({ name: categoryForm.name }); }} className="p-4 border-b border-gray-100 bg-gray-50 flex gap-3 items-end">
-                      <div className="flex-1">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CATEGORY NAME *</label>
-                        <Input required value={categoryForm.name} onChange={e => setCategoryForm({ name: e.target.value })} placeholder="e.g. Food, Beverage, Catering" className="rounded-none border border-gold/30 text-sm" />
-                      </div>
-                      <button type="submit" disabled={createSalesCategory.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">SAVE</button>
-                      <button type="button" onClick={() => setShowCategoryForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
-                    </form>
-                  )}
-                  <div className="divide-y divide-gray-50">
-                    {(salesCategoriesList ?? []).length === 0 && (
-                      <p className="p-6 text-center text-sm text-gray-400">No sales categories yet. Click Add to create one.</p>
-                    )}
-                    {(salesCategoriesList ?? []).map((c: any) => (
-                      <div key={c.id} className="flex items-center justify-between flex-wrap gap-y-2 px-4 py-3 hover:bg-gray-50">
-                        <span className="text-sm text-gray-800">{c.name}</span>
-                        <button aria-label="Delete category" onClick={() => deleteSalesCategory.mutate({ id: c.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Menu Items (grouped by package/section) */}
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Menu Items</h2>
-                    <button onClick={() => { setShowMenuForm(true); setEditingPackageId(null); setMenuForm({ name: '', type: 'food', description: '', pricePerHead: '', customPriceLabel: '', chefNotes: '', pdfUrl: '', pdfName: '' }); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
-                  </div>
-                  {/* Section filter tabs */}
-                  <div className="flex border-b border-gray-100 px-4 pt-2 gap-1 overflow-x-auto">
-                    <button onClick={() => setMenuSettingsTab('sections')} className={`text-xs font-bebas tracking-widest px-3 py-1.5 border-b-2 transition-colors ${menuSettingsTab === 'sections' ? 'border-burgundy text-burgundy' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>All</button>
-                    {(menuSectionsList ?? []).map((s: any) => (
-                      <button key={s.id} onClick={() => setMenuSettingsTab('categories')} className="text-xs font-bebas tracking-widest px-3 py-1.5 border-b-2 border-transparent text-gray-500 hover:text-gray-700">{s.name}</button>
-                    ))}
-                  </div>
-                  {showMenuForm && (
-                    <form onSubmit={e => {
-                      e.preventDefault();
-                      // Send empty strings as null when editing so users can clear a field.
-                      // On create we omit them so server defaults to null.
-                      const payload = {
-                        name: menuForm.name,
-                        type: menuForm.type,
-                        description: menuForm.description || undefined,
-                        pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : (editingPackageId ? null : undefined),
-                        customPriceLabel: menuForm.customPriceLabel || (editingPackageId ? null : undefined),
-                        chefNotes: menuForm.chefNotes || (editingPackageId ? null : undefined),
-                        pdfUrl: menuForm.pdfUrl || (editingPackageId ? null : undefined),
-                        pdfName: menuForm.pdfName || (editingPackageId ? null : undefined),
-                      };
-                      if (editingPackageId) {
-                        updateMenuPackage.mutate({ id: editingPackageId, ...payload } as any);
-                      } else {
-                        createMenuPackage.mutate(payload as any);
-                      }
-                    }} className="p-4 border-b border-gray-100 bg-gray-50 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ITEM NAME *</label>
-                          <Input required value={menuForm.name} onChange={e => setMenuForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Catering Package" className="rounded-none border border-gold/30 text-sm" />
-                        </div>
-                        <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE PER HEAD (NZD)</label>
-                          <Input type="number" step="0.01" value={menuForm.pricePerHead} onChange={e => setMenuForm(f => ({ ...f, pricePerHead: e.target.value }))} placeholder="65.00" className="rounded-none border border-gold/30 text-sm" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CUSTOM PRICE LABEL (OPTIONAL)</label>
-                        <Input value={menuForm.customPriceLabel} onChange={e => setMenuForm(f => ({ ...f, customPriceLabel: e.target.value }))} placeholder={'e.g. "$95pp" or "$1500 flat" or "POA" — shown instead of the price-per-head'} className="rounded-none border border-gold/30 text-sm" />
-                        <p className="font-dm text-[11px] text-ink/60 mt-1">When set, this overrides the per-head price wherever this menu is displayed.</p>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SHORT DESCRIPTION</label>
-                        <Input value={menuForm.description} onChange={e => setMenuForm(f => ({ ...f, description: e.target.value }))} placeholder="A choice of 3 courses" className="rounded-none border border-gold/30 text-sm" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHEF / STAFF MENU TEXT (PASTE FULL MENU)</label>
-                        <textarea
-                          value={menuForm.chefNotes}
-                          onChange={e => setMenuForm(f => ({ ...f, chefNotes: e.target.value }))}
-                          rows={8}
-                          placeholder={"Paste the full menu here exactly as you want chefs to see it. Line breaks and spacing are preserved.\n\nENTRÉE\n— Hapuka crudo, finger lime, kohlrabi\n— Heirloom tomato, smoked ricotta, basil\n\nMAIN\n— Wagyu sirloin, bone marrow jus\n— Market fish, brown butter"}
-                          className="w-full rounded-none border border-gold/30 text-sm font-mono p-2 whitespace-pre-wrap"
-                        />
-                        <p className="font-dm text-[11px] text-ink/60 mt-1">Plain text only — paste from anywhere and the layout is kept as-is.</p>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHEF MENU PDF (APPENDED TO BEO)</label>
-                        {menuForm.pdfUrl ? (
-                          <div className="flex items-center gap-2 p-2 bg-white border border-gold/30">
-                            <FileText className="w-4 h-4 text-forest" />
-                            <a href={menuForm.pdfUrl} target="_blank" rel="noopener noreferrer" className="font-dm text-sm text-forest hover:underline truncate flex-1">{menuForm.pdfName || 'View PDF'}</a>
-                            <button type="button" onClick={() => setMenuForm(f => ({ ...f, pdfUrl: '', pdfName: '' }))} className="text-red-400 hover:text-red-600 text-xs font-bebas tracking-widest">REMOVE</button>
-                          </div>
-                        ) : (
-                          <label className={`inline-flex items-center gap-2 font-bebas tracking-widest text-xs px-3 py-2 border cursor-pointer ${menuPdfUploading ? 'bg-forest/40 text-cream border-forest cursor-wait' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>
-                            {menuPdfUploading ? 'UPLOADING…' : 'UPLOAD PDF'}
-                            <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={menuPdfUploading}
-                              onChange={async e => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                if (file.type !== 'application/pdf') { toast.error('PDFs only'); return; }
-                                if (file.size > 10 * 1024 * 1024) { toast.error('Max 10MB'); return; }
-                                setMenuPdfUploading(true);
-                                const tId = toast.loading(`Uploading ${file.name}...`);
-                                try {
-                                  const fd = new FormData();
-                                  fd.append('file', file);
-                                  const res = await fetch('/api/upload-pdf', { method: 'POST', body: fd, credentials: 'include' });
-                                  if (!res.ok) {
-                                    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
-                                    throw new Error(err.error || 'Upload failed');
-                                  }
-                                  const { url, name } = await res.json();
-                                  setMenuForm(f => ({ ...f, pdfUrl: url, pdfName: name }));
-                                  toast.success(`${name} attached`, { id: tId });
-                                } catch (err: any) {
-                                  toast.error(err?.message || 'Upload failed', { id: tId });
-                                } finally {
-                                  setMenuPdfUploading(false);
-                                  e.target.value = '';
-                                }
-                              }}
-                            />
-                          </label>
-                        )}
-                        <p className="font-dm text-[11px] text-ink/60 mt-1">Staff can open or print this PDF straight from the menu — useful for printed table menus.</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="submit" disabled={createMenuPackage.isPending || updateMenuPackage.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{editingPackageId ? 'UPDATE' : 'ADD ITEM'}</button>
-                        <button type="button" onClick={() => { setShowMenuForm(false); setEditingPackageId(null); }} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
-                      </div>
-                    </form>
-                  )}
-                  <div className="divide-y divide-gray-50">
-                    {(menuPackages ?? []).length === 0 && !showMenuForm && (
-                      <p className="p-6 text-center text-sm text-gray-400">No menu items yet. Click Add to create one.</p>
-                    )}
-                    {(menuPackages ?? []).map((pkg: any) => (
-                      <div key={pkg.id} className={`px-4 py-3 hover:bg-gray-50 ${pkg.isActive ? '' : 'bg-stone-50'}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-sm font-medium ${pkg.isActive ? 'text-gray-800' : 'text-stone-500 line-through'}`}>{pkg.name}</span>
-                              {!pkg.isActive && <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 bg-stone-200 text-stone-700">NOT OFFERED</span>}
-                              {pkg.description && <span className="text-xs text-gray-400">{pkg.description}</span>}
-                            </div>
-                            {pkg.pdfUrl && (
-                              <a href={pkg.pdfUrl} target="_blank" rel="noopener noreferrer"
-                                 className="inline-flex items-center gap-1 mt-1 text-xs text-forest hover:underline">
-                                <FileText className="w-3 h-3" /> {pkg.pdfName || 'Open PDF'}
-                              </a>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            {pkg.customPriceLabel
-                              ? <span className="text-sm font-semibold text-gray-700">{pkg.customPriceLabel}</span>
-                              : pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-500 font-normal">per person + GST</span></span>
-                            }
-                            <button
-                              type="button"
-                              aria-pressed={pkg.isActive}
-                              aria-label={`${pkg.name}: ${pkg.isActive ? 'offered — click to stop offering it' : 'not offered — click to offer it again'}`}
-                              title={pkg.isActive ? 'Offered on proposals and the booking page' : 'Not offered; past events still show it'}
-                              onClick={() => togglePackageActive.mutate({ id: pkg.id, isActive: !pkg.isActive })}
-                              disabled={togglePackageActive.isPending}
-                              className={`font-bebas tracking-widest text-[11px] px-2 py-1 border transition-colors ${pkg.isActive ? 'border-forest text-forest hover:bg-emerald-50' : 'border-stone-400 text-stone-600 hover:bg-stone-100'}`}>
-                              {pkg.isActive ? 'OFFERED' : 'NOT OFFERED'}
-                            </button>
-                            <button aria-label="Edit package" onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '', customPriceLabel: pkg.customPriceLabel ?? '', chefNotes: pkg.chefNotes ?? '', pdfUrl: pkg.pdfUrl ?? '', pdfName: pkg.pdfName ?? '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => deleteMenuPackage.mutate({ id: pkg.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        </div>
-                        {pkg.chefNotes && (
-                          <details className="mt-2 group">
-                            <summary className="cursor-pointer text-[11px] font-bebas tracking-widest text-gray-500 hover:text-forest">
-                              ▾ CHEF / STAFF MENU
-                            </summary>
-                            <pre className="mt-1 p-3 bg-cream-card border border-gold/15 font-mono text-xs text-ink/80 whitespace-pre-wrap break-words">{pkg.chefNotes}</pre>
-                          </details>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                </div>)}
-
                 {/* ── CATALOGUE TAB ── */}
                 {menuSettingsSection === 'catalogue' && (<div>
                 <p className="font-dm text-sm text-ink/70 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets. Prices exclude GST. Hide an item to take it off the menu without losing it from past events.</p>
@@ -9988,21 +9320,6 @@ export default function Dashboard() {
               </div>
               )}
 
-              {settingsSubTab === "billing" && (
-              <div className="max-w-3xl mx-auto">
-                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Billing</h1>
-                <div className="bg-white border border-gray-200 rounded p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="font-semibold text-gray-800">Current Plan</h2>
-                      <p className="text-sm text-forest font-semibold mt-1">VenueFlowHQ — Full Access</p>
-                      <p className="text-xs text-gray-400 mt-0.5">All features unlocked</p>
-                    </div>
-                    <span className="bg-forest/10 text-forest text-xs font-bebas tracking-widest px-4 py-2 rounded">ACTIVE</span>
-                  </div>
-                </div>
-              </div>
-              )}
 
               {settingsSubTab === "waitlist" && user?.role === 'admin' && <WaitlistPanel />}
               {settingsSubTab === "follow-ups" && (
