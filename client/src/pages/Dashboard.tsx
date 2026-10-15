@@ -57,6 +57,7 @@ import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabe
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
+import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { formatEventDate } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
@@ -4629,6 +4630,7 @@ export default function Dashboard() {
                       onOpenLead={openLeadById} onMerged={openLeadById}
                       onOwnerChanged={v => setSelectedLead((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
                   </div>
+                  {!isStaff && <LinkedTasks leadId={selectedLead.id} />}
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -9774,6 +9776,7 @@ export default function Dashboard() {
                   onOpenLead={openLeadById} onMerged={openLeadById}
                   onOwnerChanged={v => setSelectedBooking((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
               )}
+              {!isStaff && <LinkedTasks leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId} bookingId={selectedBooking._isLead ? null : selectedBooking.id} className="mb-4" />}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.

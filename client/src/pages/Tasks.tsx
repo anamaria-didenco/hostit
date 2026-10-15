@@ -3,13 +3,15 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { Link } from "wouter";
-import { Plus, CheckCircle2, Circle, Trash2, Calendar, ChevronDown, Flag, Pencil, Inbox, CalendarCheck } from "lucide-react";
+import { Plus, CheckCircle2, Circle, Trash2, Calendar, ChevronDown, Flag, Pencil, Inbox, CalendarCheck, UserRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AssigneeSelect, TaskLinkPicker, useCompleteTask, type TaskLink } from "@/components/taskParts";
 
 const FILTERS = [
   { key: "all", label: "All Active" },
+  { key: "mine", label: "Mine" },
   { key: "overdue", label: "Overdue" },
   { key: "upcoming", label: "Upcoming" },
   { key: "completed", label: "Completed" },
@@ -28,9 +30,18 @@ type TaskFormValues = {
   description: string;
   dueDate: string; // yyyy-mm-dd, "" for none
   priority: "low" | "normal" | "high";
+  assignedTo: string; // a name, "" for unassigned
+  link: TaskLink | null; // the enquiry or event this is about
 };
 
-const EMPTY_FORM: TaskFormValues = { title: "", description: "", dueDate: "", priority: "normal" };
+const EMPTY_FORM: TaskFormValues = { title: "", description: "", dueDate: "", priority: "normal", assignedTo: "", link: null };
+
+// The enquiry or event a listed task is about (an enquiry wins if it has both).
+function linkOf(task: any): TaskLink | null {
+  if (task.linkedLeadId != null && task.leadName) return { kind: "lead", id: task.linkedLeadId, name: task.leadName };
+  if (task.linkedBookingId != null && task.bookingName) return { kind: "booking", id: task.linkedBookingId, name: task.bookingName };
+  return null;
+}
 
 // A stored due date as the date input's yyyy-mm-dd (local day).
 function dueDateInput(ms: number | null | undefined): string {
@@ -102,6 +113,16 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
           </Select>
         </div>
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="task-assignee" className="font-bebas text-xs tracking-widest text-sage block mb-1">ASSIGN TO</label>
+          <AssigneeSelect id="task-assignee" value={form.assignedTo} onChange={v => setForm(f => ({ ...f, assignedTo: v }))} />
+        </div>
+        <div>
+          <span className="font-bebas text-xs tracking-widest text-sage block mb-1">LINK TO (OPTIONAL)</span>
+          <TaskLinkPicker value={form.link} onChange={link => setForm(f => ({ ...f, link }))} />
+        </div>
+      </div>
       <div className="flex gap-2 pt-1">
         <button
           onClick={onCancel}
@@ -147,10 +168,8 @@ export default function Tasks() {
     onError: () => toast.error("Failed to update task"),
   });
 
-  const completeTask = trpc.tasks.complete.useMutation({
-    onSuccess: () => refetch(),
-    onError: () => toast.error("Failed to update task"),
-  });
+  // Completing offers an Undo on the toast.
+  const { complete: completeTask } = useCompleteTask(() => refetch());
 
   const deleteTask = trpc.tasks.delete.useMutation({
     onSuccess: () => { refetch(); toast.success("Task deleted"); },
@@ -163,6 +182,9 @@ export default function Tasks() {
       description: form.description || undefined,
       dueDate: form.dueDate ? new Date(form.dueDate).getTime() : undefined,
       priority: form.priority,
+      assignedTo: form.assignedTo || undefined,
+      linkedLeadId: form.link?.kind === "lead" ? form.link.id : undefined,
+      linkedBookingId: form.link?.kind === "booking" ? form.link.id : undefined,
     });
   };
 
@@ -177,6 +199,13 @@ export default function Tasks() {
       dueDate: form.dueDate === editing.initial.dueDate ? undefined
         : form.dueDate ? new Date(form.dueDate).getTime() : null,
       priority: form.priority,
+      assignedTo: form.assignedTo.trim() || null,
+      // Only re-link when it changed (a task made by a rule can be linked to
+      // both an enquiry and an event, which the picker shows as one).
+      ...(form.link?.kind === editing.initial.link?.kind && form.link?.id === editing.initial.link?.id ? {} : {
+        linkedLeadId: form.link?.kind === "lead" ? form.link.id : null,
+        linkedBookingId: form.link?.kind === "booking" ? form.link.id : null,
+      }),
     });
   };
 
@@ -237,7 +266,7 @@ export default function Tasks() {
             {filter === "completed" ? "No completed tasks yet" : "No tasks here"}
           </p>
           <p className="font-dm text-xs text-sage/60 mt-1">
-            {filter === "overdue" ? "You're all caught up!" : "Create a task to get started"}
+            {filter === "overdue" ? "You're all caught up!" : filter === "mine" ? "Tasks assigned to you show up here" : "Create a task to get started"}
           </p>
         </div>
       ) : (
@@ -269,7 +298,7 @@ export default function Tasks() {
               >
                 <button
                   aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
-                  onClick={() => completeTask.mutate({ id: task.id, completed: !task.completed })}
+                  onClick={() => completeTask(task, !task.completed)}
                   className="mt-0.5 flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-full text-sage hover:text-burgundy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                 >
                   {task.completed
@@ -300,8 +329,13 @@ export default function Tasks() {
                       {new Date(task.dueDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
                     </div>
                   )}
-                  {(task.leadName || task.bookingName) && (
+                  {(task.leadName || task.bookingName || task.assignedTo) && (
                     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1.5">
+                      {task.assignedTo && (
+                        <span className="inline-flex items-center gap-1 font-dm text-xs text-ink/75" title="Assigned to">
+                          <UserRound className="w-3 h-3" aria-hidden="true" /> {task.assignedTo}
+                        </span>
+                      )}
                       {task.leadName && (
                         // A full page load, not <Link>: this page sits inside the
                         // dashboard, which only reads ?tab/?leadId when it loads.
@@ -327,6 +361,8 @@ export default function Tasks() {
                         description: task.description ?? "",
                         dueDate: dueDateInput(task.dueDate),
                         priority: (task.priority ?? "normal") as TaskFormValues["priority"],
+                        assignedTo: task.assignedTo ?? "",
+                        link: linkOf(task),
                       },
                     });
                   }}

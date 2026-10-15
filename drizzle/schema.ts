@@ -978,6 +978,8 @@ export const tasks = pgTable("tasks", {
   linkedBookingId: integer("linked_booking_id"),
   assignedTo: varchar("assigned_to", { length: 255 }),
   priority: varchar("priority", { length: 20 }).default("normal"),
+  // 'follow_up' = made from an enquiry's follow-up date (server/followUpTask.ts).
+  source: varchar("source", { length: 30 }),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });

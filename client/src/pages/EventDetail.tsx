@@ -26,6 +26,7 @@ import { currency } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
 import { DoubleBookedTag } from "@/components/DateHold";
 import LeadProposals from "@/components/LeadProposals";
+import LinkedTasks from "@/components/LinkedTasks";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -553,6 +554,8 @@ export default function EventDetail() {
               )}
             </div>
           </div>
+
+          {!isStaff && <LinkedTasks bookingId={booking.id} leadId={booking.leadId} className="" ruleHeading />}
 
           {/* Generate Documents */}
           <div className="dante-card p-5">

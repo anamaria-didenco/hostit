@@ -98,6 +98,7 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "team.",           // team access links are logins in their own right
   "apiTokens.",      // API tokens act as the owner
   "portal.",         // client portal links show the client's money
+  "tasks.searchLinks", // client names + emails, only needed to create/edit tasks
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];
