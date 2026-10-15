@@ -2569,7 +2569,7 @@ export default function Dashboard() {
   // Team members
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', email: '', role: 'staff' });
-  const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id });
+  const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id && !isStaff });
   const teamById = useMemo(() => new Map<number, { name: string }>((teamList ?? []).map((m: any) => [m.id, m])), [teamList]);
   const createTeamMember = trpc.team.create.useMutation({ onSuccess: () => { refetchTeam(); setTeamForm({ name: '', email: '', role: 'staff' }); setShowTeamForm(false); toast.success('Team member added!'); } });
   const deleteTeamMember = trpc.team.delete.useMutation({ onSuccess: () => { refetchTeam(); toast.success('Team member removed'); } });
@@ -7611,8 +7611,8 @@ export default function Dashboard() {
                 <p className="font-dm text-sm text-ink/70 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
                 <div className="space-y-4">
 
-                  {/* ── Claude / MCP ── */}
-                  <ApiTokensSection />
+                  {/* ── Claude / MCP ── (API tokens act as the owner) */}
+                  {!isTeamMember && <ApiTokensSection />}
 
                   {/* ── NowBookIt ── */}
                   <div className="dante-card overflow-hidden">
@@ -8177,6 +8177,16 @@ export default function Dashboard() {
               {settingsSubTab === "team" && (() => {
                 const ROLES = [{ value: 'staff', label: 'Staff' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
                 const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
+                // Logins and access links are managed by the owner only — the
+                // server refuses these for a team-link session.
+                if (isTeamMember) return (
+                  <div className="max-w-3xl mx-auto">
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Team</h1>
+                    <div className="dante-card p-5">
+                      <p className="font-dm text-sm text-ink/70">Only the venue owner can add or remove logins and team access links.</p>
+                    </div>
+                  </div>
+                );
                 return (
                 <div className="max-w-3xl mx-auto">
                   <AccountLoginsSection />

@@ -25,7 +25,19 @@ export type SessionPayload = {
   isTeamMember?: boolean;
   /** Restricted staff login: events + runsheets only, no money or settings. */
   isStaff?: boolean;
+  /** The extra login (users row) this session was issued to, when it isn't
+   *  the owner's own — re-checked on every request so deleting the login
+   *  ends the session. */
+  loginId?: number;
+  /** The team member a team-access-link session belongs to — re-checked on
+   *  every request (removed or deactivated → signed out) and their role
+   *  decides what they can do. */
+  teamMemberId?: number;
 };
+
+/** Sessions signed before logins and team links were re-checked carry no
+ *  version; they're refused so a removed login can't keep an old cookie. */
+export const SESSION_VERSION = 2;
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 const GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
@@ -198,6 +210,9 @@ class SDKServer {
       name: payload.name,
       ...(payload.isTeamMember ? { isTeamMember: true } : {}),
       ...(payload.isStaff ? { isStaff: true } : {}),
+      ...(payload.loginId ? { loginId: payload.loginId } : {}),
+      ...(payload.teamMemberId ? { teamMemberId: payload.teamMemberId } : {}),
+      sv: SESSION_VERSION,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -206,7 +221,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string; isTeamMember: boolean; isStaff: boolean } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; isTeamMember: boolean; isStaff: boolean; loginId: number | null; teamMemberId: number | null; sv: number | null } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -217,7 +232,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name, isTeamMember, isStaff } = payload as Record<string, unknown>;
+      const { openId, appId, name, isTeamMember, isStaff, loginId, teamMemberId, sv } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -234,6 +249,9 @@ class SDKServer {
         name,
         isTeamMember: isTeamMember === true,
         isStaff: isStaff === true,
+        loginId: typeof loginId === "number" ? loginId : null,
+        teamMemberId: typeof teamMemberId === "number" ? teamMemberId : null,
+        sv: typeof sv === "number" ? sv : null,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -266,6 +284,16 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
+    return (await this.authenticateWithAccess(req)).user;
+  }
+
+  /**
+   * The signed-in user plus what this session may do. Extra logins and
+   * team-access links are looked up on every request, so removing one (or
+   * changing a team member's role) takes effect immediately instead of when
+   * the cookie expires. Throws when the session is no longer valid.
+   */
+  async authenticateWithAccess(req: Request): Promise<{ user: User; access: SessionAccess }> {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
@@ -274,6 +302,16 @@ class SDKServer {
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
     }
+    if (session.sv !== SESSION_VERSION) {
+      throw ForbiddenError("Session from before logins were re-checked — sign in again");
+    }
+    let access: SessionAccess = {
+      isStaff: session.isStaff,
+      isTeamMember: session.isTeamMember,
+      loginId: session.loginId,
+      teamMemberId: session.teamMemberId,
+      teamRole: null,
+    };
 
     const sessionUserId = session.openId;
     const signedInAt = new Date();
@@ -289,7 +327,7 @@ class SDKServer {
     // a database connection. This lets the password-only owner flow run on
     // localhost dev without DATABASE_URL configured.
     if (!user && sessionUserId.startsWith("local-")) {
-      return {
+      return { user: {
         id: 0,
         openId: sessionUserId,
         name: session.name ?? "Admin",
@@ -301,7 +339,7 @@ class SDKServer {
         lastSignedIn: signedInAt,
         createdAt: signedInAt,
         updatedAt: signedInAt,
-      } as unknown as User;
+      } as unknown as User, access };
     }
 
     // If user not in DB, try to sync from OAuth (non-local accounts only)
@@ -326,6 +364,8 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
+    access = await this.checkSessionAccess(user, access);
+
     // Best-effort last-seen update — don't fail auth if it errors.
     try {
       await db.upsertUser({
@@ -336,8 +376,43 @@ class SDKServer {
       console.warn("[Auth] lastSignedIn update failed:", err);
     }
 
-    return user;
+    return { user, access };
+  }
+
+  /** Re-check an extra login or team link against the database. */
+  private async checkSessionAccess(owner: User, access: SessionAccess): Promise<SessionAccess> {
+    // Restricted sessions signed without the id they belong to can't be
+    // checked, so they're not accepted.
+    if (access.isTeamMember && !access.teamMemberId) throw ForbiddenError("Team link session — open your link again");
+    if (access.isStaff && !access.loginId && !access.teamMemberId) throw ForbiddenError("Staff session — sign in again");
+    if (!access.loginId && !access.teamMemberId) return access;
+    const conn = await db.getDb();
+    if (!conn) throw ForbiddenError("Can't check this login right now");
+    const { users, teamMembers } = await import("../../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    if (access.loginId) {
+      const [login] = await conn.select({ id: users.id, workspaceOwnerId: users.workspaceOwnerId, isStaff: users.isStaff, passwordHash: users.passwordHash })
+        .from(users).where(eq(users.id, access.loginId)).limit(1);
+      if (!login || login.workspaceOwnerId !== owner.id || !login.passwordHash) throw ForbiddenError("This login has been removed");
+      // The login's current setting decides, not what it was when signed in.
+      return { ...access, isStaff: login.isStaff === true };
+    }
+    const [member] = await conn.select({ id: teamMembers.id, ownerId: teamMembers.ownerId, isActive: teamMembers.isActive, role: teamMembers.role })
+      .from(teamMembers).where(eq(teamMembers.id, access.teamMemberId!)).limit(1);
+    if (!member || !member.isActive || member.ownerId !== owner.id) throw ForbiddenError("This team link has been removed");
+    const teamRole = (member.role ?? "staff").toLowerCase();
+    // A team member set up as Staff gets the staff login's restrictions.
+    return { ...access, isTeamMember: true, isStaff: teamRole === "staff", teamRole };
   }
 }
+
+export type SessionAccess = {
+  isStaff: boolean;
+  isTeamMember: boolean;
+  loginId: number | null;
+  teamMemberId: number | null;
+  /** staff | manager | admin, for a team-link session. */
+  teamRole: string | null;
+};
 
 export const sdk = new SDKServer();

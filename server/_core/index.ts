@@ -291,14 +291,23 @@ async function startServer() {
         // A staff login runs inside the owner's workspace but is flagged so the
         // server can restrict it — the flag rides in the signed session, not in
         // anything the browser can change.
+        // An extra login carries its own id so it can be checked (and ended
+        // when removed) on every request.
+        const loginId = credUser.workspaceOwnerId ? credUser.id : undefined;
         const token = credUser.isStaff
           ? await sdk.signSession({
               openId: sessionUser.openId,
               appId: ENV.appId,
               name: credUser.name ?? "Staff",
               isStaff: true,
+              loginId,
             })
-          : await sdk.createSessionToken(sessionUser.openId, { name: sessionUser.name ?? "Admin" });
+          : await sdk.signSession({
+              openId: sessionUser.openId,
+              appId: ENV.appId,
+              name: (loginId ? credUser.name : sessionUser.name) ?? "Admin",
+              loginId,
+            });
         const cookieOptions = getSessionCookieOptions(req);
         res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
         res.json({ success: true });
@@ -367,7 +376,7 @@ async function startServer() {
       if (!owner) { res.status(404).send('<h2>Account not found</h2>'); return; }
       await db.update(teamMembers).set({ lastAccessedAt: Date.now() }).where(eq(teamMembers.id, member.id));
       const sessionToken = await sdk.signSession(
-        { openId: owner.openId, appId: (await import('./env')).ENV.appId, name: member.name, isTeamMember: true },
+        { openId: owner.openId, appId: (await import('./env')).ENV.appId, name: member.name, isTeamMember: true, teamMemberId: member.id },
         { expiresInMs: 30 * 24 * 60 * 60 * 1000 }
       );
       const cookieOptions = getSessionCookieOptions(req);

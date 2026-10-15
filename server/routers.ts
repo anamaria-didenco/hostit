@@ -161,7 +161,7 @@ export const appRouter = router({
         // sync with the sibling public endpoints (previously it omitted
         // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
         // info leak).
-        const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember;
+        const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember && !ctx.isStaff;
         if (!isRealOwner) {
           const safe: any = { ...vs };
           for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
@@ -246,7 +246,13 @@ export const appRouter = router({
         // Enquiry form: availability on the date picker + walkthrough booking.
         showAvailabilityOnForm: z.coerce.number().int().min(0).max(1).optional(),
         walkthroughEnabled: z.coerce.number().int().min(0).max(1).optional(),
-        walkthroughDays: z.string().regex(/^([0-6](,[0-6])*)?$/).optional(),
+        // Stored as "2,3,4". The venue details form holds the days as a list
+        // and sends the whole form, so take either shape — a list made every
+        // "Save venue details" fail.
+        walkthroughDays: z.union([
+          z.string().regex(/^([0-6](,[0-6])*)?$/),
+          z.array(z.number().int().min(0).max(6)),
+        ]).transform(v => Array.isArray(v) ? Array.from(new Set(v)).sort().join(',') : v).optional(),
         walkthroughStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
         walkthroughEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
         walkthroughSlotMinutes: z.coerce.number().int().min(10).max(240).optional(),
@@ -313,7 +319,17 @@ export const appRouter = router({
         }
         return saved;
       }),
-    getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
+    getOwn: protectedProcedure.query(async ({ ctx }) => {
+      const vs = await getVenueSettings(ctx.user.id);
+      // A staff login runs under the owner's id but must never be handed the
+      // mail, inbox or booking-system credentials. Removed (not nulled) so
+      // nothing the staff screens read changes shape.
+      if (vs && ctx.isStaff) {
+        const safe: any = { ...vs };
+        for (const k of ["smtpPass", "imapPass", "nbiApiKey", "nbiWebhookSecret"]) delete safe[k];
+        return safe as typeof vs;
+      }
+      return vs;
     }),
 
     upsert: protectedProcedure
@@ -2099,15 +2115,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         let emailedTo: string | null = null;
         if (proposal) {
           const priorStatus = (await getLeadById(proposal.leadId, ctx.user.id))?.status;
-          await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
+          // A revised proposal for a booked or held event (a menu change, say)
+          // mustn't send the enquiry back to "Proposal sent": its event stayed
+          // confirmed while the enquiry looked unbooked, and leaving Tentative
+          // would also release the date hold.
+          const keepsStatus = ['booked', 'confirmed', 'finished', 'tentative'].includes(priorStatus ?? '');
+          if (!keepsStatus) await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
             leadId: proposal.leadId,
             ownerId: ctx.user.id,
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
-          const { onLeadStatusChanged } = await import('./automatedTasks');
-          await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
+          if (!keepsStatus) {
+            const { onLeadStatusChanged } = await import('./automatedTasks');
+            await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
+          }
           // Set a follow-up a few days out so a quoted lead doesn't go cold —
           // sending a quote previously set no reminder at all. Only set one if
           // the lead doesn't already have a (future) follow-up pending.
@@ -2120,7 +2143,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               const [lead] = await db.select({ followUpDate: leads.followUpDate })
                 .from(leads).where(eq(leads.id, proposal.leadId)).limit(1);
               const hasFutureFollowUp = lead?.followUpDate && new Date(lead.followUpDate).getTime() > Date.now();
-              if (!hasFutureFollowUp) {
+              if (!keepsStatus && !hasFutureFollowUp) {
                 const followUpDate = new Date();
                 followUpDate.setDate(followUpDate.getDate() + 3);
                 await db.update(leads).set({ followUpDate }).where(eq(leads.id, proposal.leadId));
@@ -3297,7 +3320,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
         // but always allow admins — including additional account logins
         // created via Settings → Team, which resolve to the workspace owner.
-        if (ctx.isTeamMember && ctx.user?.role !== 'admin') {
+        if (ctx.isTeamMember && ctx.teamRole !== 'admin') {
           throw new Error('Team members cannot send emails. Contact your venue manager.');
         }
         const { getDb } = await import('./db');
@@ -4368,7 +4391,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     // venue's. Without the role check every venue account could read every
     // signup's name and email.
     list: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Not available for this account' });
+      if (ctx.user.role !== 'admin' || ctx.isTeamMember || ctx.isStaff || ctx.loginId) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not available for this account' });
       const { getDb } = await import('./db');
       const { waitlist } = await import('../drizzle/schema');
       const db = await getDb();
@@ -8138,14 +8161,15 @@ Return ONLY valid JSON.`;
         let paymentsData: { id: number; amount: string; type: string; method: string; paidAt: Date; notes: string | null }[] = [];
         if (runsheet.bookingId) {
           const { payments } = await import('../drizzle/schema');
-          paymentsData = await db.select({
+          // What's been received, for collecting the balance on the night.
+          // Payment notes are left out — the link needs no login.
+          paymentsData = (await db.select({
             id: payments.id,
             amount: payments.amount,
             type: payments.type,
             method: payments.method,
             paidAt: payments.paidAt,
-            notes: payments.notes,
-          }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt);
+          }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt)).map(p => ({ ...p, notes: null }));
         }
         // Sanitise rich-text fields before they reach the PUBLIC staff portal,
         // which renders them via dangerouslySetInnerHTML. An operator (or a
@@ -8153,11 +8177,19 @@ Return ONLY valid JSON.`;
         // <img onerror=…> etc. and run script on the app origin for anyone
         // opening the shared link.
         const { cleanRichHtml } = await import('./sanitizeHtml');
+        // Only what the staff page shows. The link needs no login, so the
+        // runsheet's cost lines, client email, linked proposal and internal
+        // ids stay out of it.
+        const r = runsheet;
         const safeRunsheet = {
-          ...runsheet,
-          notes: cleanRichHtml((runsheet as any).notes),
-          venueSetup: cleanRichHtml((runsheet as any).venueSetup),
-          footerText: cleanRichHtml((runsheet as any).footerText),
+          id: r.id, bookingId: r.bookingId, title: r.title, updatedAt: r.updatedAt,
+          eventDate: r.eventDate, eventStartTime: r.eventStartTime, eventEndTime: r.eventEndTime,
+          eventType: r.eventType, guestCount: r.guestCount, venueName: r.venueName, spaceName: r.spaceName,
+          venueArea: r.venueArea, setupSummary: r.setupSummary, dietaries: r.dietaries, kitchenNotes: r.kitchenNotes,
+          drinksData: r.drinksData, fnbColumns: r.fnbColumns, attachments: r.attachments,
+          notes: cleanRichHtml(r.notes),
+          venueSetup: cleanRichHtml(r.venueSetup),
+          footerText: cleanRichHtml(r.footerText),
         };
         // Billing instructions for the Now & Next phone view: the same
         // "How this event is billed" steps the BEO prints, plus how to pay.
@@ -8197,7 +8229,7 @@ Return ONLY valid JSON.`;
             };
           }
         }
-        return { link, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
+        return { link: { id: link.id, label: link.label }, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
       }),
 
     // Protected: create a new staff portal link
@@ -9118,12 +9150,18 @@ Return ONLY valid JSON.`;
       const { eq, desc } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(teamMembers).where(eq(teamMembers.ownerId, ctx.user.id)).orderBy(desc(teamMembers.createdAt));
+      const rows = await db.select().from(teamMembers).where(eq(teamMembers.ownerId, ctx.user.id)).orderBy(desc(teamMembers.createdAt));
+      // Each access link IS a login: only the owner (and full-access logins)
+      // may see them. A staff login or team-link session could otherwise
+      // copy one and open a session with more access than their own.
+      const { isAccountManager } = await import('./_core/trpc');
+      return isAccountManager(ctx) ? rows : rows.map(r => ({ ...r, accessToken: '' }));
     }),
 
     create: protectedProcedure
       .input(z.object({ name: z.string().min(1), email: z.string().optional(), role: z.string().default('staff') }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { teamMembers } = await import('../drizzle/schema');
         const crypto = await import('crypto');
@@ -9145,6 +9183,7 @@ Return ONLY valid JSON.`;
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { teamMembers } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
@@ -9177,6 +9216,7 @@ Return ONLY valid JSON.`;
   }),
   apiTokens: router({
     list: protectedProcedure.query(async ({ ctx }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { apiTokens } = await import('../drizzle/schema');
       const { eq, desc } = await import('drizzle-orm');
@@ -9196,6 +9236,7 @@ Return ONLY valid JSON.`;
     create: protectedProcedure
       .input(z.object({ name: z.string().min(1).max(120) }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { apiTokens } = await import('../drizzle/schema');
         const cryptoMod = await import('crypto');
@@ -9218,6 +9259,7 @@ Return ONLY valid JSON.`;
     revoke: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         const { getDb } = await import('./db');
         const { apiTokens } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
@@ -9360,6 +9402,7 @@ Return ONLY valid JSON.`;
   accountLogins: router({
     list: protectedProcedure
       .query(async ({ ctx }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const { getDb } = await import('./db');
         const { users: usersTable } = await import('../drizzle/schema');
@@ -9385,6 +9428,7 @@ Return ONLY valid JSON.`;
         isStaff: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const bcrypt = await import('bcryptjs');
         const { getDb } = await import('./db');
@@ -9417,6 +9461,7 @@ Return ONLY valid JSON.`;
     setPassword: protectedProcedure
       .input(z.object({ id: z.number(), password: z.string().min(8).max(200) }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const bcrypt = await import('bcryptjs');
         const { getDb } = await import('./db');
@@ -9436,6 +9481,7 @@ Return ONLY valid JSON.`;
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
         const { getDb } = await import('./db');
         const { users: usersTable } = await import('../drizzle/schema');

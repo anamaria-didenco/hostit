@@ -750,7 +750,9 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
   });
   // The client signs in their portal link for this event. Sending makes sure
   // that link exists (with signing on) and emails it when SMTP is set up.
-  const { data: portalLinks } = trpc.portal.list.useQuery({ bookingId });
+  // Client portal links aren't readable by a staff login.
+  const { isStaff: portalStaff } = useAuth();
+  const { data: portalLinks } = trpc.portal.list.useQuery({ bookingId }, { enabled: !portalStaff });
   const signingLink = (() => {
     const t = (portalLinks ?? []).find((t: any) => {
       try { return JSON.parse(t.permissions ?? '{}').signContract && (!t.expiresAt || Number(t.expiresAt) > Date.now()); } catch { return false; }
@@ -1185,7 +1187,9 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
 
 // ─── Client Portal Tab ────────────────────────────────────────────────────────
 function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) {
-  const { data: tokens, isLoading } = trpc.portal.list.useQuery({ bookingId });
+  // Client portal links aren't readable by a staff login.
+  const { isStaff: portalStaff } = useAuth();
+  const { data: tokens, isLoading } = trpc.portal.list.useQuery({ bookingId }, { enabled: !portalStaff });
   const utils = trpc.useUtils();
   const [showForm, setShowForm] = useState(false);
   const [perms, setPerms] = useState({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false });
