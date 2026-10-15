@@ -146,6 +146,8 @@ export async function handleNbiWebhook(req: Request, res: Response) {
         .set({ status: "cancelled", updatedAt: new Date() })
         .where(eq(bookings.id, existingByNbiId.id));
       console.log(`[NBI Webhook] Cancelled booking #${existingByNbiId.id}`);
+      // A cancelled event no longer double-books anything.
+      await (await import("./doubleBookings")).reconcileClashFlags(venue.ownerId);
     }
     res.json({ ok: true, action: "cancelled" });
     return;

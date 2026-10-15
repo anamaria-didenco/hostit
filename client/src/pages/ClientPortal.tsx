@@ -87,6 +87,13 @@ export default function ClientPortal() {
   const guestCount = booking?.guestCount ?? lead?.guestCount;
   const venueName = venue?.name ?? "Your event";
 
+  const hasTotal = Number(paymentSummary?.total ?? 0) > 0;
+  // "Partially paid" means part of a known total — without one, money in is
+  // just money received.
+  const statusInfo = paymentSummary && !hasTotal && paymentSummary.status === "partial"
+    ? { label: "Payment Received", cls: "bg-blue-100 text-blue-700" }
+    : (PAYMENT_STATUS[paymentSummary?.status ?? "unpaid"] ?? PAYMENT_STATUS.unpaid);
+
   const lineItems = proposal?.lineItems ? (() => { try { return JSON.parse(proposal.lineItems); } catch { return []; } })() : [];
 
   return (
@@ -220,25 +227,39 @@ export default function ClientPortal() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-bold text-gray-800 text-lg">Payments &amp; Balance</h3>
-              <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wide ${(PAYMENT_STATUS[paymentSummary.status] ?? PAYMENT_STATUS.unpaid).cls}`}>
-                {(PAYMENT_STATUS[paymentSummary.status] ?? PAYMENT_STATUS.unpaid).label}
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wide ${statusInfo.cls}`}>
+                {statusInfo.label}
               </span>
             </div>
 
             {/* Summary tiles */}
             <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* No total yet (and no accepted proposal to take it from): say
+                  so, rather than "$0.00" which reads as nothing to pay. */}
               <div className="rounded-lg bg-gray-50 px-4 py-3 text-center">
                 <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Event Total</div>
-                <div className="font-bold text-gray-900 text-lg">{nzd(paymentSummary.total)}</div>
+                {hasTotal
+                  ? <div className="font-bold text-gray-900 text-lg">{nzd(paymentSummary.total)}</div>
+                  : <div className="text-gray-500 text-sm italic py-1">To be confirmed</div>}
+                {hasTotal && paymentSummary.totalSource === "proposal" && (
+                  <div className="text-gray-500 text-xs mt-0.5">From your accepted proposal</div>
+                )}
               </div>
               <div className="rounded-lg bg-green-50 px-4 py-3 text-center">
                 <div className="text-green-700 text-xs uppercase tracking-wide mb-1">Paid to Date</div>
                 <div className="font-bold text-green-700 text-lg">{nzd(paymentSummary.totalPaid)}</div>
               </div>
-              <div className={`rounded-lg px-4 py-3 text-center ${paymentSummary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
-                <div className={`text-xs uppercase tracking-wide mb-1 ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>Outstanding</div>
-                <div className={`font-bold text-lg ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>{nzd(paymentSummary.outstanding)}</div>
-              </div>
+              {hasTotal ? (
+                <div className={`rounded-lg px-4 py-3 text-center ${paymentSummary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                  <div className={`text-xs uppercase tracking-wide mb-1 ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>Outstanding</div>
+                  <div className={`font-bold text-lg ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>{nzd(paymentSummary.outstanding)}</div>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-gray-50 px-4 py-3 text-center">
+                  <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Outstanding</div>
+                  <div className="text-gray-500 text-sm italic py-1">To be confirmed</div>
+                </div>
+              )}
             </div>
 
             {/* Progress */}
