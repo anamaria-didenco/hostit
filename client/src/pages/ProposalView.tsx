@@ -218,51 +218,62 @@ export default function ProposalView() {
     <div className="vf-proposal min-h-screen font-inter" style={{ backgroundColor: T.bg }}>
       <style>{`.vf-proposal .font-playfair{font-family:${brand.serif}} .vf-proposal, .vf-proposal .font-inter{font-family:${brand.sans}}`}</style>
 
-      {/* ── Venue Cover Photo Banner ─────────────────────────────────── */}
-      {venuePhoto && (
-        <div
-          className="w-full h-56 md:h-72 bg-cover bg-center relative"
-          style={{ backgroundImage: `url(${venuePhoto})` }}
-        >
-          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 40%, ${T.header}cc)` }} />
-        </div>
-      )}
-
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <header style={{ backgroundColor: T.header, color: T.headerText }}>
-        <div className="max-w-3xl mx-auto px-6 py-8">
-          <div className="flex items-center gap-4 mb-3">
+      {/* ── Hero: venue photo (or the venue's colour), logo, and the title ── */}
+      <header className="relative overflow-hidden" style={{ backgroundColor: T.header, color: T.headerText }}>
+        {venuePhoto && (
+          <>
+            <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${venuePhoto})` }} aria-hidden />
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.78) 100%)' }} aria-hidden />
+          </>
+        )}
+        <div className={`relative max-w-3xl mx-auto px-6 flex flex-col ${venuePhoto ? 'min-h-[340px] md:min-h-[420px] pt-8 pb-24 md:pb-28' : 'pt-10 pb-24 md:pb-28'}`}
+          style={{ color: venuePhoto ? '#fff' : T.headerText }}>
+          <div className="flex items-center justify-between gap-4">
             {venueLogo ? (
-              <img
-                src={venueLogo}
-                alt={venue?.name ?? "Venue"}
-                className="h-12 w-auto object-contain"
-                style={{ filter: 'brightness(0) invert(1)' }}
-              />
+              <img src={venueLogo} alt={venue?.name ?? "Venue"} className="h-12 md:h-14 w-auto max-w-[60%] object-contain"
+                style={{ filter: (venuePhoto || brand.onAccent === "#fff") ? 'brightness(0) invert(1)' : 'none' }} />
             ) : (
-              <span className="font-playfair text-2xl font-bold" style={{ color: T.headerText }}>{venue?.name ?? ""}</span>
+              <span className="font-playfair text-xl md:text-2xl font-bold">{venue?.name ?? ""}</span>
+            )}
+            {venue?.city && (
+              <span className="hidden sm:flex items-center gap-1.5 text-xs opacity-85"><MapPin className="w-3 h-3" aria-hidden />{venue.city}</span>
             )}
           </div>
-          <div className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.headerMuted }}>EVENT PROPOSAL</div>
-          {venue && (
-            <div className="pt-4" style={{ borderTop: `1px solid ${T.headerText}18` }}>
-              {venueLogo && <div className="font-playfair text-2xl font-bold" style={{ color: T.headerText }}>{venue.name}</div>}
-              {venue.tagline && <div className="font-inter text-sm italic mt-0.5" style={{ color: T.headerMuted }}>{venue.tagline}</div>}
-              {venue.city && (
-                <div className="flex items-center gap-1.5 mt-2 text-xs" style={{ color: T.headerMuted }}>
-                  <MapPin className="w-3 h-3" />
-                  {venue.address ? `${venue.address}, ${venue.city}` : venue.city}
-                </div>
-              )}
-            </div>
-          )}
+          <div className={venuePhoto ? 'mt-auto pt-16' : 'pt-10'}>
+            <div className="font-bebas text-xs tracking-[0.25em] mb-3" style={{ color: 'inherit', opacity: 0.85 }}>EVENT PROPOSAL</div>
+            <h1 className="font-playfair font-bold leading-[1.08] text-[2rem] md:text-5xl m-0" style={{ color: 'inherit', textWrap: 'balance' }}>{proposal.title}</h1>
+            {venue?.tagline && !venuePhoto && <div className="font-inter text-sm italic mt-3 opacity-85">{venue.tagline}</div>}
+          </div>
         </div>
       </header>
 
-      {/* Stripe accent band */}
-      <div className="h-3 stripe-pattern" />
+      <main className="max-w-3xl mx-auto px-6 pt-0 pb-10">
+        {/* Key facts */}
+        {(() => {
+          const facts = [
+            { icon: <Calendar className="w-4 h-4" />, label: "Date", value: proposal.eventDate ? new Date(proposal.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : null },
+            { icon: <Users className="w-4 h-4" />, label: "Guests", value: proposal.guestCount ? String(proposal.guestCount) : null },
+            { icon: <MapPin className="w-4 h-4" />, label: "Space", value: proposal.spaceName },
+            { icon: <Clock className="w-4 h-4" />, label: isExpired ? "Expired" : "Valid until", value: proposal.expiresAt ? new Date(proposal.expiresAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : null },
+          ].filter(f => f.value);
+          if (facts.length === 0) return null;
+          return (
+            <dl className="-mt-14 md:-mt-16 relative mb-8 flex flex-wrap overflow-hidden rounded-sm shadow-sm m-0"
+              style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
+              {facts.map((f, i) => (
+                <div key={f.label} className="px-5 py-4 min-w-0 basis-1/2 md:basis-0 md:flex-1 grow"
+                  style={{ borderLeft: i === 0 ? 'none' : `1px solid ${T.cardBorder}`, borderTop: i >= 2 ? `1px solid ${T.cardBorder}` : 'none' }}>
+                  <dt className="flex items-center gap-1.5 font-bebas text-xs tracking-widest" style={{ color: T.stone }}>
+                    <span style={{ color: T.accent }}>{f.icon}</span>{f.label}
+                  </dt>
+                  <dd className="m-0 mt-1 font-playfair font-semibold text-base break-words" style={{ color: T.ink }}>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          );
+        })()}
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
+
 
         {/* Status banners */}
         {alreadyResponded === "accepted" && (
@@ -294,18 +305,6 @@ export default function ProposalView() {
           </div>
         )}
 
-        {/* Proposal title */}
-        <div className="mb-8">
-          <div className="font-bebas text-xs tracking-widest mb-1" style={{ color: T.stone }}>PROPOSAL</div>
-          <h1 className="font-playfair text-3xl font-bold leading-tight" style={{ color: T.ink }}>{proposal.title}</h1>
-          <div className="font-inter text-xs mt-2" style={{ color: T.stone }}>
-            Prepared on {new Date(proposal.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
-            {proposal.expiresAt && !isExpired && (
-              <span className="ml-3" style={{ color: T.accent }}>· Expires {new Date(proposal.expiresAt).toLocaleDateString("en-NZ")}</span>
-            )}
-          </div>
-        </div>
-
         {/* Intro message */}
         {proposal.introMessage && (
           <div className="p-6 mb-6 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
@@ -314,29 +313,13 @@ export default function ProposalView() {
           </div>
         )}
 
-        {/* Event Details */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[
-            { icon: <Calendar className="w-4 h-4" />, label: "EVENT DATE", value: proposal.eventDate ? new Date(proposal.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : null },
-            { icon: <Users className="w-4 h-4" />, label: "GUESTS", value: proposal.guestCount ? `${proposal.guestCount} guests` : null },
-            { icon: <MapPin className="w-4 h-4" />, label: "SPACE", value: proposal.spaceName },
-            { icon: <Clock className="w-4 h-4" />, label: "EXPIRES", value: proposal.expiresAt ? new Date(proposal.expiresAt).toLocaleDateString("en-NZ") : null },
-          ].filter(d => d.value).map(detail => (
-            <div key={detail.label} className="p-4 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
-              <div className="flex items-center gap-1.5 mb-1.5" style={{ color: T.header }}>{detail.icon}</div>
-              <div className="font-bebas text-xs tracking-widest" style={{ color: T.stone }}>{detail.label}</div>
-              <div className="font-playfair font-semibold text-sm mt-0.5" style={{ color: T.ink }}>{detail.value}</div>
-            </div>
-          ))}
-        </div>
-
         {/* Photos */}
         {photos.length > 0 && (
-          <div className={`mb-6 grid gap-2 ${photos.length - 1 >= 3 ? 'grid-cols-2 sm:grid-cols-3' : photos.length - 1 === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className="mb-6 flex gap-2 overflow-x-auto snap-x" role="list" aria-label="Photos">
             {photos.map((ph, i) => (
-              <figure key={ph.id} className={`m-0 ${i === 0 ? 'col-span-full' : ''}`}>
+              <figure key={ph.id} role="listitem" className="m-0 snap-start" style={{ flex: photos.length <= 4 ? '1 1 0' : '0 0 220px', minWidth: photos.length <= 4 ? '140px' : undefined }}>
                 <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} loading="lazy"
-                  className={`w-full object-cover rounded-sm ${i === 0 ? 'aspect-[16/9]' : 'aspect-[4/3]'}`} style={{ border: `1px solid ${T.cardBorder}` }} />
+                  className="w-full aspect-[4/3] object-cover rounded-sm" style={{ border: `1px solid ${T.cardBorder}` }} />
                 {ph.caption && <figcaption className="font-inter text-xs mt-1" style={{ color: T.stone }}>{ph.caption}</figcaption>}
               </figure>
             ))}

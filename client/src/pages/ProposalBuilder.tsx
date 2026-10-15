@@ -1804,11 +1804,11 @@ function ProposalPhotosCard({ proposalId, token, locked, onChanged }: { proposal
         )}
       </div>
       {photos.length === 0 ? (
-        <p className="font-dm text-xs text-muted-foreground m-0">Show the space, a set table or the food. The first photo is shown largest. Up to 12.</p>
+        <p className="font-dm text-xs text-muted-foreground m-0">Show the space, a set table or the food. They appear in one row, in this order. Up to 12.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="flex gap-3 overflow-x-auto pb-2">
           {photos.map((ph, i) => (
-            <div key={ph.id} className="min-w-0">
+            <div key={ph.id} className="w-44 shrink-0">
               <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} className="w-full aspect-[4/3] object-cover border border-border" />
               {!locked && (
                 <>
