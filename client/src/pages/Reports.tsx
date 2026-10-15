@@ -220,27 +220,9 @@ export default function Reports() {
             );
           })()}
 
-          {/* Two charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Revenue by month */}
-            <div className="dante-card p-5">
-              <h2 className="font-cormorant text-lg font-semibold text-ink">Revenue by Month</h2>
-              <p className="font-dm text-xs text-sage mt-0.5 mb-4">{currentYear}, by event date. Cancelled events left out.</p>
-              {revenueData && revenueData.some((r: any) => r.revenue > 0) ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={revenueData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6a6256" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#6a6256" }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
-                    <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-sage font-dm text-sm">No booking totals for {currentYear} yet</div>
-              )}
-            </div>
-
+          {/* Revenue by month lives on the Revenue tab — it's for the year,
+              not this period, so it doesn't belong beside these figures. */}
+          <div className="grid grid-cols-1 gap-6">
             {/* Enquiry source */}
             <div className="dante-card p-5">
               <h2 className="font-cormorant text-lg font-semibold text-ink">Enquiry Sources</h2>
@@ -421,7 +403,7 @@ export default function Reports() {
           <div className="dante-card p-5">
             <h2 className="font-cormorant text-xl font-semibold text-ink">Monthly Revenue</h2>
             <p className="font-dm text-xs text-sage mt-0.5 mb-4">{currentYear}, by event date. Cancelled events left out.</p>
-            {revenueData && revenueData.length > 0 ? (
+            {revenueData && revenueData.some((r: any) => r.revenue > 0) ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={revenueData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
@@ -432,7 +414,7 @@ export default function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-64 flex items-center justify-center text-sage font-dm text-sm">No revenue data yet</div>
+              <div className="h-64 flex items-center justify-center text-sage font-dm text-sm">No booking totals for {currentYear} yet</div>
             )}
           </div>
           <GoogleAdsBookingExport />

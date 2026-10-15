@@ -16,6 +16,7 @@ import { buildVenueMailer, fmtNzd } from "./paymentsEmail";
 import { escapeHtml } from "./sanitizeHtml";
 import { publicBaseUrl } from "./publicUrl";
 import { dayWithTimeFrom } from "@shared/eventDate";
+import { changedElsewhere } from "./runsheetVersion";
 
 const NZ_TZ = "Pacific/Auckland";
 
@@ -316,7 +317,7 @@ export async function respondToProposal(input: {
       }).where(and(eq(bookings.id, existing.id), eq(bookings.ownerId, proposal.ownerId)));
       // Keep its runsheets on the same day as the booking.
       if (eventDate && existing.eventDate && eventDate.getTime() !== new Date(existing.eventDate).getTime()) {
-        await db.update(runsheets).set({ eventDate, updatedAt: new Date() })
+        await db.update(runsheets).set({ eventDate, updatedAt: new Date(), ...changedElsewhere() })
           .where(and(eq(runsheets.bookingId, existing.id), eq(runsheets.ownerId, proposal.ownerId)));
       }
       bookingId = existing.id;

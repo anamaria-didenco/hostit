@@ -465,6 +465,25 @@ export default function RunsheetBuilder() {
   // effect. Every autosave channel checks it before claiming a change is the
   // operator's rather than the server's own data coming back.
   const hydratingRef = useRef(false);
+  const [hydrationTick, setHydrationTick] = useState(0);
+
+  // ── Edit-conflict protection ──────────────────────────────────────────────
+  // Every save sends the version this page last loaded plus a random id for
+  // this open page. If someone else (or this sheet in another tab) saved in
+  // between, the server refuses the save instead of overwriting their work,
+  // and the dialog at the bottom asks which version to keep. Autosaves pause
+  // while it's open. See server/runsheetVersion.ts.
+  const editorIdRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+  const versionRef = useRef<number | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const conflictRef = useRef(false);
+  const openConflict = useCallback(() => { conflictRef.current = true; setConflict(true); }, []);
+  const versioned = () => ({ expectedVersion: versionRef.current ?? undefined, editorId: editorIdRef.current });
+  const noteVersion = (r: unknown) => {
+    const v = (r as { version?: unknown } | undefined)?.version;
+    if (typeof v === 'number') versionRef.current = Math.max(versionRef.current ?? 0, v);
+  };
+  const isConflict = (e: unknown) => (e as { data?: { code?: string } } | undefined)?.data?.code === 'CONFLICT';
 
   // ── "NOW" indicator for live service ──────────────────────────────────────
   // Updates every 30s. Lets the timeline highlight the currently-active item
@@ -1084,9 +1103,11 @@ export default function RunsheetBuilder() {
   }, [items, title, eventDate, venueName]);
 
   // Warn before leaving page with unsaved changes
+  const skipUnloadWarningRef = useRef(false);
   useEffect(() => {
     if (!isDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
+      if (skipUnloadWarningRef.current) return;
       e.preventDefault();
       e.returnValue = '';
     };
@@ -1380,12 +1401,12 @@ export default function RunsheetBuilder() {
 
   // F&B mutations
   const saveFnbMutation = trpc.fnb.save.useMutation({
-    onSuccess: () => toast.success('F&B sheet saved'),
-    onError: () => toast.error('Failed to save F&B sheet'),
+    onSuccess: (r) => { noteVersion(r); toast.success('F&B sheet saved'); },
+    onError: (e) => { if (isConflict(e)) openConflict(); else toast.error('Failed to save F&B sheet'); },
   });
   // Silent variant for debounced autosave — no toast, no refetch, so the food
   // sheet persists as you type without interrupting editing or flashing toasts.
-  const silentFnbSaveMutation = trpc.fnb.save.useMutation();
+  const silentFnbSaveMutation = trpc.fnb.save.useMutation({ onSuccess: noteVersion });
   const { data: existingFnb, refetch: refetchFnb } = trpc.fnb.list.useQuery(
     { runsheetId: sheetId! },
     { enabled: !!sheetId }
@@ -1412,6 +1433,7 @@ export default function RunsheetBuilder() {
     const itemsToSave = itemsOverride ?? fnbItems;
     try {
       await saveFnbMutation.mutateAsync({
+        ...versioned(),
         runsheetId: id,
         items: itemsToSave.map((item, i) => ({
           section: item.section,
@@ -1793,6 +1815,7 @@ export default function RunsheetBuilder() {
       const firstLoad = hydratedSheetRef.current !== (existing as any).id;
       if (!firstLoad && (dirtyRef.current.size > 0 || coreSavingRef.current)) return;
       hydratedSheetRef.current = (existing as any).id;
+      versionRef.current = (existing as any).version ?? 0;
       setTitle(existing.title);
       setEventDate(existing.eventDate ? new Date(existing.eventDate).toLocaleDateString("en-CA") : "");
       setVenueName(existing.venueName ?? "");
@@ -1854,11 +1877,14 @@ export default function RunsheetBuilder() {
       // autosave effects can't tell that apart from a user edit, so without
       // this they'd all mark themselves dirty and write the data straight back
       // — the header would flash "Save now" on every page load and every
-      // refetch. Cleared on a macrotask, which runs after React has flushed
-      // this commit's effects, so it's cleared whether or not each effect
-      // actually re-ran (some don't, if their values happen to be unchanged).
+      // refetch, and (now that saves are versioned) a page that only received
+      // someone else's changes would save them back as its own and give that
+      // person a false "changed somewhere else". Cleared by the effect just
+      // before the render guards below, which runs after every autosave effect
+      // in the commit that shows this data. (A timer used to clear it, but the
+      // timer could fire before that commit, so the echo still happened.)
       hydratingRef.current = true;
-      setTimeout(() => { hydratingRef.current = false; }, 0);
+      setHydrationTick(n => n + 1);
     }
   }, [existing]);
 
@@ -2032,14 +2058,29 @@ export default function RunsheetBuilder() {
     onError: () => toast.error("Failed to save runsheet"),
   });
   const updateMutation = trpc.runsheets.update.useMutation({
-    onSuccess: () => { utils.runsheets.get.invalidate({ id: sheetId! }); toast.success("Saved!"); },
-    onError: () => toast.error("Failed to save"),
+    onSuccess: (r) => { noteVersion(r); utils.runsheets.get.invalidate({ id: sheetId! }); toast.success("Saved!"); },
+    onError: (e) => { if (isConflict(e)) openConflict(); else toast.error("Failed to save"); },
   });
   // Autosave. On failure the calling channel stays dirty (we simply never mark
   // it clean) so the change isn't silently lost behind a "saved" indicator.
   const silentUpdateMutation = trpc.runsheets.update.useMutation({
-    onError: () => toast.error("Auto-save failed — click Save now"),
+    onSuccess: noteVersion,
+    onError: (e) => { if (isConflict(e)) openConflict(); else toast.error("Auto-save failed — click Save now"); },
   });
+
+  // Notice someone else's save without waiting to collide with it: when
+  // nothing here is waiting to save, just show their latest; otherwise ask.
+  const { data: versionInfo } = trpc.runsheets.versionCheck.useQuery(
+    { id: sheetId!, editorId: editorIdRef.current },
+    { enabled: !!sheetId && !!existing, refetchInterval: 20_000, refetchOnWindowFocus: true },
+  );
+  useEffect(() => {
+    if (!versionInfo || versionInfo.mine || versionRef.current == null || conflictRef.current) return;
+    if (versionInfo.version <= versionRef.current) return;
+    if (dirtyRef.current.size === 0 && !coreSavingRef.current) { void refetchExisting(); void refetchFnb(); }
+    else openConflict();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versionInfo]);
   // No refetch after adding or deleting a row: the new row's id is written
   // back by persistTimelineItems and a deleted row is already gone locally. A
   // refetch here raced with typing and reverted it.
@@ -2059,7 +2100,9 @@ export default function RunsheetBuilder() {
     if (!fnbColsInitialized.current) { fnbColsInitialized.current = true; return; }
     if (!sheetId || hydratingRef.current) return;
     markDirty('columns');
+    if (conflictRef.current) return;
     silentUpdateMutation.mutate({
+      ...versioned(),
       id: sheetId,
       fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol, price: showPriceCol },
     } as any, { onSuccess: () => markClean('columns') });
@@ -2073,7 +2116,9 @@ export default function RunsheetBuilder() {
     if (!sheetId || hydratingRef.current) return;
     markDirty('dietaries');
     const t = setTimeout(() => {
+      if (conflictRef.current) return;
       silentUpdateMutation.mutate({
+        ...versioned(),
         id: sheetId,
         dietaries: dietaries,
       } as any, { onSuccess: () => markClean('dietaries') });
@@ -2090,7 +2135,9 @@ export default function RunsheetBuilder() {
     if (!sheetId || hydratingRef.current) return;
     markDirty('doc');
     const t = setTimeout(() => {
+      if (conflictRef.current) return;
       silentUpdateMutation.mutate({
+        ...versioned(),
         id: sheetId,
         // Use `|| null` (not undefined) so CLEARING a field persists — undefined
         // is dropped from the payload and the server keeps the old value, which
@@ -2132,7 +2179,9 @@ export default function RunsheetBuilder() {
     if (skipNextFnbAutosaveRef.current) { skipNextFnbAutosaveRef.current = false; return; }
     markDirty('food');
     const t = setTimeout(() => {
+      if (conflictRef.current) return;
       silentFnbSaveMutation.mutate({
+        ...versioned(),
         runsheetId: sheetId,
         items: fnbItems.map((item, i) => ({
           section: item.section,
@@ -2149,7 +2198,7 @@ export default function RunsheetBuilder() {
           sortOrder: i,
           unitPrice: item.unitPrice != null && (item.unitPrice as any) !== '' ? Number(item.unitPrice) : null,
         })),
-      }, { onSuccess: () => markClean('food'), onError: () => toast.error("Auto-save failed — click Save now") });
+      }, { onSuccess: () => markClean('food'), onError: (e) => { if (isConflict(e)) openConflict(); else toast.error("Auto-save failed — click Save now"); } });
     }, 1200);
     return () => clearTimeout(t);
   }, [fnbItems, sheetId]);
@@ -2177,11 +2226,12 @@ export default function RunsheetBuilder() {
   // Persist the event identity + every timeline row. Guarded against overlap so
   // a fast typist can't have two passes writing the same rows at once.
   async function persistCore() {
-    if (!sheetId) return;
+    if (!sheetId || conflictRef.current) return;
     if (coreSavingRef.current) { coreRetryRef.current = true; return; }
     coreSavingRef.current = true;
     try {
       await silentUpdateMutation.mutateAsync({
+        ...versioned(),
         id: sheetId,
         title,
         eventDate: eventDate || null,
@@ -2294,7 +2344,9 @@ export default function RunsheetBuilder() {
         if (fnbItems.length > 0 && created?.id) await saveFnb(created.id);
       } else {
         await updateMutation.mutateAsync({
+          ...versioned(),
           id: sheetId,
+          fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol, price: showPriceCol },
           title,
           eventDate: eventDate || null,
           venueName: venueName || undefined,
@@ -2329,6 +2381,36 @@ export default function RunsheetBuilder() {
       setLastSavedAt(new Date());
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ── Conflict dialog choices ───────────────────────────────────────────────
+  const [resolvingConflict, setResolvingConflict] = useState(false);
+  // Drop this page's unsaved edits and reopen the sheet as it was last saved.
+  function loadLatestVersion() {
+    skipUnloadWarningRef.current = true;
+    window.location.reload();
+  }
+  // Save everything on this page over the other save.
+  async function keepMyVersion() {
+    if (!sheetId) return;
+    setResolvingConflict(true);
+    try {
+      let latest;
+      try {
+        latest = await utils.runsheets.versionCheck.fetch({ id: sheetId, editorId: editorIdRef.current });
+      } catch {
+        toast.error("Couldn't reach the server — check your connection and try again.");
+        return;
+      }
+      if (latest) versionRef.current = latest.version;
+      conflictRef.current = false;
+      setConflict(false);
+      await handleSave();
+    } catch {
+      // Another save landed in between: the dialog opens again.
+    } finally {
+      setResolvingConflict(false);
     }
   }
 
@@ -2517,6 +2599,11 @@ export default function RunsheetBuilder() {
   const formattedEventDate = eventDate
     ? new Date(eventDate + "T12:00:00").toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : "";
+
+  // Declared after every autosave effect on purpose: effects run in order, so
+  // in the commit that shows freshly loaded data the autosaves see
+  // hydratingRef still set and skip, and only then is it cleared.
+  useEffect(() => { hydratingRef.current = false; }, [hydrationTick]);
 
   if (authLoading) {
     return (
@@ -6711,6 +6798,30 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT CONFLICT ─────────────────────────────────────────────────── */}
+      {conflict && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="rs-conflict-title" aria-describedby="rs-conflict-body" className="bg-white w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gold/50 bg-forest">
+              <AlertTriangle className="w-4 h-4 text-cream" />
+              <span id="rs-conflict-title" className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span>
+            </div>
+            <div id="rs-conflict-body" className="p-5 space-y-3 font-dm text-sm text-ink">
+              <p>It was saved somewhere else while you had it open — by someone else, or in another tab. Saving stopped here so neither of you loses work.</p>
+              <p className="text-ink/80"><strong>Load the latest</strong> to see their changes; anything you changed in the last few seconds that hasn't saved will be lost. <strong>Keep mine</strong> saves this page over theirs.</p>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 px-5 py-4 border-t border-gold/20">
+              <Button variant="outline" onClick={keepMyVersion} disabled={resolvingConflict} className="flex-1 rounded-sm border-gold/40 font-bebas tracking-widest text-xs min-h-[44px]">
+                {resolvingConflict ? 'SAVING…' : 'KEEP MINE'}
+              </Button>
+              <Button onClick={loadLatestVersion} disabled={resolvingConflict} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-sm font-bebas tracking-widest text-xs min-h-[44px]">
+                LOAD THE LATEST
+              </Button>
+            </div>
           </div>
         </div>
       )}
