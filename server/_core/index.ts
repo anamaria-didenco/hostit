@@ -397,6 +397,10 @@ async function startServer() {
 
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", pdfPublicLimit, handleProposalPdf);
+  // Proposal photos — public, but only with the proposal's own token.
+  app.get("/api/proposal-photo/:token/:id", expressRateLimit("photo:public", 240, 60_000), (req, res) => {
+    import("../proposalPhotos").then(m => m.handleProposalPhoto(req, res)).catch(() => res.status(500).end());
+  });
 
   // Floor Plan PDF download (public — share token acts as auth)
   app.get("/api/floor-plan-pdf/:token", pdfPublicLimit, handleFloorPlanPdf);

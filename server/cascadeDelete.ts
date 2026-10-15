@@ -25,7 +25,7 @@ import { and, eq, inArray, or, type SQL } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   leads, leadActivity, leadMessages, leadSequenceSends, venueNotifications, tasks,
-  proposals, quoteItems, proposalDrinks, quoteSettings,
+  proposals, quoteItems, proposalDrinks, quoteSettings, proposalPhotos,
   bookings, payments, xeroInvoices, floorPlans, checklistInstances,
   runsheets, runsheetItems, fnbItems, staffPortalLinks, weddingChecklists,
   contracts, eventBudgets, eventEquipment, communications, seatingCharts, clientPortalTokens,
@@ -76,6 +76,7 @@ async function deleteProposalRows(tx: Tx, ownerId: number, proposalIds: number[]
   await tx.delete(quoteItems).where(and(inArray(quoteItems.proposalId, proposalIds), eq(quoteItems.ownerId, ownerId)));
   await tx.delete(proposalDrinks).where(and(inArray(proposalDrinks.proposalId, proposalIds), eq(proposalDrinks.ownerId, ownerId)));
   await tx.delete(quoteSettings).where(and(inArray(quoteSettings.proposalId, proposalIds), eq(quoteSettings.ownerId, ownerId)));
+  await tx.delete(proposalPhotos).where(and(inArray(proposalPhotos.proposalId, proposalIds), eq(proposalPhotos.ownerId, ownerId)));
   await tx.delete(proposals).where(and(inArray(proposals.id, proposalIds), eq(proposals.ownerId, ownerId)));
 }
 

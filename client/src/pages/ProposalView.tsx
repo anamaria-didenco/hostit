@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import { DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
 import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
 import { isPackageLine } from "@shared/proposalPackages";
+import { venueBrand } from "@shared/brand";
 
 interface LineItem {
   description: string;
@@ -160,7 +161,23 @@ export default function ProposalView() {
   });
 
   const venue = data?.venue;
-  const T = getThemeTokens(venue?.themeKey);
+  // The venue's Brand Pack (accent colour, fonts, logo) leads; the theme only
+  // supplies the page's neutral background and text colours.
+  const brand = venueBrand(venue as any);
+  const T: ThemeTokens = {
+    ...getThemeTokens(venue?.themeKey),
+    header: brand.accent, headerText: brand.onAccent,
+    headerMuted: brand.onAccent === "#fff" ? "rgba(255,255,255,0.82)" : "rgba(26,26,26,0.72)",
+    accent: brand.accent, accentText: brand.onAccent,
+  };
+  useEffect(() => {
+    if (!venue) return;
+    const id = "vf-brand-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
+    document.head.appendChild(link);
+  }, [venue, brand.fontLink]);
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: T.bg }}>
@@ -185,6 +202,7 @@ export default function ProposalView() {
   // A choice of menus: each priced on its own, the client picks one.
   const menuOptions = proposalMoney(lineItems, Number(proposal.taxPercent ?? 15), Number(proposal.depositPercent ?? 25), (proposal as any).menuChoice).options;
   const menus: Array<{ line: string; name: string; description: string | null; menu: string | null }> = (data as any).menus ?? [];
+  const photos: Array<{ id: number; caption: string | null }> = (data as any).photos ?? [];
   const menuFor = (line: string) => menus.find(m => m.line === line);
   const shownLines = lineItems.filter(l => !isEmptyLine(l) && !(menuOptions.length && isPackageLine(l.description)));
   const chosenOption = menuOptions.find(o => o.line === chosenMenu) ?? null;
@@ -197,7 +215,8 @@ export default function ProposalView() {
   const venueLogo = venue?.logoUrl;
 
   return (
-    <div className="min-h-screen font-inter" style={{ backgroundColor: T.bg }}>
+    <div className="vf-proposal min-h-screen font-inter" style={{ backgroundColor: T.bg }}>
+      <style>{`.vf-proposal .font-playfair{font-family:${brand.serif}} .vf-proposal, .vf-proposal .font-inter{font-family:${brand.sans}}`}</style>
 
       {/* ── Venue Cover Photo Banner ─────────────────────────────────── */}
       {venuePhoto && (
@@ -310,6 +329,19 @@ export default function ProposalView() {
             </div>
           ))}
         </div>
+
+        {/* Photos */}
+        {photos.length > 0 && (
+          <div className={`mb-6 grid gap-2 ${photos.length - 1 >= 3 ? 'grid-cols-2 sm:grid-cols-3' : photos.length - 1 === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {photos.map((ph, i) => (
+              <figure key={ph.id} className={`m-0 ${i === 0 ? 'col-span-full' : ''}`}>
+                <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} loading="lazy"
+                  className={`w-full object-cover rounded-sm ${i === 0 ? 'aspect-[16/9]' : 'aspect-[4/3]'}`} style={{ border: `1px solid ${T.cardBorder}` }} />
+                {ph.caption && <figcaption className="font-inter text-xs mt-1" style={{ color: T.stone }}>{ph.caption}</figcaption>}
+              </figure>
+            ))}
+          </div>
+        )}
 
         {/* Pricing */}
         {lineItems.length > 0 && (

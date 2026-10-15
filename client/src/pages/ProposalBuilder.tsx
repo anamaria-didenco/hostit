@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image, Eye, EyeOff, ArrowLeft, ArrowRight, Camera } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -80,6 +80,9 @@ export default function ProposalBuilder() {
   // Menu packages offered as a choice (the client picks one) rather than
   // added together.
   const [menuChoice, setMenuChoice] = useState(false);
+  // Live preview of the client's page beside the form; reloads after each save.
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewNonce, setPreviewNonce] = useState(0);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "Venue Hire", qty: 1, unitPrice: 0, total: 0 },
   ]);
@@ -567,6 +570,7 @@ export default function ProposalBuilder() {
         return null;
       }
       setSavedProposal(proposal);
+      setPreviewNonce(n => n + 1);
       if (leadId) utils.proposals.byLead.invalidate({ leadId });
       await saveQuote.mutateAsync({
         proposalId: proposal.id,
@@ -660,6 +664,13 @@ export default function ProposalBuilder() {
             </span>
           )}
           {savedProposal?.publicToken && (
+            <Button onClick={() => setShowPreview(v => !v)} variant="ghost" size="sm" aria-pressed={showPreview}
+              className="hidden lg:inline-flex text-gray-500 hover:text-gray-800 font-inter text-xs gap-1">
+              {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {showPreview ? "Hide preview" : "Live preview"}
+            </Button>
+          )}
+          {savedProposal?.publicToken && (
             <Button
               onClick={handleDownloadPdf}
               disabled={pdfLoading}
@@ -686,9 +697,11 @@ export default function ProposalBuilder() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
+      <main className={showPreview && savedProposal?.publicToken
+        ? "max-w-[1600px] mx-auto p-6 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6"
+        : "max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6"}>
         {/* Left: Form (read-only once the client has answered) */}
-        <fieldset disabled={locked} className="lg:col-span-2 space-y-5 min-w-0">
+        <fieldset disabled={locked} className={`${showPreview && savedProposal?.publicToken ? "" : "lg:col-span-2"} space-y-5 min-w-0`}>
           {pendingDraft && (
             <div role="alert" className="bg-amber-50 border-2 border-amber-200 p-4 font-dm text-sm text-amber-900">
               <p className="m-0">
@@ -737,6 +750,15 @@ export default function ProposalBuilder() {
               </div>
             </div>
           </div>
+
+          {/* Photos */}
+          {savedProposal?.id ? (
+            <ProposalPhotosCard proposalId={savedProposal.id} token={savedProposal.publicToken} locked={locked} onChanged={() => setPreviewNonce(n => n + 1)} />
+          ) : (
+            <div className="bg-cream-card border border-dashed border-border p-4 font-dm text-xs text-muted-foreground flex items-center gap-2">
+              <Camera className="w-4 h-4" aria-hidden /> Save the draft to add photos of the space, table settings or food.
+            </div>
+          )}
 
           {/* Event Details */}
           <div className="bg-cream-card border border-border p-4 md:p-5 shadow-sm">
@@ -1455,8 +1477,20 @@ export default function ProposalBuilder() {
           </div>
         </fieldset>
 
+        {/* Right: live preview of the client's page */}
+        {showPreview && savedProposal?.publicToken && (
+          <div className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bebas text-xs tracking-widest text-muted-foreground">WHAT THE CLIENT SEES</span>
+              <span className="font-dm text-[11px] text-muted-foreground">{canAutosave ? "Updates as you edit" : "Updates when you save"}</span>
+            </div>
+            <iframe key={previewNonce} title="Client view preview" src={`/proposal/${savedProposal.publicToken}?preview=${previewNonce}`}
+              className="w-full h-[calc(100vh-8rem)] border-2 border-border bg-white" />
+          </div>
+        )}
+
         {/* Right: Summary & Actions */}
-        <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <div className={`space-y-4 lg:sticky lg:top-20 lg:self-start ${showPreview && savedProposal?.publicToken ? "lg:hidden" : ""}`}>
 
           {/* Appearance — hidden; managed via Venue Settings */}
           {false && <div className="bg-cream-card border border-border shadow-sm">
@@ -1473,8 +1507,9 @@ export default function ProposalBuilder() {
             </button>
             {appearanceSectionOpen && (
               <div className="px-4 pb-4 space-y-4 border-t border-border">
+                <p className="font-dm text-xs text-muted-foreground pt-3 m-0">The header colour, fonts and logo on the client's page and PDF come from your Brand Pack (Settings → Brand Pack).</p>
                 {/* Theme Selector */}
-                <div className="pt-3">
+                <div className="pt-1">
                   <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">COLOUR THEME</div>
                   <div className="grid grid-cols-3 gap-1.5">
                     {COLOUR_THEMES.map(theme => (
@@ -1706,6 +1741,96 @@ function ProposalStatusPanel({ proposal }: { proposal: any }) {
         <a href={`/proposals/new?leadId=${proposal.leadId}`} className="inline-block mt-2 font-dm text-xs font-semibold text-primary underline underline-offset-2">
           Start a new proposal for this enquiry
         </a>
+      )}
+    </div>
+  );
+}
+
+/** Shrink a photo in the browser before upload (longest side 1600px, JPEG). */
+async function resizePhoto(file: File, max = 1600, quality = 0.82): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/** Photos on the proposal: add (several at once), caption, reorder, remove. */
+function ProposalPhotosCard({ proposalId, token, locked, onChanged }: { proposalId: number; token: string; locked: boolean; onChanged: () => void }) {
+  const utils = trpc.useUtils();
+  const { data: photos = [] } = trpc.proposals.photos.list.useQuery({ proposalId });
+  const add = trpc.proposals.photos.add.useMutation();
+  const update = trpc.proposals.photos.update.useMutation();
+  const remove = trpc.proposals.photos.remove.useMutation();
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const refresh = async () => { await utils.proposals.photos.list.invalidate({ proposalId }); onChanged(); };
+  const onFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    let added = 0;
+    try {
+      for (const f of Array.from(files)) {
+        if (!f.type.startsWith("image/")) { toast.error(`${f.name} isn't a photo.`); continue; }
+        await add.mutateAsync({ proposalId, dataUrl: await resizePhoto(f) });
+        added++;
+      }
+      if (added) toast.success(added === 1 ? "Photo added" : `${added} photos added`);
+    } catch (e: any) {
+      toast.error(e?.message || "Couldn't add that photo — try another.");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+      await refresh();
+    }
+  };
+  const act = async (p: Promise<unknown>) => { try { await p; await refresh(); } catch (e: any) { toast.error(e?.message || "Couldn't save that change"); } };
+  return (
+    <div className="bg-cream-card border border-border p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-bebas text-xs tracking-widest text-muted-foreground m-0">PHOTOS</h2>
+        {!locked && (
+          <>
+            <input ref={fileRef} id="pb-photos" type="file" accept="image/jpeg,image/png,image/webp,image/*" multiple className="sr-only"
+              onChange={e => void onFiles(e.target.files)} />
+            <Button type="button" size="sm" variant="ghost" disabled={busy || photos.length >= 12} onClick={() => fileRef.current?.click()}
+              className="font-bebas tracking-widest text-xs text-primary gap-1">
+              <Plus className="w-3 h-3" /> {busy ? "ADDING..." : "ADD PHOTOS"}
+            </Button>
+          </>
+        )}
+      </div>
+      {photos.length === 0 ? (
+        <p className="font-dm text-xs text-muted-foreground m-0">Show the space, a set table or the food. The first photo is shown largest. Up to 12.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {photos.map((ph, i) => (
+            <div key={ph.id} className="min-w-0">
+              <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} className="w-full aspect-[4/3] object-cover border border-border" />
+              {!locked && (
+                <>
+                  <Input aria-label={`Caption for photo ${i + 1}`} defaultValue={ph.caption ?? ""} placeholder="Caption (optional)"
+                    onBlur={e => { if ((e.target.value || "") !== (ph.caption ?? "")) void act(update.mutateAsync({ id: ph.id, caption: e.target.value })); }}
+                    className="mt-1 rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8" />
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex">
+                      <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => void act(update.mutateAsync({ id: ph.id, move: "earlier" }))}
+                        className="w-9 h-9 inline-flex items-center justify-center text-muted-foreground hover:text-ink disabled:opacity-30"><ArrowLeft className="w-4 h-4" /></button>
+                      <button type="button" aria-label="Move later" disabled={i === photos.length - 1} onClick={() => void act(update.mutateAsync({ id: ph.id, move: "later" }))}
+                        className="w-9 h-9 inline-flex items-center justify-center text-muted-foreground hover:text-ink disabled:opacity-30"><ArrowRight className="w-4 h-4" /></button>
+                    </div>
+                    <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => void act(remove.mutateAsync({ id: ph.id }))}
+                      className="w-9 h-9 inline-flex items-center justify-center text-muted-foreground/60 hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </>
+              )}
+              {locked && ph.caption && <div className="font-dm text-xs text-muted-foreground mt-1">{ph.caption}</div>}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

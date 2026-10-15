@@ -21,6 +21,7 @@ import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
 import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
 import { isPackageLine } from "@shared/proposalPackages";
 import type { ProposalMenu } from "./proposalMenus";
+import { venueBrand } from "@shared/brand";
 
 // Bar option labels
 const BAR_LABELS: Record<string, string> = {
@@ -43,6 +44,8 @@ export function buildHtml(data: {
   quoteData: { settings: any; items: any[] } | null;
   /** The menu packages on the proposal, with their menus (see proposalMenus). */
   menus?: ProposalMenu[];
+  /** Photos as data URLs, in display order. */
+  photos?: Array<{ src: string; caption: string | null }>;
 }): string {
   const { proposal, lead, venue, drinks, quoteData } = data;
   const menus = data.menus ?? [];
@@ -75,7 +78,11 @@ export function buildHtml(data: {
   const venueEmail = venue?.email ?? "";
   const venueWebsite = (venue?.website ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   const venueLogoUrl = venue?.logoUrl ?? "";
-  const primaryColor = venue?.primaryColor ?? "#350513";
+  // The venue's Brand Pack: accent colour, fonts and logo.
+  const brand = venueBrand(venue);
+  const primaryColor = brand.accent;
+  const onAccent = brand.onAccent;
+  const photos = data.photos ?? [];
 
   let sampleMenuHtml = "";
   const sampleSelected: string[] = (drinks as any)?.selectedSampleItems ?? [];
@@ -182,41 +189,41 @@ export function buildHtml(data: {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${esc(proposal.title)}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500&family=Bebas+Neue&display=swap');
+  @import url('${brand.fontLink}');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; }
+  body { font-family: ${brand.sans}; font-size: 11pt; color: #1a1a1a; background: #fff; }
 
   /* Header */
-  .header { background: ${primaryColor}; color: #f7f1e9; padding: 32px 48px; display: flex; justify-content: space-between; align-items: flex-start; }
-  .header-left h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28pt; font-weight: 600; line-height: 1.1; }
-  .header-left .subtitle { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.12em; font-size: 10pt; color: rgba(247,241,233,0.7); margin-top: 4px; }
-  .header-right { text-align: right; font-size: 9pt; color: rgba(247,241,233,0.8); line-height: 1.8; }
-  .header-right .venue-name { font-family: 'Bebas Neue', sans-serif; font-size: 13pt; letter-spacing: 0.1em; color: #f7f1e9; }
-  .logo { max-height: 48px; max-width: 140px; object-fit: contain; filter: brightness(0) invert(1); margin-bottom: 8px; }
+  .header { background: ${primaryColor}; color: ${onAccent}; padding: 32px 48px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .header-left h1 { font-family: ${brand.serif}; font-size: 28pt; font-weight: 600; line-height: 1.1; }
+  .header-left .subtitle { font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.12em; font-size: 10pt; color: ${onAccent}; opacity: 0.8; margin-top: 4px; }
+  .header-right { text-align: right; font-size: 9pt; color: ${onAccent}; opacity: 0.85; line-height: 1.8; }
+  .header-right .venue-name { font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; font-size: 13pt; letter-spacing: 0.1em; color: ${onAccent}; }
+  .logo { max-height: 48px; max-width: 140px; object-fit: contain; ${onAccent === "#fff" ? "filter: brightness(0) invert(1);" : ""} margin-bottom: 8px; }
 
   /* Meta strip */
   .meta-strip { background: #f5f0eb; border-bottom: 2px solid ${primaryColor}; padding: 14px 48px; display: flex; gap: 40px; flex-wrap: wrap; }
   .meta-item { font-size: 9pt; }
-  .meta-label { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em; font-size: 8pt; color: #888; display: block; }
+  .meta-label { font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.1em; font-size: 8pt; color: #888; display: block; }
   .meta-value { font-weight: 500; color: #1a1a1a; }
 
   /* Body */
   .body { padding: 32px 48px; }
 
   /* Intro */
-  .intro { font-family: 'Cormorant Garamond', serif; font-size: 13pt; line-height: 1.7; color: #333; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid #e5e0d8; }
+  .intro { font-family: ${brand.serif}; font-size: 13pt; line-height: 1.7; color: #333; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid #e5e0d8; }
 
   /* Section */
   .section { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid #e5e0d8; }
   .section:last-child { border-bottom: none; }
-  .section-title { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.12em; font-size: 11pt; color: ${primaryColor}; margin-bottom: 12px; border-left: 3px solid ${primaryColor}; padding-left: 10px; }
-  .subsection-title { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em; font-size: 9pt; color: #555; margin: 14px 0 8px; }
+  .section-title { font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.12em; font-size: 11pt; color: ${primaryColor}; margin-bottom: 12px; border-left: 3px solid ${primaryColor}; padding-left: 10px; }
+  .subsection-title { font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.1em; font-size: 9pt; color: #555; margin: 14px 0 8px; }
 
   /* Tables */
   .items-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
-  .items-table thead tr { background: ${primaryColor}; color: #f7f1e9; }
-  .items-table thead th { padding: 7px 10px; text-align: left; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.08em; font-size: 9pt; font-weight: 400; }
+  .items-table thead tr { background: ${primaryColor}; color: ${onAccent}; }
+  .items-table thead th { padding: 7px 10px; text-align: left; font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; font-size: 9pt; font-weight: 400; }
   .items-table tbody tr:nth-child(even) { background: #f9f6f2; }
   .items-table tbody td { padding: 7px 10px; vertical-align: top; }
   .item-name { font-weight: 500; }
@@ -228,8 +235,8 @@ export function buildHtml(data: {
   .totals-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
   .totals-table td { padding: 5px 10px; }
   .totals-table .amount { text-align: right; font-weight: 500; }
-  .totals-table .total-row { background: ${primaryColor}; color: #f7f1e9; font-weight: 600; font-size: 12pt; }
-  .totals-table .total-row .amount { font-family: 'Cormorant Garamond', serif; font-size: 15pt; }
+  .totals-table .total-row { background: ${primaryColor}; color: ${onAccent}; font-weight: 600; font-size: 12pt; }
+  .totals-table .total-row .amount { font-family: ${brand.serif}; font-size: 15pt; }
   .totals-table .deposit-row { background: #f5f0eb; }
   .totals-table .met td { color: #2d6a4f; font-weight: 600; }
   .totals-table .unmet td { color: #c0392b; font-weight: 600; }
@@ -240,16 +247,25 @@ export function buildHtml(data: {
   /* Quote section */
   .quote-notes { font-size: 9.5pt; color: #666; margin-top: 10px; font-style: italic; }
 
+  /* Photos */
+  .photos { display: grid; grid-template-columns: repeat(${Math.min(3, Math.max(1, photos.length - 1))}, 1fr); gap: 6px; margin-bottom: 24px; }
+  .photos figure { margin: 0; break-inside: avoid; }
+  .photos figure:first-child { grid-column: 1 / -1; }
+  .photos img { width: 100%; height: 150px; object-fit: cover; display: block; }
+  .photos figure:first-child img { height: 260px; }
+  .photos figcaption { font-size: 8.5pt; color: #777; margin-top: 3px; }
+
   /* Menu options + menus */
   .options { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 4px; }
   .options td { padding: 10px; border-bottom: 1px solid #e5e0d8; vertical-align: top; }
-  .options .opt-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
+  .options .opt-name { font-family: ${brand.serif}; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
   .options .opt-desc { color: #666; font-size: 9pt; margin-top: 2px; }
-  .options .opt-total { text-align: right; white-space: nowrap; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 15pt; font-weight: 600; color: ${primaryColor}; }
+  .options .opt-total { text-align: right; white-space: nowrap; font-family: ${brand.serif}; font-size: 15pt; font-weight: 600; color: ${primaryColor}; }
   .options .opt-dep { text-align: right; white-space: nowrap; font-size: 8.5pt; color: #777; }
   .choose-note { font-size: 9pt; color: #666; margin: 2px 0 6px; }
   .menu-block { margin-top: 14px; break-inside: avoid; }
-  .menu-block h3 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
+  .section-title { break-after: avoid; page-break-after: avoid; }
+  .menu-block h3 { font-family: ${brand.serif}; font-size: 14pt; font-weight: 600; color: #1a1a1a; }
   .menu-block .menu-desc { color: #666; font-size: 9.5pt; margin: 2px 0 6px; }
   .menu-text { white-space: pre-line; font-size: 9.5pt; line-height: 1.55; color: #333; }
 
@@ -258,7 +274,7 @@ export function buildHtml(data: {
 
   /* Footer */
   .footer { background: #f5f0eb; border-top: 2px solid ${primaryColor}; padding: 16px 48px; display: flex; justify-content: space-between; align-items: center; font-size: 8.5pt; color: #888; margin-top: 32px; }
-  .footer strong { color: ${primaryColor}; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.08em; font-size: 10pt; }
+  .footer strong { color: ${primaryColor}; font-family: ${brand.sans}; text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; font-size: 10pt; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -300,6 +316,8 @@ export function buildHtml(data: {
 
   <!-- Intro message -->
   ${proposal.introMessage ? `<div class="intro">${cleanRichHtml(proposal.introMessage)}</div>` : ""}
+
+  ${photos.length ? `<div class="photos">${photos.map(ph => `<figure><img src="${ph.src}" alt="" />${ph.caption ? `<figcaption>${esc(ph.caption)}</figcaption>` : ""}</figure>`).join("")}</div>` : ""}
 
   <!-- Line items / Pricing -->
   <div class="section">
@@ -404,6 +422,8 @@ export async function handleProposalPdf(req: Request, res: Response) {
       drinks: drinksRows[0] ?? null,
       quoteData: qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null,
       menus: await (await import("./proposalMenus")).proposalMenus(proposal.ownerId, proposal.lineItems),
+      photos: (await (await import("./proposalPhotos")).proposalPhotosWithData(proposal.id))
+        .map(ph => ({ src: `data:${ph.contentType};base64,${ph.data}`, caption: ph.caption })),
     });
 
     // Generate PDF with Puppeteer's bundled Chromium (no system browser needed)

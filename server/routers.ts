@@ -17,6 +17,7 @@ import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 import { inboxRouter } from "./inboxRouter";
 import { zonedDayBoundUtc } from "@shared/tz";
 import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/proposalTotals";
+import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -2066,6 +2067,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return getProposalsByLead(input.leadId, ctx.user.id);
       }),
 
+    photos: proposalPhotosRouter,
+
     // Public: client views proposal by token
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
@@ -2086,7 +2089,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { internalNotes: _internal, ...publicProposal } = proposal;
         const { proposalMenus } = await import('./proposalMenus');
         const menus = await proposalMenus(proposal.ownerId, proposal.lineItems);
-        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null, menus };
+        const { listProposalPhotos } = await import('./proposalPhotos');
+        const photos = await listProposalPhotos(proposal.id);
+        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null, menus, photos };
       }),
 
     create: protectedProcedure
