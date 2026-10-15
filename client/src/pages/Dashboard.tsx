@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
+import { showCascadedToast } from "@/lib/cascadedToast";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -891,8 +892,14 @@ export default function Dashboard() {
     if (tab === "pipeline") setTab("enquiries");
   }, [tab]);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
-  const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
-  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
+  // A second URL param picks the section WITHIN a settings tab (Venue's
+  // Spaces, Menu's catalogue), so a deep link like ?sub=venue&stab=spaces
+  // lands on the right section instead of the tab's default.
+  const _rawStab = _qp.get('stab');
+  const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">(
+    _initSubTab === "venue" && (["details","profile","spaces"] as const).includes(_rawStab as any) ? _rawStab as any : "details");
+  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">(
+    _initSubTab === "menu" && (["packages","catalogue"] as const).includes(_rawStab as any) ? _rawStab as any : "catalogue");
   const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
   const [catalogAiText, setCatalogAiText] = useState("");
   const [catalogPdfLoading, setCatalogPdfLoading] = useState(false);
@@ -1711,6 +1718,7 @@ export default function Dashboard() {
       const dragged = dragRescheduleRef.current;
       dragRescheduleRef.current = false;
       toast.success(dragged ? "Event rescheduled" : (savedToastLabel(vars) ?? "Saved"));
+      showCascadedToast(data);
     },
     onError: (err, vars) => {
       const wasDrag = dragRescheduleRef.current;
@@ -1745,7 +1753,7 @@ export default function Dashboard() {
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
-      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) toast.success(msg);
+      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) { toast.success(msg); showCascadedToast(data); }
       // A save that went through after "Book anyway" — the inline editor had
       // rolled its optimistic value back, so put the saved one back in place.
       if (v.allowClash) {
@@ -1999,6 +2007,7 @@ export default function Dashboard() {
       setEditingEventDetails(false);
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event details saved");
+      showCascadedToast(data);
     },
     onError: (err, vars) => {
       if (promptClashOverride(err, () => updateLeadDetails.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
@@ -2388,7 +2397,7 @@ export default function Dashboard() {
     },
   });
   const updateSettings = trpc.venue.update.useMutation({
-    onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
+    onSuccess: () => { refetchSettings(); utils.quickstart.setupStatus.invalidate(); toast.success("Settings saved!"); },
     onError: (err) => toast.error(err.message || "Failed to save settings"),
   });
   const testEmailMutation = trpc.venue.testEmail.useMutation({
@@ -2495,7 +2504,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to clear sync"),
   });
   const createSpace = trpc.spaces.create.useMutation({
-    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
+    onSuccess: () => { refetchSpaces(); utils.quickstart.setupStatus.invalidate(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
   });
   const updateSpace = trpc.spaces.update.useMutation({
     onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
@@ -2817,7 +2826,7 @@ export default function Dashboard() {
     onSuccess: () => { refetchCatalogCategories(); setCatalogActiveCategoryId(null); toast.success('Category deleted'); }
   });
   const createCatalogItem = trpc.menuCatalog.createItem.useMutation({
-    onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
+    onSuccess: () => { refetchCatalogItems(); utils.quickstart.setupStatus.invalidate(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
   });
   // On/off the menu without deleting: past events keep showing what was sold.
   const toggleCatalogItemAvailable = trpc.menuCatalog.updateItem.useMutation({
@@ -2835,7 +2844,7 @@ export default function Dashboard() {
     onSuccess: () => { refetchCatalogItems(); toast.success('Item deleted'); }
   });
   const bulkCreateCatalogItems = trpc.menuCatalog.bulkCreateItems.useMutation({
-    onSuccess: (data) => { refetchCatalogItems(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
+    onSuccess: (data) => { refetchCatalogItems(); utils.quickstart.setupStatus.invalidate(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
   });
   // Bulk select / edit / delete state for the catalogue items list. The set
   // is reset whenever the active category changes so selections never leak
@@ -3657,11 +3666,11 @@ export default function Dashboard() {
               {/* Setup steps for a new venue — hidden once everything is done. */}
               {setupStatus && (() => {
                 const steps = [
-                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
-                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
-                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); } },
+                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
+                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
+                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); setMenuSettingsSection('catalogue'); } },
                   { key: 'email', label: 'Connect your email', sub: 'Email — so replies and proposals send from you', go: () => { setTab('settings'); setSettingsSubTab('email'); } },
-                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
+                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
                 ] as const;
                 const todo = steps.filter(st => !(setupStatus as any)[st.key]);
                 if (todo.length === 0) return null;
@@ -5341,10 +5350,13 @@ export default function Dashboard() {
                     className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors">
                     <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
                   </button>
+                  {/* Staff are read-only server-side, so hide create. */}
+                  {!isStaff && (
                   <button onClick={() => setShowAddLead(true)}
                     className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
                     <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
                   </button>
+                  )}
                 </div>
                 {/* Row 2 (mobile only): Big tap-friendly nav controls */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-3">
@@ -10480,16 +10492,19 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
                       </button>
+                      {/* Staff are read-only server-side, so hide create. */}
+                      {!isStaff && (
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/proposals/new?leadId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> CREATE PROPOSAL
                       </button>
+                      )}
                       {drawerLeadRunsheets && drawerLeadRunsheets.length > 0 ? (
                         <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?id=${drawerLeadRunsheets[drawerLeadRunsheets.length - 1].id}&leadId=${selectedBooking.id}`); }}
                           className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                          <Clock className="w-3 h-3 text-gold" /> EDIT RUNSHEET
+                          <Clock className="w-3 h-3 text-gold" /> {isStaff ? 'VIEW RUNSHEET' : 'EDIT RUNSHEET'}
                         </button>
-                      ) : ['booked','confirmed'].includes(selectedBooking.status) ? (
+                      ) : !isStaff && ['booked','confirmed'].includes(selectedBooking.status) ? (
                         <button
                           onClick={() => {
                             createRunsheet.mutate({
@@ -10564,6 +10579,7 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <Printer className="w-3 h-3" /> CLIENT COPY
                       </button>
+                      {!isStaff && (
                       <button
                         onClick={async () => {
                           try {
@@ -10576,6 +10592,7 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <LinkIcon className="w-3 h-3" /> PACK LINK
                       </button>
+                      )}
 
                       {/* Money */}
                       <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
@@ -10602,8 +10619,8 @@ export default function Dashboard() {
                         <DollarSign className="w-3 h-3" /> PAYMENTS {drawerPaymentsOpen ? '▲' : '▼'}
                       </button>
 
-                      {/* Sync */}
-                      {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
+                      {/* Sync — staff are read-only server-side, so hide it. */}
+                      {!isStaff && (venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
                           <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">SYNC</div>
                           <button

@@ -143,7 +143,9 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
 }
 
 export default function Tasks() {
-  const { user } = useAuth();
+  // A staff login is read-only server-side, so write controls (new/edit/
+  // delete/complete) would only fail — hide or disable them.
+  const { user, isStaff } = useAuth();
   const [filter, setFilter] = useState<"all" | "mine" | "overdue" | "upcoming" | "completed">("all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<{ id: number; initial: TaskFormValues } | null>(null);
@@ -219,13 +221,15 @@ export default function Tasks() {
           <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Tasks</h1>
           <p className="font-dm text-xs md:text-sm text-sage mt-0.5">Track follow-ups, event prep, and team to-dos</p>
         </div>
-        <button
-          onClick={() => setShowForm(v => !v)}
-          className="flex items-center gap-1.5 bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark active:bg-burg-dark transition-colors min-h-[44px] flex-shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          {showForm ? "CANCEL" : "NEW TASK"}
-        </button>
+        {!isStaff && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-1.5 bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark active:bg-burg-dark transition-colors min-h-[44px] flex-shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {showForm ? "CANCEL" : "NEW TASK"}
+          </button>
+        )}
       </div>
 
       {/* Create Form */}
@@ -299,7 +303,8 @@ export default function Tasks() {
                 <button
                   aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
                   onClick={() => completeTask(task, !task.completed)}
-                  className="mt-0.5 flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-full text-sage hover:text-burgundy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
+                  disabled={isStaff}
+                  className="mt-0.5 flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-full text-sage hover:text-burgundy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors disabled:pointer-events-none"
                 >
                   {task.completed
                     ? <CheckCircle2 className="w-5 h-5 text-forest" />
@@ -351,35 +356,39 @@ export default function Tasks() {
                     </div>
                   )}
                 </div>
-                <button
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditing({
-                      id: task.id,
-                      initial: {
-                        title: task.title,
-                        description: task.description ?? "",
-                        dueDate: dueDateInput(task.dueDate),
-                        priority: (task.priority ?? "normal") as TaskFormValues["priority"],
-                        assignedTo: task.assignedTo ?? "",
-                        link: linkOf(task),
-                      },
-                    });
-                  }}
-                  className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
-                  title="Edit task"
-                  aria-label="Edit task"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
-                  className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
-                  title="Delete task"
-                  aria-label="Delete task"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {!isStaff && (
+                  <button
+                    onClick={() => {
+                      setShowForm(false);
+                      setEditing({
+                        id: task.id,
+                        initial: {
+                          title: task.title,
+                          description: task.description ?? "",
+                          dueDate: dueDateInput(task.dueDate),
+                          priority: (task.priority ?? "normal") as TaskFormValues["priority"],
+                          assignedTo: task.assignedTo ?? "",
+                          link: linkOf(task),
+                        },
+                      });
+                    }}
+                    className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
+                    title="Edit task"
+                    aria-label="Edit task"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+                {!isStaff && (
+                  <button
+                    onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
+                    className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
+                    title="Delete task"
+                    aria-label="Delete task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             );
           })}

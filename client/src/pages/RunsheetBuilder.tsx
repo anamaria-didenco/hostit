@@ -411,7 +411,9 @@ type SaveChannel = 'core' | 'doc' | 'food' | 'dietaries' | 'columns';
 
 export default function RunsheetBuilder() {
   const [location, navigate] = useLocation();
-  const { user, loading: authLoading } = useAuth();
+  // A staff login is read-only server-side — every autosave would be refused,
+  // so the builder opens in view-only mode (banner below, writes short-circuited).
+  const { user, loading: authLoading, isStaff } = useAuth();
 
   const params = new URLSearchParams(window.location.search);
   const runsheetId = params.get("id") ? Number(params.get("id")) : null;
@@ -2209,6 +2211,7 @@ export default function RunsheetBuilder() {
   const autosaveInitialized = React.useRef(false);
   useEffect(() => {
     if (!autosaveInitialized.current) { autosaveInitialized.current = true; return; }
+    if (isStaff) return;
     if (!sheetId || hydratingRef.current) return;
     markDirty('doc');
     const t = setTimeout(() => {
@@ -2252,6 +2255,7 @@ export default function RunsheetBuilder() {
   // doesn't interrupt typing. Gated on fnbReadyRef so we never persist an empty
   // list before the server data has loaded.
   useEffect(() => {
+    if (isStaff) return;
     if (!sheetId || !fnbReadyRef.current) return;
     if (skipNextFnbAutosaveRef.current) { skipNextFnbAutosaveRef.current = false; return; }
     markDirty('food');
@@ -2293,6 +2297,7 @@ export default function RunsheetBuilder() {
   const [coreRetryTick, setCoreRetryTick] = useState(0);
   useEffect(() => {
     if (!coreAutosaveInitialized.current) { coreAutosaveInitialized.current = true; return; }
+    if (isStaff) return;
     if (!sheetId) return;
     if (hydratingRef.current) return;
     const t = setTimeout(() => { void persistCore(); }, 1400);
@@ -2361,7 +2366,7 @@ export default function RunsheetBuilder() {
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
   useEffect(() => {
-    if (!sheetId || staffLinkAutoCreated.current) return;
+    if (isStaff || !sheetId || staffLinkAutoCreated.current) return;
     if (staffLinks === undefined) return;
     if (staffLinks.length === 0) {
       staffLinkAutoCreated.current = true;
@@ -2372,6 +2377,7 @@ export default function RunsheetBuilder() {
   }, [sheetId, staffLinks]);
 
   async function handleSave() {
+    if (isStaff) return;
     setSaving(true);
     try {
       if (!sheetId) {
@@ -3055,7 +3061,12 @@ export default function RunsheetBuilder() {
               is nothing to save). Dirty: a single "Save now" that writes every
               section. Never both. State is carried by icon + words, not by hue
               alone, so it still reads without colour perception. */}
-          {saving ? (
+          {isStaff ? (
+            <span className="no-print flex items-center gap-1.5 text-xs font-dm text-ink/75" title="Staff access is view-only">
+              <Eye className="w-3.5 h-3.5" aria-hidden />
+              <span className="hidden sm:inline">View only</span>
+            </span>
+          ) : saving ? (
             <span className="no-print flex items-center gap-1.5 text-xs font-dm text-ink/75" aria-live="polite">
               <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
               <span className="hidden sm:inline">Saving…</span>
@@ -3084,6 +3095,15 @@ export default function RunsheetBuilder() {
           )}
         </div>
       </nav>
+
+      {/* Staff access is read-only — writes are refused server-side, so say so
+          plainly rather than letting edits look like they saved. */}
+      {isStaff && (
+        <div role="status" className="no-print bg-gold/15 border-b border-gold/40 px-4 sm:px-6 py-2 flex items-center gap-2 text-xs font-dm text-ink/80">
+          <Eye className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+          <span>View only — you can read this run sheet but changes won't be saved.</span>
+        </div>
+      )}
 
       {/* ── DocBar — document identity strip ────────────────────────────── */}
       <div role="region" aria-label="Document details" className="no-print md:sticky top-14 z-40 bg-cream border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
