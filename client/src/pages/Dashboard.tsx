@@ -16,7 +16,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw, ArrowLeft
+  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw, ArrowLeft, User as UserIcon, Phone, Building2
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
@@ -665,6 +665,9 @@ const DRAWER_LABEL = "font-dm text-xs font-medium text-ink/60";
 const hasDrawerValue = (v: unknown) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
 const DRAWER_PENCIL = "p-1.5 -m-1.5 rounded text-ink/55 hover:text-forest hover:bg-linen";
 const DRAWER_VALUE_BTN = "text-left rounded-sm hover:bg-linen/70 -mx-1 px-1 transition-colors";
+// Basic shape check for a client email typed into an edit form.
+const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+const BAD_EMAIL_MSG = "That email doesn't look right. Check it and try again.";
 
 /**
  * One collapsible block of the event side panel. The header is a single
@@ -1668,12 +1671,13 @@ export default function Dashboard() {
       utils.bookings.clashes.invalidate();
       utils.dashboard.invalidate();
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
-      toast.success("Event rescheduled");
+      // Also used for the drawer's inline field edits, not only date moves.
+      toast.success(vars.eventDate !== undefined ? "Event rescheduled" : "Saved");
     },
     onError: (err, vars) => {
       // Date clash → "Book anyway?" (resends with allowClash), not a dead end.
       if (promptClashOverride(err, () => rescheduleLead.mutate({ ...vars, allowClash: true }), { confirmLabel: "Move anyway" })) return;
-      toast.error("Failed to reschedule");
+      toast.error(vars.eventDate !== undefined ? "Failed to reschedule" : "Failed to save change");
     },
   });
   const rescheduleBooking = trpc.bookings.update.useMutation({
@@ -1760,7 +1764,8 @@ export default function Dashboard() {
   // Inline edit state for the booking slide-out panel: only one field at a time.
   // `value` is held as a string while editing (forms only deal in strings) and
   // coerced to the right type at save.
-  const [drawerEdit, setDrawerEdit] = useState<{ field: string; value: string } | null>(null);
+  // `last` is the second box of the Name editor (last name).
+  const [drawerEdit, setDrawerEdit] = useState<{ field: string; value: string; last?: string } | null>(null);
   const drawerEditRef = useRef(drawerEdit);
   drawerEditRef.current = drawerEdit;
   // Enter saves / Escape cancels on every inline field editor in the panel.
@@ -1776,6 +1781,8 @@ export default function Dashboard() {
       setDrawerEdit(null);
       return;
     }
+    // A malformed email stays open in the editor to fix.
+    if (field === "email" && !looksLikeEmail(raw)) { toast.error(BAD_EMAIL_MSG); return; }
     let mutValue: any = raw;
     if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
     else if (field === "totalNzd" || field === "depositNzd" || field === "minimumSpend") mutValue = raw === "" ? null : Number(raw);
@@ -1790,7 +1797,9 @@ export default function Dashboard() {
       }
     }
     else if (field === "spaceName") mutValue = raw === "" ? null : raw;
-    else mutValue = raw; // email and any other string field
+    else if (field === "phone" || field === "company") mutValue = raw.trim() === "" ? null : raw.trim();
+    else if (field === "email") mutValue = raw.trim();
+    else mutValue = raw; // any other string field
     // Optimistic local update — keep the prior value so we can roll back if the
     // server rejects the mutation.
     const prevValue = (selectedBooking as any)[field];
@@ -1802,10 +1811,37 @@ export default function Dashboard() {
     };
     if (selectedBooking._isLead) {
       rescheduleLead.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
+    } else if (field === "phone" || field === "company") {
+      // Bookings have no phone/company of their own: they live on the enquiry.
+      if (!selectedBooking.leadId) { setDrawerEdit(null); return; }
+      rescheduleLead.mutate({ id: selectedBooking.leadId, [field]: mutValue } as any, { onError: onErr });
     } else {
       rescheduleBooking.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
     }
     setDrawerEdit(null);
+  }
+  // The client's name, from the drawer's Name editor. Saved on the enquiry
+  // (or the booking), which carries it to the other and to the run sheet.
+  function saveDrawerName(first: string, last: string) {
+    if (!selectedBooking) return;
+    const firstName = first.trim(), lastName = last.trim();
+    if (!firstName) { toast.error("First name is required."); return; }
+    const prev = { firstName: selectedBooking.firstName, lastName: selectedBooking.lastName };
+    const id = selectedBooking.id;
+    setSelectedBooking((p: any) => p ? { ...p, firstName, lastName } : p);
+    // (The mutation's own onError says it failed.)
+    const onError = () => setSelectedBooking((p: any) => (p && p.id === id) ? { ...p, ...prev } : p);
+    if (selectedBooking._isLead) rescheduleLead.mutate({ id, firstName, lastName: lastName || null }, { onError });
+    else rescheduleBooking.mutate({ id, firstName, lastName }, { onError });
+    setDrawerEdit(null);
+  }
+  // Phone and company in the drawer: the enquiry's own, or (for a booking,
+  // which has neither) its enquiry's. Undefined when there's no enquiry.
+  function drawerContact(field: "phone" | "company"): string | null | undefined {
+    if (!selectedBooking) return undefined;
+    if (selectedBooking._isLead || field in selectedBooking) return selectedBooking[field] ?? null;
+    const lead = selectedBooking.leadId ? (allLeads ?? []).find((l: any) => l && l.id === selectedBooking.leadId) : null;
+    return lead ? ((lead as any)[field] ?? null) : undefined;
   }
   // ISO datetime → value for <input type="datetime-local"> (yyyy-MM-ddTHH:mm in LOCAL time).
   // The drawer's date editor value: "YYYY-MM-DD", plus "THH:mm" only when the
@@ -1886,7 +1922,9 @@ export default function Dashboard() {
   const updateLeadDetails = trpc.leads.update.useMutation({
     onSuccess: (data, vars) => {
       refetchLeads();
-      setSelectedLead((prev: any) => prev ? { ...prev, ...vars } : prev);
+      // Fields left out of the save (undefined) keep their shown value.
+      const saved = Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== undefined));
+      setSelectedLead((prev: any) => prev ? { ...prev, ...saved } : prev);
       setEditingEventDetails(false);
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event details saved");
@@ -4479,7 +4517,7 @@ export default function Dashboard() {
                     <div className="dante-card p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-bebas text-xs tracking-widest text-ink/70">EVENT DETAILS</h3>
-                        {!editingEventDetails ? (
+                        {isStaff ? null : !editingEventDetails ? (
                           <button onClick={() => startLeadDetailsEdit(selectedLead)} className="text-xs text-ink/70 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
                             <Edit2 className="w-3 h-3" /> EDIT
                           </button>
@@ -4487,13 +4525,17 @@ export default function Dashboard() {
                           <div className="flex gap-2">
                             <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/60 hover:text-ink font-bebas tracking-widest">CANCEL</button>
                             <button onClick={() => {
+                              const firstName = String(eventDetailForm.firstName ?? '').trim();
+                              const email = String(eventDetailForm.email ?? '').trim();
+                              if (!firstName) { toast.error("First name is required."); return; }
+                              if (email && !looksLikeEmail(email)) { toast.error(BAD_EMAIL_MSG); return; }
                               updateLeadDetails.mutate({
                                 id: selectedLead.id,
-                                firstName: eventDetailForm.firstName || undefined,
-                                lastName: eventDetailForm.lastName || null,
-                                email: eventDetailForm.email || undefined,
-                                phone: eventDetailForm.phone || null,
-                                company: eventDetailForm.company || null,
+                                firstName,
+                                lastName: String(eventDetailForm.lastName ?? '').trim() || null,
+                                email: email || undefined,
+                                phone: String(eventDetailForm.phone ?? '').trim() || null,
+                                company: String(eventDetailForm.company ?? '').trim() || null,
                                 eventType: eventDetailForm.eventType || null,
                                 // Keep the event's time when only the day changes; a date-only
                                 // value used to wipe it.
@@ -4535,7 +4577,7 @@ export default function Dashboard() {
                             { label: "First Name", key: "firstName", type: "text" },
                             { label: "Last Name", key: "lastName", type: "text" },
                             { label: "Email", key: "email", type: "email" },
-                            { label: "Phone", key: "phone", type: "text" },
+                            { label: "Phone", key: "phone", type: "tel" },
                             { label: "Company", key: "company", type: "text" },
                             { label: "Event Type", key: "eventType", type: "text" },
                             { label: "Date", key: "eventDate", type: "date" },
@@ -9863,6 +9905,47 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+                {/* NAME — the client's first and last name. Saved on the
+                    enquiry/booking, which carries it to the other and to
+                    run sheets still showing the old name. */}
+                <div className="flex items-start gap-3 sm:col-span-2">
+                  <UserIcon className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className={DRAWER_LABEL}>Name</div>
+                      {drawerEdit?.field !== "name" && !isStaff && (
+                        <button onClick={() => setDrawerEdit({ field: "name", value: selectedBooking.firstName ?? "", last: selectedBooking.lastName ?? "" })}
+                          className={DRAWER_PENCIL} aria-label="Edit name">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {drawerEdit?.field === "name" ? (
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        <Input value={drawerEdit.value} aria-label="First name" placeholder="First name"
+                          onChange={e => setDrawerEdit({ ...drawerEdit, value: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); saveDrawerName(drawerEdit.value, drawerEdit.last ?? ""); } }}
+                          className="h-8 text-xs flex-1 min-w-[7rem]" autoFocus />
+                        <Input value={drawerEdit.last ?? ""} aria-label="Last name" placeholder="Last name"
+                          onChange={e => setDrawerEdit({ ...drawerEdit, last: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); saveDrawerName(drawerEdit.value, drawerEdit.last ?? ""); } }}
+                          className="h-8 text-xs flex-1 min-w-[7rem]" />
+                        <button onClick={() => saveDrawerName(drawerEdit.value, drawerEdit.last ?? "")}
+                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
+                        <button onClick={() => setDrawerEdit(null)}
+                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
+                      </div>
+                    ) : isStaff ? (
+                      <div className="font-dm text-sm text-ink">{`${selectedBooking.firstName ?? ""} ${selectedBooking.lastName ?? ""}`.trim() || "—"}</div>
+                    ) : (
+                      <button type="button" tabIndex={-1}
+                        onClick={() => setDrawerEdit({ field: "name", value: selectedBooking.firstName ?? "", last: selectedBooking.lastName ?? "" })}
+                        className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>
+                        {`${selectedBooking.firstName ?? ""} ${selectedBooking.lastName ?? ""}`.trim() || "—"}
+                      </button>
+                    )}
+                  </div>
+                </div>
                 {/* EMAIL */}
                 {(selectedBooking.email || drawerEdit?.field === "email") && (
                 <div className="flex items-start gap-3 sm:col-span-2">
@@ -9870,7 +9953,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <div className={DRAWER_LABEL}>Email</div>
-                      {drawerEdit?.field !== "email" && (
+                      {drawerEdit?.field !== "email" && !isStaff && (
                         <button onClick={() => setDrawerEdit({ field: "email", value: selectedBooking.email ?? "" })}
                           className={DRAWER_PENCIL} aria-label="Edit email">
                           <Pencil className="w-3 h-3" />
@@ -9897,13 +9980,63 @@ export default function Dashboard() {
                   </div>
                 </div>
                 )}
+                {/* PHONE / COMPANY — on the enquiry (a booking shows and
+                    edits its enquiry's). Hidden when empty unless editing. */}
+                {([
+                  { field: "phone" as const, label: "Phone", icon: Phone, type: "tel" },
+                  { field: "company" as const, label: "Company", icon: Building2, type: "text" },
+                ]).map(({ field, label, icon: Icon, type }) => {
+                  const value = drawerContact(field);
+                  if (value === undefined || (!value && drawerEdit?.field !== field)) return null;
+                  const start = () => setDrawerEdit({ field, value: value ?? "" });
+                  return (
+                    <div key={field} className="flex items-start gap-3">
+                      <Icon className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div className={DRAWER_LABEL}>{label}</div>
+                          {drawerEdit?.field !== field && !isStaff && (
+                            <button onClick={start} className={DRAWER_PENCIL} aria-label={`Edit ${label.toLowerCase()}`}>
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        {drawerEdit?.field === field ? (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Input type={type} value={drawerEdit.value} aria-label={label}
+                              onChange={e => setDrawerEdit({ field, value: e.target.value })}
+                              onKeyDown={drawerEditKeys(field)}
+                              className="h-8 text-xs flex-1 min-w-[7rem]" autoFocus />
+                            <button onClick={() => saveDrawerField(field, drawerEdit.value)}
+                              className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
+                            <button onClick={() => setDrawerEdit(null)}
+                              className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
+                          </div>
+                        ) : field === "phone" ? (
+                          <a href={`tel:${value}`}
+                            className="block font-dm text-sm text-forest underline decoration-forest/30 underline-offset-2 hover:decoration-forest truncate">
+                            {value}
+                          </a>
+                        ) : isStaff ? (
+                          <div className="font-dm text-sm text-ink truncate">{value}</div>
+                        ) : (
+                          <button type="button" tabIndex={-1} onClick={start}
+                            className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink max-w-full truncate`}>{value}</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
                 {/* Fields not filled in yet: one "+" each, nothing else. */}
                 {(() => {
                   const missing: Array<[string, () => void]> = [];
                   if (!hasDrawerValue(selectedBooking.guestCount) && drawerEdit?.field !== "guestCount") missing.push(["Guests", () => setDrawerEdit({ field: "guestCount", value: "" })]);
                   if (!selectedBooking.spaceName?.trim() && !drawerAddFields.has('space')) missing.push(["Space", () => setDrawerAddFields(prev => new Set(prev).add('space'))]);
                   if (!hasDrawerValue(selectedBooking.minimumSpend) && drawerEdit?.field !== "minimumSpend") missing.push(["Minimum spend", () => setDrawerEdit({ field: "minimumSpend", value: "" })]);
-                  if (!selectedBooking.email && drawerEdit?.field !== "email") missing.push(["Email", () => setDrawerEdit({ field: "email", value: "" })]);
+                  if (!selectedBooking.email && drawerEdit?.field !== "email" && !isStaff) missing.push(["Email", () => setDrawerEdit({ field: "email", value: "" })]);
+                  for (const [field, label] of [["phone", "Phone"], ["company", "Company"]] as const) {
+                    if (!isStaff && drawerContact(field) === null && drawerEdit?.field !== field) missing.push([label, () => setDrawerEdit({ field, value: "" })]);
+                  }
                   return missing.length > 0 ? (
                     <div className="sm:col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 border-t border-gold/20">
                       <span className={DRAWER_LABEL}>Add</span>

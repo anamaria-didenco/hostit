@@ -196,9 +196,13 @@ export default function EventDetail() {
   const handleSave = () => {
     const changed = (k: string) => String(form[k] ?? "") !== String(baseline[k] ?? "");
     const patch: Parameters<typeof updateBooking.mutate>[0] = { id: bookingId };
-    if (changed("firstName")) patch.firstName = form.firstName;
-    if (changed("lastName")) patch.lastName = form.lastName;
-    if (changed("email")) patch.email = form.email;
+    if (changed("firstName") && !String(form.firstName ?? "").trim()) { toast.error("First name is required."); return; }
+    if (changed("email") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email ?? "").trim())) {
+      toast.error("That email doesn't look right. Check it and try again."); return;
+    }
+    if (changed("firstName")) patch.firstName = form.firstName.trim();
+    if (changed("lastName")) patch.lastName = form.lastName.trim();
+    if (changed("email")) patch.email = form.email.trim();
     if (changed("eventType")) patch.eventType = form.eventType || undefined;
     if (changed("eventDate") || changed("eventTime")) patch.eventDate = combineLocalDateTime(form.eventDate, form.eventTime);
     if (changed("eventEndDate") || changed("eventEndTime")) {
@@ -267,7 +271,7 @@ export default function EventDetail() {
                       <Save className="w-3 h-3" /> {updateBooking.isPending ? "SAVING..." : "SAVE"}
                     </button>
                   </>
-                ) : (
+                ) : isStaff ? null : (
                   <button onClick={() => setEditing(true)}
                     className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1">
                     <Edit3 className="w-3 h-3" /> EDIT
