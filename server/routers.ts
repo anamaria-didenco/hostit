@@ -1232,14 +1232,25 @@ export const appRouter = router({
         // optional: the venue may skip the question.
         lostReason: z.enum(LOST_REASON_KEYS).optional(),
         lostReasonNote: z.string().max(500).optional(),
+        // Used when moving to booked/confirmed/tentative for an enquiry that
+        // has no space yet: the space picked in the confirm step. It is saved
+        // on the enquiry together with the status change (and ignored when
+        // the enquiry already has a space).
+        spaceName: z.string().max(200).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Capture the prior status so we can react to transitions (e.g. moving
         // AWAY from booked needs to cancel the linked booking — otherwise the
         // calendar keeps showing a confirmed event for a lead that's actually
         // lost/cancelled).
-        const priorLead = await getLeadById(input.id, ctx.user.id);
-        if (!priorLead) throw new Error('Lead not found');
+        const storedLead = await getLeadById(input.id, ctx.user.id);
+        if (!storedLead) throw new Error('Lead not found');
+        // A space picked in the confirm step stands in for the missing one:
+        // every check below sees it, and it is saved once they pass.
+        const suppliedSpace = input.spaceName?.trim() || '';
+        const spaceToSave = suppliedSpace && !storedLead.spaceName?.trim()
+          && ['booked', 'confirmed', 'tentative'].includes(input.status) ? suppliedSpace : '';
+        const priorLead = spaceToSave ? { ...storedLead, spaceName: spaceToSave } : storedLead;
         const wasBooked = ['booked', 'confirmed', 'finished'].includes(priorLead.status ?? '');
         const isBooked = ['booked', 'confirmed', 'finished'].includes(input.status);
 
@@ -1271,6 +1282,10 @@ export const appRouter = router({
         if (restorable) {
           const { findClashes, assertNoClashes } = await import('./availability');
           assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(restorable)), input.allowClash);
+        }
+
+        if (spaceToSave) {
+          await updateLead(input.id, ctx.user.id, { spaceName: spaceToSave });
         }
 
         let holdUntil: Date | null = null;
