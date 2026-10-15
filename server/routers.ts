@@ -4448,18 +4448,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(checklistTemplates.id, input.templateId), eq(checklistTemplates.ownerId, ctx.user.id))).limit(1);
         if (!template) throw new Error('Template not found');
         const items = ((template.items as any[]) ?? []).map(item => ({ ...item, checked: false }));
+        // The template's items go onto the event's one checklist — the run
+        // sheet's. With no run sheet yet they wait in a bookingId-only list,
+        // which is carried over when the run sheet's checklist is first made.
+        const { findEventRunsheet, getOrCreateRunsheetChecklist } = await import('./eventChecklist');
+        const runsheet = await findEventRunsheet(ctx.user.id, input.bookingId);
+        if (runsheet) {
+          const instance = await getOrCreateRunsheetChecklist(ctx.user.id, runsheet.id, {
+            bookingId: input.bookingId,
+            name: runsheet.title ? `${runsheet.title} — Staff Checklist` : undefined,
+            addItems: items,
+          });
+          return { id: instance.id };
+        }
         const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items }).returning({ id: checklistInstances.id });
         return { id: result.id };
       }),
+    // The event's checklist is its run sheet's (see server/eventChecklist.ts).
     getForBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { checklistInstances } = await import('../drizzle/schema');
-        const { eq, and, desc } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return [];
-        return db.select().from(checklistInstances).where(and(eq(checklistInstances.bookingId, input.bookingId), eq(checklistInstances.ownerId, ctx.user.id))).orderBy(desc(checklistInstances.createdAt));
+        const { readEventChecklist } = await import('./eventChecklist');
+        return readEventChecklist(ctx.user.id, input.bookingId);
       }),
     updateInstance: protectedProcedure
       .input(z.object({
@@ -4493,32 +4503,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     getOrCreateForRunsheet: protectedProcedure
       .input(z.object({
         runsheetId: z.number(),
+        // The event this sheet belongs to, when the sheet itself only carries
+        // a leadId — stamped on the checklist so /checklist finds it.
+        bookingId: z.number().optional(),
         name: z.string().optional(),
         defaultItems: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
-        await assertAllOwned({ runsheet: input.runsheetId }, ctx.user.id);
-        const { getDb } = await import('./db');
-        const { checklistInstances } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const crypto = await import('crypto');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        const existing = await db.select().from(checklistInstances)
-          .where(and(eq(checklistInstances.runsheetId, input.runsheetId), eq(checklistInstances.ownerId, ctx.user.id)))
-          .limit(1);
-        if (existing[0]) return existing[0];
-        const shareToken = crypto.randomBytes(24).toString('hex');
-        const items = (input.defaultItems ?? []).map(i => ({ ...i, checked: false, checkedAt: undefined, notes: undefined }));
-        const [result] = await db.insert(checklistInstances).values({
-          runsheetId: input.runsheetId,
-          ownerId: ctx.user.id,
-          name: input.name ?? 'Staff Checklist',
-          items,
-          shareToken,
-        }).returning();
-        return result;
+        await assertAllOwned({ runsheet: input.runsheetId, booking: input.bookingId }, ctx.user.id);
+        // Also folds in the event's old /checklist lists, once (F-29).
+        const { getOrCreateRunsheetChecklist } = await import('./eventChecklist');
+        return getOrCreateRunsheetChecklist(ctx.user.id, input.runsheetId, {
+          bookingId: input.bookingId,
+          name: input.name,
+          defaultItems: input.defaultItems,
+        });
       }),
 
     getByShareToken: publicProcedure
