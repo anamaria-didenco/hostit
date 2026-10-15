@@ -80,38 +80,8 @@ const COURSE_ORDER = [
 // ships its own <link> so we request exactly the weights/italics the BEO uses
 // (italic serif for course titles + venue name). "editorial" is the historic
 // default and its link/vars reproduce the previous hard-coded fonts 1:1.
-export const BRAND_FONT_PAIRS: Record<string, { label: string; serif: string; sans: string; link: string }> = {
-  editorial: {
-    label: "Editorial (Spectral · Hanken Grotesk)",
-    serif: "'Spectral',Georgia,serif",
-    sans: "'Hanken Grotesk',Arial,sans-serif",
-    link: "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap",
-  },
-  classic: {
-    label: "Classic (Playfair Display · Source Sans)",
-    serif: "'Playfair Display',Georgia,serif",
-    sans: "'Source Sans 3',Arial,sans-serif",
-    link: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600;700&display=swap",
-  },
-  modern: {
-    label: "Modern (Fraunces · Inter)",
-    serif: "'Fraunces',Georgia,serif",
-    sans: "'Inter',Arial,sans-serif",
-    link: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap",
-  },
-  elegant: {
-    label: "Elegant (Cormorant Garamond · Montserrat)",
-    serif: "'Cormorant Garamond',Georgia,serif",
-    sans: "'Montserrat',Arial,sans-serif",
-    link: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Montserrat:wght@400;500;600;700&display=swap",
-  },
-  clean: {
-    label: "Clean (DM Serif Display · DM Sans)",
-    serif: "'DM Serif Display',Georgia,serif",
-    sans: "'DM Sans',Arial,sans-serif",
-    link: "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap",
-  },
-};
+export { BRAND_FONT_PAIRS } from "@shared/brand";
+import { BRAND_FONT_PAIRS } from "@shared/brand";
 
 // Pick a readable ink/white for text sitting on a solid brand-accent surface
 // (status pill, guests cell, balance bar, bar tag). A pale accent needs dark

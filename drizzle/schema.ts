@@ -415,6 +415,21 @@ export const proposals = pgTable("proposals", {
 }));
 
 export type Proposal = typeof proposals.$inferSelect;
+
+// Photos on a proposal (migration 0092). Kept in the database because the
+// server's disk doesn't survive a deploy; resized in the browser first.
+export const proposalPhotos = pgTable("proposal_photos", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  proposalId: integer("proposalId").notNull(),
+  contentType: varchar("contentType", { length: 50 }).notNull(),
+  data: text("data").notNull(), // base64
+  caption: varchar("caption", { length: 255 }),
+  sortOrder: integer("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  proposalIdx: index("proposal_photos_proposal_idx").on(t.proposalId),
+}));
 export type InsertProposal = typeof proposals.$inferInsert;
 
 // ─── Bookings (confirmed events) ─────────────────────────────────────────────
