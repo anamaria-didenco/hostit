@@ -201,6 +201,11 @@ export async function updateLeadStatus(id: number, ownerId: number, status: stri
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
   await db.update(leads).set(updateData)
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
+  // A lost/cancelled enquiry has no follow-up left: drop its follow-up task.
+  if (status === "lost" || status === "cancelled") {
+    const { trySyncFollowUpTask } = await import("./followUpTask");
+    await trySyncFollowUpTask(ownerId, id);
+  }
 }
 
 export async function updateLead(id: number, ownerId: number, data: Partial<InsertLead>) {
@@ -237,6 +242,7 @@ export async function markLeadLost(
   await db.update(leads)
     .set({ status: "lost", lostReason: key, lostReasonNote: noteText, updatedAt: new Date() })
     .where(and(eq(leads.id, leadId), eq(leads.ownerId, ownerId)));
+  { const { trySyncFollowUpTask } = await import("./followUpTask"); await trySyncFollowUpTask(ownerId, leadId); }
   if (["booked", "confirmed", "finished"].includes(lead.status ?? "")) {
     await db.update(bookings).set({ status: "cancelled" })
       .where(and(eq(bookings.leadId, leadId), eq(bookings.ownerId, ownerId), ne(bookings.status, "cancelled")));

@@ -4,6 +4,7 @@ import { Bell, ChevronDown, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toLocalDateInput } from "@/lib/dateTime";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FOLLOW_UP_CHANGED_EVENT } from "@/components/taskParts";
 
 /**
  * "Follow up on [date]" for a lead: quick picks (tomorrow / 3 days / 1 week),
@@ -42,6 +43,16 @@ export function FollowUpDateControl({
   const labelId = useId();
   const customId = useId();
   const current = toLocalDateInput(value ?? null); // "" when unset
+  // Finishing (or undoing) this enquiry's follow-up task in the Tasks section
+  // changes the date too; follow it.
+  useEffect(() => {
+    const onTask = (e: Event) => {
+      const d = (e as CustomEvent).detail as { leadId: number; followUpDate: number | null } | undefined;
+      if (d && d.leadId === leadId) onChanged?.(d.followUpDate != null ? new Date(d.followUpDate) : null);
+    };
+    window.addEventListener(FOLLOW_UP_CHANGED_EVENT, onTask);
+    return () => window.removeEventListener(FOLLOW_UP_CHANGED_EVENT, onTask);
+  }, [leadId, onChanged]);
   const [open, setOpen] = useState(false);
   // Kept across open/close so Escape never throws away a half-picked date.
   const [custom, setCustom] = useState(current || ymdInDays(1));
@@ -52,6 +63,7 @@ export function FollowUpDateControl({
       const next = vars.followUpDate ? new Date(vars.followUpDate) : null;
       onChanged?.(next);
       utils.leads.list.invalidate();
+      utils.tasks.list.invalidate(); // the date is also a task
       utils.leads.getActivity.invalidate({ leadId });
       utils.dashboard.invalidate();
       toast.success(next ? `Follow-up set for ${fmtDay(toLocalDateInput(next))}` : "Follow-up date cleared");

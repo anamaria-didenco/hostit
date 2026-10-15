@@ -1476,6 +1476,7 @@ export const appRouter = router({
           minimumSpend: minimumSpend !== undefined ? (minimumSpend !== null ? String(minimumSpend) : null) : undefined,
           spaceName: spaceName !== undefined ? (spaceName?.trim() || null) : undefined,
         } as any);
+        if (followUpDate) { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, id); }
         // Once the enquiry has a live booking, the booking and its runsheets
         // carry their own copies of these fields (calendar, BEO, staff link).
         // Keep them in step — the booking→enquiry direction already does
@@ -1591,6 +1592,8 @@ export const appRouter = router({
         await updateLead(input.id, ctx.user.id, {
           followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
         });
+        // The date is also a task in Tasks: create/move/remove it.
+        { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, input.id); }
         await addLeadActivity({
           leadId: input.id,
           ownerId: ctx.user.id,
@@ -1725,6 +1728,7 @@ export const appRouter = router({
         await db.update(leads)
           .set({ followUpDate: nextFollowUp })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, input.leadId); }
         await markStaffResponse(ctx.user.id, input.leadId, { emailed: true });
         // Log it on the timeline (this also bumps lastActivityAt, so the lead
         // stops reading as "gone quiet").
@@ -2214,6 +2218,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                 const followUpDate = new Date();
                 followUpDate.setDate(followUpDate.getDate() + 3);
                 await db.update(leads).set({ followUpDate }).where(eq(leads.id, proposal.leadId));
+                const { trySyncFollowUpTask } = await import('./followUpTask');
+                await trySyncFollowUpTask(ctx.user.id, proposal.leadId);
               }
             }
           } catch (err) {
@@ -3620,6 +3626,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             })();
             await updateLeadStatus(activityLeadId, ctx.user.id, 'contacted');
             await updateLead(activityLeadId, ctx.user.id, { followUpDate });
+            { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, activityLeadId); }
             await addLeadActivity({
               leadId: activityLeadId,
               ownerId: ctx.user.id,
@@ -6736,21 +6743,41 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
   // ─── Tasks ────────────────────────────────────────────────────────────────
   tasks: router({
     list: protectedProcedure
-      .input(z.object({ filter: z.enum(['all', 'mine', 'overdue', 'upcoming', 'completed']).optional() }).optional())
+      .input(z.object({
+        filter: z.enum(['all', 'mine', 'overdue', 'upcoming', 'completed']).optional(),
+        // Only tasks about this enquiry and/or event (either match counts) —
+        // the "Tasks" section on an enquiry or event.
+        leadId: z.number().optional(),
+        bookingId: z.number().optional(),
+      }).optional())
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { tasks } = await import('../drizzle/schema');
         const { eq, and, lte, gte, desc } = await import('drizzle-orm');
+        const { myTaskName } = await import('./taskLinks');
         const db = await getDb();
         if (!db) return [];
         const now = Date.now();
         const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-        let rows = await db.select().from(tasks).where(eq(tasks.ownerId, ctx.user.id)).orderBy(desc(tasks.createdAt));
+        const { or } = await import('drizzle-orm');
+        const about = [
+          input?.leadId != null ? eq(tasks.linkedLeadId, input.leadId) : undefined,
+          input?.bookingId != null ? eq(tasks.linkedBookingId, input.bookingId) : undefined,
+        ].filter((c): c is NonNullable<typeof c> => !!c);
+        let rows = await db.select().from(tasks)
+          .where(and(eq(tasks.ownerId, ctx.user.id), about.length ? or(...about) : undefined))
+          .orderBy(desc(tasks.createdAt));
         const filter = input?.filter ?? 'all';
         if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < now);
         else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= now);
         else if (filter === 'completed') rows = rows.filter(t => t.completed);
-        else if (filter === 'mine') rows = rows.filter(t => !t.completed);
+        else if (filter === 'mine') {
+          // Open tasks assigned to the signed-in person (by name, as assignedTo
+          // is a name): their own login name, or the team member's name on a
+          // team link.
+          const me = myTaskName(ctx);
+          rows = rows.filter(t => !t.completed && !!me && (t.assignedTo ?? '').trim().toLowerCase() === me);
+        }
         else rows = rows.filter(t => !t.completed);
         // Client names for the "open enquiry / event" links; null when the
         // linked record no longer exists, so the list doesn't link to nothing.
@@ -6780,7 +6807,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         dueDate: z.number().optional(),
         linkedLeadId: z.number().optional(),
         linkedBookingId: z.number().optional(),
-        assignedTo: z.string().optional(),
+        assignedTo: z.string().max(255).optional(),
         priority: z.enum(['low', 'normal', 'high']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -6798,13 +6825,25 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           dueDate: input.dueDate,
           linkedLeadId: input.linkedLeadId,
           linkedBookingId: input.linkedBookingId,
-          assignedTo: input.assignedTo,
+          assignedTo: input.assignedTo?.trim() || null,
           priority: input.priority ?? 'normal',
           completed: false,
           createdAt: now,
           updatedAt: now,
         });
         return { success: true, id: (result as any).insertId };
+      }),
+    // People a task can be assigned to, and who "mine" means for this login.
+    assignees: protectedProcedure.query(async ({ ctx }) => {
+      const { listAssignees } = await import('./taskLinks');
+      return listAssignees(ctx);
+    }),
+    // Enquiries and events matching a client name / email, for the "Link to" picker.
+    searchLinks: protectedProcedure
+      .input(z.object({ q: z.string().max(100) }))
+      .query(async ({ input, ctx }) => {
+        const { searchLinkTargets } = await import('./taskLinks');
+        return searchLinkTargets(ctx.user.id, input.q);
       }),
     complete: protectedProcedure
       .input(z.object({ id: z.number(), completed: z.boolean() }))
@@ -6814,11 +6853,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [before] = await db.select().from(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id))).limit(1);
         await db.update(tasks).set({
           completed: input.completed,
           completedAt: input.completed ? Date.now() : null,
           updatedAt: Date.now(),
         }).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        // A follow-up task and its enquiry's follow-up date go together.
+        if (before && before.completed !== input.completed) {
+          const { clearFollowUpDateForTask, restoreFollowUpDateForTask } = await import('./followUpTask');
+          if (input.completed) await clearFollowUpDateForTask(before);
+          else await restoreFollowUpDateForTask(before);
+        }
         return { success: true };
       }),
     delete: protectedProcedure
@@ -6829,7 +6875,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [gone] = await db.select().from(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id))).limit(1);
         await db.delete(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        if (gone && !gone.completed) {
+          const { clearFollowUpDateForTask } = await import('./followUpTask');
+          await clearFollowUpDateForTask(gone);
+        }
         return { success: true };
       }),
     update: protectedProcedure
@@ -6841,6 +6892,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         priority: z.enum(['low', 'normal', 'high']).optional(),
         linkedLeadId: z.number().nullable().optional(),
         linkedBookingId: z.number().nullable().optional(),
+        assignedTo: z.string().max(255).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -6851,7 +6903,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...rest } = input;
-        await db.update(tasks).set({ ...rest, updatedAt: Date.now() }).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id)));
+        const [before] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id))).limit(1);
+        if (!before) return { success: true };
+        const set: Record<string, unknown> = { ...rest, updatedAt: Date.now() };
+        if (rest.assignedTo !== undefined) set.assignedTo = rest.assignedTo?.trim() || null;
+        // A follow-up task is its enquiry's follow-up date: it keeps a due
+        // date (clearing it is ignored) and stays attached to that enquiry
+        // (re-linking turns it into an ordinary task).
+        const isFollowUp = before.source === 'follow_up' && !before.completed;
+        if (isFollowUp && rest.dueDate === null) delete set.dueDate;
+        const relinked = isFollowUp && rest.linkedLeadId !== undefined && rest.linkedLeadId !== before.linkedLeadId;
+        if (relinked) set.source = null;
+        await db.update(tasks).set(set).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id)));
+        if (relinked) {
+          const { clearFollowUpDateForTask } = await import('./followUpTask');
+          await clearFollowUpDateForTask(before);
+        }
+        if (isFollowUp && !relinked && typeof rest.dueDate === 'number' && rest.dueDate !== before.dueDate) {
+          const { moveFollowUpDateForTask } = await import('./followUpTask');
+          await moveFollowUpDateForTask({ ...before, dueDate: rest.dueDate });
+        }
         return { success: true };
       }),
   }),
