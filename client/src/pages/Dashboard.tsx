@@ -456,19 +456,23 @@ function SpacePricingFields<T extends SpacePricingForm>({ form, setForm }: { for
   );
 }
 
-function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl, isAdmin = false }: {
+function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl, isAdmin = false, canManageAccount = true }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
   venueName?: string;
   venueLogoUrl?: string;
   // The VenueFlowHQ marketing waitlist is the platform owner's, not a venue's.
   isAdmin?: boolean;
+  // Only account managers (owner / full-access login) see the owner-only
+  // sub-tabs: Brand Pack, Team / Account Logins and Integrations. A manager
+  // team link gets everything else.
+  canManageAccount?: boolean;
 }) {
   // Grouped by what you're trying to do, not in the order they were built.
-  const groups = [
+  const rawGroups = [
     { label: "Your venue", items: [
       { id: "venue", label: "Venue" },
-      { id: "brand-pack", label: "Brand Pack" },
+      ...(canManageAccount ? [{ id: "brand-pack", label: "Brand Pack" }] : []),
       { id: "floor-plans", label: "Floor Plans" },
       { id: "menu", label: "Menu & Catalogue" },
       { id: "taxes", label: "Taxes & Fees" },
@@ -484,13 +488,15 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { label: "Email & team", items: [
       { id: "email", label: "Email" },
       { id: "staff-emails", label: "BEO Email Recipients" },
-      { id: "team", label: "Team" },
+      ...(canManageAccount ? [{ id: "team", label: "Team" }] : []),
     ]},
     // Billing was a static placeholder card — removed until there's real billing.
-    { label: "Account", items: [
+    ...(canManageAccount ? [{ label: "Account", items: [
       { id: "integrations", label: "Integrations" },
-    ]},
+    ]}] : []),
   ];
+  // Drop any group left with no items (e.g. "Account" for a manager).
+  const groups = rawGroups.filter(g => g.items.length > 0);
   const items = groups.flatMap(g => g.items);
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
@@ -838,6 +844,13 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember, isStaff, error: authError, refresh: refreshAuth, logout } = useAuth();
+  // Only the venue owner (or a full-access account login) manages the account —
+  // its logins, team access links, integrations (Xero/NBI/API tokens) and Brand
+  // Pack. A team-access-link session (manager or staff) is not an account
+  // manager, matching the server's isAccountManager(). The sensitive Settings
+  // sub-tabs are hidden from everyone who isn't one; the server refuses the
+  // calls regardless.
+  const canManageAccount = !isTeamMember && !isStaff;
   const [, setLocation] = useLocation();
   // The shell had no sign-out control at all (the only one lived in the
   // unused DashboardLayout scaffold), so on a shared or borrowed device the
@@ -878,6 +891,14 @@ export default function Dashboard() {
     if (tab === "pipeline") setTab("enquiries");
   }, [tab]);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
+  // A manager (or any non-account-manager) who lands on an owner-only sub-tab —
+  // e.g. a bookmarked ?sub=integrations — is moved to Venue, so the sidebar and
+  // the panel never disagree. The server refuses those calls regardless.
+  useEffect(() => {
+    if (!canManageAccount && (settingsSubTab === "brand-pack" || settingsSubTab === "team" || settingsSubTab === "integrations")) {
+      setSettingsSubTab("venue");
+    }
+  }, [canManageAccount, settingsSubTab]);
   const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
   const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
   const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
@@ -6107,7 +6128,7 @@ export default function Dashboard() {
           {tab === "settings" && (
             <div className="flex flex-col md:flex-row" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
               {/* Settings sidebar — like Perfect Venue */}
-              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} isAdmin={user?.role === 'admin'} />
+              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} isAdmin={user?.role === 'admin'} canManageAccount={canManageAccount} />
               <div className="flex-1 overflow-auto p-4 md:p-8">
 
               {/* ── VENUE (unified: Details + Profile + Spaces) ─────── */}
@@ -7721,7 +7742,7 @@ export default function Dashboard() {
               )}
 
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
-              {settingsSubTab === "integrations" && (() => {
+              {settingsSubTab === "integrations" && canManageAccount && (() => {
                 const nbiConnected = !!(venueSettings as any)?.nbiAccountId && !!(venueSettings as any)?.nbiVenueId;
                 const nbiEnabled = (venueSettings as any)?.nbiSyncEnabled === 1;
                 return (
@@ -8045,7 +8066,7 @@ export default function Dashboard() {
               )}
 
               {/* ── BEO EMAIL RECIPIENTS SUB-TAB ───────────────────────────── */}
-              {settingsSubTab === "brand-pack" && settingsForm && (() => {
+              {settingsSubTab === "brand-pack" && canManageAccount && settingsForm && (() => {
                 // Curated serif+sans pairings — keys MUST match BRAND_FONT_PAIRS
                 // in server/beoPdf.ts so the on-screen picker matches the PDF.
                 const FONT_PAIRS = [
@@ -8293,7 +8314,7 @@ export default function Dashboard() {
               })()}
 
               {/* ── TEAM SUB-TAB ───────────────────────────────── */}
-              {settingsSubTab === "team" && (() => {
+              {settingsSubTab === "team" && canManageAccount && (() => {
                 const ROLES = [{ value: 'staff', label: 'Staff' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
                 const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
                 // Logins and access links are managed by the owner only — the

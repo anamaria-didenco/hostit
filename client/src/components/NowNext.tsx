@@ -134,7 +134,29 @@ export default function NowNext({
   const label = "font-bebas tracking-widest text-[12px] text-stone";
 
   return (
-    <div className="max-w-md mx-auto pb-44">
+    <div className="max-w-md mx-auto pb-44 sm:pb-6">
+      {/* Allergies + screen switcher. One nav system: a static bar at the top on
+          desktop, a bar pinned to the bottom (thumb reach) on phones. It used to
+          be a full-width fixed bottom bar on every size, so on desktop it showed
+          at the same time as the staff portal's top tabs — a second navigation. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 bg-white border-t-2 border-gold print:hidden sm:static sm:inset-x-auto sm:z-auto sm:border-t-0 sm:border-b-2 sm:mb-4" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        {severe.length > 0 && (
+          <button type="button" onClick={() => setScreen("allergies")}
+            className="w-full text-left bg-red-700 text-white px-4 py-2.5 font-dm text-[16px] font-bold leading-snug">
+            Allergies: {bannerText}
+            <span className="block font-normal text-[14px]">Tap to see everyone</span>
+          </button>
+        )}
+        <div role="tablist" aria-label="Now and next screens" className="max-w-md mx-auto grid grid-cols-5">
+          {tabs.map(([key, name]) => (
+            <button key={key} id={`vf-nn-tab-${key}`} role="tab" type="button" aria-selected={screen === key} aria-controls={`vf-nn-${key}`}
+              onClick={() => setScreen(key)}
+              className={`min-h-[52px] font-dm text-[14px] font-bold ${screen === key ? "text-forest shadow-[inset_0_3px_0_#2f5488]" : "text-stone"}`}>
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
       <div role="tabpanel" id={`vf-nn-${screen}`} aria-labelledby={`vf-nn-tab-${screen}`} className="space-y-4">
         {screen === "now" && (
           <>
@@ -355,26 +377,6 @@ export default function NowNext({
             )}
           </>
         )}
-      </div>
-
-      {/* Allergies + screen switcher, pinned to the bottom of every screen. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 bg-white border-t-2 border-gold print:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {severe.length > 0 && (
-          <button type="button" onClick={() => setScreen("allergies")}
-            className="w-full text-left bg-red-700 text-white px-4 py-2.5 font-dm text-[16px] font-bold leading-snug">
-            Allergies: {bannerText}
-            <span className="block font-normal text-[14px]">Tap to see everyone</span>
-          </button>
-        )}
-        <div role="tablist" aria-label="Now and next screens" className="max-w-md mx-auto grid grid-cols-5">
-          {tabs.map(([key, name]) => (
-            <button key={key} id={`vf-nn-tab-${key}`} role="tab" type="button" aria-selected={screen === key} aria-controls={`vf-nn-${key}`}
-              onClick={() => setScreen(key)}
-              className={`min-h-[52px] font-dm text-[14px] font-bold ${screen === key ? "text-forest shadow-[inset_0_3px_0_#2f5488]" : "text-stone"}`}>
-              {name}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );

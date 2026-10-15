@@ -436,6 +436,9 @@ export const appRouter = router({
      * Bookings Webhook Url field. Generates the per-venue secret on first call.
      */
     getNbiWebhookUrl: protectedProcedure.query(async ({ ctx }) => {
+      // The NBI webhook secret is an integration credential — only the owner
+      // (or a full-access login) manages integrations, never a team manager.
+      { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { venueSettings } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
@@ -454,6 +457,7 @@ export const appRouter = router({
 
     /** Rotate the webhook secret — invalidates any URL pasted into NBI before. */
     regenerateNbiWebhookSecret: protectedProcedure.mutation(async ({ ctx }) => {
+      { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { venueSettings } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
@@ -8312,6 +8316,15 @@ Return ONLY valid JSON.`;
         await db.update(staffPortalLinks).set({ lastAccessedAt: Date.now() }).where(eq(staffPortalLinks.id, link.id));
         const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, link.runsheetId)).limit(1);
         if (!runsheet) return null;
+        // The venue's Brand Pack (accent, font, logo, theme, tagline) so the
+        // staff page can brand its header with venueBrand(), like the proposal
+        // page. These aren't secret (not in VENUE_SECRET_FIELDS).
+        const { venueSettings: venueSettingsTable } = await import('../drizzle/schema');
+        const [venue] = await db.select({
+          name: venueSettingsTable.name, logoUrl: venueSettingsTable.logoUrl, primaryColor: venueSettingsTable.primaryColor,
+          brandAccentColor: venueSettingsTable.brandAccentColor, brandFontKey: venueSettingsTable.brandFontKey,
+          themeKey: venueSettingsTable.themeKey, tagline: venueSettingsTable.tagline,
+        }).from(venueSettingsTable).where(eq(venueSettingsTable.ownerId, link.ownerId)).limit(1);
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
         const { checklistInstances } = await import('../drizzle/schema');
@@ -8430,7 +8443,7 @@ Return ONLY valid JSON.`;
             };
           }
         }
-        return { link: { id: link.id, label: link.label }, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
+        return { link: { id: link.id, label: link.label }, venue: venue ?? null, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
       }),
 
     // Protected: create a new staff portal link
@@ -8688,7 +8701,15 @@ Return ONLY valid JSON.`;
         if (!wc) return null;
         const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, wc.runsheetId)).limit(1);
         if (!runsheet) return null;
-        const [venue] = await db.select({ name: venueSettings.name, logoUrl: venueSettings.logoUrl, primaryColor: venueSettings.primaryColor })
+        // Brand Pack fields (accent, font, logo, theme, tagline) ride along so
+        // the client page can brand itself with venueBrand(), the same way the
+        // proposal page does. None of these are secret (not in
+        // VENUE_SECRET_FIELDS), so they're safe on this public link.
+        const [venue] = await db.select({
+          name: venueSettings.name, logoUrl: venueSettings.logoUrl, primaryColor: venueSettings.primaryColor,
+          brandAccentColor: venueSettings.brandAccentColor, brandFontKey: venueSettings.brandFontKey,
+          themeKey: venueSettings.themeKey, tagline: venueSettings.tagline,
+        })
           .from(venueSettings).where(eq(venueSettings.ownerId, wc.ownerId)).limit(1);
         let coupleNames: string | null = null;
         if (runsheet.leadId) {
@@ -8699,7 +8720,9 @@ Return ONLY valid JSON.`;
           answers: wc.answers ?? {},
           submittedAt: wc.submittedAt,
           venueName: venue?.name ?? 'Your Venue',
+          venue: venue ?? null,
           eventTitle: runsheet.title,
+          eventType: runsheet.eventType ?? null,
           eventDate: runsheet.eventDate,
           coupleNames,
         };
