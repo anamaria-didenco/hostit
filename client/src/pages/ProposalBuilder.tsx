@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image, Eye, EyeOff, ArrowLeft, ArrowRight, Camera } from "lucide-react";
+import { Pencil, ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image, Eye, EyeOff, ArrowLeft, ArrowRight, Camera } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -45,7 +45,7 @@ interface LineItem {
 }
 
 export default function ProposalBuilder() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, isStaff } = useAuth();
   const [, setLocation] = useLocation();
 
   // ?leadId=N starts a new proposal for that enquiry; ?proposalId=N opens an
@@ -726,11 +726,9 @@ export default function ProposalBuilder() {
 
           {/* Lead Info Banner */}
           {lead && (
-            <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
-              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{locked ? "PROPOSAL FOR" : savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}</div>
-              <div className="font-alfa text-lg text-ink">{lead.firstName} {lead.lastName}</div>
-              <div className="font-dm text-sm text-muted-foreground">{lead.email} · {lead.eventType || "Event"}</div>
-            </div>
+            <ClientContactCard lead={lead as any} leadId={leadId}
+              heading={locked ? "PROPOSAL FOR" : savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}
+              canEdit={!isStaff && !locked} onSaved={() => setPreviewNonce(n => n + 1)} />
           )}
 
           {/* Proposal Title & Intro */}
@@ -1831,6 +1829,78 @@ function ProposalPhotosCard({ proposalId, token, locked, onChanged }: { proposal
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** The client the proposal is for, with their contact details editable in place. */
+function ClientContactCard({ lead, leadId, heading, canEdit, onSaved }: {
+  lead: { id: number; firstName: string; lastName: string | null; email: string | null; phone: string | null; company: string | null; eventType: string | null };
+  leadId: number | null; heading: string; canEdit: boolean; onSaved: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const update = trpc.leads.update.useMutation();
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ firstName: "", lastName: "", email: "", phone: "", company: "" });
+  const [err, setErr] = useState<string | null>(null);
+  const start = () => {
+    setF({ firstName: lead.firstName ?? "", lastName: lead.lastName ?? "", email: lead.email ?? "", phone: lead.phone ?? "", company: lead.company ?? "" });
+    setErr(null); setEditing(true);
+  };
+  const save = async () => {
+    if (!f.firstName.trim()) return setErr("Enter a first name.");
+    if (f.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return setErr("That email address doesn't look right.");
+    setErr(null);
+    try {
+      await update.mutateAsync({ id: lead.id, firstName: f.firstName.trim(), lastName: f.lastName.trim() || null, email: f.email.trim(), phone: f.phone.trim() || null, company: f.company.trim() || null } as any);
+      if (leadId) await utils.leads.get.invalidate({ id: leadId });
+      toast.success("Saved");
+      setEditing(false);
+      onSaved();
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't save those details.");
+    }
+  };
+  const field = (key: keyof typeof f, label: string, type = "text", autoComplete?: string) => (
+    <div className="min-w-0">
+      <label htmlFor={`pb-c-${key}`} className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">{label}</label>
+      <Input id={`pb-c-${key}`} type={type} autoComplete={autoComplete} value={f[key]} onChange={e => setF(p => ({ ...p, [key]: e.target.value }))}
+        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm text-sm h-9 bg-white" />
+    </div>
+  );
+  return (
+    <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{heading}</div>
+        {canEdit && !editing && (
+          <button type="button" onClick={start} className="inline-flex items-center gap-1 font-bebas text-xs tracking-widest text-primary hover:underline min-h-[32px]">
+            <Pencil className="w-3 h-3" aria-hidden /> EDIT CONTACT
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-3 mt-1">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {field("firstName", "FIRST NAME", "text", "given-name")}
+            {field("lastName", "LAST NAME", "text", "family-name")}
+            {field("email", "EMAIL", "email", "email")}
+            {field("phone", "PHONE", "tel", "tel")}
+            {field("company", "COMPANY")}
+          </div>
+          {err && <p role="alert" className="font-dm text-sm text-red-700 m-0">{err}</p>}
+          <div className="flex gap-2">
+            <Button type="button" onClick={save} disabled={update.isPending} className="bg-primary text-white font-bebas tracking-widest rounded-none text-xs h-9">{update.isPending ? "SAVING..." : "SAVE"}</Button>
+            <Button type="button" variant="outline" onClick={() => setEditing(false)} className="font-bebas tracking-widest rounded-none text-xs h-9 bg-transparent">CANCEL</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="font-alfa text-lg text-ink">{[lead.firstName, lead.lastName].filter(Boolean).join(" ")}{lead.company ? <span className="font-dm text-sm text-muted-foreground"> · {lead.company}</span> : null}</div>
+          <div className="font-dm text-sm text-muted-foreground">
+            {[lead.email || (canEdit ? "No email yet" : null), lead.phone, lead.eventType || "Event"].filter(Boolean).join(" · ")}
+          </div>
+        </>
       )}
     </div>
   );
