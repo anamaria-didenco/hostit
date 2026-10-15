@@ -1007,7 +1007,6 @@ export default function Dashboard() {
     let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return SPACE_PALETTE[h % SPACE_PALETTE.length];
   };
-  const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   // Lost/cancelled are dead ends, not work — the board hides them until asked
   // (unless the user has saved their own stage choices via CUSTOMISE).
@@ -4179,7 +4178,7 @@ export default function Dashboard() {
                                 const fuReason = leadFollowUpState(lead, nowTs).reason;
                                 return (
                                   <button key={lead.id}
-                                    onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
+                                    onClick={() => openEventDrawer({ ...lead, _isLead: true })}
                                     className="group w-full shrink-0 text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
@@ -4659,104 +4658,6 @@ export default function Dashboard() {
                 />
               )}
               {/* Kanban Lead Quick-View Modal */}
-              {leadViewMode === "kanban" && kanbanDetailOpen && selectedLead && (
-                <Dialog open={kanbanDetailOpen} onOpenChange={(v) => { setKanbanDetailOpen(v); if (!v) setSelectedLead(null); }}>
-                  <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                      <DialogTitle className="font-cormorant text-xl font-semibold text-ink leading-tight">
-                        {selectedLead.firstName} {selectedLead.lastName}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      {/* Status badge */}
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const stage = pipelineStages.find((s: any) => s.key === selectedLead.status);
-                          return stage ? (
-                            <span className={`font-bebas text-xs tracking-widest px-2.5 py-1 border ${stage.color}`}>{stage.label}</span>
-                          ) : null;
-                        })()}
-                        {holdState(selectedLead) === 'held' && <HoldTag until={selectedLead.holdUntil} />}
-                        <DateClashChip clashes={clashMap?.[selectedLead.id] as any} />
-                      </div>
-                      {/* Contact */}
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        {selectedLead.email && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EMAIL</p>
-                            <p className="font-dm text-sm text-ink truncate">{selectedLead.email}</p>
-                          </div>
-                        )}
-                        {selectedLead.phone && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">PHONE</p>
-                            <p className="font-dm text-sm text-ink">{selectedLead.phone}</p>
-                          </div>
-                        )}
-                        {selectedLead.eventType && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EVENT TYPE</p>
-                            <p className="font-dm text-sm text-ink">{selectedLead.eventType}</p>
-                          </div>
-                        )}
-                        {selectedLead.eventDate && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EVENT DATE</p>
-                            <p className="font-dm text-sm text-ink">
-                              {new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                              {fmtEventTime(selectedLead.eventDate) && (
-                                <span className="text-forest"> · {fmtEventTime(selectedLead.eventDate)}</span>
-                              )}
-                            </p>
-                          </div>
-                        )}
-                        {selectedLead.guestCount && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">GUESTS</p>
-                            <p className="font-dm text-sm text-ink">{selectedLead.guestCount}</p>
-                          </div>
-                        )}
-                        {selectedLead.budget && (
-                          <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">BUDGET</p>
-                            <p className="font-dm text-sm text-ink">${Number(selectedLead.budget).toLocaleString()}</p>
-                          </div>
-                        )}
-                      </div>
-                      {selectedLead.message && (
-                        <div>
-                          <p className="font-bebas text-xs tracking-widest text-ink/70 mb-1">MESSAGE</p>
-                          <p className="font-dm text-sm text-ink/70 leading-relaxed line-clamp-3">{selectedLead.message}</p>
-                        </div>
-                      )}
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-border flex-wrap">
-                        {selectedLead.email && !isTeamMember && (
-                          <button
-                            onClick={() => {
-                              setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
-                              setShowEmailModal(true);
-                              setKanbanDetailOpen(false);
-                            }}
-                            className="flex items-center gap-1.5 font-bebas tracking-widest text-xs border border-forest/30 text-forest px-3 py-2 hover:bg-forest/10 transition-colors">
-                            <Mail className="w-3.5 h-3.5" /> EMAIL
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setKanbanDetailOpen(false); setLocation(`/proposals/new?leadId=${selectedLead.id}`); }}
-                          className="flex items-center gap-1.5 font-bebas tracking-widest text-xs bg-forest-dark text-cream px-3 py-2 hover:bg-forest transition-colors">
-                          <FileText className="w-3.5 h-3.5" /> CREATE PROPOSAL
-                        </button>
-                        <button
-                          onClick={() => { setLeadViewMode("list"); setKanbanDetailOpen(false); }}
-                          className="ml-auto font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 px-2 py-2">
-                          FULL DETAILS <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
               </div>
             </div>
           )}
