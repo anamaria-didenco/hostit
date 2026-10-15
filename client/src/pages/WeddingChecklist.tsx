@@ -4,6 +4,7 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Heart, Plus, X } from "lucide-react";
+import { venueBrand } from "@shared/brand";
 
 type Dietary = { name: string; count: number; notes?: string };
 
@@ -103,6 +104,18 @@ export default function WeddingChecklist() {
     submitMutation.mutate({ token });
   }
 
+  // The venue's Brand Pack leads the page's look (accent colour, font pairing,
+  // logo), the same way the proposal page is branded via venueBrand().
+  const brand = venueBrand((data as any)?.venue);
+  useEffect(() => {
+    if (!data) return;
+    const id = "vf-brand-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
+    document.head.appendChild(link);
+  }, [data, brand.fontLink]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center">
@@ -126,14 +139,25 @@ export default function WeddingChecklist() {
     ? new Date(data.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : null;
 
+  // The page was always headed "Wedding Checklist" even for a corporate dinner
+  // or birthday. Lead with the event's own type; keep "Wedding" when it really
+  // is one (the event type often reads "Wedding Reception").
+  const eventType = ((data as any).eventType ?? "").toString().trim();
+  const isWedding = /wedding/i.test(eventType) || /wedding/i.test(data.eventTitle ?? "");
+  const checklistNoun = isWedding ? "Wedding" : (eventType || "Event");
+  const possessive = data.coupleNames ? `${data.coupleNames}'s` : "Your";
+
   return (
-    <div className="min-h-screen bg-linen">
+    <div className="min-h-screen bg-linen" style={{ fontFamily: brand.sans }}>
       <main className="max-w-xl mx-auto px-4 py-10">
-        {/* Header */}
+        {/* Header — venue logo/name first, then the (event-type aware) title */}
         <header className="mb-8 text-center">
-          <div className="font-bebas tracking-[0.2em] text-xs text-forest/70 mb-1">{data.venueName}</div>
-          <h1 className="font-serif text-3xl font-semibold text-ink">
-            {data.coupleNames ? `${data.coupleNames}'s` : "Your"} Wedding Checklist
+          {brand.logoUrl ? (
+            <img src={brand.logoUrl} alt={data.venueName} className="h-12 w-auto max-w-[60%] object-contain mx-auto mb-2" />
+          ) : null}
+          <div className="font-bebas tracking-[0.2em] text-xs mb-1" style={{ color: brand.accent }}>{data.venueName}</div>
+          <h1 className="text-3xl font-semibold text-ink" style={{ fontFamily: brand.serif }}>
+            {possessive} {checklistNoun} Checklist
           </h1>
           <p className="font-dm text-sm text-ink/70 mt-1.5">
             {data.eventTitle}{eventDateLabel ? ` · ${eventDateLabel}` : ""}
@@ -267,7 +291,8 @@ export default function WeddingChecklist() {
           <button
             onClick={handleSubmit}
             disabled={submitMutation.isPending}
-            className="inline-flex items-center gap-2 bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-3 transition-colors disabled:opacity-60"
+            className="inline-flex items-center gap-2 font-bebas tracking-widest text-sm rounded-sm px-6 py-3 transition-opacity hover:opacity-90 disabled:opacity-60"
+            style={{ backgroundColor: brand.accent, color: brand.onAccent }}
           >
             <Heart className="w-4 h-4" /> {submitMutation.isPending ? "SUBMITTING…" : "MARK AS SUBMITTED"}
           </button>

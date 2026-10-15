@@ -10,6 +10,7 @@ import {
 import { currency } from "@/lib/money";
 import NowNext from "@/components/NowNext";
 import { groupDrinks } from "@shared/drinkGroups";
+import { venueBrand } from "@shared/brand";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -124,6 +125,22 @@ export default function StaffPortal() {
     },
   });
 
+  // The venue's Brand Pack (accent, font, logo) leads the look, the same way
+  // the proposal page is branded via venueBrand().
+  const brand = venueBrand((data as any)?.venue);
+  const onA = brand.onAccent;
+  const onAMuted = onA === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(26,26,26,0.72)";
+  const onAOverlay = onA === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(26,26,26,0.10)";
+  const onABorder = onA === "#fff" ? "rgba(255,255,255,0.12)" : "rgba(26,26,26,0.12)";
+  useEffect(() => {
+    if (!data) return;
+    const id = "vf-brand-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
+    document.head.appendChild(link);
+  }, [data, brand.fontLink]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center">
@@ -220,13 +237,21 @@ export default function StaffPortal() {
   return (
     <div className="min-h-screen bg-linen">
       {/* ── Header ── */}
-      <header className="bg-forest sticky top-0 z-10 shadow-md">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <p className="font-bebas tracking-[0.22em] text-white/85 text-[11px]">FUNCTION RUNSHEET · STAFF COPY</p>
-            <h1 className="font-serif text-white text-xl leading-tight">{runsheet.title}</h1>
+      <header className="sticky top-0 z-10 shadow-md" style={{ backgroundColor: brand.accent, color: onA }}>
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {brand.logoUrl && (
+              <img src={brand.logoUrl} alt={(data as any)?.venue?.name ?? "Venue"} className="h-9 w-auto max-w-[120px] object-contain flex-shrink-0"
+                style={{ filter: onA === "#fff" ? "brightness(0) invert(1)" : "none" }} />
+            )}
+            <div className="min-w-0">
+              <p className="font-bebas tracking-[0.22em] text-[11px]" style={{ color: onAMuted }}>
+                {((data as any)?.venue?.name ?? "").toString().toUpperCase() || "FUNCTION RUNSHEET"} · STAFF COPY
+              </p>
+              <h1 className="text-xl leading-tight truncate" style={{ fontFamily: brand.serif }}>{runsheet.title}</h1>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => {
                 // Booking-backed runsheets print the real BEO PDF; lead-only
@@ -234,32 +259,30 @@ export default function StaffPortal() {
                 if ((runsheet as any).bookingId) window.open(`/api/beo/staff/${token}`, '_blank');
                 else window.print();
               }}
-              className="print:hidden flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-sm transition-colors"
+              className="print:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-opacity hover:opacity-80"
+              style={{ backgroundColor: onAOverlay, color: onA }}
               title="Print or save as PDF"
             >
-              <Printer className="w-3.5 h-3.5 text-white/90" />
-              <span className="font-bebas tracking-widest text-white/90 text-xs">PRINT / PDF</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span className="font-bebas tracking-widest text-xs">PRINT / PDF</span>
             </button>
-            <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-sm">
-              <CheckCircle2 className="w-3.5 h-3.5 text-white/80" />
-              <span className="font-bebas tracking-widest text-white/90 text-xs">LIVE</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm" style={{ backgroundColor: onAOverlay, color: onA }}>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span className="font-bebas tracking-widest text-xs">LIVE</span>
             </div>
           </div>
         </div>
         {/* Tab bar — a real tablist so a screen reader announces which of the
             two views is showing, not just "button, button". */}
-        <div role="tablist" aria-label="Staff portal view" className="max-w-4xl mx-auto px-4 flex border-t border-white/10 overflow-x-auto">
+        <div role="tablist" aria-label="Staff portal view" className="max-w-4xl mx-auto px-4 flex border-t overflow-x-auto" style={{ borderColor: onABorder }}>
           <button
             id="vf-tab-now"
             role="tab"
             aria-selected={activePortalTab === 'now'}
             aria-controls="vf-tabpanel-now"
             onClick={() => setActivePortalTab('now')}
-            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap ${
-              activePortalTab === 'now'
-                ? 'text-white border-white'
-                : 'text-white/70 border-transparent hover:text-white/90'
-            }`}
+            className="font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap"
+            style={{ color: activePortalTab === 'now' ? onA : onAMuted, borderColor: activePortalTab === 'now' ? onA : 'transparent' }}
           >
             NOW &amp; NEXT
           </button>
@@ -269,11 +292,8 @@ export default function StaffPortal() {
             aria-selected={activePortalTab === 'runsheet'}
             aria-controls="vf-tabpanel-runsheet"
             onClick={() => setActivePortalTab('runsheet')}
-            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap ${
-              activePortalTab === 'runsheet'
-                ? 'text-white border-white'
-                : 'text-white/70 border-transparent hover:text-white/90'
-            }`}
+            className="font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap"
+            style={{ color: activePortalTab === 'runsheet' ? onA : onAMuted, borderColor: activePortalTab === 'runsheet' ? onA : 'transparent' }}
           >
             RUNSHEET
           </button>
@@ -283,11 +303,8 @@ export default function StaffPortal() {
             aria-selected={activePortalTab === 'checklist'}
             aria-controls="vf-tabpanel-checklist"
             onClick={() => setActivePortalTab('checklist')}
-            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap flex items-center gap-2 ${
-              activePortalTab === 'checklist'
-                ? 'text-white border-white'
-                : 'text-white/70 border-transparent hover:text-white/90'
-            }`}
+            className="font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap flex items-center gap-2"
+            style={{ color: activePortalTab === 'checklist' ? onA : onAMuted, borderColor: activePortalTab === 'checklist' ? onA : 'transparent' }}
           >
             CHECKLIST
             {/* Solid light background + dark text rather than translucent
