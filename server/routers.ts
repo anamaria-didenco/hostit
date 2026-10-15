@@ -4979,6 +4979,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
           if ((prevRs?.t ?? '') !== fields.eventStartTime) newStartTime = fields.eventStartTime;
         }
+        // What the sheet held before this save, so only values that actually
+        // changed here reach the event and enquiry (autosave sends every
+        // field each time).
+        const [beforeShared] = await db.select({ guestCount: runsheets.guestCount, eventType: runsheets.eventType, spaceName: runsheets.spaceName })
+          .from(runsheets).where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
         updateData.updatedAt = new Date();
         // Refused (CONFLICT) when someone else saved since this builder
         // loaded the sheet, so their edits aren't overwritten.
@@ -4997,9 +5002,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // count — would never show up on the dashboard.
         const sharedBooking: Record<string, any> = {};
         const sharedLead: Record<string, any> = {};
-        if (fields.guestCount !== undefined) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
-        if (fields.eventType !== undefined) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
-        if (fields.spaceName !== undefined) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
+        // Only values changed in THIS save. Pushing whatever the sheet held let
+        // a sheet with an old guest count (or no space) overwrite the event
+        // whenever anything else on it was edited.
+        const changed = (k: 'guestCount' | 'eventType' | 'spaceName') =>
+          fields[k] !== undefined && (fields[k] ?? null) !== ((beforeShared as any)?.[k] ?? null);
+        if (changed('guestCount')) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
+        if (changed('eventType')) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
+        if (changed('spaceName')) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
         if (movedToDay) sharedBooking._movedToDay = movedToDay;
         if (newStartTime) sharedBooking._startTime = newStartTime;
         if (Object.keys(sharedBooking).length > 0) {

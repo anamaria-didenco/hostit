@@ -4,7 +4,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { staffMayCall } from "./_core/trpc";
 import { getDb } from "./db";
-import { leads, proposals, venueSettings, teamMembers, leadActivity } from "../drizzle/schema";
+import { leads, proposals, venueSettings, teamMembers, leadActivity, bookings, runsheets } from "../drizzle/schema";
 
 /**
  * Launch fixes from the operating-system audit, through the real routers and
@@ -49,6 +49,8 @@ d("audit launch fixes (DB)", () => {
     const ids = (await db.select({ id: leads.id }).from(leads).where(eq(leads.ownerId, OWNER))).map(r => r.id);
     for (const id of ids) await db.delete(leadActivity).where(eq(leadActivity.leadId, id));
     await db.delete(proposals).where(eq(proposals.ownerId, OWNER));
+    await db.delete(runsheets).where(eq(runsheets.ownerId, OWNER));
+    await db.delete(bookings).where(eq(bookings.ownerId, OWNER));
     await db.delete(leads).where(eq(leads.ownerId, OWNER));
     await db.delete(teamMembers).where(eq(teamMembers.ownerId, OWNER));
     await db.delete(venueSettings).where(eq(venueSettings.ownerId, OWNER));
@@ -94,5 +96,20 @@ d("audit launch fixes (DB)", () => {
     expect((own as any)?.smtpPass).toBe("secret-test-value");
     const asStaff = await staff.venue.getOwn();
     expect((asStaff as any)?.smtpPass ?? null).toBeNull();
+  });
+
+  it("a run sheet save only passes on the guests, type and space it changed", async () => {
+    const db = (await getDb())!;
+    const at = new Date("2099-04-10T06:30:00Z");
+    const [b] = await db.insert(bookings).values({ ownerId: OWNER, firstName: "Stale", email: "s@example.com", eventDate: at, guestCount: 50, spaceName: "Back Bar", status: "confirmed" } as any).returning();
+    // The sheet still holds an old count and no space.
+    const [rs] = await db.insert(runsheets).values({ ownerId: OWNER, bookingId: b.id, title: "Stale sheet", eventDate: at, guestCount: 45 } as any).returning();
+    await owner.runsheets.update({ id: rs.id, notes: "Just a note", guestCount: 45, spaceName: null, eventType: null } as any);
+    let [after] = await db.select().from(bookings).where(eq(bookings.id, b.id));
+    expect(after.guestCount).toBe(50);
+    expect(after.spaceName).toBe("Back Bar");
+    await owner.runsheets.update({ id: rs.id, guestCount: 60 } as any);
+    [after] = await db.select().from(bookings).where(eq(bookings.id, b.id));
+    expect(after.guestCount).toBe(60);
   });
 });
