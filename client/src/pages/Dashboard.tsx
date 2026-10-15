@@ -25,6 +25,8 @@ import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
+import { SinceLastVisit } from "@/components/SinceLastVisit";
+import { SpaceAvailability } from "@/components/SpaceAvailability";
 import { useDayTitles, DayTitleText, DayTitleAddButton, DayTitleModal, ymdLocal as ymdLocalD } from "@/components/DayTitle";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
@@ -3650,6 +3652,9 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* Since your last visit — what changed since this user last loaded the dashboard (non-staff). */}
+              {!isStaff && <SinceLastVisit />}
+
               {/* Calendar + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Calendar card */}
@@ -5133,6 +5138,7 @@ export default function Dashboard() {
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
+                  <SpaceAvailability />
                   <button onClick={() => setShowPrintWeek(true)}
                     title="Print every event's run sheet for a week, in one PDF"
                     aria-label="Print the week's run sheets"

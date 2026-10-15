@@ -1537,6 +1537,83 @@ export default function RunsheetBuilder() {
     { proposalId: linkedProposalId! },
     { enabled: !!linkedProposalId }
   );
+
+  // ── Proposal → F&B pull (shared by the PULL button and the "menu changed"
+  // banner) ──────────────────────────────────────────────────────────────────
+  // Build the F&B rows a pull would add: food from the quote items + the
+  // proposal's line items, drinks from the proposal drinks. This is the single
+  // source of truth so the button and the banner never drift apart.
+  const buildProposalFnbRows = useCallback((startSort: number): FnbItem[] => {
+    const qItems: any[] = (proposalQuote as any)?.items ?? [];
+    const drinks: any = proposalDrinks;
+    const foodRows: FnbItem[] = qItems.map((qi: any, i: number) => ({
+      section: 'foh' as const, course: 'Menu',
+      dishName: qi.name ?? qi.description ?? 'Menu Item',
+      description: qi.description ?? '', qty: Number(qi.qty) || 1,
+      dietary: '', serviceTime: '', staffAssigned: '', sortOrder: startSort + i,
+      unitPrice: qi.unitPrice != null ? Number(qi.unitPrice) : (qi.priceCents != null ? Number(qi.priceCents) / 100 : null),
+      _tempId: `pull-qi-${i}`,
+    }));
+    const drinkRows: FnbItem[] = [];
+    if (drinks?.selectedDrinks) {
+      try {
+        const arr: string[] = typeof drinks.selectedDrinks === 'string' ? JSON.parse(drinks.selectedDrinks) : drinks.selectedDrinks;
+        arr.forEach((name: string, i: number) => {
+          drinkRows.push({ section: 'foh', course: 'Drinks', dishName: name, qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: startSort + foodRows.length + i, _tempId: `pull-dr-${i}` });
+        });
+      } catch {}
+    }
+    if (drinks?.customDrinks) {
+      try {
+        const arr: any[] = typeof drinks.customDrinks === 'string' ? JSON.parse(drinks.customDrinks) : drinks.customDrinks;
+        arr.forEach((d: any, i: number) => {
+          drinkRows.push({ section: 'foh', course: 'Drinks', dishName: d.name, description: d.description ?? '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: startSort + foodRows.length + drinkRows.length + i, _tempId: `pull-cd-${i}` });
+        });
+      } catch {}
+    }
+    const liRows: FnbItem[] = [];
+    if ((linkedProposal as any)?.lineItems) {
+      try {
+        const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
+        li.filter((item: any) => item.description).forEach((item: any, i: number) => {
+          liRows.push({ section: 'foh', course: 'Menu', dishName: item.description, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: startSort + foodRows.length + drinkRows.length + i, unitPrice: item.unitPrice != null ? Number(item.unitPrice) : null, _tempId: `pull-li-${i}` });
+        });
+      } catch {}
+    }
+    return [...foodRows, ...drinkRows, ...liRows];
+  }, [proposalQuote, proposalDrinks, linkedProposal]);
+
+  const normDish = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+
+  // Proposal rows not already on the food sheet (matched by dish name, so a
+  // second pull — or the banner — never doubles a dish that's already there).
+  const pendingProposalRows = React.useMemo(() => {
+    const have = new Set(fnbItems.map(it => normDish(it.dishName)).filter(Boolean));
+    return buildProposalFnbRows(0).filter(r => !have.has(normDish(r.dishName)));
+  }, [fnbItems, buildProposalFnbRows]);
+
+  // Signature of the missing dishes. When it changes (the proposal's menu
+  // changed), a previously dismissed banner comes back.
+  const currentMenuSig = React.useMemo(
+    () => pendingProposalRows.map(r => normDish(r.dishName)).sort().join('|'),
+    [pendingProposalRows],
+  );
+  const [menuBannerDismissedSig, setMenuBannerDismissedSig] = useState<string | null>(null);
+  // Only on an existing sheet with its F&B loaded: a fresh sheet is seeded from
+  // the proposal directly, and we don't want a false banner while F&B loads.
+  const showMenuPullBanner = !!sheetId && !!linkedProposalId && existingFnb !== undefined
+    && pendingProposalRows.length > 0 && menuBannerDismissedSig !== currentMenuSig;
+
+  // Append the missing proposal rows (dedup, don't double). Used by both the
+  // banner and the PULL button.
+  const pullProposalMenu = () => {
+    const rows = pendingProposalRows;
+    if (rows.length === 0) { toast('The food sheet already matches the proposal.'); return; }
+    setFnbItems(prev => [...prev, ...rows.map((r, i) => ({ ...r, sortOrder: prev.length + i, _tempId: `pull-${Date.now()}-${i}` }))]);
+    toast.success(`${rows.length} item${rows.length !== 1 ? 's' : ''} pulled from proposal`);
+    setMenuBannerDismissedSig(currentMenuSig);
+  };
+
   const { data: booking } = trpc.bookings.getById.useQuery(
     { id: bookingId! },
     { enabled: !!bookingId && !sheetId }
@@ -4427,6 +4504,36 @@ export default function RunsheetBuilder() {
             {/* Items sub-tab wrapper */}
             <div className={fnbSubTab === 'items' ? '' : 'hidden print:block'}>
 
+            {/* ── PROPOSAL MENU CHANGED — offer to pull in (never silent) ── */}
+            {showMenuPullBanner && (
+              <div className="mx-5 my-4 border border-amber-300 bg-amber-50 p-4 flex items-start gap-3 no-print">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-none mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bebas tracking-widest text-xs text-amber-800">PROPOSAL MENU CHANGED</div>
+                  <p className="font-dm text-sm text-ink/80 mt-1">
+                    The linked proposal has {pendingProposalRows.length} item{pendingProposalRows.length !== 1 ? 's' : ''} that {pendingProposalRows.length !== 1 ? "aren't" : "isn't"} on this food sheet. Pull {pendingProposalRows.length !== 1 ? 'them' : 'it'} in?
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      onClick={pullProposalMenu}
+                      className="font-bebas tracking-widest text-xs text-cream bg-forest hover:bg-forest/90 rounded-sm px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" /> PULL INTO F&B SHEET
+                    </button>
+                    <button
+                      onClick={() => setMenuBannerDismissedSig(currentMenuSig)}
+                      className="font-dm text-xs text-ink/60 hover:text-ink px-2 py-1.5"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+                <button onClick={() => setMenuBannerDismissedSig(currentMenuSig)} aria-label="Dismiss" className="flex-none text-amber-600/70 hover:text-amber-800">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
               <div className="mx-5 my-4 border border-gold/40 bg-[#fffbf0] p-4 space-y-3">
@@ -4436,54 +4543,7 @@ export default function RunsheetBuilder() {
                     <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
                   </div>
                   <button
-                    onClick={() => {
-                      const qItems: any[] = (proposalQuote as any)?.items ?? [];
-                      const drinks: any = proposalDrinks;
-                      const foodRows: FnbItem[] = qItems.map((qi: any, i: number) => ({
-                        section: 'foh' as const,
-                        course: 'Menu',
-                        dishName: qi.name ?? qi.description ?? 'Menu Item',
-                        description: qi.description ?? '',
-                        qty: Number(qi.qty) || 1,
-                        dietary: '',
-                        serviceTime: '',
-                        staffAssigned: '',
-                        sortOrder: fnbItems.length + i,
-                        // Pull pricing through from the proposal quote so running totals stay accurate.
-                        unitPrice: qi.unitPrice != null ? Number(qi.unitPrice) : (qi.priceCents != null ? Number(qi.priceCents) / 100 : null),
-                        _tempId: `pull-qi-${Date.now()}-${i}`,
-                      }));
-                      const drinkRows: FnbItem[] = [];
-                      if (drinks?.selectedDrinks) {
-                        try {
-                          const arr: string[] = typeof drinks.selectedDrinks === 'string' ? JSON.parse(drinks.selectedDrinks) : drinks.selectedDrinks;
-                          arr.forEach((name: string, i: number) => {
-                            drinkRows.push({ section: 'foh', course: 'Drinks', dishName: name, qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + i, _tempId: `pull-dr-${Date.now()}-${i}` });
-                          });
-                        } catch {}
-                      }
-                      if (drinks?.customDrinks) {
-                        try {
-                          const arr: any[] = typeof drinks.customDrinks === 'string' ? JSON.parse(drinks.customDrinks) : drinks.customDrinks;
-                          arr.forEach((d: any, i: number) => {
-                            drinkRows.push({ section: 'foh', course: 'Drinks', dishName: d.name, description: d.description ?? '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, _tempId: `pull-cd-${Date.now()}-${i}` });
-                          });
-                        } catch {}
-                      }
-                      const liRows: FnbItem[] = [];
-                      if ((linkedProposal as any)?.lineItems) {
-                        try {
-                          const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
-                          li.filter((item: any) => item.description).forEach((item: any, i: number) => {
-                            liRows.push({ section: 'foh', course: 'Menu', dishName: item.description, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, unitPrice: item.unitPrice != null ? Number(item.unitPrice) : null, _tempId: `pull-li-${Date.now()}-${i}` });
-                          });
-                        } catch {}
-                      }
-                      const all = [...foodRows, ...drinkRows, ...liRows];
-                      if (all.length === 0) { toast.error('No F&B items found in proposal'); return; }
-                      setFnbItems(prev => [...prev, ...all]);
-                      toast.success(`${all.length} item${all.length !== 1 ? 's' : ''} pulled from proposal`);
-                    }}
+                    onClick={pullProposalMenu}
                     className="font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 border border-gold/40 rounded-sm px-2.5 min-h-[44px] hover:bg-forest/5 hover:border-forest/30 transition-colors"
                   >
                     <RefreshCw className="w-3 h-3" /> PULL INTO F&B SHEET

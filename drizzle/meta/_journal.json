@@ -651,6 +651,13 @@
       "when": 1792024054403,
       "tag": "0092_proposal_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1792024054408,
+      "tag": "0097_user_last_seen",
+      "breakpoints": true
     }
   ]
 }

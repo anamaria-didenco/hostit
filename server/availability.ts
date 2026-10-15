@@ -252,6 +252,89 @@ export function classifyClashes(q: ClashQuery, candidates: ClashCandidate[], opt
   return out.sort((a, b) => rank(a) - rank(b) || a.start.localeCompare(b.start));
 }
 
+// ─── Availability by space ───────────────────────────────────────────────────
+
+/** One space on one day: the events on it, and whether that makes it busy. */
+export type SpaceDay = {
+  spaceId: number;
+  spaceName: string;
+  busy: boolean;
+  /** Definite clashes — same space, overlapping the day. */
+  events: Clash[];
+};
+
+/** A day's availability: every space's free/busy, plus any events whose space
+ *  the venue never set (so they can't be tied to one room). */
+export type AvailabilityDay = {
+  date: string; // "YYYY-MM-DD" (venue zone)
+  spaces: SpaceDay[];
+  unknownSpace: Clash[];
+};
+
+export type AvailabilityResult = { from: string; to: string; days: AvailabilityDay[] };
+
+/** Inclusive list of NZ calendar days from `from` to `to`, capped. */
+function daysInRange(from: string, to: string, max = 31): string[] {
+  const out: string[] = [];
+  let cur = from;
+  while (cur <= to && out.length < max) {
+    out.push(cur);
+    cur = addDaysYmd(cur, 1);
+  }
+  return out;
+}
+
+/**
+ * Per-space free/busy for a date (or an inclusive date range), for the
+ * "Availability" view. Reuses the same candidate load and clash classification
+ * as date-clash detection, so "busy" here means exactly what a clash means
+ * everywhere else. Scoped to the owner — never another venue's events.
+ */
+export async function availabilityForDate(
+  ownerId: number,
+  fromYmd: string,
+  toYmd?: string,
+  now: Date = new Date(),
+): Promise<AvailabilityResult> {
+  const from = fromYmd;
+  const to = toYmd && toYmd >= fromYmd ? toYmd : fromYmd;
+  const days = daysInRange(from, to);
+  const empty: AvailabilityResult = { from, to, days: [] };
+  if (days.length === 0) return empty;
+
+  const { getEventSpaces } = await import("./db");
+  const spaces = await getEventSpaces(ownerId);
+
+  // One candidate load across the whole window (a day either side, for events
+  // that run past midnight), then classify each day against it.
+  const windowStart = zonedMidnight(days[0]);
+  const windowEnd = zonedMidnight(addDaysYmd(days[days.length - 1], 1));
+  const candidates = await loadCandidates(
+    ownerId,
+    new Date(windowStart.getTime() - DAY_MS),
+    new Date(windowEnd.getTime() + DAY_MS),
+  );
+
+  const out: AvailabilityDay[] = days.map(ymd => {
+    const dayStart = zonedMidnight(ymd);
+    const dayNext = zonedMidnight(addDaysYmd(ymd, 1));
+    const perSpace: SpaceDay[] = spaces.map(sp => {
+      const events = classifyClashes(
+        { start: dayStart, end: dayNext, spaceId: sp.id, spaceName: sp.name },
+        candidates,
+        { now },
+      ).filter(c => c.certainty === "clash");
+      return { spaceId: sp.id, spaceName: sp.name, busy: events.length > 0, events };
+    });
+    // Events that overlap the day but have no space set — a query with no space
+    // returns every overlapping event as "possible"; keep only the space-less.
+    const unknownSpace = classifyClashes({ start: dayStart, end: dayNext }, candidates, { now })
+      .filter(c => spaceList(c.spaceName).length === 0);
+    return { date: ymd, spaces: perSpace, unknownSpace };
+  });
+  return { from, to, days: out };
+}
+
 // ─── Errors ────────────────────────────────────────────────────────────────
 
 /** Carries the clash list to the client (see errorFormatter in _core/trpc). */
