@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Printer, CheckSquare, Square, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Printer, CheckSquare, Square, Plus, Clock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -18,61 +18,62 @@ interface ChecklistItem {
   notes?: string;
 }
 
-interface ChecklistInstance {
-  id: number;
-  name: string;
-  items: ChecklistItem[];
-  bookingId?: number;
-  templateId?: number;
-  createdAt: Date;
-}
-
 export default function Checklist() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const bookingId = parseInt(new URLSearchParams(window.location.search).get("bookingId") ?? "0") || undefined;
-  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   useEscapeKey(showAssignModal, () => setShowAssignModal(false));
 
-  const { data: instances, refetch: refetchInstances } = trpc.checklists.getForBooking.useQuery(
+  // The event's one checklist is its run sheet's staff checklist — the same
+  // list ticked on the run sheet and from the staff link (F-29).
+  const { data, refetch, isLoading: checklistLoading } = trpc.checklists.getForBooking.useQuery(
     { bookingId: bookingId! },
     { enabled: !!bookingId && isAuthenticated }
   );
+  const runsheet = data?.runsheet ?? null;
+  const instance = data?.instance ?? null;
+  const items = (instance?.items ?? []) as ChecklistItem[];
 
   const { data: templates } = trpc.checklists.listTemplates.useQuery(undefined, { enabled: isAuthenticated });
 
+  // First visit: create the run sheet's checklist and carry over any older
+  // lists made on this page. Staff logins are read-only, so a refusal is fine.
+  const setupFor = useRef<number | null>(null);
+  const setupChecklist = trpc.checklists.getOrCreateForRunsheet.useMutation({
+    onSuccess: () => refetch(),
+    onError: () => {},
+  });
+  useEffect(() => {
+    if (!runsheet || !data?.needsSetup || setupFor.current === runsheet.id) return;
+    setupFor.current = runsheet.id;
+    setupChecklist.mutate({
+      runsheetId: runsheet.id,
+      bookingId,
+      name: runsheet.title ? `${runsheet.title} — Staff Checklist` : undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runsheet?.id, data?.needsSetup]);
+
   const assignTemplate = trpc.checklists.assignToBooking.useMutation({
-    onSuccess: () => { refetchInstances(); setShowAssignModal(false); toast.success("Checklist assigned!"); },
+    onSuccess: () => { refetch(); setShowAssignModal(false); toast.success("Template tasks added"); },
     onError: () => toast.error("Failed to assign checklist"),
   });
 
-  const updateInstance = trpc.checklists.updateInstance.useMutation({
-    onSuccess: () => refetchInstances(),
+  // One item at a time on the server, so a tick made here never overwrites
+  // one a staff member just made from their link.
+  const toggleByToken = trpc.checklists.toggleItemByToken.useMutation({
+    onSuccess: () => refetch(),
+    onError: () => { toast.error("Couldn't save that tick. Try again."); refetch(); },
   });
 
-  const deleteInstance = trpc.checklists.deleteInstance.useMutation({
-    onSuccess: () => { refetchInstances(); setSelectedInstanceId(null); toast.success("Checklist removed"); },
-  });
-
-  const selectedInstance = instances?.find((i: any) => i.id === selectedInstanceId) ?? instances?.[0] ?? null;
-
-  useEffect(() => {
-    if (instances?.length && !selectedInstanceId) {
-      setSelectedInstanceId(instances[0].id);
-    }
-  }, [instances]);
-
-  const toggleItem = (instance: any, itemId: string) => {
-    const items = (instance.items as ChecklistItem[]).map((item: ChecklistItem) =>
-      item.id === itemId ? { ...item, checked: !item.checked, checkedAt: !item.checked ? new Date().toISOString() : undefined } : item
-    );
-    updateInstance.mutate({ id: instance.id, items });
+  const toggleItem = (itemId: string) => {
+    if (!instance?.shareToken) return;
+    const item = items.find(i => i.id === itemId);
+    toggleByToken.mutate({ token: instance.shareToken, itemId, checked: !item?.checked });
   };
 
-  const completedCount = (instance: any) => {
-    const items = instance?.items as ChecklistItem[] ?? [];
-    return items.filter(i => i.checked).length;
-  };
+  const completedCount = items.filter(i => i.checked).length;
+  const runsheetHref = runsheet ? `/runsheet?id=${runsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`;
 
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="font-bebas text-xl tracking-widest text-muted-foreground">LOADING...</div></div>;
 
@@ -89,10 +90,10 @@ export default function Checklist() {
             </button>
           </Link>
           <div className="w-px h-4 bg-cream/20 hidden sm:block" />
-          <span className="font-bebas text-xs md:text-sm tracking-widest text-cream truncate">EVENT CHECKLISTS</span>
+          <span className="font-bebas text-xs md:text-sm tracking-widest text-cream truncate">EVENT CHECKLIST</span>
         </div>
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-          {isAuthenticated && (
+          {isAuthenticated && runsheet && (
             <Button onClick={() => setShowAssignModal(true)} size="sm"
               className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest text-xs rounded-none min-h-[44px]"
               aria-label="Assign template"
@@ -112,88 +113,97 @@ export default function Checklist() {
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8 print:px-0 print:py-4">
-        {/* Instance selector */}
-        {(instances ?? []).length > 1 && (
-          <div className="flex gap-2 mb-6 print:hidden">
-            {(instances ?? []).map((inst: any) => (
-              <button
-                key={inst.id}
-                type="button"
-                aria-pressed={selectedInstanceId === inst.id}
-                onClick={() => setSelectedInstanceId(inst.id)}
-                className={`font-bebas text-xs tracking-widest px-4 py-2 border transition-colors ${
-                  selectedInstanceId === inst.id
-                    ? "bg-ink text-cream border-ink"
-                    : "bg-white text-ink border-border hover:border-ink"
-                }`}
-              >
-                {inst.name}
-              </button>
-            ))}
+        {/* No event */}
+        {!bookingId && (
+          <div className="text-center py-16">
+            <CheckSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h1 className="font-cormorant text-2xl font-semibold text-ink mb-2">No Event Selected</h1>
+            <p className="font-dm text-sm text-muted-foreground">Open the checklist from an event.</p>
           </div>
         )}
 
-        {/* No checklists */}
-        {(instances ?? []).length === 0 && (
+        {bookingId && checklistLoading && (
+          <div className="text-center py-16 font-bebas text-xl tracking-widest text-muted-foreground">LOADING...</div>
+        )}
+
+        {/* No run sheet yet — the checklist lives on it */}
+        {bookingId && data && !runsheet && (
           <div className="text-center py-16">
             <CheckSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h1 className="font-cormorant text-2xl font-semibold text-ink mb-2">No Checklists Yet</h1>
-            <p className="font-dm text-sm text-muted-foreground mb-6">
-              Assign a checklist template to this event to get started.
+            <h1 className="font-cormorant text-2xl font-semibold text-ink mb-2">No Run Sheet Yet</h1>
+            <p className="font-dm text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+              This event's checklist lives on its run sheet, so the team ticks one list — here, on the run sheet and from the staff link.
+              {data.oldListCount > 0 && " The checklist tasks already on this event carry over when you create it."}
             </p>
             {isAuthenticated && (
-              <Button onClick={() => setShowAssignModal(true)}
-                className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none">
-                ASSIGN TEMPLATE
+              <Button asChild className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none min-h-[44px]">
+                <Link href={runsheetHref}>
+                  <Clock className="w-4 h-4 mr-1.5" />
+                  CREATE RUN SHEET
+                </Link>
               </Button>
             )}
           </div>
         )}
 
-        {/* Active checklist */}
-        {selectedInstance && (
+        {/* Run sheet, checklist still being set up */}
+        {runsheet && !instance && (
+          <div className="text-center py-16 font-dm text-sm text-muted-foreground">
+            {setupChecklist.isPending ? "Setting up the checklist…" : "No checklist on this event's run sheet yet."}
+          </div>
+        )}
+
+        {/* The event checklist */}
+        {runsheet && instance && (
           <div>
             {/* Header */}
             <div className="flex items-start justify-between gap-3 mb-6 print:mb-4">
               <div className="min-w-0">
                 <div className="font-bebas text-[10px] font-extrabold uppercase tracking-[0.32em] text-primary mb-1">CHECKLIST</div>
-                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink tracking-[-0.01em] print:text-2xl break-words">{selectedInstance.name}</h1>
+                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink tracking-[-0.01em] print:text-2xl break-words">{instance.name}</h1>
                 <p className="font-dm text-sm text-muted-foreground mt-1">
-                  {completedCount(selectedInstance)} of {(selectedInstance.items as ChecklistItem[]).length} tasks completed
+                  {completedCount} of {items.length} tasks completed
+                </p>
+                <p className="font-dm text-xs text-muted-foreground mt-1 print:hidden">
+                  The same list as the run sheet and the staff checklist link.
                 </p>
               </div>
-              <button
-                onClick={() => { if (confirm("Remove this checklist?")) deleteInstance.mutate({ id: selectedInstance.id }); }}
-                className="text-muted-foreground hover:text-destructive active:text-destructive transition-colors print:hidden flex items-center justify-center min-w-[44px] min-h-[44px] flex-shrink-0"
-                aria-label="Remove checklist"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <Link href={runsheetHref}>
+                <button className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-forest hover:text-ink transition-colors print:hidden min-h-[44px] flex-shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>RUN SHEET</span>
+                </button>
+              </Link>
             </div>
 
             {/* Progress bar */}
             <div
               className="w-full bg-border h-1.5 mb-6 print:hidden"
               role="progressbar"
-              aria-valuenow={completedCount(selectedInstance)}
+              aria-valuenow={completedCount}
               aria-valuemin={0}
-              aria-valuemax={(selectedInstance.items as ChecklistItem[]).length}
-              aria-label={`${completedCount(selectedInstance)} of ${(selectedInstance.items as ChecklistItem[]).length} tasks complete`}
+              aria-valuemax={items.length}
+              aria-label={`${completedCount} of ${items.length} tasks complete`}
             >
               <div
                 className="bg-burgundy h-1.5 transition-all"
-                style={{ width: `${(selectedInstance.items as ChecklistItem[]).length > 0 ? (completedCount(selectedInstance) / (selectedInstance.items as ChecklistItem[]).length) * 100 : 0}%` }}
+                style={{ width: `${items.length > 0 ? (completedCount / items.length) * 100 : 0}%` }}
               />
             </div>
 
             {/* Items */}
             <SectionHead
               title="Setup Checklist"
-              meta={`${completedCount(selectedInstance)}/${(selectedInstance.items as ChecklistItem[]).length}`}
+              meta={`${completedCount}/${items.length}`}
               className="mb-3"
             />
+            {items.length === 0 && (
+              <p className="font-dm text-sm text-muted-foreground py-6">
+                No tasks yet. Assign a template, or add tasks on the run sheet.
+              </p>
+            )}
             <div className="space-y-2">
-              {(selectedInstance.items as ChecklistItem[]).map((item) => (
+              {items.map((item) => (
                 <div
                   key={item.id}
                   role="checkbox"
@@ -204,8 +214,8 @@ export default function Checklist() {
                       ? "bg-stone-50 border-stone-200 print:bg-white"
                       : "bg-white border-border hover:border-ink print:bg-white"
                   }`}
-                  onClick={() => !loading && toggleItem(selectedInstance, item.id)}
-                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!loading) toggleItem(selectedInstance, item.id); } }}
+                  onClick={() => !loading && toggleItem(item.id)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!loading) toggleItem(item.id); } }}
                 >
                   {item.checked
                     ? <CheckSquare className="w-5 h-5 text-burgundy flex-shrink-0 print:text-black" />
@@ -238,7 +248,8 @@ export default function Checklist() {
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden" onClick={() => setShowAssignModal(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="assign-template-title" className="bg-cream border border-border shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 id="assign-template-title" className="font-cormorant text-xl font-semibold text-ink mb-4">Assign Checklist Template</h2>
+            <h2 id="assign-template-title" className="font-cormorant text-xl font-semibold text-ink mb-1">Assign Checklist Template</h2>
+            <p className="font-dm text-xs text-muted-foreground mb-4">Its tasks are added to this event's checklist.</p>
             {(templates ?? []).length === 0 ? (
               <div className="text-center py-6">
                 <p className="font-dm text-sm text-muted-foreground mb-4">No templates yet. Create one in Settings first.</p>

@@ -510,7 +510,7 @@ export default function EventDetail() {
               <Link href={`/checklist?bookingId=${bookingId}`}>
                 <button className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                   <ClipboardList className="w-4 h-4" />
-                  CHECKLISTS
+                  CHECKLIST
                 </button>
               </Link>
               <Link href={`/payments?bookingId=${bookingId}`}>
