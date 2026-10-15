@@ -6850,6 +6850,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const { markDashboardSeen } = await import("./sinceLastSeen");
       return markDashboardSeen(ctx.user.id);
     }),
+    /** Overview "Needs you today": what to do now, ownerId-scoped. Staff are refused by the "dashboard." prefix rule. */
+    needsAttention: protectedProcedure.query(async ({ ctx }) => {
+      const { getNeedsAttention } = await import('./needsAttention');
+      return getNeedsAttention(ctx.user.id);
+    }),
+    /** Overview "Today" and "Upcoming Events": today + the next 14 days, whichever month the calendar shows. */
+    upcoming: protectedProcedure.query(async ({ ctx }) => {
+      const { getUpcomingEvents } = await import('./needsAttention');
+      return getUpcomingEvents(ctx.user.id);
+    }),
   }),
   // ─── Availability by space ───────────────────────────────────────────────
   availability: router({

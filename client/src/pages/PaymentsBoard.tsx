@@ -90,7 +90,7 @@ const BUCKET_LABEL: Record<Bucket, string> = {
 const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices"], ["received", "Received"]] as const;
 type View = typeof TABS[number][0];
 
-export default function PaymentsBoard() {
+export default function PaymentsBoard({ initialFilter }: { initialFilter?: "deposits_due" } = {}) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
@@ -100,7 +100,7 @@ export default function PaymentsBoard() {
   // Default to Upcoming (what's coming up and where is its money at). Past
   // events that still need something are surfaced by a banner above the list,
   // so a forgotten post-event drinks bill can't hide behind this default.
-  const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
+  const [filter, setFilter] = useState<"action" | "upcoming" | "all" | "deposits">(initialFilter === "deposits_due" ? "deposits" : "upcoming");
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
   // "Bookings" tracks where each booking's money is up to; "Invoices sent" is
@@ -151,6 +151,9 @@ export default function PaymentsBoard() {
   // A stream settling on the night needs nothing until the event has happened.
   const streamNeedsAction = (r: Row, status: string) =>
     status === "to_invoice" || status === "invoiced" || (status === "on_night" && !isFuture(r));
+  // The Overview "Deposits due" tile: confirmed events from today on whose deposit is
+  // required and unpaid (same rule as server/needsAttention.ts countDepositsDue).
+  const isUpcomingDepositDue = (r: Row) => r.status === "confirmed" && isDepositDue(r) && !!r.eventDate && isFuture(r);
   const needsAction = (r: Row) =>
     isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
   const bucketOf = (r: Row): Bucket | null => {
@@ -174,6 +177,7 @@ export default function PaymentsBoard() {
       (r.spaceName ?? "").toLowerCase().includes(needle));
     if (bucket) list = list.filter(r => bucketOf(r) === bucket);
     else if (filter === "action") list = list.filter(needsAction);
+    else if (filter === "deposits") list = list.filter(isUpcomingDepositDue);
     else if (filter === "upcoming") list = list.filter(isFuture);
     // Sort: soonest event first, except "All" which is most recent first.
     const ts = (r: Row) => (r.eventDate ? new Date(r.eventDate).getTime() : Number.MAX_SAFE_INTEGER);
@@ -365,7 +369,7 @@ export default function PaymentsBoard() {
 
       {/* Filters */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap" role="group" aria-label="Which bookings to show">
-        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
+        {([["action", "Needs action"], ["deposits", "Deposits due"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
           const on = !bucket && filter === id;
           return (
             <button key={id} aria-pressed={on} onClick={() => { setFilter(id); setBucket(null); }}

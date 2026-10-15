@@ -142,11 +142,11 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
   );
 }
 
-export default function Tasks() {
+export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } = {}) {
   // A staff login is read-only server-side, so write controls (new/edit/
   // delete/complete) would only fail — hide or disable them.
   const { user, isStaff } = useAuth();
-  const [filter, setFilter] = useState<"all" | "mine" | "overdue" | "upcoming" | "completed">("all");
+  const [filter, setFilter] = useState<"all" | "mine" | "overdue" | "upcoming" | "completed">(initialFilter ?? "all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<{ id: number; initial: TaskFormValues } | null>(null);
 

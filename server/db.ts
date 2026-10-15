@@ -449,7 +449,7 @@ export async function restoreCancelledBooking(id: number, ownerId: number, statu
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
-  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, needsFollowUp: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
+  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, needsFollowUp: 0, upcomingEvents: 0, overdueTasks: 0, depositsDue: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
   const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
   const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')));
   // The pipeline's "won" statuses. 'booked' was renamed to 'confirmed' app-wide
@@ -459,7 +459,8 @@ export async function getDashboardStats(ownerId: number) {
   // "upcoming events". Keep 'booked' for any historical rows.
   const WON = ['booked', 'confirmed', 'finished'];
   const CLOSED = [...WON, 'lost', 'cancelled'];
-  // Active enquiries: any lead not yet won/lost/cancelled
+  // OPEN enquiries (the "Open Enquiries" tile): any lead not yet won/lost/cancelled.
+  // NEW / OPEN / FOLLOW-UP are defined once in shared/needsToday.ts.
   const newLeads = allLeads.filter(l => !CLOSED.includes(l.status ?? '')).length;
   const now = new Date();
   const overdueFollowUps = allLeads.filter(l =>
@@ -512,6 +513,9 @@ export async function getDashboardStats(ownerId: number) {
     const total = Number(b.totalNzd ?? 0);
     return total > 0 && !covers(paidByBooking[b.id] ?? 0, total);
   }).length;
+  // Confirmed upcoming events whose deposit is required and unpaid: the same rule as
+  // the Payments board and the Overview's "Needs you today" card (shared/needsToday.ts).
+  const depositsDue = await (await import('./needsAttention')).countDepositsDue(ownerId, now);
   return {
     newLeads,
     totalLeads: allLeads.length,
@@ -522,6 +526,7 @@ export async function getDashboardStats(ownerId: number) {
     needsFollowUp,
     upcomingEvents,
     overdueTasks,
+    depositsDue,
     conversionRate,
     totalRevenueAllTime,
     pendingPayments,
