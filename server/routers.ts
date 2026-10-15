@@ -1472,6 +1472,13 @@ export const appRouter = router({
         // The client's emails go with the enquiry.
         const { leadMessages } = await import('../drizzle/schema');
         await db.delete(leadMessages).where(and(eq(leadMessages.leadId, input.id), eq(leadMessages.ownerId, ctx.user.id)));
+        // So do its open to-dos (e.g. its walkthrough task) — they'd otherwise
+        // sit in Tasks pointing at nothing. Ones tied to an event stay.
+        const { tasks } = await import('../drizzle/schema');
+        const { isNull } = await import('drizzle-orm');
+        await db.delete(tasks).where(and(
+          eq(tasks.linkedLeadId, input.id), eq(tasks.ownerId, ctx.user.id), eq(tasks.completed, false), isNull(tasks.linkedBookingId),
+        ));
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -6395,7 +6402,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         else if (filter === 'completed') rows = rows.filter(t => t.completed);
         else if (filter === 'mine') rows = rows.filter(t => !t.completed);
         else rows = rows.filter(t => !t.completed);
-        return rows;
+        // Client names for the "open enquiry / event" links; null when the
+        // linked record no longer exists, so the list doesn't link to nothing.
+        const { leads, bookings } = await import('../drizzle/schema');
+        const { inArray } = await import('drizzle-orm');
+        const name = (r: { firstName: string | null; lastName: string | null }) => [r.firstName, r.lastName].filter(Boolean).join(' ').trim() || 'Client';
+        const leadIds = Array.from(new Set(rows.map(t => t.linkedLeadId).filter((v): v is number => v != null)));
+        const bookingIds = Array.from(new Set(rows.map(t => t.linkedBookingId).filter((v): v is number => v != null)));
+        const leadNames = new Map(leadIds.length
+          ? (await db.select({ id: leads.id, firstName: leads.firstName, lastName: leads.lastName }).from(leads)
+              .where(and(eq(leads.ownerId, ctx.user.id), inArray(leads.id, leadIds)))).map(r => [r.id, name(r)] as const)
+          : []);
+        const bookingNames = new Map(bookingIds.length
+          ? (await db.select({ id: bookings.id, firstName: bookings.firstName, lastName: bookings.lastName }).from(bookings)
+              .where(and(eq(bookings.ownerId, ctx.user.id), inArray(bookings.id, bookingIds)))).map(r => [r.id, name(r)] as const)
+          : []);
+        return rows.map(t => ({
+          ...t,
+          leadName: t.linkedLeadId != null ? leadNames.get(t.linkedLeadId) ?? null : null,
+          bookingName: t.linkedBookingId != null ? bookingNames.get(t.linkedBookingId) ?? null : null,
+        }));
       }),
     create: protectedProcedure
       .input(z.object({
