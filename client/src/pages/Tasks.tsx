@@ -121,9 +121,9 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
   );
 }
 
-export default function Tasks() {
+export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } = {}) {
   const { user } = useAuth();
-  const [filter, setFilter] = useState<"all" | "mine" | "overdue" | "upcoming" | "completed">("all");
+  const [filter, setFilter] = useState<"all" | "mine" | "overdue" | "upcoming" | "completed">(initialFilter ?? "all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<{ id: number; initial: TaskFormValues } | null>(null);
 

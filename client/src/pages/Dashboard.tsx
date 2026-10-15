@@ -40,6 +40,10 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
+import NeedsYouToday from "@/components/NeedsYouToday";
+import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
+import UpcomingEventsCard from "@/components/UpcomingEventsCard";
+import { isOpenEnquiry } from "@shared/needsToday";
 import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
@@ -1235,6 +1239,14 @@ export default function Dashboard() {
   const [hiddenStats, setHiddenStats] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_stats') ?? '[]')); } catch { return new Set(); }
   });
+  // Where the Overview tiles send you: a one-shot filter for Tasks / Payments,
+  // dropped again when you leave that tab so the sidebar link opens it plain.
+  const [tasksOpenFilter, setTasksOpenFilter] = useState<"overdue" | undefined>(undefined);
+  const [paymentsOpenFilter, setPaymentsOpenFilter] = useState<"deposits_due" | undefined>(undefined);
+  useEffect(() => {
+    if (tab !== "tasks") setTasksOpenFilter(undefined);
+    if (tab !== "payments") setPaymentsOpenFilter(undefined);
+  }, [tab]);
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
@@ -2900,7 +2912,10 @@ export default function Dashboard() {
     .filter((l: any) => l.status === "new")
     .slice()
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
+  // The sidebar badge counts NEW enquiries (status "new"), exactly the NEW tab
+  // and the Overview "New Enquiries" card. It used to count only the unopened
+  // ones, which never matched either. Definitions: shared/needsToday.ts.
+  const unreadCount = newEnquiries.length;
   const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
 
   // Auto-switch to "all" when there are no new enquiries
@@ -2957,6 +2972,8 @@ export default function Dashboard() {
   // enquiry set. Multiple selections OR together.
   const leadsToShow = leadStatusFilter.length > 0
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
+    // Follow-up covers every open enquiry, "new" ones included (the tab's badge counts them).
+    : followUpOnly ? applyDateFilter(allEnquiries)
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const followUpNowMs = Date.now();
   const filteredLeads = leadsToShow
@@ -3410,16 +3427,79 @@ export default function Dashboard() {
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (() => {
+            // The action tiles come first, the vanity numbers sit in a collapsed
+            // "Performance" row. Every count below is the one the list it opens
+            // shows (definitions: shared/needsToday.ts).
+            const openEnquiryCount = allLeads ? allEnquiries.filter((l: any) => isOpenEnquiry(l.status)).length : (stats?.newLeads ?? 0);
+            const followUpTileCount = allLeads ? followUpCount : (stats?.needsFollowUp ?? 0);
+            const overdueTaskCount = stats?.overdueTasks ?? 0;
+            const depositsDueCount = stats?.depositsDue ?? 0;
             const allStats = [
-              { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
+              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
+              { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
+              { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
+              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
               { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-blue-500" /> },
-              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", icon: <FileText className="w-5 h-5 text-forest" /> },
-              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
               { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
-              { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: (stats?.overdueTasks ?? 0) > 0 ? 'danger' as const : undefined },
-              { id: "needs_followup", label: "Needs Follow-up", value: stats?.needsFollowUp ?? 0, sub: (stats?.needsFollowUp ?? 0) > 0 ? "quoted or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${(stats?.needsFollowUp ?? 0) > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: (stats?.needsFollowUp ?? 0) > 0 ? 'warn' as const : undefined },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-forest" />, perf: true },
+              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-forest" />, perf: true },
             ];
+            // Land on exactly the records a tile counted: clear the date, owner,
+            // search and status filters the list may have been left with.
+            const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
+              setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
+              setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
+              setTab('enquiries');
+            };
+            const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
+            // Open an event/enquiry from the Today, Upcoming and Needs-you panels in the drawer.
+            const openOverviewEvent = (e: UpcomingEventRow) => {
+              if (e._type === 'booking') { openEventDrawer({ ...(e.row as any), _type: 'booking' }); return; }
+              const full = allLeads?.find((l: any) => l.id === e.id) ?? e.row;
+              openEventDrawer({ ...(full as any), _isLead: true });
+            };
+            const openBookingById = async (id: number) => {
+              const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
+              if (!b) { toast.error("That event no longer exists."); return; }
+              openEventDrawer({ ...b, _type: 'booking' });
+            };
+            const tileAction = (id: string) => {
+              switch (id) {
+                case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
+                case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
+                case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
+                case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
+                case 'upcoming_events': return showCalendarList();
+                case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
+                case 'conversion_rate': case 'revenue_month': return setTab('reports');
+              }
+            };
+            const renderTile = (s: (typeof allStats)[number]) => {
+              // When an action tile has a non-zero count, give it a coloured left
+              // accent + tint + coloured number so the eye lands on what needs
+              // doing. Inline styles so they reliably win over .dante-card.
+              const alert = (s as any).alert as 'danger' | 'warn' | undefined;
+              const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
+                : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
+              const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => tileAction(s.id)}
+                  style={alertStyle}
+                  className="dante-card p-3 md:p-4 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <div className="mb-2">{s.icon}</div>
+                  <div className={`font-serif text-2xl md:text-3xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
+                  <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
+                  <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
+                </button>
+              );
+            };
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
+            const actionStats = visibleStats.filter(s => !(s as any).perf);
+            const perfStats = visibleStats.filter(s => (s as any).perf);
             return (
             <div className="p-6 space-y-6">
               {/* Header */}
@@ -3461,6 +3541,29 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* What to do today: the card hides itself when there is nothing; the
+                  Today panel sits to its right on desktop and below it on a phone. */}
+              {!isStaff && (
+                <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+                  <NeedsYouToday
+                    onOpenBooking={openBookingById}
+                    onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                    onOpenLink={(link) => { void openAlertLink(link); }}
+                    onGoCalendarList={showCalendarList}
+                    onGoTasksOverdue={() => tileAction('overdue_tasks')}
+                    onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                    onGoDeposits={() => tileAction('deposits_due')}
+                  />
+                  <TodayPanel
+                    className="lg:w-[340px] lg:shrink-0 lg:ml-auto"
+                    onOpenEvent={openOverviewEvent}
+                    onCalendar={() => setTab('calendar')}
+                    newEnquiries={newEnquiries.length}
+                    onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                  />
+                </div>
+              )}
 
               {/* Setup steps for a new venue — hidden once everything is done. */}
               {setupStatus && (() => {
@@ -3565,89 +3668,23 @@ export default function Dashboard() {
                 </section>
               )}
 
-              {/* Phone: today first. On a phone the seven KPI tiles used to fill
-                  the screen before anything about tonight. */}
-              {(() => {
-                const sameDay = (d: Date, t: Date) => d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
-                const now = new Date();
-                const todays = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
-                  .filter((e: any) => e.eventDate && !['cancelled','lost','declined'].includes(e.status) && sameDay(new Date(e.eventDate), now))
-                  .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
-                return (
-                  <section aria-label="Today" className="md:hidden dante-card overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="Today" meta={todays.length ? `${todays.length} event${todays.length !== 1 ? 's' : ''}` : undefined} className="flex-1" />
-                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary min-h-[44px]">Calendar</button>
-                    </div>
-                    {todays.length === 0 ? (
-                      <p className="px-4 py-3 font-dm text-sm text-sage">No events today.</p>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {todays.map((e: any) => (
-                          <button key={`${e._type}-${e.id}`}
-                            onClick={() => { const full = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e); openEventDrawer(e._type === 'booking' ? full : { ...full, _isLead: true }); }}
-                            className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] text-left hover:bg-linen">
-                            <span className="font-dm text-sm tabular-nums text-ink/70 w-16 shrink-0">{fmtEventTime(e.eventDate) || '—'}</span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-serif text-sm font-semibold text-foreground truncate">{e.firstName} {e.lastName}</span>
-                              <span className="block font-sans text-xs text-muted-foreground truncate">{[e.eventType, e.guestCount ? `${e.guestCount} guests` : null, e.spaceName].filter(Boolean).join(' · ')}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {newEnquiries.length > 0 && (
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }}
-                        className="w-full text-left px-4 py-3 min-h-[44px] border-t border-border font-dm text-sm font-semibold text-forest hover:bg-linen">
-                        {newEnquiries.length} new enquir{newEnquiries.length === 1 ? 'y' : 'ies'} waiting →
-                      </button>
-                    )}
-                  </section>
-                );
-              })()}
-
-              {/* KPI Cards — clickable, route to relevant tab */}
-              {visibleStats.length > 0 && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                  {visibleStats.map(s => {
-                    const target: DashTab = (
-                      s.id === 'active_enquiries' ? 'enquiries' :
-                      s.id === 'upcoming_events' ? 'calendar' :
-                      s.id === 'proposals_sent' ? 'enquiries' :
-                      s.id === 'conversion_rate' ? 'reports' :
-                      s.id === 'revenue_month' ? 'reports' :
-                      s.id === 'overdue_tasks' ? 'tasks' :
-                      s.id === 'needs_followup' ? 'enquiries' :
-                      'overview'
-                    );
-                    // When an action tile has a non-zero count, give it a
-                    // coloured left accent + tint + coloured number so the eye
-                    // lands on what needs doing, not the informational metrics.
-                    // Inline styles so they reliably win over .dante-card.
-                    const alert = (s as any).alert as 'danger' | 'warn' | undefined;
-                    const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
-                      : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
-                    const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          if (s.id === 'needs_followup') { setFollowUpOnly(true); setLeadStatusFilter([]); setLeadsSubTab('all'); }
-                          if (s.id === 'proposals_sent') { setFollowUpOnly(false); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); }
-                          setTab(target);
-                        }}
-                        style={alertStyle}
-                        className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                      >
-                        <div className="mb-2 md:mb-3">{s.icon}</div>
-                        <div className={`font-serif text-2xl md:text-4xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
-                        <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
-                        <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
-                      </button>
-                    );
-                  })}
+              {/* KPI tiles — action tiles first, each opens exactly the records it
+                  counted. The vanity numbers wait in a collapsed Performance row. */}
+              {actionStats.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
+                  {actionStats.map(renderTile)}
                 </div>
+              )}
+              {perfStats.length > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer select-none list-none inline-flex items-center gap-1.5 min-h-[44px] font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" aria-hidden /> Performance
+                    <span className="font-semibold normal-case tracking-normal">{perfStats.map(s => `${s.label} ${s.value}`).join(' · ')}</span>
+                  </summary>
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4 mt-2">
+                    {perfStats.map(renderTile)}
+                  </div>
+                </details>
               )}
 
               {/* Calendar + Sidebar */}
@@ -3657,54 +3694,18 @@ export default function Dashboard() {
 
                 {/* Sidebar cards */}
                 <div className="space-y-4">
-                  {/* Upcoming Events */}
-                  <div className="dante-card overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="Upcoming Events" className="flex-1" />
-                      <button onClick={() => setTab('calendar')} aria-label="View all upcoming events" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
-                    </div>
-                    {(() => {
-                      const upcoming = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
-                        .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
-                        .filter((e: any) => new Date(e.eventDate) >= new Date())
-                        .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
-                        .slice(0, 8);
-                      if (upcoming.length === 0) return (
-                        <div className="flex flex-col items-center justify-center p-6 text-center">
-                          <Calendar className="w-8 h-8 text-sage/20 mx-auto mb-2" />
-                          <p className="font-dm text-xs text-sage/50">No upcoming events this month</p>
-                        </div>
-                      );
-                      return (
-                        <div className="divide-y divide-border max-h-56 overflow-auto">
-                          {upcoming.map((e: any) => {
-                            const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
-                            return (
-                              <button key={e.id}
-                                onClick={() => {
-                                  // Merge with full lead data so the drawer has all fields
-                                  const fullItem = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e);
-                                  openEventDrawer(e._type === 'booking' ? fullItem : { ...fullItem, _isLead: true });
-                                }}
-                                className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} aria-hidden="true" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
-                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{formatEventDate(e.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                  {/* Upcoming Events — the next 14 days from today, whatever month the calendar shows. */}
+                  <UpcomingEventsCard
+                    onOpenEvent={openOverviewEvent}
+                    onSeeAll={showCalendarList}
+                    statusInfo={(st) => getStatusInfo(st)}
+                  />
 
                   {/* New Enquiries */}
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -3714,7 +3715,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="divide-y divide-border max-h-56 overflow-auto">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }}
+                          <button key={lead.id} onClick={() => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${lead.id}`); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
@@ -3723,6 +3724,11 @@ export default function Dashboard() {
                             </div>
                           </button>
                         ))}
+                        {newEnquiries.length > 6 && (
+                          <button onClick={() => showEnquiries({ sub: 'new' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
+                            +{newEnquiries.length - 6} more new enquiries {'\u2192'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -6084,7 +6090,7 @@ export default function Dashboard() {
           {/* ── TASKS ─────────────────────────────────────────────────────── */}
           {tab === "tasks" && (
             <div className="flex-1">
-              <TasksPage />
+              <TasksPage initialFilter={tasksOpenFilter} />
             </div>
           )}
 
@@ -6098,7 +6104,7 @@ export default function Dashboard() {
           {/* ── PAYMENTS ────────────────────────────────────────────────────── */}
           {tab === "payments" && (
             <div className="flex-1">
-              <PaymentsBoard />
+              <PaymentsBoard initialFilter={paymentsOpenFilter} />
             </div>
           )}
 

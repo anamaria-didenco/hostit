@@ -51,8 +51,9 @@ export default function PaymentTracker() {
   const bookingId = params.get("bookingId") ? Number(params.get("bookingId")) : null;
   // Where "back" goes: the payments board that linked here, otherwise the event.
   const cameFromBoard = params.get("from") === "board";
-  const backTarget = cameFromBoard ? "/dashboard?tab=payments" : bookingId ? `/event/${bookingId}` : "/";
-  const backLabel = cameFromBoard ? "BACK TO PAYMENTS" : bookingId ? "BACK TO EVENT" : "BACK";
+  const cameFromOverview = params.get("from") === "overview";
+  const backTarget = cameFromBoard ? "/dashboard?tab=payments" : cameFromOverview ? "/dashboard" : bookingId ? `/event/${bookingId}` : "/";
+  const backLabel = cameFromBoard ? "BACK TO PAYMENTS" : cameFromOverview ? "BACK TO OVERVIEW" : bookingId ? "BACK TO EVENT" : "BACK";
 
   // Arriving from the board's RECORD button (or a "record it" prompt) means
   // you came here to record a payment — open the form straight away.
