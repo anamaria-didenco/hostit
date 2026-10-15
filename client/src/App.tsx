@@ -16,7 +16,6 @@ import FloorPlanShare from "./pages/FloorPlanShare";
 import Checklist from "./pages/Checklist";
 import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
-import Analytics from "./pages/Analytics";
 import EventDetail from "./pages/EventDetail";
 import ClientPortal from "./pages/ClientPortal";
 import StaffPortal from "./pages/StaffPortal";
@@ -46,7 +45,8 @@ function Router() {
       <Route path="/checklist" component={Checklist} />
       <Route path="/runsheet" component={RunsheetBuilder} />
       <Route path="/payments" component={PaymentTracker} />
-      <Route path="/analytics" component={Analytics} />
+      {/* Analytics was folded into Reports as its Goals tab. */}
+      <Route path="/analytics"><Redirect to="/dashboard?tab=reports&rtab=goals" /></Route>
       {/* Express Book is unfinished (it dropped the chosen space and package and
           could default to the wrong venue) — send any old link to the real
           enquiry form instead. */}
