@@ -397,9 +397,9 @@ export default function EventDetail() {
                 </div>
                 <div className="flex items-start gap-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-bebas text-xs tracking-widest text-ink/65">EMAIL</div>
-                    <div className="font-dm text-sm text-ink">{booking.email}</div>
+                    <div className="font-dm text-sm text-ink break-all">{booking.email}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
