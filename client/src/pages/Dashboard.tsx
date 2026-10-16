@@ -1415,7 +1415,7 @@ export default function Dashboard() {
     if (lead) {
       // An explicit ?tab= (a record opened over the Calendar, say) stays put.
       if (!qp.get('tab')) setTab("enquiries");
-      if (leadViewMode === "list" && (qp.get('tab') ?? 'enquiries') === 'enquiries') setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+      openEventDrawer({ ...lead, _isLead: true });
     }
     leadIdParamApplied.current = true;
   }, [allLeads]);
@@ -1840,6 +1840,7 @@ export default function Dashboard() {
     onSuccess: (_data, vars) => {
       refetchLeads();
       setSelectedLead((prev: any) => prev ? { ...prev, source: vars.source } : prev);
+      setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === vars.id ? { ...prev, source: vars.source } : prev);
       toast.success("Source updated");
     },
     onError: () => toast.error("Failed to update source"),
@@ -2319,14 +2320,15 @@ export default function Dashboard() {
     },
   });
 
-  // Helper: select a lead and mark it as read
+  // Helper: open an enquiry and mark it as read. Every entry point (list rows,
+  // client history, alerts, win-back) now opens the one shared enquiry drawer,
+  // so an enquiry looks and behaves the same however you reach it.
   function selectLead(lead: any) {
-    setSelectedLead(lead);
     setEditingEventDetails(false);
-    // Note: selectLead is defined below; this is the inner implementation
     if (lead && !lead.readAt) {
       markRead.mutate({ id: lead.id });
     }
+    openEventDrawer({ ...lead, _isLead: true });
   }
 
   // ── Browser history (Back/Forward through tabs and records) + Cmd/Ctrl-K finder ──
@@ -4649,359 +4651,6 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
-                {leadViewMode === "list" && leadsSubTab !== "winback" && (selectedLead ? (
-                  <div className="flex-1 overflow-auto p-4 md:p-6">
-                  {/* flex-wrap: on a phone the action buttons drop below the
-                      name instead of running off the right edge. */}
-                  <div className="flex flex-wrap items-center gap-3 mb-3">
-                    <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 py-1 pr-2">
-                      <ChevronLeft className="w-4 h-4" /> BACK
-                    </button>
-                    <div className="flex-1 min-w-[12rem]">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
-                        {isPartialLead(selectedLead) && <PartialChip />}
-                        {leadNeedsReply(selectedLead) && <NeedsReplyChip />}
-                      </div>
-                      <div className="font-dm text-sm text-ink/60">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap max-w-full">
-                      {selectedLead.email && !isTeamMember && (
-                        <button onClick={() => {
-                          setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
-                          setShowEmailModal(true);
-                        }}
-                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all">
-                          <Mail className="w-3.5 h-3.5" /> EMAIL
-                        </button>
-                      )}
-                      {selectedLead.email && !isTeamMember && leadFollowUpState(selectedLead, followUpNowMs).needs && (
-                        <button onClick={() => { if (!sendFollowUp.isPending) sendFollowUp.mutate({ leadId: selectedLead.id }); }}
-                          disabled={sendFollowUp.isPending}
-                          title="Email this enquirer a follow-up now"
-                          className="border border-amber-500/50 text-amber-700 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-amber-50 transition-all disabled:opacity-50">
-                          <Send className="w-3.5 h-3.5" /> {sendFollowUp.isPending ? 'SENDING…' : 'FOLLOW UP'}
-                        </button>
-                      )}
-                      <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
-                        className="bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest transition-all">
-                        <FileText className="w-3.5 h-3.5" /> CREATE PROPOSAL
-                      </button>
-                      {selectedLeadRunsheets && selectedLeadRunsheets.length > 0 ? (
-                        <button onClick={() => setLocation(`/runsheet?id=${selectedLeadRunsheets[selectedLeadRunsheets.length - 1].id}&leadId=${selectedLead.id}`)}
-                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all">
-                          <Clock className="w-3.5 h-3.5" /> EDIT RUNSHEET
-                        </button>
-                      ) : ['booked','confirmed'].includes(selectedLead.status) ? (
-                        <button
-                          onClick={() => {
-                            const eventDate = selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0,10) : undefined;
-                            const guestCount = selectedLead.guestCount ? Number(selectedLead.guestCount) : undefined;
-                            const eventType = selectedLead.eventType || 'Event';
-                            createRunsheet.mutate({
-                              title: `${eventType} — ${selectedLead.firstName} ${selectedLead.lastName ?? ''}`,
-                              leadId: selectedLead.id,
-                              eventDate,
-                              guestCount,
-                              eventType,
-                              notes: selectedLead.message ?? undefined,
-                              venueName: (venueSettings as any)?.name ?? undefined,
-                            });
-                          }}
-                          disabled={createRunsheet.isPending}
-                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all disabled:opacity-50">
-                          <Clock className="w-3.5 h-3.5" /> {createRunsheet.isPending ? 'CREATING...' : 'GENERATE RUNSHEET'}
-                        </button>
-                      ) : (
-                        <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
-                          className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-gold/10 transition-all">
-                          <Clock className="w-3.5 h-3.5" /> RUNSHEET
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete enquiry from ${selectedLead.firstName} ${selectedLead.lastName ?? ''}? This cannot be undone.`)) {
-                            deleteLead.mutate({ id: selectedLead.id });
-                          }
-                        }}
-                        className="border border-red-200 text-red-400 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-red-50 transition-all ml-auto">
-                        <Trash2 className="w-3.5 h-3.5" /> DELETE
-                      </button>
-                    </div>
-                  </div>
-                  {/* Notes without scrolling to the activity log. */}
-                  {!isStaff && (
-                    <div className="mb-4 max-w-2xl">
-                      <QuickNote leadId={selectedLead.id} />
-                    </div>
-                  )}
-                  {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
-                  {!isStaff && (
-                    <div className="-mt-1 mb-4 md:-mt-3 md:mb-6">
-                      <LeadResponseInfo leadId={selectedLead.id} readOnly={isTeamMember}
-                        onOpenSettings={() => { setTab("settings"); setSettingsSubTab("follow-ups"); }} />
-                    </div>
-                  )}
-                  {!CLOSED_FOLLOWUP_STATUSES.includes(selectedLead.status) && !isStaff ? (
-                    <div className="mb-4 md:mb-6">
-                      <FollowUpDateControl
-                        leadId={selectedLead.id}
-                        value={selectedLead.followUpDate}
-                        onChanged={next => setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, followUpDate: next } : prev)}
-                      />
-                    </div>
-                  ) : <div className="mb-1 md:mb-3" />}
-
-                  {/* Owner, returning-client / duplicate flags, client history, merge. */}
-                  <div className="mb-4 max-w-2xl">
-                    <LeadClientPanel key={selectedLead.id} leadId={selectedLead.id} assignedTo={selectedLead.assignedTo}
-                      onOpenLead={openLeadById} onMerged={openLeadById}
-                      onOwnerChanged={v => setSelectedLead((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
-                  </div>
-                  {!isStaff && <LinkedTasks leadId={selectedLead.id} />}
-
-                  <div className="grid md:grid-cols-2 gap-6 mb-6">
-                    {/* Event Details */}
-                    <div className="dante-card p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-bebas text-xs tracking-widest text-ink/70">EVENT DETAILS</h3>
-                        {isStaff ? null : !editingEventDetails ? (
-                          <button onClick={() => startLeadDetailsEdit(selectedLead)} className="text-xs text-ink/70 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
-                            <Edit2 className="w-3 h-3" /> EDIT
-                          </button>
-                        ) : (
-                          <div className="hidden md:flex gap-2">
-                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/60 hover:text-ink font-bebas tracking-widest">CANCEL</button>
-                            <button onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
-                              {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {!editingEventDetails ? (
-                        <div className="space-y-2 text-sm font-dm">
-                          {[
-                            ["Name", `${selectedLead.firstName} ${selectedLead.lastName ?? ''}`.trim()],
-                            ["Email", selectedLead.email],
-                            ["Phone", selectedLead.phone],
-                            ["Event Type", selectedLead.eventType],
-                            ["Date", selectedLead.eventDate ? new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : null],
-                            ["Guests", selectedLead.guestCount],
-                            ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
-                            ["Company", selectedLead.company],
-                          ].filter(([, v]) => v).map(([label, value]) => (
-                            <div key={label as string} className="flex gap-2">
-                              <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
-                              <span className="text-foreground font-medium">{String(value)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-2 text-sm">
-                          {[
-                            { label: "First Name", key: "firstName", type: "text" },
-                            { label: "Last Name", key: "lastName", type: "text" },
-                            { label: "Email", key: "email", type: "email" },
-                            { label: "Phone", key: "phone", type: "tel" },
-                            { label: "Company", key: "company", type: "text" },
-                            { label: "Event Type", key: "eventType", type: "text" },
-                            { label: "Date", key: "eventDate", type: "date" },
-                            { label: "Guests", key: "guestCount", type: "number" },
-                            { label: "Budget (NZD)", key: "budget", type: "number" },
-                          ].map(({ label, key, type }) => (
-                            <div key={key} className="flex items-center gap-2">
-                              <span className="text-ink/60 w-24 flex-shrink-0 text-xs">{label}:</span>
-                              <input
-                                type={type}
-                                value={eventDetailForm[key] ?? ''}
-                                onChange={e => setEventDetailForm((f: any) => ({ ...f, [key]: e.target.value }))}
-                                className="flex-1 border-b border-gold/40 focus:border-forest bg-transparent text-sm text-ink focus:outline-none py-0.5 font-dm"
-                              />
-                            </div>
-                          ))}
-                          {/* Phone: Save / Cancel stay in view at the bottom of the
-                              form however far down the fields you are. */}
-                          <div className="md:hidden sticky bottom-0 -mx-4 -mb-4 mt-3 px-4 py-3 flex gap-2 bg-cream border-t border-gold/40 shadow-[0_-4px_8px_rgba(0,0,0,0.06)]">
-                            <button type="button" onClick={() => setEditingEventDetails(false)}
-                              className="flex-1 min-h-[44px] border border-ink/25 text-ink/80 font-bebas tracking-widest text-xs">CANCEL</button>
-                            <button type="button" onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending}
-                              className="flex-1 min-h-[44px] bg-forest-dark text-cream hover:bg-forest font-bebas tracking-widest text-xs disabled:opacity-50">
-                              {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Status & Actions */}
-                    <div className="dante-card p-4">
-                      <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">PIPELINE STATUS</h3>
-                      {/* Confirm Booking CTA */}
-                      {!['booked','confirmed'].includes(selectedLead.status) && (
-                        <button
-                          onClick={() => {
-                            updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any });
-                          }}
-                          className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs hover:bg-forest transition-colors">
-                          <CheckCircle className="w-4 h-4 text-gold" />
-                          CONFIRM BOOKING → MOVE TO CALENDAR
-                        </button>
-                      )}
-                      {['booked','confirmed'].includes(selectedLead.status) && (
-                        <div className="w-full mb-3 flex flex-col gap-2">
-                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 font-bebas tracking-widest text-xs text-forest">
-                            <CheckCircle className="w-4 h-4 text-forest" />
-                            CONFIRMED EVENT — VISIBLE ON CALENDAR
-                          </div>
-                          <button
-                            onClick={() => { setTab('calendar' as any); setSelectedLead(null); }}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-forest/30 text-forest font-bebas tracking-widest text-xs hover:bg-forest/10 transition-colors">
-                            <Calendar className="w-3.5 h-3.5" /> VIEW ON CALENDAR
-                          </button>
-                          {!isStaff && (
-                            <EventNextSteps key={selectedLead.id} leadId={selectedLead.id} leadStatus={selectedLead.status}
-                              onOpenRunsheet={(bid) => setLocation(`/runsheet?bookingId=${bid}`)}
-                              onOpenSettings={() => { setTab("settings"); setSettingsSubTab("email"); }} />
-                          )}
-                        </div>
-                      )}
-                      {!isStaff && (
-                        <div className="mb-3">
-                          <HoldPanel
-                            key={selectedLead.id}
-                            lead={selectedLead}
-                            defaultHoldDays={(venueSettings as any)?.defaultHoldDays}
-                            onChanged={(patch) => {
-                              setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev);
-                              refetchLeads();
-                            }}
-                            onAddDate={() => startLeadDetailsEdit(selectedLead)}
-                          />
-                        </div>
-                      )}
-                      <div className="space-y-1.5">
-                        {pipelineStages.map(stage => {
-                          const isActive = selectedLead.status === stage.key;
-                          return (
-                            <button key={stage.key}
-                              onClick={() => {
-                                updateStatus.mutate({ id: selectedLead.id, status: stage.key as any });
-                              }}
-                              className="w-full text-left px-3 py-2 border font-bebas tracking-widest text-xs transition-all"
-                              style={isActive ? {
-                                backgroundColor: stage.swatch + '22',
-                                borderColor: stage.swatch,
-                                color: '#1a1a1a',
-                                borderLeftWidth: '3px',
-                              } : {
-                                backgroundColor: 'transparent',
-                                borderColor: '#f0ede8',
-                                color: '#888',
-                              }}
-                            >
-                              <span
-                                className="inline-block w-2 h-2 rounded-full mr-2 flex-shrink-0"
-                                style={{ backgroundColor: isActive ? stage.swatch : stage.swatch + '66' }}
-                              />
-                              {stage.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Message */}
-                  {selectedLead.message && (
-                  <div className="dante-card p-4 mb-6">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-2">CLIENT MESSAGE</h3>
-                      <p className="font-dm text-sm text-ink/60 italic">"{selectedLead.message}"</p>
-                    </div>
-                  )}
-
-                  {/* Email conversation (sent from VenueFlow + client replies) */}
-                  {selectedLead.id && (
-                    <div className="dante-card p-4 mb-4">
-                      <LeadConversation leadId={selectedLead.id} clientFirstName={selectedLead.firstName}
-                        onReply={selectedLead.email && !isTeamMember ? (_m, reply) => openEmailReply(selectedLead, reply) : undefined} />
-                    </div>
-                  )}
-                  {/* Walkthrough: the client's request from the enquiry form, and
-                      the time staff confirm once someone's on site. */}
-                  {!isStaff && (
-                    <div className="dante-card p-4 mb-4">
-                      <WalkthroughPanel lead={selectedLead}
-                        onChanged={patch => setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev)} />
-                    </div>
-                  )}
-                  {!isStaff && <LeadProposals leadId={selectedLead.id} />}
-
-                  {/* Activity Log */}
-                  <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ACTIVITY LOG</h3>
-                    <div className="space-y-2 mb-4 max-h-48 overflow-auto">
-                      {(selectedLeadActivity ?? []).length === 0 ? (
-                        <p className="font-dm text-xs text-ink/60">No activity yet</p>
-                      ) : (selectedLeadActivity ?? []).map((act: any) => (
-                        <div key={act.id} className="flex gap-3 text-xs font-dm">
-                          <div className="w-2 h-2 bg-tomato rounded-full mt-1.5 flex-shrink-0" />
-                          <div>
-                            <span className="font-bebas tracking-widest text-ink/60">{act.type.replace(/_/g, " ").toUpperCase()} · </span>
-                            <span className="text-foreground">{act.content}</span>
-                            <div className="text-ink/60/50 mt-0.5">{new Date(act.createdAt).toLocaleString("en-NZ")}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input value={noteText} onChange={e => setNoteText(e.target.value)}
-                        placeholder="Add a note..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm flex-1" />
-                      <button onClick={() => addNote.mutate({ leadId: selectedLead.id, content: noteText })}
-                        disabled={!noteText.trim() || addNote.isPending}
-                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-40">ADD</button>
-                    </div>
-                  </div>
-                  {/* Enquiry Source */}
-                  <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ENQUIRY SOURCE</h3>
-                    <Select
-                      value={selectedLead.source ?? ""}
-                      onValueChange={(v) => updateLeadSource.mutate({ id: selectedLead.id, source: v })}
-                    >
-                      <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0 font-dm text-sm">
-                        <SelectValue placeholder="Select source…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["Phone","Email","Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
-                          <SelectItem key={s} value={s}>{s === "lead_form" ? "Lead Form" : s === "express_book" ? "Express Book" : s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {(() => {
-                      const attribution = adAttribution(selectedLead);
-                      if (!attribution) return null;
-                      return (
-                        <div className="mt-3 pt-3 border-t border-gold/20">
-                          <div className="font-bebas text-[10px] tracking-widest text-ink/50 mb-1">AD CLICK ATTRIBUTION</div>
-                          <div className="font-dm text-sm text-foreground">{attribution.label}</div>
-                          {attribution.clickId && (
-                            <div className="font-dm text-[11px] text-ink/60 mt-0.5 break-all">{attribution.clickId}</div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              ) : leadViewMode === "list" ? (
-                <div className="flex-1 hidden md:flex items-center justify-center text-center p-8">
-                  <div>
-                    <MessageSquare className="w-12 h-12 text-ink/60/20 mx-auto mb-4" />
-                    <div className="font-alfa text-xl text-ink/60/30">SELECT A LEAD</div>
-                    <p className="font-dm text-ink/60/50 text-sm mt-2">Click a lead from the list to view details</p>
-                  </div>
-                </div>
-              ) : null)}
               </div>{/* ── End content area ────────────────────────────────────── */}
 
               {/* Floating Bulk Action Toolbar */}
@@ -10324,6 +9973,40 @@ export default function Dashboard() {
                 })()}
               </div>
               </DrawerSection>
+              {/* Enquiry source — leads only. Where the enquiry came from, plus
+                  any ad-click attribution. Mirrors the old list-view panel so an
+                  enquiry looks the same however you open it. */}
+              {selectedBooking._isLead && !isStaff && (
+                <div className="border border-gold/30 bg-white p-3">
+                  <h3 className="font-bebas tracking-widest text-xs text-ink/70 mb-2">ENQUIRY SOURCE</h3>
+                  <Select
+                    value={selectedBooking.source ?? ""}
+                    onValueChange={(v) => updateLeadSource.mutate({ id: selectedBooking.id, source: v })}
+                  >
+                    <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0 font-dm text-sm">
+                      <SelectValue placeholder="Select source…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["Phone","Email","Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
+                        <SelectItem key={s} value={s}>{s === "lead_form" ? "Lead Form" : s === "express_book" ? "Express Book" : s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(() => {
+                    const attribution = adAttribution(selectedBooking);
+                    if (!attribution) return null;
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gold/20">
+                        <div className="font-bebas text-[10px] tracking-widest text-ink/50 mb-1">AD CLICK ATTRIBUTION</div>
+                        <div className="font-dm text-sm text-foreground">{attribution.label}</div>
+                        {attribution.clickId && (
+                          <div className="font-dm text-[11px] text-ink/60 mt-0.5 break-all">{attribution.clickId}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               {/* Financials + billing terms — bookings only, one collapsible block. */}
               {!selectedBooking._isLead && (
               <DrawerSection id="money" title="FINANCIALS & BILLING" icon={<DollarSign />}
@@ -10506,19 +10189,6 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
-                      <button onClick={() => {
-                          const lead = selectedBooking;
-                          setSelectedBooking(null);
-                          // Make sure the enquiries tab is in a state that actually shows this lead's detail
-                          setLeadViewMode('list');
-                          setLeadStatusFilter([]);
-                          setLeadsSubTab('all');
-                          selectLead(lead);
-                          setTab('enquiries');
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
-                      </button>
                       {/* Staff are read-only server-side, so hide create. */}
                       {!isStaff && (
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/proposals/new?leadId=${selectedBooking.id}`); }}
