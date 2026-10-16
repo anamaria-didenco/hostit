@@ -244,6 +244,9 @@ export async function mergeLeads(ownerId: number, keepId: number, mergeId: numbe
     if (dropTaskIds.length) {
       await tx.delete(tasks).where(and(inArray(tasks.id, dropTaskIds), eq(tasks.ownerId, ownerId), eq(tasks.completed, false)));
     }
+    // The kept enquiry's follow-up date has its own task; the duplicate's
+    // follow-up task goes rather than leaving two for one client.
+    await tx.delete(tasks).where(and(eq(tasks.linkedLeadId, mergeId), eq(tasks.ownerId, ownerId), eq(tasks.source, "follow_up"), eq(tasks.completed, false)));
     await tx.update(tasks).set({ linkedLeadId: keepId }).where(and(eq(tasks.linkedLeadId, mergeId), eq(tasks.ownerId, ownerId)));
     await tx.update(contracts).set({ leadId: keepId }).where(and(eq(contracts.leadId, mergeId), eq(contracts.ownerId, ownerId)));
     await tx.update(eventBudgets).set({ leadId: keepId }).where(and(eq(eventBudgets.leadId, mergeId), eq(eventBudgets.ownerId, ownerId)));

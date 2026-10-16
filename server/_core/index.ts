@@ -395,6 +395,38 @@ async function startServer() {
   const pdfPublicLimit = expressRateLimit("pdf:public", 30, 60_000);
   const pdfAuthLimit = expressRateLimit("pdf:auth", 60, 60_000);
 
+  // Self-serve sign-up: create a venue owner (users + venue_settings) and sign
+  // them straight in. Rate-limited hard — account creation should be a trickle,
+  // not a flood. Never logs the submitted email or password.
+  const signupLimit = expressRateLimit("auth:signup", 5, 60 * 60_000); // 5 / hour / IP
+  app.post("/api/auth/signup", signupLimit, async (req, res) => {
+    try {
+      const { email, password, name } = req.body ?? {};
+      if (typeof email !== "string" || typeof password !== "string") {
+        res.status(400).json({ error: "Email and password are required." });
+        return;
+      }
+      const { createVenueOwner, SignupError } = await import("../signup");
+      let owner;
+      try {
+        owner = await createVenueOwner({ email, password, name: typeof name === "string" ? name : undefined });
+      } catch (err) {
+        if (err instanceof SignupError) {
+          res.status(err.code === "email_taken" ? 409 : err.code === "db_unavailable" ? 503 : 400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      const token = await sdk.signSession({ openId: owner.openId, appId: ENV.appId, name: owner.name });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[Signup] Error:", e?.message ?? e);
+      res.status(500).json({ error: "Sign-up failed. Please try again." });
+    }
+  });
+
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", pdfPublicLimit, handleProposalPdf);
   // Proposal photos — public, but only with the proposal's own token.

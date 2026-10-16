@@ -58,16 +58,33 @@ const TONE_STYLES: Record<StatusTone, { wrap: string; dot: string }> = {
   grey:  { wrap: "bg-[#f0ede6] text-muted-foreground",          dot: "bg-[#8a8073]" },
 };
 
-// Map common lifecycle statuses to a tone.
+// Map common lifecycle statuses to a tone. One registry so a given status wears
+// the same colour everywhere it appears in the app.
 const STATUS_TONE: Record<string, StatusTone> = {
   new: "blue", confirmed: "blue", paid: "blue", active: "blue", booked: "blue", won: "blue",
-  quoted: "amber", pending: "amber", proposal: "amber", hold: "amber", tentative: "amber", partial: "amber",
+  paid_in_full: "blue", finished: "blue", accepted: "blue",
+  quoted: "amber", pending: "amber", proposal: "amber", proposal_sent: "amber", hold: "amber",
+  tentative: "amber", partial: "amber", deposit_paid: "amber", negotiating: "amber", contacted: "amber",
   overdue: "red", unpaid: "red", declined: "red", lost: "red",
   cancelled: "grey", canceled: "grey", archived: "grey", closed: "grey", completed: "grey",
 };
 
+// Human labels for statuses whose key isn't already presentable. Anything not
+// listed falls back to its key with underscores turned into spaces.
+const STATUS_LABEL: Record<string, string> = {
+  paid_in_full: "Paid in Full",
+  deposit_paid: "Deposit Paid",
+  proposal_sent: "Proposal Sent",
+};
+
 function statusTone(status: string): StatusTone {
   return STATUS_TONE[status.toLowerCase().trim()] ?? "blue";
+}
+
+/** Presentable label for a status key, e.g. "deposit_paid" → "Deposit Paid". */
+function statusLabel(status: string): string {
+  const key = status.toLowerCase().trim();
+  return STATUS_LABEL[key] ?? status.replace(/_/g, " ");
 }
 
 function StatusBadge({
@@ -94,9 +111,9 @@ function StatusBadge({
       {...props}
     >
       <span className={cn("size-1.5 rounded-full shrink-0", styles.dot)} />
-      {label ?? status}
+      {label ?? statusLabel(status)}
     </span>
   );
 }
 
-export { Badge, badgeVariants, StatusBadge, statusTone };
+export { Badge, badgeVariants, StatusBadge, statusTone, statusLabel };

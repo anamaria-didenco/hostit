@@ -7,6 +7,9 @@ import PaymentsReceived from "@/components/PaymentsReceived";
 import XeroEventInvoices from "@/components/XeroEventInvoices";
 import XeroEventPayments from "@/components/XeroEventPayments";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
+import { fmtDate as fmtDateTz } from "@/lib/dateTime";
+import { currencyWhole } from "@/lib/money";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -56,11 +59,11 @@ interface SentInvoice {
   createdAt: string;
 }
 
-const fmtNZD = (n: number) =>
-  n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// Money and dates route through the shared formatters so the board reads the
+// same as the rest of the app (whole dollars here, no cents noise).
+const fmtNZD = (n: number) => currencyWhole(n);
 
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "No date";
+const fmtDate = (iso: string | null) => (iso ? fmtDateTz(iso, "weekday") : "No date");
 
 // Chip palette by state.
 const CHIP = {
@@ -90,7 +93,7 @@ const BUCKET_LABEL: Record<Bucket, string> = {
 const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices"], ["received", "Received"]] as const;
 type View = typeof TABS[number][0];
 
-export default function PaymentsBoard() {
+export default function PaymentsBoard({ initialFilter }: { initialFilter?: "deposits_due" } = {}) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
@@ -100,7 +103,7 @@ export default function PaymentsBoard() {
   // Default to Upcoming (what's coming up and where is its money at). Past
   // events that still need something are surfaced by a banner above the list,
   // so a forgotten post-event drinks bill can't hide behind this default.
-  const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
+  const [filter, setFilter] = useState<"action" | "upcoming" | "all" | "deposits">(initialFilter === "deposits_due" ? "deposits" : "upcoming");
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
   // "Bookings" tracks where each booking's money is up to; "Invoices sent" is
@@ -151,6 +154,9 @@ export default function PaymentsBoard() {
   // A stream settling on the night needs nothing until the event has happened.
   const streamNeedsAction = (r: Row, status: string) =>
     status === "to_invoice" || status === "invoiced" || (status === "on_night" && !isFuture(r));
+  // The Overview "Deposits due" tile: confirmed events from today on whose deposit is
+  // required and unpaid (same rule as server/needsAttention.ts countDepositsDue).
+  const isUpcomingDepositDue = (r: Row) => r.status === "confirmed" && isDepositDue(r) && !!r.eventDate && isFuture(r);
   const needsAction = (r: Row) =>
     isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
   const bucketOf = (r: Row): Bucket | null => {
@@ -174,6 +180,7 @@ export default function PaymentsBoard() {
       (r.spaceName ?? "").toLowerCase().includes(needle));
     if (bucket) list = list.filter(r => bucketOf(r) === bucket);
     else if (filter === "action") list = list.filter(needsAction);
+    else if (filter === "deposits") list = list.filter(isUpcomingDepositDue);
     else if (filter === "upcoming") list = list.filter(isFuture);
     // Sort: soonest event first, except "All" which is most recent first.
     const ts = (r: Row) => (r.eventDate ? new Date(r.eventDate).getTime() : Number.MAX_SAFE_INTEGER);
@@ -260,18 +267,14 @@ export default function PaymentsBoard() {
 
   return (
     <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="font-cormorant text-3xl font-semibold text-ink flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-forest" aria-hidden="true" /> Payments
-          </h1>
-          {/* Hidden on phones: it pushed the first booking below the screen. */}
-          <p className="hidden sm:block font-dm text-sm text-sage mt-0.5">
-            Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+      <PageHeader
+        className="mb-4"
+        icon={<DollarSign className="w-6 h-6 text-forest" aria-hidden="true" />}
+        title="Payments"
+        // Hidden on phones: it pushed the first booking below the screen.
+        subtitleClassName="hidden sm:block"
+        subtitle="Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night."
+        actions={<>
         {xeroStatus?.connected && (
           <button
             onClick={() => syncXero.mutate({ force: true })}
@@ -316,8 +319,8 @@ export default function PaymentsBoard() {
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
           />
         </div>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* View switcher — a real tab set: arrow keys / Home / End move between tabs. */}
       <div className="flex gap-1.5 mb-4 border-b border-gold/20 overflow-x-auto" role="tablist" aria-label="Payments view">
@@ -365,7 +368,7 @@ export default function PaymentsBoard() {
 
       {/* Filters */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap" role="group" aria-label="Which bookings to show">
-        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
+        {([["action", "Needs action"], ["deposits", "Deposits due"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
           const on = !bucket && filter === id;
           return (
             <button key={id} aria-pressed={on} onClick={() => { setFilter(id); setBucket(null); }}
@@ -461,7 +464,7 @@ export default function PaymentsBoard() {
 }
 
 function jumpLabel(r: Row) {
-  return `${r.name}${r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}` : ""}`;
+  return `${r.name}${r.eventDate ? ` — ${fmtDateTz(r.eventDate, "short")}` : ""}`;
 }
 
 // Every invoice sent through to Xero, newest first — the "what have we billed
@@ -491,7 +494,7 @@ function depositEntries(rows: Row[]): DepositEntry[] {
     if (!inv && emailedAt == null) continue;
     const invAt = inv ? new Date(inv.createdAt).getTime() : null;
     const sentAt = Math.max(emailedAt ?? 0, invAt ?? 0);
-    const day = (t: number) => new Date(t).toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+    const day = (t: number) => fmtDateTz(t, "dayMonth");
     const how: string[] = [];
     if (emailedAt != null) how.push(`Request emailed ${day(emailedAt)}`);
     if (inv) how.push(`Xero ${inv.invoiceNumber ?? "invoice"}${inv.status === "DRAFT" ? " (draft — not sent from Xero yet)" : ""} ${day(invAt!)}`);
@@ -698,7 +701,7 @@ function SentInvoices({ rows, q, loading, onOpen }: { rows: Row[]; q: string; lo
                       {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
                     </div>
                     <div className="font-dm text-xs text-sage truncate">
-                      {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
+                      {row.name} · {fmtDate(row.eventDate)} · sent {fmtDateTz(inv.createdAt, "dayMonth")}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
                     </div>
                   </div>
                   <span className="font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>

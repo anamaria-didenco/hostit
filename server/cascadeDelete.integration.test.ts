@@ -18,7 +18,7 @@ import {
 } from "../drizzle/schema";
 
 const HAS_DB = !!process.env.DATABASE_URL;
-const OWNER = 960000 + Math.floor(Math.random() * 9999);
+const OWNER = 900000 + Math.floor(Math.random() * 9999);
 const OTHER = OWNER + 10000;
 
 function ctx(id = OWNER): TrpcContext {
@@ -85,7 +85,7 @@ describe.skipIf(!HAS_DB)("cascading deletes + status integrity (DB)", () => {
 
   beforeAll(async () => {
     await (await db()).insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Cascade Test Venue", slug: `cascade-test-${OWNER}`,
     });
   });

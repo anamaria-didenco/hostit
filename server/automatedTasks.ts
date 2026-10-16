@@ -88,6 +88,29 @@ async function createRuleTask(ownerId: number, rule: TaskRule, subject: Subject,
   if (claimed.length === 0) return false; // already fired for this lead/booking
   const now = Date.now();
   const builtin = rule.key.startsWith("builtin:");
+  // The built-in "Follow up with <client>" is the enquiry's follow-up task: it
+  // shares the lead's one follow-up task (server/followUpTask.ts) rather than
+  // adding a second "Follow up with" row. If the lead already has an open one,
+  // that one stands (its date is the lead's follow-up date); otherwise the
+  // task is created by setting the lead's follow-up date to the rule's due date.
+  if (builtin && subject.leadId) {
+    const { syncFollowUpTask, FOLLOW_UP_SOURCE } = await import("./followUpTask");
+    const [existing] = await db.select({ id: tasks.id }).from(tasks).where(and(
+      eq(tasks.ownerId, ownerId), eq(tasks.linkedLeadId, subject.leadId),
+      eq(tasks.completed, false), eq(tasks.source, FOLLOW_UP_SOURCE),
+    )).limit(1);
+    let taskId: number | null = existing?.id ?? null;
+    if (!taskId) {
+      await db.update(leads).set({ followUpDate: new Date(dueMs) })
+        .where(and(eq(leads.id, subject.leadId), eq(leads.ownerId, ownerId)));
+      taskId = await syncFollowUpTask(ownerId, subject.leadId, {
+        description: `Function pack was sent — check in with ${subject.clientName} to confirm they've received it and answer any questions.`,
+        priority: rule.priority,
+      });
+    }
+    if (taskId) await db.update(automatedTaskRuns).set({ taskId }).where(eq(automatedTaskRuns.id, claimed[0].id));
+    return !!taskId && !existing;
+  }
   const [task] = await db.insert(tasks).values({
     ownerId,
     title: builtin ? `Follow up with ${subject.clientName}` : `${rule.name} — ${subject.clientName}`,

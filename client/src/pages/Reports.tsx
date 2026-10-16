@@ -10,6 +10,8 @@ import {
 import { TrendingUp, DollarSign, Users, Calendar, Settings, Download, AlertCircle } from "lucide-react";
 import { parseCustomStatuses, statusChipClasses, statusSwatch } from "@/components/StatusManager";
 import { currencyWhole } from "@/lib/money";
+import { fmtDate } from "@/lib/dateTime";
+import { PageHeader } from "@/components/ui/page-header";
 import { isRealEnquiry, isImportedBooking, WON_LEAD_STATUSES } from "@shared/conversion";
 import {
   PeriodPicker, ConversionSummaryCard, FunnelCard, TrendCard, SpeedTiles, BySourceCard,
@@ -130,13 +132,11 @@ export default function Reports() {
 
   return (
     <div className="p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
-          <p className="font-dm text-sm text-sage mt-0.5">Analytics and performance insights for your venue</p>
-        </div>
-        {tab === "overview" && (
+      <PageHeader
+        accent="burgundy"
+        title="Reports"
+        subtitle="Analytics and performance insights for your venue"
+        actions={tab === "overview" ? (
           <div className="relative">
             <button
               onClick={() => setShowCustomize(v => !v)}
@@ -168,8 +168,8 @@ export default function Reports() {
               </div>
             )}
           </div>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Sub-tabs */}
       <div ref={tabStripRef} className="flex gap-0 mb-6 border-b border-border overflow-x-auto">
@@ -303,10 +303,10 @@ export default function Reports() {
                       <tr key={l.id} className="transition-colors" style={{ backgroundColor: tint(statusSwatch(l.status, statuses), 0.06) }}>
                         <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{l.firstName} {l.lastName || ""}</td>
                         <td className="px-4 py-3 font-dm text-sm text-ink">{l.eventName || "—"}</td>
-                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{l.eventDate ? fmtDate(l.eventDate) : "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventType || "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
-                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.budget ? `$${Number(l.budget).toLocaleString()}` : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.budget ? currencyWhole(l.budget) : "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${badgeClass}`}>
                             {l.status?.replace("_", " ").toUpperCase() || "—"}
@@ -344,11 +344,11 @@ export default function Reports() {
                     return (
                       <tr key={b.id} className="transition-colors" style={{ backgroundColor: tint(statusSwatch(b.status, statuses), 0.06) }}>
                         <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{b.eventName || `${b.firstName} ${b.lastName || ""}`.trim() || "—"}</td>
-                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{b.eventDate ? fmtDate(b.eventDate) : "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventType || "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{b.spaceName || "—"}</td>
-                        <td className="px-4 py-3 font-dm text-sm text-ink">{b.totalNzd ? `$${Number(b.totalNzd).toLocaleString()}` : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-sm text-ink">{b.totalNzd ? currencyWhole(b.totalNzd) : "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${badgeClass}`}>{b.status?.toUpperCase() || "—"}</span>
                         </td>
@@ -409,7 +409,7 @@ export default function Reports() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6a6256" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#6a6256" }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
+                  <Tooltip formatter={(v: any) => [currencyWhole(v), "Revenue"]} />
                   <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -457,9 +457,9 @@ export default function Reports() {
                 {(allBookings ?? []).filter((b: any) => b.totalNzd).sort((a: any, b: any) => (Number(b.totalNzd) || 0) - (Number(a.totalNzd) || 0)).map((b: any) => (
                   <tr key={b.id} className="hover:bg-linen transition-colors">
                     <td className="px-4 py-3 font-dm text-sm text-ink">{b.eventName || `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim() || "—"}</td>
-                    <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
+                    <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventDate ? fmtDate(b.eventDate) : "—"}</td>
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
-                    <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalNzd).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">{currencyWhole(b.totalNzd)}</td>
                     <td className="px-4 py-3">
                       <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${statusChipClasses(b.status, statuses)}`}>{b.status?.toUpperCase()}</span>
                     </td>
@@ -546,7 +546,7 @@ export default function Reports() {
                     <tr key={l.id} className="hover:bg-linen transition-colors">
                       <td className="px-4 py-3 font-dm text-sm text-ink">{l.firstName} {l.lastName}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventType || "—"}</td>
-                      <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
+                      <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventDate ? fmtDate(l.eventDate) : "—"}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
                       <td className="px-4 py-3">
                         <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${statusChipClasses(l.status, statuses)}`}>

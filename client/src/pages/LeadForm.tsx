@@ -45,6 +45,7 @@ const MAX_LENGTH: Record<string, number> = {
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@shared/enquiryCopy";
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 import { isVenueSiteOrigin, originOf } from "@shared/adAttribution";
+import { venueBrand } from "@shared/brand";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
@@ -795,6 +796,12 @@ export default function LeadForm() {
   );
   const venue = slug ? venueBySlug : venueDefault;
   const isLoading = slug ? loadingBySlug : loadingDefault;
+  // Lead with the venue's Brand Pack accent (brandAccentColor → venue colour →
+  // navy), exactly as the proposal page does via venueBrand(). This replaces the
+  // old `venue.primaryColor ?? green` default, which left the enquiry form on
+  // the stored primary colour (often the stock red) even when the venue had
+  // chosen a Brand Pack accent the proposal already used.
+  const brand = venueBrand(venue as any);
 
   // Spaces + published prices, the availability/walkthrough switches, the
   // optional Turnstile key and the signed "form opened at" token. Fetched
@@ -1141,7 +1148,7 @@ export default function LeadForm() {
   const bgOverride = hexParam(paramBg);
   const bgTransparent = paramBg === "transparent";
 
-  const primaryColor = accentOverride ?? venue?.primaryColor ?? "#2D4A3E";
+  const primaryColor = accentOverride ?? brand.accent;
   const logoUrl      = (venue as any)?.logoUrl;
   // The white-out filter below only makes sense for a logo with real
   // transparency — a JPEG (never transparent) turns into a solid white
@@ -1178,7 +1185,13 @@ export default function LeadForm() {
   const formCardBg      = bgTransparent ? "transparent" : (bgOverride || (isEmbed ? "transparent" : ((venue as any)?.formCardBg || "#fffdf9")));
   // A colour saved without its "#" (e.g. "E51F1A") isn't valid CSS and rendered
   // the button and selected pills invisible — accept it either way.
-  const formButtonColor = withHash(accentOverride || (venue as any)?.formButtonColor || primaryColor);
+  // When the venue has opted into a Brand Pack accent, it leads here too — the
+  // way the proposal page is branded — rather than a legacy per-form button
+  // colour. Venues with no Brand Pack accent keep their saved formButtonColor.
+  const formButtonColor = withHash(
+    accentOverride
+    || ((venue as any)?.brandAccentColor ? brand.accent : ((venue as any)?.formButtonColor || primaryColor))
+  );
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
   let galleryImages: string[] = [];

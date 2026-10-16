@@ -14,7 +14,7 @@ import { leads, proposals, venueSettings, teamMembers, leadActivity, bookings, r
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 980000 + Math.floor(Math.random() * 9999);
+const OWNER = 960000 + Math.floor(Math.random() * 9999);
 
 function ctx(extra: Partial<TrpcContext> = {}): TrpcContext {
   return {
@@ -39,7 +39,7 @@ d("audit launch fixes (DB)", () => {
   beforeAll(async () => {
     const db = (await getDb())!;
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Now Test Venue", slug: `now-test-${OWNER}`, smtpPass: "secret-test-value",
     } as any);
   });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -93,6 +93,11 @@ export default function Login() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="text-center text-sm text-[#6a6256] mt-5">
+          New to VenueFlow?{" "}
+          <Link href="/signup" className="font-semibold text-[#2f5488] hover:underline">Create an account</Link>
+        </p>
       </div>
     </div>
   );

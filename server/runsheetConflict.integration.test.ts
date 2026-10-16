@@ -12,7 +12,7 @@ import { startTimeOf, zonedWallTimeToDate } from "@shared/eventDate";
  */
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
-const OWNER = 970000 + Math.floor(Math.random() * 9999);
+const OWNER = 990000 + Math.floor(Math.random() * 9999);
 
 function ctx(): TrpcContext {
   return {
@@ -35,7 +35,7 @@ d("run sheet edit conflicts (DB)", () => {
   beforeAll(async () => {
     const db = (await getDb())!;
     await db.insert(venueSettings).values({
-      id: sql`(select coalesce(max(id), 0) + 1 from venue_settings)` as any,
+      id: OWNER as any,
       ownerId: OWNER, name: "Conflict Test Venue", slug: `conflict-test-${OWNER}`,
     });
     const at = zonedWallTimeToDate(2099, 3, 6, 18, 30, "Pacific/Auckland");

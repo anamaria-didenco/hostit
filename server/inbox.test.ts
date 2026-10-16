@@ -248,7 +248,7 @@ describe.skipIf(!hasDb)("inbox poll with a fake IMAP server", () => {
     const caller = appRouter.createCaller(ctxFor());
     await caller.leads.delete({ id: leadId });
     const db = (await getDb())!;
-    expect(await db.select().from(leadMessages).where(eq(leadMessages.leadId, leadId))).toHaveLength(0);
+    expect(await db.select().from(leadMessages).where(and(eq(leadMessages.ownerId, OWNER), eq(leadMessages.leadId, leadId)))).toHaveLength(0);
   });
 });
 

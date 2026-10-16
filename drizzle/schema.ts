@@ -45,6 +45,10 @@ export const users = pgTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  // When this user last loaded their dashboard (epoch ms). Drives the
+  // "Since you were last here" feed (dashboard.sinceLastSeen). Null until the
+  // first visit is recorded — treated as "nothing new yet". Migration 0097.
+  lastSeenAt: bigint("lastSeenAt", { mode: "number" }),
 });
 
 export type User = typeof users.$inferSelect;
@@ -223,6 +227,10 @@ export const venueSettings = pgTable("venue_settings", {
   // "Christmas party"]) for the "Same time next year" win-back list. Null =
   // the built-in defaults in shared/winBack.ts.
   winBackAnnualTypes: text("winBackAnnualTypes"),
+  // When the one-screen "welcome to VenueFlowHQ" intro was dismissed, per
+  // account. Null = never seen (a brand-new self-serve signup), so it shows
+  // once and then stays dismissed.
+  welcomeSeenAt: timestamp("welcomeSeenAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -978,6 +986,8 @@ export const tasks = pgTable("tasks", {
   linkedBookingId: integer("linked_booking_id"),
   assignedTo: varchar("assigned_to", { length: 255 }),
   priority: varchar("priority", { length: 20 }).default("normal"),
+  // 'follow_up' = made from an enquiry's follow-up date (server/followUpTask.ts).
+  source: varchar("source", { length: 30 }),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });

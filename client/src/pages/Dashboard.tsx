@@ -20,11 +20,14 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
+import { showCascadedToast } from "@/lib/cascadedToast";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
+import { SinceLastVisit } from "@/components/SinceLastVisit";
+import { SpaceAvailability } from "@/components/SpaceAvailability";
 import { useDayTitles, DayTitleText, DayTitleAddButton, DayTitleModal, ymdLocal as ymdLocalD } from "@/components/DayTitle";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
@@ -40,6 +43,10 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
+import NeedsYouToday from "@/components/NeedsYouToday";
+import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
+import UpcomingEventsCard from "@/components/UpcomingEventsCard";
+import { isOpenEnquiry } from "@shared/needsToday";
 import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
@@ -57,16 +64,27 @@ import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabe
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
+import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { formatEventDate } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
 import WalkthroughPanel from "@/components/WalkthroughPanel";
+import QuickNote from "@/components/QuickNote";
+import RecordPaymentButton from "@/components/RecordPaymentDialog";
+import ConfirmSpaceDialog from "@/components/ConfirmSpaceDialog";
+import EventNextSteps from "@/components/EventNextSteps";
+import { savedToastLabel } from "@/lib/editToast";
 import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
 import { HoldPanel, HoldTag, DateClashChip, DoubleBookedTag, holdState, fmtHoldDay } from "@/components/DateHold";
+import GlobalFinder from "@/components/GlobalFinder";
+import EventSearchResults from "@/components/EventSearchResults";
+import MovedNote from "@/components/MovedNote";
+import { leadMatchesSearch } from "@/lib/leadSearch";
+import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
@@ -456,19 +474,23 @@ function SpacePricingFields<T extends SpacePricingForm>({ form, setForm }: { for
   );
 }
 
-function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl, isAdmin = false }: {
+function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl, isAdmin = false, canManageAccount = true }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
   venueName?: string;
   venueLogoUrl?: string;
   // The VenueFlowHQ marketing waitlist is the platform owner's, not a venue's.
   isAdmin?: boolean;
+  // Only account managers (owner / full-access login) see the owner-only
+  // sub-tabs: Brand Pack, Team / Account Logins and Integrations. A manager
+  // team link gets everything else.
+  canManageAccount?: boolean;
 }) {
   // Grouped by what you're trying to do, not in the order they were built.
-  const groups = [
+  const rawGroups = [
     { label: "Your venue", items: [
       { id: "venue", label: "Venue" },
-      { id: "brand-pack", label: "Brand Pack" },
+      ...(canManageAccount ? [{ id: "brand-pack", label: "Brand Pack" }] : []),
       { id: "floor-plans", label: "Floor Plans" },
       { id: "menu", label: "Menu & Catalogue" },
       { id: "taxes", label: "Taxes & Fees" },
@@ -484,13 +506,15 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { label: "Email & team", items: [
       { id: "email", label: "Email" },
       { id: "staff-emails", label: "BEO Email Recipients" },
-      { id: "team", label: "Team" },
+      ...(canManageAccount ? [{ id: "team", label: "Team" }] : []),
     ]},
     // Billing was a static placeholder card — removed until there's real billing.
-    { label: "Account", items: [
+    ...(canManageAccount ? [{ label: "Account", items: [
       { id: "integrations", label: "Integrations" },
-    ]},
+    ]}] : []),
   ];
+  // Drop any group left with no items (e.g. "Account" for a manager).
+  const groups = rawGroups.filter(g => g.items.length > 0);
   const items = groups.flatMap(g => g.items);
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
@@ -838,6 +862,13 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember, isStaff, error: authError, refresh: refreshAuth, logout } = useAuth();
+  // Only the venue owner (or a full-access account login) manages the account —
+  // its logins, team access links, integrations (Xero/NBI/API tokens) and Brand
+  // Pack. A team-access-link session (manager or staff) is not an account
+  // manager, matching the server's isAccountManager(). The sensitive Settings
+  // sub-tabs are hidden from everyone who isn't one; the server refuses the
+  // calls regardless.
+  const canManageAccount = !isTeamMember && !isStaff;
   const [, setLocation] = useLocation();
   // The shell had no sign-out control at all (the only one lived in the
   // unused DashboardLayout scaffold), so on a shared or borrowed device the
@@ -862,7 +893,7 @@ export default function Dashboard() {
   const _qp = new URLSearchParams(window.location.search);
   const _rawTab = _qp.get('tab');
   const _rawSub = _qp.get('sub');
-  const _initTab: DashTab = isDashTab(_rawTab) ? _rawTab : "overview";
+  const _initTab: DashTab = isDashTab(_rawTab) ? (_rawTab === "pipeline" ? "enquiries" : _rawTab) : "overview";
   // (staff are redirected off restricted tabs by the effect below)
   const _initSubTab: SettingsSubTab = isSettingsSubTab(_rawSub) ? _rawSub : "venue";
   const [tab, setTab] = useState<DashTab>(_initTab);
@@ -878,8 +909,22 @@ export default function Dashboard() {
     if (tab === "pipeline") setTab("enquiries");
   }, [tab]);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
-  const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
-  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
+  // A manager (or any non-account-manager) who lands on an owner-only sub-tab —
+  // e.g. a bookmarked ?sub=integrations — is moved to Venue, so the sidebar and
+  // the panel never disagree. The server refuses those calls regardless.
+  useEffect(() => {
+    if (!canManageAccount && (settingsSubTab === "brand-pack" || settingsSubTab === "team" || settingsSubTab === "integrations")) {
+      setSettingsSubTab("venue");
+    }
+  }, [canManageAccount, settingsSubTab]);
+  // A second URL param picks the section WITHIN a settings tab (Venue's
+  // Spaces, Menu's catalogue), so a deep link like ?sub=venue&stab=spaces
+  // lands on the right section instead of the tab's default.
+  const _rawStab = _qp.get('stab');
+  const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">(
+    _initSubTab === "venue" && (["details","profile","spaces"] as const).includes(_rawStab as any) ? _rawStab as any : "details");
+  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">(
+    _initSubTab === "menu" && (["packages","catalogue"] as const).includes(_rawStab as any) ? _rawStab as any : "catalogue");
   const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
   const [catalogAiText, setCatalogAiText] = useState("");
   const [catalogPdfLoading, setCatalogPdfLoading] = useState(false);
@@ -960,6 +1005,13 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [actionsMenuOpen]);
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // Enquiries whose status was just changed inline: kept in the list, marked
+  // "Moved to <Status> · Undo", until the next tab / filter / search change.
+  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; at: number }>>({});
+  const rowPosRef = useRef<Map<number, number>>(new Map());
+  const statusPriorRef = useRef<Record<number, string>>({});
+  const statusRowAtRef = useRef<Record<number, number>>({});
+  const undoingRef = useRef<Set<number>>(new Set());
   // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
   const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
@@ -1008,6 +1060,9 @@ export default function Dashboard() {
   }, [isDesktop]);
   // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
   const [followUpOnly, setFollowUpOnly] = useState(false);
+  useEffect(() => {
+    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
+  }, [tab, leadsSubTab, leadStatusFilter, leadDateFilter, followUpOnly, showPartialOnly, leadOwnerFilter, leadSearch, leadViewMode]);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -1175,6 +1230,7 @@ export default function Dashboard() {
   // return focus to whatever opened it (keyed on the booking id so inline
   // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
+  const showEmailModalRef = useRef(false);
   useEffect(() => {
     if (!selectedBooking) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -1193,6 +1249,8 @@ export default function Dashboard() {
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // The email composer opened over the panel: leave the panel alone.
+        if (showEmailModalRef.current) return;
         // An open dropdown/popover inside the panel handles its own Escape
         // (Radix marks it defaultPrevented); an open inline field edit is
         // cancelled. Only a bare Escape closes the whole panel — otherwise
@@ -1235,6 +1293,14 @@ export default function Dashboard() {
   const [hiddenStats, setHiddenStats] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_stats') ?? '[]')); } catch { return new Set(); }
   });
+  // Where the Overview tiles send you: a one-shot filter for Tasks / Payments,
+  // dropped again when you leave that tab so the sidebar link opens it plain.
+  const [tasksOpenFilter, setTasksOpenFilter] = useState<"overdue" | undefined>(undefined);
+  const [paymentsOpenFilter, setPaymentsOpenFilter] = useState<"deposits_due" | undefined>(undefined);
+  useEffect(() => {
+    if (tab !== "tasks") setTasksOpenFilter(undefined);
+    if (tab !== "payments") setPaymentsOpenFilter(undefined);
+  }, [tab]);
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
@@ -1260,8 +1326,10 @@ export default function Dashboard() {
 
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads, isError: leadsError } = trpc.leads.list.useQuery(
-    // Server filters by a single status; multi-select filters fan out client-side.
-    { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
+    // Always the full list: status filters are applied client-side (below).
+    // Fetching only the filtered status made the tab counts, the search and a
+    // just-moved row all lose every enquiry outside the chosen status.
+    {},
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
   // leadId → date clashes with a booking or hold, for the "Date clash" chips.
@@ -1345,8 +1413,9 @@ export default function Dashboard() {
     // Open it the way this view opens enquiries: the table (the desktop
     // default) uses the drawer, so setting selectedLead alone showed nothing.
     if (lead) {
-      setTab("enquiries");
-      if (leadViewMode === "list") setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+      // An explicit ?tab= (a record opened over the Calendar, say) stays put.
+      if (!qp.get('tab')) setTab("enquiries");
+      if (leadViewMode === "list" && (qp.get('tab') ?? 'enquiries') === 'enquiries') setSelectedLead(lead); else openEventDrawer({ ...lead, _isLead: true });
     }
     leadIdParamApplied.current = true;
   }, [allLeads]);
@@ -1370,6 +1439,10 @@ export default function Dashboard() {
     { enabled: !!selectedLead?.id }
   );
   const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
+  // The enquiry's status as the server has it (the drawer flips its own copy
+  // the moment you pick one, before the change has actually gone through).
+  const drawerLeadServerStatus: string | undefined = drawerLeadId
+    ? (allLeads ?? []).find((l: any) => l?.id === drawerLeadId)?.status : undefined;
   // Opening an enquiry (list, board or drawer) means its alerts have been
   // seen — clear them so the bell only counts what still needs a look.
   const openedLeadId: number | null = selectedLead?.id ?? drawerLeadId ?? selectedBooking?.leadId ?? null;
@@ -1663,6 +1736,9 @@ export default function Dashboard() {
 
   // A guest change reaches the run sheet; offer to update its food too.
   const offerFoodRescale = useFoodRescaleOffer();
+  // Set by a calendar drag-and-drop, which really is a reschedule; every other
+  // date change says what it changed ("Date saved").
+  const dragRescheduleRef = useRef(false);
   const rescheduleLead = trpc.leads.update.useMutation({
     onSuccess: (data, vars) => {
       refetchLeads();
@@ -1672,11 +1748,16 @@ export default function Dashboard() {
       utils.dashboard.invalidate();
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       // Also used for the drawer's inline field edits, not only date moves.
-      toast.success(vars.eventDate !== undefined ? "Event rescheduled" : "Saved");
+      const dragged = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      toast.success(dragged ? "Event rescheduled" : (savedToastLabel(vars) ?? "Saved"));
+      showCascadedToast(data);
     },
     onError: (err, vars) => {
+      const wasDrag = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
       // Date clash → "Book anyway?" (resends with allowClash), not a dead end.
-      if (promptClashOverride(err, () => rescheduleLead.mutate({ ...vars, allowClash: true }), { confirmLabel: "Move anyway" })) return;
+      if (promptClashOverride(err, () => { dragRescheduleRef.current = wasDrag; rescheduleLead.mutate({ ...vars, allowClash: true }); }, { confirmLabel: "Move anyway" })) return;
       toast.error(vars.eventDate !== undefined ? "Failed to reschedule" : "Failed to save change");
     },
   });
@@ -1698,12 +1779,14 @@ export default function Dashboard() {
       // changes and inline field edits — so tailor the toast to what actually
       // changed rather than always saying "Event rescheduled".
       const v = (vars ?? {}) as any;
-      let msg = "Event updated";
-      if (v.eventDate !== undefined) msg = "Date saved";
+      let msg = savedToastLabel(v) ?? "Event updated";
+      const dragged = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      if (dragged) msg = "Event rescheduled";
       else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
-      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) toast.success(msg);
+      if (!(v.guestCount !== undefined && offerFoodRescale(data, { bookingId: v.id }))) { toast.success(msg); showCascadedToast(data); }
       // A save that went through after "Book anyway" — the inline editor had
       // rolled its optimistic value back, so put the saved one back in place.
       if (v.allowClash) {
@@ -1712,7 +1795,9 @@ export default function Dashboard() {
       }
     },
     onError: (err, vars) => {
-      if (promptClashOverride(err, () => rescheduleBooking.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      const wasDrag = dragRescheduleRef.current;
+      dragRescheduleRef.current = false;
+      if (promptClashOverride(err, () => { dragRescheduleRef.current = wasDrag; rescheduleBooking.mutate({ ...vars, allowClash: true }); }, { confirmLabel: "Save anyway" })) return;
       toast.error("Failed to save change");
     },
   });
@@ -1743,6 +1828,7 @@ export default function Dashboard() {
         }
       }
     }
+    dragRescheduleRef.current = true;
     if (payload.type === 'booking') {
       rescheduleBooking.mutate({ id: payload.id, eventDate: newIso });
     } else {
@@ -1877,6 +1963,32 @@ export default function Dashboard() {
     });
     setEditingEventDetails(true);
   }
+  // Save the list panel's EVENT DETAILS form (the top SAVE on desktop, the
+  // sticky bar at the bottom of the form on a phone).
+  function saveLeadDetailsEdit(lead: any) {
+    const firstName = String(eventDetailForm.firstName ?? '').trim();
+    const email = String(eventDetailForm.email ?? '').trim();
+    if (!firstName) { toast.error("First name is required."); return; }
+    if (email && !looksLikeEmail(email)) { toast.error(BAD_EMAIL_MSG); return; }
+    updateLeadDetails.mutate({
+      id: lead.id,
+      firstName,
+      lastName: String(eventDetailForm.lastName ?? '').trim() || null,
+      email: email || undefined,
+      phone: String(eventDetailForm.phone ?? '').trim() || null,
+      company: String(eventDetailForm.company ?? '').trim() || null,
+      eventType: eventDetailForm.eventType || null,
+      // Keep the event's time when only the day changes; a date-only
+      // value used to wipe it.
+      eventDate: eventDetailForm.eventDate
+        ? (combineLocalDateTime(eventDetailForm.eventDate, lead.eventDate && fmtEventTime(lead.eventDate)
+            ? (() => { const d = new Date(lead.eventDate); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
+            : null) ?? eventDetailForm.eventDate)
+        : null,
+      guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
+      budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
+    });
+  }
   // The calendar date as the venue sees it. Date-only events are stored at UTC
   // midnight, which is already that date; timed ones are read in local time.
   function localYmd(iso: string | Date): string {
@@ -1928,6 +2040,7 @@ export default function Dashboard() {
       setEditingEventDetails(false);
       if (vars.guestCount !== undefined && offerFoodRescale(data, { leadId: vars.id })) return;
       toast.success("Event details saved");
+      showCascadedToast(data);
     },
     onError: (err, vars) => {
       if (promptClashOverride(err, () => updateLeadDetails.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
@@ -1936,6 +2049,18 @@ export default function Dashboard() {
   });
   const updateStatusMut = trpc.leads.updateStatus.useMutation({
     onSuccess: (data, variables) => {
+      // Keep the row where it is, marked "Moved to … · Undo" (or drop the mark
+      // when this change WAS the undo). See movedRows.
+      const wasUndo = undoingRef.current.delete(variables.id);
+      const from = statusPriorRef.current[variables.id];
+      delete statusPriorRef.current[variables.id];
+      setMovedRows(prev => {
+        if (wasUndo) { if (!prev[variables.id]) return prev; const { [variables.id]: _gone, ...rest } = prev; return rest; }
+        // Only a row that was on screen can stay on screen.
+        const at = prev[variables.id]?.at ?? statusRowAtRef.current[variables.id];
+        if (!from || from === variables.status || at === undefined) return prev;
+        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, at } };
+      });
       refetchLeads();
       utils.bookings.clashes.invalidate();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
@@ -1965,6 +2090,7 @@ export default function Dashboard() {
     },
     onError: (err, variables) => {
       suppressStatusToast.current = false;
+      undoingRef.current.delete(variables.id);
       if (getClashes(err)) {
         // Undo the optimistic status flip, then ask "Book anyway?".
         const prior = (allLeads ?? []).find((l: any) => l.id === variables.id)?.status;
@@ -2002,16 +2128,66 @@ export default function Dashboard() {
   // (LostReasonDialog). Skip still marks it lost; cancel leaves it as it was.
   type UpdateStatusVars = Parameters<typeof updateStatusMut.mutate>[0];
   const [lostPrompt, setLostPrompt] = useState<null | { single?: UpdateStatusVars; bulkIds?: number[]; name?: string; prior?: string }>(null);
+  // Moving an enquiry with no space to Booked / Confirmed / Tentative asks for
+  // the space right there (ConfirmSpaceDialog), then carries on with the change.
+  const [spacePrompt, setSpacePrompt] = useState<null | { vars: UpdateStatusVars; name?: string; prior?: string }>(null);
   const updateStatus = {
     ...updateStatusMut,
-    mutate: (vars: UpdateStatusVars) => {
+    mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
+      const priorStatus: string | undefined = (allLeads ?? []).find((x: any) => x?.id === vars.id)?.status;
+      if (priorStatus) statusPriorRef.current[vars.id] = priorStatus;
+      const rowAt = rowPosRef.current.get(vars.id);
+      if (rowAt !== undefined) statusRowAtRef.current[vars.id] = rowAt;
       if (vars.status === 'lost' && vars.lostReason === undefined) {
         const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
         return;
       }
-      updateStatusMut.mutate(vars);
+      // Confirming an enquiry with no space asks for one inline, rather than
+      // failing with a toast (the server also accepts spaceName here).
+      if (['booked', 'confirmed', 'tentative'].includes(vars.status) && vars.spaceName === undefined) {
+        const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
+        // The open panel may hold a fresher copy than the list.
+        const open: any = [selectedBooking, selectedLead].find((x: any) => x && x.id === vars.id && (x._isLead || x === selectedLead));
+        const space = (open?.spaceName ?? l?.spaceName ?? '').toString().trim();
+        if ((l || open) && !space) {
+          const src = open ?? l;
+          setSpacePrompt({ vars, name: `${src.firstName ?? ''} ${src.lastName ?? ''}`.trim() || undefined, prior: l?.status ?? src.status });
+          return;
+        }
+      }
+      updateStatusMut.mutate(vars, callOpts);
     },
+  };
+  // Undo for a row marked "Moved to …": the same server path as any status
+  // change (holds/bookings are created or cancelled there), so a refusal comes
+  // back as an error and is shown, and the mark stays.
+  const undoMove = (leadId: number) => {
+    const m = movedRows[leadId];
+    if (!m) return;
+    undoingRef.current.add(leadId);
+    updateStatus.mutate({ id: leadId, status: m.from as any }, {
+      onError: (err: any) => { if (!getClashes(err)) toast.error(err?.message || "Couldn't undo that status change"); },
+    });
+  };
+  const confirmSpace = (spaceName: string) => {
+    const p = spacePrompt;
+    setSpacePrompt(null);
+    if (!p) return;
+    const patch = (prev: any) => prev && prev.id === p.vars.id ? { ...prev, spaceName } : prev;
+    setSelectedLead(patch);
+    setSelectedBooking((prev: any) => prev?._isLead ? patch(prev) : prev);
+    updateStatusMut.mutate({ ...p.vars, spaceName });
+  };
+  const cancelSpace = () => {
+    const p = spacePrompt;
+    setSpacePrompt(null);
+    // Undo any optimistic status the caller already showed.
+    if (p?.prior) {
+      const undo = (prev: any) => prev && prev.id === p.vars.id && prev.status === p.vars.status ? { ...prev, status: p.prior } : prev;
+      setSelectedLead(undo);
+      setSelectedBooking((prev: any) => prev?._isLead ? undo(prev) : prev);
+    }
   };
   const bulkUpdateStatus = {
     ...bulkUpdateStatusMut,
@@ -2031,6 +2207,7 @@ export default function Dashboard() {
   const cancelLost = () => {
     const p = lostPrompt;
     setLostPrompt(null);
+    undoingRef.current.clear();
     // Undo any optimistic "lost" the caller already showed.
     if (p?.single && p.prior) {
       const undo = (prev: any) => prev && prev.id === p.single!.id && prev.status === 'lost' ? { ...prev, status: p.prior } : prev;
@@ -2152,6 +2329,34 @@ export default function Dashboard() {
     }
   }
 
+  // ── Browser history (Back/Forward through tabs and records) + Cmd/Ctrl-K finder ──
+  const [finderOpen, setFinderOpen] = useState(false);
+  const openLeadFromUrlOrFinder = async (id: number): Promise<boolean> => {
+    const lead: any = (allLeads ?? []).find((l: any) => l && l.id === id) ?? await utils.leads.get.fetch({ id }).catch(() => null);
+    if (!lead) { toast.error("That enquiry no longer exists."); return false; }
+    openEventDrawer({ ...lead, _isLead: true });
+    return true;
+  };
+  const openBookingFromUrl = async (id: number): Promise<boolean> => {
+    const b: any = await utils.bookings.getById.fetch({ id }).catch(() => null);
+    if (!b) { toast.error("That event no longer exists."); return false; }
+    openEventDrawer(b);
+    return true;
+  };
+  useDashboardHistory<DashTab>({
+    tab,
+    setTab,
+    normalizeTab: raw => !isDashTab(raw) ? null : raw === "pipeline" ? "enquiries" : isStaff && raw !== "calendar" && raw !== "tasks" ? "calendar" : raw,
+    isTabAllowed: t => t !== "pipeline" && (!isStaff || t === "calendar" || t === "tasks"),
+    drawer: selectedBooking
+      ? { kind: selectedBooking._isLead ? "lead" : "booking", id: selectedBooking.id }
+      : selectedLead ? { kind: "lead", id: selectedLead.id } : null,
+    closeDrawer: () => { setSelectedBooking(null); setSelectedLead(null); },
+    openLead: openLeadFromUrlOrFinder,
+    openBooking: openBookingFromUrl,
+    leadsLoaded: !!allLeads,
+  });
+
   const parseEnquiryMutation = trpc.leads.parseEnquiryText.useMutation({
     onSuccess: (result) => {
       if (result.success && result.data) {
@@ -2225,7 +2430,7 @@ export default function Dashboard() {
     },
   });
   const updateSettings = trpc.venue.update.useMutation({
-    onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
+    onSuccess: () => { refetchSettings(); utils.quickstart.setupStatus.invalidate(); toast.success("Settings saved!"); },
     onError: (err) => toast.error(err.message || "Failed to save settings"),
   });
   const testEmailMutation = trpc.venue.testEmail.useMutation({
@@ -2332,7 +2537,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to clear sync"),
   });
   const createSpace = trpc.spaces.create.useMutation({
-    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
+    onSuccess: () => { refetchSpaces(); utils.quickstart.setupStatus.invalidate(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
   });
   const updateSpace = trpc.spaces.update.useMutation({
     onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
@@ -2351,6 +2556,7 @@ export default function Dashboard() {
 
   // Email compose state
   const [showEmailModal, setShowEmailModal] = useState(false);
+  showEmailModalRef.current = showEmailModal;
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
   // Set when the composer was opened from a client's email ("Reply"), so the
   // send threads under it (In-Reply-To / References). Cleared on close.
@@ -2653,7 +2859,7 @@ export default function Dashboard() {
     onSuccess: () => { refetchCatalogCategories(); setCatalogActiveCategoryId(null); toast.success('Category deleted'); }
   });
   const createCatalogItem = trpc.menuCatalog.createItem.useMutation({
-    onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
+    onSuccess: () => { refetchCatalogItems(); utils.quickstart.setupStatus.invalidate(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
   });
   // On/off the menu without deleting: past events keep showing what was sold.
   const toggleCatalogItemAvailable = trpc.menuCatalog.updateItem.useMutation({
@@ -2671,7 +2877,7 @@ export default function Dashboard() {
     onSuccess: () => { refetchCatalogItems(); toast.success('Item deleted'); }
   });
   const bulkCreateCatalogItems = trpc.menuCatalog.bulkCreateItems.useMutation({
-    onSuccess: (data) => { refetchCatalogItems(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
+    onSuccess: (data) => { refetchCatalogItems(); utils.quickstart.setupStatus.invalidate(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
   });
   // Bulk select / edit / delete state for the catalogue items list. The set
   // is reset whenever the active category changes so selections never leak
@@ -2900,15 +3106,20 @@ export default function Dashboard() {
     .filter((l: any) => l.status === "new")
     .slice()
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
+  // The sidebar badge counts NEW enquiries (status "new"), exactly the NEW tab
+  // and the Overview "New Enquiries" card. It used to count only the unopened
+  // ones, which never matched either. Definitions: shared/needsToday.ts.
+  const unreadCount = newEnquiries.length;
   const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
 
   // Auto-switch to "all" when there are no new enquiries
+  // (Not while a just-moved row is pinned: switching tabs would unpin it.)
+  const movedCount = Object.keys(movedRows).length;
   useEffect(() => {
-    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new") {
+    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new" && movedCount === 0) {
       setLeadsSubTab("all");
     }
-  }, [newEnquiries.length, allLeads]);
+  }, [newEnquiries.length, allLeads, movedCount]);
 
   function applyDateFilter(list: any[]) {
     if (leadDateFilter === "all") return list;
@@ -2955,18 +3166,29 @@ export default function Dashboard() {
 
   // When the user has picked one or more statuses, fetch+filter from the full
   // enquiry set. Multiple selections OR together.
-  const leadsToShow = leadStatusFilter.length > 0
+  // Typing in the search box searches EVERYTHING: every status, every date,
+  // every filter. (It used to search only the current tab and date window, so
+  // a past or already-quoted client was "not found" under New + Upcoming.)
+  const searching = leadSearch.trim().length > 0;
+  // Rows just moved to another status stay put (marked "Moved to … · Undo")
+  // until the next tab/filter/search change, instead of vanishing: they are
+  // taken out of the filtered list and put back at the row they were on.
+  const pinnedMoves = allEnquiries.filter((l: any) => movedRows[l.id]);
+  const leadsToShow = searching
+    ? allEnquiries
+    : leadStatusFilter.length > 0
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
+    // Follow-up covers every open enquiry, "new" ones included (the tab's badge counts them).
+    : followUpOnly ? applyDateFilter(allEnquiries)
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const followUpNowMs = Date.now();
-  const filteredLeads = leadsToShow
-    .filter((l: any) => (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
-    .filter((l: any) => !showPartialOnly || isPartialLead(l))
-    .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
-    .filter((l: any) => leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter)
-    .filter((l: any) =>
-      !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
-    )
+  const sortedLeads = leadsToShow
+    .filter((l: any) => !movedRows[l.id])
+    .filter((l: any) => searching ? true : (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
+    .filter((l: any) => searching || !showPartialOnly || isPartialLead(l))
+    .filter((l: any) => searching || !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
+    .filter((l: any) => searching || (leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter))
+    .filter((l: any) => !searching || leadMatchesSearch(l, leadSearch))
     .slice()
     .sort((a: any, b: any) => {
       let cmp = 0;
@@ -2989,6 +3211,13 @@ export default function Dashboard() {
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
     });
+  const filteredLeads = pinnedMoves.length === 0 ? sortedLeads : (() => {
+    const out = sortedLeads.slice();
+    pinnedMoves.slice().sort((a: any, b: any) => movedRows[a.id].at - movedRows[b.id].at)
+      .forEach((l: any) => out.splice(Math.min(movedRows[l.id].at, out.length), 0, l));
+    return out;
+  })();
+  rowPosRef.current = new Map(filteredLeads.map((l: any, i: number) => [l.id, i]));
   const followUpCount = allEnquiries.filter((l: any) => leadFollowUpState(l, followUpNowMs).needs).length;
 
   // Calendar
@@ -3273,6 +3502,8 @@ export default function Dashboard() {
   return (
     <div className="h-screen bg-background font-inter flex flex-col md:flex-row overflow-hidden">
       <a href="#vf-main" className="skip-link">Skip to content</a>
+      <GlobalFinder open={finderOpen} onOpenChange={setFinderOpen} isStaff={isStaff} stages={pipelineStages}
+        onOpenLead={id => { void openLeadFromUrlOrFinder(id); }} onOpenEvent={id => setLocation(`/event/${id}`)} />
       {/* ── TOP NAVIGATION BAR (mobile only — desktop uses the sidebar) ──────── */}
       <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
@@ -3327,6 +3558,10 @@ export default function Dashboard() {
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {/* Alerts bell — one instance per viewport so browser alerts never double. Staff logins can't read alerts. */}
+          <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event" title="Find"
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+            <Search className="w-4 h-4 text-gray-500" aria-hidden="true" />
+          </button>
           {!isStaff && !isDesktop && <NotificationBell variant="light" onOpenLink={openAlertLink} side="bottom" align="end" />}
           <ThemeSwitcher />
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
@@ -3346,6 +3581,10 @@ export default function Dashboard() {
         <div className="h-[62px] flex items-center px-[18px] border-b" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <button onClick={() => setTab("overview" as any)} aria-label="VenueFlow — go to dashboard" className="flex items-center focus:outline-none">
             <img src="/venueflow-logo-white.png" alt="VenueFlow" className="h-7 w-auto" />
+          </button>
+          <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event (Ctrl or Cmd + K)" title="Find (Ctrl/Cmd + K)"
+            className="ml-auto w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white transition-colors">
+            <Search className="w-4 h-4" aria-hidden="true" style={{ color: '#bcc8db' }} />
           </button>
         </div>
         {/* Nav */}
@@ -3410,16 +3649,79 @@ export default function Dashboard() {
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (() => {
+            // The action tiles come first, the vanity numbers sit in a collapsed
+            // "Performance" row. Every count below is the one the list it opens
+            // shows (definitions: shared/needsToday.ts).
+            const openEnquiryCount = allLeads ? allEnquiries.filter((l: any) => isOpenEnquiry(l.status)).length : (stats?.newLeads ?? 0);
+            const followUpTileCount = allLeads ? followUpCount : (stats?.needsFollowUp ?? 0);
+            const overdueTaskCount = stats?.overdueTasks ?? 0;
+            const depositsDueCount = stats?.depositsDue ?? 0;
             const allStats = [
-              { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
+              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
+              { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
+              { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
+              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
               { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-blue-500" /> },
-              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", icon: <FileText className="w-5 h-5 text-forest" /> },
-              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
               { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
-              { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: (stats?.overdueTasks ?? 0) > 0 ? 'danger' as const : undefined },
-              { id: "needs_followup", label: "Needs Follow-up", value: stats?.needsFollowUp ?? 0, sub: (stats?.needsFollowUp ?? 0) > 0 ? "quoted or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${(stats?.needsFollowUp ?? 0) > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: (stats?.needsFollowUp ?? 0) > 0 ? 'warn' as const : undefined },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-forest" />, perf: true },
+              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-forest" />, perf: true },
             ];
+            // Land on exactly the records a tile counted: clear the date, owner,
+            // search and status filters the list may have been left with.
+            const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
+              setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
+              setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
+              setTab('enquiries');
+            };
+            const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
+            // Open an event/enquiry from the Today, Upcoming and Needs-you panels in the drawer.
+            const openOverviewEvent = (e: UpcomingEventRow) => {
+              if (e._type === 'booking') { openEventDrawer({ ...(e.row as any), _type: 'booking' }); return; }
+              const full = allLeads?.find((l: any) => l.id === e.id) ?? e.row;
+              openEventDrawer({ ...(full as any), _isLead: true });
+            };
+            const openBookingById = async (id: number) => {
+              const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
+              if (!b) { toast.error("That event no longer exists."); return; }
+              openEventDrawer({ ...b, _type: 'booking' });
+            };
+            const tileAction = (id: string) => {
+              switch (id) {
+                case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
+                case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
+                case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
+                case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
+                case 'upcoming_events': return showCalendarList();
+                case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
+                case 'conversion_rate': case 'revenue_month': return setTab('reports');
+              }
+            };
+            const renderTile = (s: (typeof allStats)[number]) => {
+              // When an action tile has a non-zero count, give it a coloured left
+              // accent + tint + coloured number so the eye lands on what needs
+              // doing. Inline styles so they reliably win over .dante-card.
+              const alert = (s as any).alert as 'danger' | 'warn' | undefined;
+              const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
+                : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
+              const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => tileAction(s.id)}
+                  style={alertStyle}
+                  className="dante-card p-3 md:p-4 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <div className="mb-2">{s.icon}</div>
+                  <div className={`font-serif text-2xl md:text-3xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
+                  <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
+                  <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
+                </button>
+              );
+            };
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
+            const actionStats = visibleStats.filter(s => !(s as any).perf);
+            const perfStats = visibleStats.filter(s => (s as any).perf);
             return (
             <div className="p-6 space-y-6">
               {/* Header */}
@@ -3462,14 +3764,37 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* What to do today: the card hides itself when there is nothing; the
+                  Today panel sits to its right on desktop and below it on a phone. */}
+              {!isStaff && (
+                <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+                  <NeedsYouToday
+                    onOpenBooking={openBookingById}
+                    onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                    onOpenLink={(link) => { void openAlertLink(link); }}
+                    onGoCalendarList={showCalendarList}
+                    onGoTasksOverdue={() => tileAction('overdue_tasks')}
+                    onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                    onGoDeposits={() => tileAction('deposits_due')}
+                  />
+                  <TodayPanel
+                    className="lg:w-[340px] lg:shrink-0 lg:ml-auto"
+                    onOpenEvent={openOverviewEvent}
+                    onCalendar={() => setTab('calendar')}
+                    newEnquiries={newEnquiries.length}
+                    onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                  />
+                </div>
+              )}
+
               {/* Setup steps for a new venue — hidden once everything is done. */}
               {setupStatus && (() => {
                 const steps = [
-                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
-                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
-                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); } },
+                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
+                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
+                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); setMenuSettingsSection('catalogue'); } },
                   { key: 'email', label: 'Connect your email', sub: 'Email — so replies and proposals send from you', go: () => { setTab('settings'); setSettingsSubTab('email'); } },
-                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); } },
+                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
                 ] as const;
                 const todo = steps.filter(st => !(setupStatus as any)[st.key]);
                 if (todo.length === 0) return null;
@@ -3565,90 +3890,27 @@ export default function Dashboard() {
                 </section>
               )}
 
-              {/* Phone: today first. On a phone the seven KPI tiles used to fill
-                  the screen before anything about tonight. */}
-              {(() => {
-                const sameDay = (d: Date, t: Date) => d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
-                const now = new Date();
-                const todays = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
-                  .filter((e: any) => e.eventDate && !['cancelled','lost','declined'].includes(e.status) && sameDay(new Date(e.eventDate), now))
-                  .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
-                return (
-                  <section aria-label="Today" className="md:hidden dante-card overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="Today" meta={todays.length ? `${todays.length} event${todays.length !== 1 ? 's' : ''}` : undefined} className="flex-1" />
-                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary min-h-[44px]">Calendar</button>
-                    </div>
-                    {todays.length === 0 ? (
-                      <p className="px-4 py-3 font-dm text-sm text-sage">No events today.</p>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {todays.map((e: any) => (
-                          <button key={`${e._type}-${e.id}`}
-                            onClick={() => { const full = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e); openEventDrawer(e._type === 'booking' ? full : { ...full, _isLead: true }); }}
-                            className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] text-left hover:bg-linen">
-                            <span className="font-dm text-sm tabular-nums text-ink/70 w-16 shrink-0">{fmtEventTime(e.eventDate) || '—'}</span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-serif text-sm font-semibold text-foreground truncate">{e.firstName} {e.lastName}</span>
-                              <span className="block font-sans text-xs text-muted-foreground truncate">{[e.eventType, e.guestCount ? `${e.guestCount} guests` : null, e.spaceName].filter(Boolean).join(' · ')}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {newEnquiries.length > 0 && (
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }}
-                        className="w-full text-left px-4 py-3 min-h-[44px] border-t border-border font-dm text-sm font-semibold text-forest hover:bg-linen">
-                        {newEnquiries.length} new enquir{newEnquiries.length === 1 ? 'y' : 'ies'} waiting →
-                      </button>
-                    )}
-                  </section>
-                );
-              })()}
-
-              {/* KPI Cards — clickable, route to relevant tab */}
-              {visibleStats.length > 0 && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                  {visibleStats.map(s => {
-                    const target: DashTab = (
-                      s.id === 'active_enquiries' ? 'enquiries' :
-                      s.id === 'upcoming_events' ? 'calendar' :
-                      s.id === 'proposals_sent' ? 'enquiries' :
-                      s.id === 'conversion_rate' ? 'reports' :
-                      s.id === 'revenue_month' ? 'reports' :
-                      s.id === 'overdue_tasks' ? 'tasks' :
-                      s.id === 'needs_followup' ? 'enquiries' :
-                      'overview'
-                    );
-                    // When an action tile has a non-zero count, give it a
-                    // coloured left accent + tint + coloured number so the eye
-                    // lands on what needs doing, not the informational metrics.
-                    // Inline styles so they reliably win over .dante-card.
-                    const alert = (s as any).alert as 'danger' | 'warn' | undefined;
-                    const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
-                      : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
-                    const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          if (s.id === 'needs_followup') { setFollowUpOnly(true); setLeadStatusFilter([]); setLeadsSubTab('all'); }
-                          if (s.id === 'proposals_sent') { setFollowUpOnly(false); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); }
-                          setTab(target);
-                        }}
-                        style={alertStyle}
-                        className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                      >
-                        <div className="mb-2 md:mb-3">{s.icon}</div>
-                        <div className={`font-serif text-2xl md:text-4xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
-                        <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
-                        <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
-                      </button>
-                    );
-                  })}
+              {/* KPI tiles — action tiles first, each opens exactly the records it
+                  counted. The vanity numbers wait in a collapsed Performance row. */}
+              {actionStats.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
+                  {actionStats.map(renderTile)}
                 </div>
               )}
+              {perfStats.length > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer select-none list-none inline-flex items-center gap-1.5 min-h-[44px] font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" aria-hidden /> Performance
+                    <span className="font-semibold normal-case tracking-normal">{perfStats.map(s => `${s.label} ${s.value}`).join(' · ')}</span>
+                  </summary>
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4 mt-2">
+                    {perfStats.map(renderTile)}
+                  </div>
+                </details>
+              )}
+
+              {/* Since your last visit — what changed since this user last loaded the dashboard (non-staff). */}
+              {!isStaff && <SinceLastVisit />}
 
               {/* Calendar + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3657,54 +3919,18 @@ export default function Dashboard() {
 
                 {/* Sidebar cards */}
                 <div className="space-y-4">
-                  {/* Upcoming Events */}
-                  <div className="dante-card overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="Upcoming Events" className="flex-1" />
-                      <button onClick={() => setTab('calendar')} aria-label="View all upcoming events" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
-                    </div>
-                    {(() => {
-                      const upcoming = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
-                        .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
-                        .filter((e: any) => new Date(e.eventDate) >= new Date())
-                        .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
-                        .slice(0, 8);
-                      if (upcoming.length === 0) return (
-                        <div className="flex flex-col items-center justify-center p-6 text-center">
-                          <Calendar className="w-8 h-8 text-sage/20 mx-auto mb-2" />
-                          <p className="font-dm text-xs text-sage/50">No upcoming events this month</p>
-                        </div>
-                      );
-                      return (
-                        <div className="divide-y divide-border max-h-56 overflow-auto">
-                          {upcoming.map((e: any) => {
-                            const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
-                            return (
-                              <button key={e.id}
-                                onClick={() => {
-                                  // Merge with full lead data so the drawer has all fields
-                                  const fullItem = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e);
-                                  openEventDrawer(e._type === 'booking' ? fullItem : { ...fullItem, _isLead: true });
-                                }}
-                                className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} aria-hidden="true" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
-                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{formatEventDate(e.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                  {/* Upcoming Events — the next 14 days from today, whatever month the calendar shows. */}
+                  <UpcomingEventsCard
+                    onOpenEvent={openOverviewEvent}
+                    onSeeAll={showCalendarList}
+                    statusInfo={(st) => getStatusInfo(st)}
+                  />
 
                   {/* New Enquiries */}
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -3714,7 +3940,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="divide-y divide-border max-h-56 overflow-auto">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab('new'); setTab('enquiries'); }}
+                          <button key={lead.id} onClick={() => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${lead.id}`); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
@@ -3723,6 +3949,11 @@ export default function Dashboard() {
                             </div>
                           </button>
                         ))}
+                        {newEnquiries.length > 6 && (
+                          <button onClick={() => showEnquiries({ sub: 'new' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
+                            +{newEnquiries.length - 6} more new enquiries {'\u2192'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3799,7 +4030,7 @@ export default function Dashboard() {
                           <div className="relative flex min-w-0">
                           <div className="flex gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {newEnquiries.length > 0 && (
-                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
+                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("new"); setSelectedLead(null); }}
                               className={tabCls(leadsSubTab === "new" && !followUpOnly)}>
                               NEW
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" && !followUpOnly ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
@@ -3817,7 +4048,7 @@ export default function Dashboard() {
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-800 text-white"}`}>{followUpCount}</span>
                             )}
                           </button>
-                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
                             className={tabCls(isAll && !followUpOnly)}>
                             ALL
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll && !followUpOnly ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
@@ -4011,8 +4242,11 @@ export default function Dashboard() {
                       title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}>
                       <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
                     </button>
-                    <span className="font-dm text-xs text-ink/60 ml-auto">{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
+                    <span className="font-dm text-xs text-ink/60 ml-auto">{searching && <span className="mr-2">Searching every status and date.</span>}{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
                   </div>
+                )}
+                {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                  <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
                 {/* Bulk select all bar */}
                 {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
@@ -4044,7 +4278,7 @@ export default function Dashboard() {
                     {filteredLeads.length === 0 ? (
                       <div className="p-12 text-center">
                         <MessageSquare className="w-10 h-10 text-sage/30 mx-auto mb-3" />
-                        <p className="font-dm text-sage text-sm">No records found</p>
+                        <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No records found"}</p>
                       </div>
                     ) : (
                       <table className="w-full text-sm border-collapse min-w-[700px]">
@@ -4128,11 +4362,9 @@ export default function Dashboard() {
                                     onChange={e => {
                                       const newStatus = e.target.value;
                                       if (newStatus === lead.status) return;
-                                      if (['booked','confirmed','tentative'].includes(newStatus) && !lead.spaceName?.trim()) {
-                                        toast.error('Pick an event space on this enquiry first.');
-                                        return;
-                                      }
-                                      updateStatus.mutate({ id: lead.id, status: newStatus as any });
+                                      updateStatus.mutate({ id: lead.id, status: newStatus as any }, {
+                                        onError: (err: any) => { if (!getClashes(err)) toast.error(err?.message || "Couldn't change the status"); },
+                                      });
                                     }}
                                     title="Change status"
                                     aria-label={`Change status for ${lead.firstName} ${lead.lastName ?? ""}`.trim()}
@@ -4146,6 +4378,10 @@ export default function Dashboard() {
                                       <option key={s.key} value={s.key}>{s.label}</option>
                                     ))}
                                   </select>
+                                  {movedRows[lead.id] && (
+                                    <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
+                                      busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/70 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
@@ -4199,16 +4435,15 @@ export default function Dashboard() {
                   ) : filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
-                      <p className="font-dm text-sage text-sm">No leads found</p>
+                      <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No leads found"}</p>
                     </div>
                   ) : filteredLeads.map((lead: any) => (
                     // shrink-0: the global `.flex { min-height:0 }` reset (index.css)
                     // otherwise lets flexbox squash these rows — a tall stack of flex
                     // children in a fixed-height flex column — down to ~0px, so the
                     // content overlaps instead of the list scrolling. Keep natural height.
-                    <div key={lead.id} className={`flex items-stretch shrink-0 ${
-                      selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''
-                    }`}>
+                    <div key={lead.id} className={`shrink-0 ${selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''}`}>
+                    <div className="flex items-stretch">
                       {bulkSelectMode && (
                         <label className="flex items-center px-3 cursor-pointer">
                           <input type="checkbox"
@@ -4276,6 +4511,13 @@ export default function Dashboard() {
                           })()}
                     </button>
                       </div>
+                    {movedRows[lead.id] && (
+                      <div className="px-4 pb-2 border-l-4" style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
+                        <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
+                          busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
+                      </div>
+                    )}
+                    </div>
                   ))}
                 </div>}
 
@@ -4488,6 +4730,12 @@ export default function Dashboard() {
                       </button>
                     </div>
                   </div>
+                  {/* Notes without scrolling to the activity log. */}
+                  {!isStaff && (
+                    <div className="mb-4 max-w-2xl">
+                      <QuickNote leadId={selectedLead.id} />
+                    </div>
+                  )}
                   {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
                   {!isStaff && (
                     <div className="-mt-1 mb-4 md:-mt-3 md:mb-6">
@@ -4511,6 +4759,7 @@ export default function Dashboard() {
                       onOpenLead={openLeadById} onMerged={openLeadById}
                       onOwnerChanged={v => setSelectedLead((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
                   </div>
+                  {!isStaff && <LinkedTasks leadId={selectedLead.id} />}
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -4522,32 +4771,9 @@ export default function Dashboard() {
                             <Edit2 className="w-3 h-3" /> EDIT
                           </button>
                         ) : (
-                          <div className="flex gap-2">
+                          <div className="hidden md:flex gap-2">
                             <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/60 hover:text-ink font-bebas tracking-widest">CANCEL</button>
-                            <button onClick={() => {
-                              const firstName = String(eventDetailForm.firstName ?? '').trim();
-                              const email = String(eventDetailForm.email ?? '').trim();
-                              if (!firstName) { toast.error("First name is required."); return; }
-                              if (email && !looksLikeEmail(email)) { toast.error(BAD_EMAIL_MSG); return; }
-                              updateLeadDetails.mutate({
-                                id: selectedLead.id,
-                                firstName,
-                                lastName: String(eventDetailForm.lastName ?? '').trim() || null,
-                                email: email || undefined,
-                                phone: String(eventDetailForm.phone ?? '').trim() || null,
-                                company: String(eventDetailForm.company ?? '').trim() || null,
-                                eventType: eventDetailForm.eventType || null,
-                                // Keep the event's time when only the day changes; a date-only
-                                // value used to wipe it.
-                                eventDate: eventDetailForm.eventDate
-                                  ? (combineLocalDateTime(eventDetailForm.eventDate, selectedLead.eventDate && fmtEventTime(selectedLead.eventDate)
-                                      ? (() => { const d = new Date(selectedLead.eventDate); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
-                                      : null) ?? eventDetailForm.eventDate)
-                                  : null,
-                                guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
-                                budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
-                              });
-                            }} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
+                            <button onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
                               {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
                             </button>
                           </div>
@@ -4594,6 +4820,16 @@ export default function Dashboard() {
                               />
                             </div>
                           ))}
+                          {/* Phone: Save / Cancel stay in view at the bottom of the
+                              form however far down the fields you are. */}
+                          <div className="md:hidden sticky bottom-0 -mx-4 -mb-4 mt-3 px-4 py-3 flex gap-2 bg-cream border-t border-gold/40 shadow-[0_-4px_8px_rgba(0,0,0,0.06)]">
+                            <button type="button" onClick={() => setEditingEventDetails(false)}
+                              className="flex-1 min-h-[44px] border border-ink/25 text-ink/80 font-bebas tracking-widest text-xs">CANCEL</button>
+                            <button type="button" onClick={() => saveLeadDetailsEdit(selectedLead)} disabled={updateLeadDetails.isPending}
+                              className="flex-1 min-h-[44px] bg-forest-dark text-cream hover:bg-forest font-bebas tracking-widest text-xs disabled:opacity-50">
+                              {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4605,10 +4841,6 @@ export default function Dashboard() {
                       {!['booked','confirmed'].includes(selectedLead.status) && (
                         <button
                           onClick={() => {
-                            if (!selectedLead.spaceName?.trim()) {
-                              toast.error('Pick an event space on this enquiry before confirming.');
-                              return;
-                            }
                             updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any });
                           }}
                           className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs hover:bg-forest transition-colors">
@@ -4627,6 +4859,11 @@ export default function Dashboard() {
                             className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-forest/30 text-forest font-bebas tracking-widest text-xs hover:bg-forest/10 transition-colors">
                             <Calendar className="w-3.5 h-3.5" /> VIEW ON CALENDAR
                           </button>
+                          {!isStaff && (
+                            <EventNextSteps key={selectedLead.id} leadId={selectedLead.id} leadStatus={selectedLead.status}
+                              onOpenRunsheet={(bid) => setLocation(`/runsheet?bookingId=${bid}`)}
+                              onOpenSettings={() => { setTab("settings"); setSettingsSubTab("email"); }} />
+                          )}
                         </div>
                       )}
                       {!isStaff && (
@@ -4649,10 +4886,6 @@ export default function Dashboard() {
                           return (
                             <button key={stage.key}
                               onClick={() => {
-                                if (['booked','confirmed','tentative'].includes(stage.key) && !selectedLead.spaceName?.trim()) {
-                                  toast.error('Pick an event space on this enquiry first.');
-                                  return;
-                                }
                                 updateStatus.mutate({ id: selectedLead.id, status: stage.key as any });
                               }}
                               className="w-full text-left px-3 py-2 border font-bebas tracking-widest text-xs transition-all"
@@ -4827,9 +5060,11 @@ export default function Dashboard() {
           )}
 
           {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
-          {showEmailModal && selectedLead && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div role="dialog" aria-modal="true" className="bg-cream border-2 border-forest w-full max-w-lg shadow-2xl">
+          {/* Portalled to <body>: the event drawer makes #root inert while it is
+              open, and the composer can now open over the drawer. */}
+          {showEmailModal && selectedLead && createPortal(
+            <div className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <div role="dialog" aria-modal="true" aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
@@ -4908,6 +5143,8 @@ export default function Dashboard() {
                       value={emailForm.body}
                       onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
                       rows={8}
+                      autoFocus
+                      onFocus={e => { const el = e.currentTarget; if (el.selectionStart === 0 && el.selectionEnd === 0) el.setSelectionRange(el.value.length, el.value.length); }}
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
@@ -5019,7 +5256,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          )}
+          , document.body)}
           {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
@@ -5133,16 +5370,20 @@ export default function Dashboard() {
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
+                  <SpaceAvailability />
                   <button onClick={() => setShowPrintWeek(true)}
                     title="Print every event's run sheet for a week, in one PDF"
                     aria-label="Print the week's run sheets"
                     className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors">
                     <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
                   </button>
+                  {/* Staff are read-only server-side, so hide create. */}
+                  {!isStaff && (
                   <button onClick={() => setShowAddLead(true)}
                     className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
                     <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
                   </button>
+                  )}
                 </div>
                 {/* Row 2 (mobile only): Big tap-friendly nav controls */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-3">
@@ -6084,7 +6325,7 @@ export default function Dashboard() {
           {/* ── TASKS ─────────────────────────────────────────────────────── */}
           {tab === "tasks" && (
             <div className="flex-1">
-              <TasksPage />
+              <TasksPage initialFilter={tasksOpenFilter} />
             </div>
           )}
 
@@ -6098,7 +6339,7 @@ export default function Dashboard() {
           {/* ── PAYMENTS ────────────────────────────────────────────────────── */}
           {tab === "payments" && (
             <div className="flex-1">
-              <PaymentsBoard />
+              <PaymentsBoard initialFilter={paymentsOpenFilter} />
             </div>
           )}
 
@@ -6107,7 +6348,7 @@ export default function Dashboard() {
           {tab === "settings" && (
             <div className="flex flex-col md:flex-row" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
               {/* Settings sidebar — like Perfect Venue */}
-              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} isAdmin={user?.role === 'admin'} />
+              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} isAdmin={user?.role === 'admin'} canManageAccount={canManageAccount} />
               <div className="flex-1 overflow-auto p-4 md:p-8">
 
               {/* ── VENUE (unified: Details + Profile + Spaces) ─────── */}
@@ -7721,7 +7962,7 @@ export default function Dashboard() {
               )}
 
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
-              {settingsSubTab === "integrations" && (() => {
+              {settingsSubTab === "integrations" && canManageAccount && (() => {
                 const nbiConnected = !!(venueSettings as any)?.nbiAccountId && !!(venueSettings as any)?.nbiVenueId;
                 const nbiEnabled = (venueSettings as any)?.nbiSyncEnabled === 1;
                 return (
@@ -8045,7 +8286,7 @@ export default function Dashboard() {
               )}
 
               {/* ── BEO EMAIL RECIPIENTS SUB-TAB ───────────────────────────── */}
-              {settingsSubTab === "brand-pack" && settingsForm && (() => {
+              {settingsSubTab === "brand-pack" && canManageAccount && settingsForm && (() => {
                 // Curated serif+sans pairings — keys MUST match BRAND_FONT_PAIRS
                 // in server/beoPdf.ts so the on-screen picker matches the PDF.
                 const FONT_PAIRS = [
@@ -8293,7 +8534,7 @@ export default function Dashboard() {
               })()}
 
               {/* ── TEAM SUB-TAB ───────────────────────────────── */}
-              {settingsSubTab === "team" && (() => {
+              {settingsSubTab === "team" && canManageAccount && (() => {
                 const ROLES = [{ value: 'staff', label: 'Staff' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
                 const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
                 // Logins and access links are managed by the owner only — the
@@ -9465,6 +9706,13 @@ export default function Dashboard() {
             </div>
             {!selectedBooking._isLead && drawerView === 'beo' ? (
               <>
+                {!isStaff && (
+                  <div className="flex-shrink-0 px-4 md:px-5 pt-3 bg-cream empty:hidden">
+                    <EventNextSteps key={`ns-b${selectedBooking.id}`} bookingId={selectedBooking.id}
+                      onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
+                      onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+                  </div>
+                )}
                 {/* Two jobs only: change it, or take the PDF. Everything else
                     (status, payments, Xero, cancel) is one tap further in. */}
                 <div className="flex-shrink-0 px-4 md:px-5 py-3 flex items-center gap-2 flex-wrap border-b border-gold bg-cream">
@@ -9480,6 +9728,10 @@ export default function Dashboard() {
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm">
                     <Download className="w-4 h-4" /> PDF
                   </button>
+                  {!isStaff && (
+                    <RecordPaymentButton bookingId={selectedBooking.id}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm" />
+                  )}
                   <button
                     onClick={() => setDrawerView('details')}
                     className="ml-auto font-dm text-sm font-semibold text-forest underline underline-offset-4 hover:no-underline px-1 py-2">
@@ -9528,6 +9780,10 @@ export default function Dashboard() {
                     className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs">
                     <ExternalLink className="hidden sm:block w-3.5 h-3.5" /> EVENT PAGE
                   </button>
+                  {!isStaff && (
+                    <RecordPaymentButton bookingId={selectedBooking.id}
+                      className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs" />
+                  )}
                 </div>
               )}
               {/* Status control + event type on one line. The coloured status
@@ -9542,8 +9798,9 @@ export default function Dashboard() {
                     if (newStatus === prevStatus) return;
                     // Rule: every event must have a space selected before it
                     // can move into a live state (booked/confirmed/tentative).
-                    const needsSpace = ['booked', 'confirmed', 'tentative'].includes(newStatus);
-                    if (needsSpace && !selectedBooking.spaceName?.trim()) {
+                    // (An enquiry with no space is asked for one by the status
+                    // change itself; a real event needs it filled in first.)
+                    if (!selectedBooking._isLead && ['booked', 'confirmed', 'tentative'].includes(newStatus) && !selectedBooking.spaceName?.trim()) {
                       setDrawerAddFields(prev => new Set(prev).add('space'));
                       toast.error('Pick a space first. The Space field is now showing under Details.', { duration: 5000 });
                       return;
@@ -9611,6 +9868,21 @@ export default function Dashboard() {
                   </Popover>
                 )}
               </div>
+              {/* Notes without leaving the drawer: type, Add, and the latest
+                  activity underneath. */}
+              {!isStaff && (selectedBooking._isLead || selectedBooking.leadId) && (
+                <QuickNote leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId} />
+              )}
+              {/* What to do now that it's an event. */}
+              {!isStaff && ((!selectedBooking._isLead) || ["booked", "confirmed"].includes(drawerLeadServerStatus ?? "")) && (
+                <EventNextSteps
+                  key={selectedBooking._isLead ? `ns-l${selectedBooking.id}` : `ns-b${selectedBooking.id}`}
+                  bookingId={selectedBooking._isLead ? null : selectedBooking.id}
+                  leadId={selectedBooking._isLead ? selectedBooking.id : null}
+                  leadStatus={selectedBooking._isLead ? drawerLeadServerStatus : selectedBooking.status}
+                  onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
+                  onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+              )}
               {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
               {selectedBooking._isLead && !isStaff && (
                 <LeadResponseInfo leadId={selectedBooking.id} readOnly={isTeamMember}
@@ -9656,6 +9928,7 @@ export default function Dashboard() {
                   onOpenLead={openLeadById} onMerged={openLeadById}
                   onOwnerChanged={v => setSelectedBooking((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
               )}
+              {!isStaff && <LinkedTasks leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId} bookingId={selectedBooking._isLead ? null : selectedBooking.id} className="mb-4" />}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.
@@ -10246,16 +10519,19 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
                       </button>
+                      {/* Staff are read-only server-side, so hide create. */}
+                      {!isStaff && (
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/proposals/new?leadId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> CREATE PROPOSAL
                       </button>
+                      )}
                       {drawerLeadRunsheets && drawerLeadRunsheets.length > 0 ? (
                         <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?id=${drawerLeadRunsheets[drawerLeadRunsheets.length - 1].id}&leadId=${selectedBooking.id}`); }}
                           className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                          <Clock className="w-3 h-3 text-gold" /> EDIT RUNSHEET
+                          <Clock className="w-3 h-3 text-gold" /> {isStaff ? 'VIEW RUNSHEET' : 'EDIT RUNSHEET'}
                         </button>
-                      ) : ['booked','confirmed'].includes(selectedBooking.status) ? (
+                      ) : !isStaff && ['booked','confirmed'].includes(selectedBooking.status) ? (
                         <button
                           onClick={() => {
                             createRunsheet.mutate({
@@ -10290,8 +10566,8 @@ export default function Dashboard() {
                               email: selectedBooking.email,
                             } as any);
                             setEmailForm({ subject: `Re: Your event enquiry — ${selectedBooking.eventType || 'Event'}`, body: `Hi ${selectedBooking.firstName},\n\nThank you for your enquiry. ` });
+                            // The composer opens over the drawer, so you land back on this record.
                             setShowEmailModal(true);
-                            setSelectedBooking(null);
                           }}
                           className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                           <Mail className="w-3 h-3" /> EMAIL
@@ -10330,6 +10606,7 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <Printer className="w-3 h-3" /> CLIENT COPY
                       </button>
+                      {!isStaff && (
                       <button
                         onClick={async () => {
                           try {
@@ -10342,6 +10619,7 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <LinkIcon className="w-3 h-3" /> PACK LINK
                       </button>
+                      )}
 
                       {/* Money */}
                       <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
@@ -10368,8 +10646,8 @@ export default function Dashboard() {
                         <DollarSign className="w-3 h-3" /> PAYMENTS {drawerPaymentsOpen ? '▲' : '▼'}
                       </button>
 
-                      {/* Sync */}
-                      {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
+                      {/* Sync — staff are read-only server-side, so hide it. */}
+                      {!isStaff && (venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
                           <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">SYNC</div>
                           <button
@@ -10423,7 +10701,6 @@ export default function Dashboard() {
                     // Same hand-off as the drawer's EMAIL button: the composer works on selectedLead.
                     setSelectedLead({ id: selectedBooking.id, firstName: selectedBooking.firstName, lastName: selectedBooking.lastName, email: selectedBooking.email } as any);
                     openEmailReply(selectedBooking, reply);
-                    setSelectedBooking(null);
                   } : undefined} />
               )}
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
@@ -10971,6 +11248,11 @@ export default function Dashboard() {
       {/* Bulk Delete Confirmation */}
       {lostPrompt && (
         <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+      )}
+      {spacePrompt && (
+        <ConfirmSpaceDialog name={spacePrompt.name} spaces={spaces as any}
+          statusLabel={pipelineStages.find(s => s.key === spacePrompt.vars.status)?.label ?? spacePrompt.vars.status}
+          onConfirm={confirmSpace} onCancel={cancelSpace} />
       )}
 
       {showBulkDeleteConfirm && (

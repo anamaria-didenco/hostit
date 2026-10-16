@@ -333,6 +333,13 @@ export const appRouter = router({
       return vs;
     }),
 
+    // Mark the one-screen welcome intro as seen for this account, so it only
+    // ever shows once (stored per account, not per browser).
+    dismissWelcome: protectedProcedure.mutation(async ({ ctx }) => {
+      await upsertVenueSettings(ctx.user.id, { welcomeSeenAt: new Date() } as any);
+      return { success: true };
+    }),
+
     upsert: protectedProcedure
       .input(z.object({
         name: z.string().optional(),
@@ -436,6 +443,9 @@ export const appRouter = router({
      * Bookings Webhook Url field. Generates the per-venue secret on first call.
      */
     getNbiWebhookUrl: protectedProcedure.query(async ({ ctx }) => {
+      // The NBI webhook secret is an integration credential — only the owner
+      // (or a full-access login) manages integrations, never a team manager.
+      { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { venueSettings } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
@@ -454,6 +464,7 @@ export const appRouter = router({
 
     /** Rotate the webhook secret — invalidates any URL pasted into NBI before. */
     regenerateNbiWebhookSecret: protectedProcedure.mutation(async ({ ctx }) => {
+      { const { assertAccountManager } = await import('./_core/trpc'); assertAccountManager(ctx); }
       const { getDb } = await import('./db');
       const { venueSettings } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
@@ -1232,14 +1243,25 @@ export const appRouter = router({
         // optional: the venue may skip the question.
         lostReason: z.enum(LOST_REASON_KEYS).optional(),
         lostReasonNote: z.string().max(500).optional(),
+        // Used when moving to booked/confirmed/tentative for an enquiry that
+        // has no space yet: the space picked in the confirm step. It is saved
+        // on the enquiry together with the status change (and ignored when
+        // the enquiry already has a space).
+        spaceName: z.string().max(200).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Capture the prior status so we can react to transitions (e.g. moving
         // AWAY from booked needs to cancel the linked booking — otherwise the
         // calendar keeps showing a confirmed event for a lead that's actually
         // lost/cancelled).
-        const priorLead = await getLeadById(input.id, ctx.user.id);
-        if (!priorLead) throw new Error('Lead not found');
+        const storedLead = await getLeadById(input.id, ctx.user.id);
+        if (!storedLead) throw new Error('Lead not found');
+        // A space picked in the confirm step stands in for the missing one:
+        // every check below sees it, and it is saved once they pass.
+        const suppliedSpace = input.spaceName?.trim() || '';
+        const spaceToSave = suppliedSpace && !storedLead.spaceName?.trim()
+          && ['booked', 'confirmed', 'tentative'].includes(input.status) ? suppliedSpace : '';
+        const priorLead = spaceToSave ? { ...storedLead, spaceName: spaceToSave } : storedLead;
         const wasBooked = ['booked', 'confirmed', 'finished'].includes(priorLead.status ?? '');
         const isBooked = ['booked', 'confirmed', 'finished'].includes(input.status);
 
@@ -1271,6 +1293,10 @@ export const appRouter = router({
         if (restorable) {
           const { findClashes, assertNoClashes } = await import('./availability');
           assertNoClashes(await findClashes(ctx.user.id, restoreClashQuery(restorable)), input.allowClash);
+        }
+
+        if (spaceToSave) {
+          await updateLead(input.id, ctx.user.id, { spaceName: spaceToSave });
         }
 
         let holdUntil: Date | null = null;
@@ -1468,6 +1494,11 @@ export const appRouter = router({
         // hold it follow the change (server/runsheetContacts.ts).
         const contactEdited = rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined || rest.phone !== undefined;
         const contactBefore = contactEdited ? await getLeadById(id, ctx.user.id) : undefined;
+        // The space before this edit, so run sheet copies that still hold it
+        // follow the change (server/runsheetSpace.ts).
+        const spaceBefore = spaceName !== undefined
+          ? (await getLeadById(id, ctx.user.id))?.spaceName ?? null
+          : undefined;
         if (rest.firstName !== undefined && !rest.firstName.trim()) throw new Error('First name is required.');
         await updateLead(id, ctx.user.id, {
           ...rest,
@@ -1476,6 +1507,7 @@ export const appRouter = router({
           minimumSpend: minimumSpend !== undefined ? (minimumSpend !== null ? String(minimumSpend) : null) : undefined,
           spaceName: spaceName !== undefined ? (spaceName?.trim() || null) : undefined,
         } as any);
+        if (followUpDate) { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, id); }
         // Once the enquiry has a live booking, the booking and its runsheets
         // carry their own copies of these fields (calendar, BEO, staff link).
         // Keep them in step — the booking→enquiry direction already does
@@ -1483,6 +1515,10 @@ export const appRouter = router({
         // event on its old date.
         const bookingUpdates: Record<string, unknown> = {};
         let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
+        // Human labels for the other records this edit also touched, so the UI
+        // can say what else changed (see the `cascaded` field on the result).
+        const cascaded = new Set<string>();
+        let runsheetTouched = false;
         if (eventDate) bookingUpdates.eventDate = new Date(eventDate);
         if (rest.guestCount !== undefined) bookingUpdates.guestCount = rest.guestCount;
         if (spaceName !== undefined && spaceName?.trim()) bookingUpdates.spaceName = spaceName.trim();
@@ -1503,6 +1539,7 @@ export const appRouter = router({
             if (ids.length) {
               await db.update(bookings).set({ ...bookingUpdates, updatedAt: new Date() })
                 .where(and(inArray(bookings.id, ids), eq(bookings.ownerId, ctx.user.id)));
+              cascaded.add('event');
               if (bookingUpdates.eventDate || bookingUpdates.spaceName) {
                 const { flagOverriddenClash, reconcileClashFlags } = await import('./doubleBookings');
                 if (allowClash) for (const bid of ids) await flagOverriddenClash(ctx.user.id, bid);
@@ -1511,7 +1548,7 @@ export const appRouter = router({
             }
             const rsUpdates: Record<string, unknown> = {};
             // The date (and start time, when it has one), as bookings.update
-            // does. The guest count follows below, separately.
+            // does. The guest count and space follow below, separately.
             if (bookingUpdates.eventDate) {
               rsUpdates.eventDate = bookingUpdates.eventDate;
               const { startTimeOf } = await import('@shared/eventDate');
@@ -1522,10 +1559,20 @@ export const appRouter = router({
               // Runsheets linked to the booking, or started from this enquiry
               // before a booking existed.
               const { changedElsewhere } = await import('./runsheetVersion');
-              await db.update(runsheets).set({ ...rsUpdates, ...changedElsewhere() })
+              const r = await db.update(runsheets).set({ ...rsUpdates, ...changedElsewhere() })
                 .where(and(eq(runsheets.ownerId, ctx.user.id), ids.length
                   ? or(inArray(runsheets.bookingId, ids), and(eq(runsheets.leadId, id), isNull(runsheets.bookingId)))
-                  : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))));
+                  : and(eq(runsheets.leadId, id), isNull(runsheets.bookingId))))
+                .returning({ id: runsheets.id });
+              if (r.length) runsheetTouched = true;
+            }
+            // The space, to run sheet copies that still hold the old room
+            // (match old value — server/runsheetSpace.ts). leads.update already
+            // pushes space to the booking above; this reaches the run sheet.
+            if (spaceName !== undefined) {
+              const { syncRunsheetSpace } = await import('./runsheetSpace');
+              const n = await syncRunsheetSpace(db, ctx.user.id, { leadId: id }, spaceBefore, spaceName);
+              if (n > 0) runsheetTouched = true;
             }
             // Guests used to stop here: the runsheet's count was treated as
             // the kitchen's own final number, so the event and the run sheet
@@ -1536,16 +1583,29 @@ export const appRouter = router({
             // (foodRescale) for the person to update via fnb.rescaleGuests.
             const { syncRunsheetGuests } = await import('./runsheetGuests');
             foodRescale = await syncRunsheetGuests(db, ctx.user.id, { leadId: id }, guestsBefore, rest.guestCount);
+            if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) runsheetTouched = true;
+            // Proposals aren't auto-updated — warn when the guest count changed
+            // and a proposal exists, so it isn't mistaken for current.
+            if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) {
+              const { proposals } = await import('../drizzle/schema');
+              const [p] = await db.select({ id: proposals.id }).from(proposals)
+                .where(and(eq(proposals.leadId, id), eq(proposals.ownerId, ctx.user.id))).limit(1);
+              if (p) cascaded.add('proposals still show the old guests');
+            }
           }
         }
         if (contactBefore) {
           const { getDb } = await import('./db');
           const db = await getDb();
           const { syncRunsheetContacts } = await import('./runsheetContacts');
-          if (db) await syncRunsheetContacts(db, ctx.user.id, { leadId: id }, contactBefore,
-            { firstName: rest.firstName, lastName: rest.lastName, email: rest.email, phone: rest.phone });
+          if (db) {
+            const n = await syncRunsheetContacts(db, ctx.user.id, { leadId: id }, contactBefore,
+              { firstName: rest.firstName, lastName: rest.lastName, email: rest.email, phone: rest.phone });
+            if (n > 0) runsheetTouched = true;
+          }
         }
-        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
+        if (runsheetTouched) cascaded.add('run sheet');
+        return { success: true, ...(foodRescale ? { foodRescale } : {}), ...(cascaded.size ? { cascaded: [...cascaded] } : {}) };
       }),
 
     activity: protectedProcedure
@@ -1591,6 +1651,8 @@ export const appRouter = router({
         await updateLead(input.id, ctx.user.id, {
           followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
         });
+        // The date is also a task in Tasks: create/move/remove it.
+        { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, input.id); }
         await addLeadActivity({
           leadId: input.id,
           ownerId: ctx.user.id,
@@ -1725,6 +1787,7 @@ export const appRouter = router({
         await db.update(leads)
           .set({ followUpDate: nextFollowUp })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, input.leadId); }
         await markStaffResponse(ctx.user.id, input.leadId, { emailed: true });
         // Log it on the timeline (this also bumps lastActivityAt, so the lead
         // stops reading as "gone quiet").
@@ -2214,6 +2277,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                 const followUpDate = new Date();
                 followUpDate.setDate(followUpDate.getDate() + 3);
                 await db.update(leads).set({ followUpDate }).where(eq(leads.id, proposal.leadId));
+                const { trySyncFollowUpTask } = await import('./followUpTask');
+                await trySyncFollowUpTask(ctx.user.id, proposal.leadId);
               }
             }
           } catch (err) {
@@ -2501,6 +2566,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await db.insert(dayNotes).values({ ownerId: ctx.user.id, date: input.date, title })
           .onConflictDoUpdate({ target: [dayNotes.ownerId, dayNotes.date], set: { title, updatedAt: new Date() } });
         return { date: input.date, title };
+      }),
+  }),
+
+  // ─── Global finder (Cmd/Ctrl-K and the Enquiries search) ─────────────────
+  // Not on the staff denylist (they may search events), so the staff limits
+  // live in searchGlobal itself: events only, no contact details.
+  search: router({
+    global: protectedProcedure
+      .input(z.object({ q: z.string().max(100), limit: z.number().int().min(1).max(50).default(8) }))
+      .query(async ({ input, ctx }) => {
+        const { searchGlobal } = await import('./globalSearch');
+        return searchGlobal(ctx.user.id, input.q, { staff: ctx.isStaff, limit: input.limit });
       }),
   }),
 
@@ -2872,6 +2949,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
           guestsBefore = cur?.guestCount ?? null;
         }
+        // The space before this edit, so run sheet copies that still hold it
+        // follow the change (server/runsheetSpace.ts).
+        let spaceBefore: string | null | undefined;
+        if (rest.spaceName !== undefined) {
+          const [cur] = await db.select({ spaceName: bookings.spaceName }).from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          spaceBefore = cur?.spaceName ?? null;
+        }
         // The client's contact before this edit, for run sheet copies of it.
         let contactBefore: { firstName: string | null; lastName: string | null; email: string | null; leadId: number | null } | undefined;
         if (rest.firstName !== undefined || rest.lastName !== undefined || rest.email !== undefined) {
@@ -2880,10 +2965,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
         }
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // Human labels for records this edit also touched, so the UI can say
+        // what else changed (and warn about what didn't follow). See part of
+        // the `cascaded` field below.
+        const cascaded = new Set<string>();
+        let runsheetTouched = false;
         if (contactBefore) {
           const { syncRunsheetContacts } = await import('./runsheetContacts');
-          await syncRunsheetContacts(db, ctx.user.id, { bookingId: id, leadId: contactBefore.leadId }, contactBefore,
+          const n = await syncRunsheetContacts(db, ctx.user.id, { bookingId: id, leadId: contactBefore.leadId }, contactBefore,
             { firstName: rest.firstName, lastName: rest.lastName, email: rest.email });
+          if (n > 0) runsheetTouched = true;
         }
         // New guest count → the event's run sheets too (food lines at the
         // old count are reported, never changed here — see runsheetGuests.ts).
@@ -2891,6 +2982,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.guestCount !== undefined) {
           const { syncRunsheetGuests } = await import('./runsheetGuests');
           foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+          if (guestsBefore !== rest.guestCount) runsheetTouched = true;
+        }
+        // New space → the event's run sheets too, but only copies that still
+        // hold the old room (server/runsheetSpace.ts).
+        if (rest.spaceName !== undefined) {
+          const { syncRunsheetSpace } = await import('./runsheetSpace');
+          const n = await syncRunsheetSpace(db, ctx.user.id, { bookingId: id }, spaceBefore, rest.spaceName);
+          if (n > 0) runsheetTouched = true;
         }
         // The runsheet keeps its own copy of the date (staff link, runsheet
         // header). Keep it in step so the event never shows two dates.
@@ -2901,9 +3000,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // and staff link show the runsheet's own copy.
           const start = startTimeOf(updates.eventDate as Date);
           const { changedElsewhere } = await import('./runsheetVersion');
-          await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}), ...changedElsewhere() })
-            .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id)));
+          const r = await db.update(runsheets).set({ eventDate: updates.eventDate as Date, ...(start ? { eventStartTime: start } : {}), ...changedElsewhere() })
+            .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id))).returning({ id: runsheets.id });
+          if (r.length) runsheetTouched = true;
         }
+        if (runsheetTouched) cascaded.add('run sheet');
         // A cancelled event's draft invoices must not sit in Xero waiting to
         // be approved by accident. Best-effort: drafts are deleted in Xero and
         // dropped from our ledger; an approved or paid invoice is left alone
@@ -2951,6 +3052,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (rest.lastName !== undefined) leadUpdates.lastName = rest.lastName;
           if (rest.email !== undefined) leadUpdates.email = rest.email;
           if (rest.eventType !== undefined) leadUpdates.eventType = rest.eventType;
+          // The space, so the enquiry and its table row stop showing the old
+          // room (this was the weakest link in the booking→lead cascade).
+          if (rest.spaceName !== undefined) leadUpdates.spaceName = rest.spaceName?.trim() || null;
           // Cascade status too: if a booking is cancelled, the lead should
           // become 'lost'; confirmed/tentative map back to booked/tentative
           // so the Events table doesn't show a "Confirmed" pill for a row
@@ -2976,6 +3080,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             leadUpdates.updatedAt = new Date();
             await db.update(leads).set(leadUpdates)
               .where(and(eq(leads.id, bookingRow.leadId), eq(leads.ownerId, ctx.user.id)));
+            cascaded.add('enquiry');
+          }
+          // Proposals aren't auto-updated — warn when the guest count changed
+          // and a proposal exists, so it isn't mistaken for current.
+          if (rest.guestCount !== undefined && guestsBefore !== rest.guestCount) {
+            const { proposals } = await import('../drizzle/schema');
+            const [p] = await db.select({ id: proposals.id }).from(proposals)
+              .where(and(eq(proposals.leadId, bookingRow.leadId), eq(proposals.ownerId, ctx.user.id))).limit(1);
+            if (p) cascaded.add('proposals still show the old guests');
           }
         }
         // Re-sync depositPaid from recorded payments ONLY when the deposit
@@ -3008,7 +3121,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
-        return { success: true, ...(foodRescale ? { foodRescale } : {}) };
+        return { success: true, ...(foodRescale ? { foodRescale } : {}), ...(cascaded.size ? { cascaded: [...cascaded] } : {}) };
       }),
     byMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
@@ -3620,6 +3733,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             })();
             await updateLeadStatus(activityLeadId, ctx.user.id, 'contacted');
             await updateLead(activityLeadId, ctx.user.id, { followUpDate });
+            { const { trySyncFollowUpTask } = await import('./followUpTask'); await trySyncFollowUpTask(ctx.user.id, activityLeadId); }
             await addLeadActivity({
               leadId: activityLeadId,
               ownerId: ctx.user.id,
@@ -6732,25 +6846,84 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     stats: protectedProcedure.query(async ({ ctx }) => {
       return getDashboardStats(ctx.user.id);
     }),
+    // "Since you were last here": what changed since this user last loaded the
+    // dashboard. Reads the stored lastSeenAt only — the bump is markSeen below,
+    // so a visit always shows what happened since the PREVIOUS visit. Blocked
+    // for staff by the dashboard.* read rule in _core/trpc.ts.
+    sinceLastSeen: protectedProcedure.query(async ({ ctx }) => {
+      const { sinceLastSeen } = await import("./sinceLastSeen");
+      return sinceLastSeen(ctx.user.id);
+    }),
+    // Stamp "last visited" to now, throttled server-side so rapid reloads don't
+    // keep moving the mark (which would empty the feed). Returns whether it
+    // actually moved, for anyone who cares.
+    markSeen: protectedProcedure.mutation(async ({ ctx }) => {
+      const { markDashboardSeen } = await import("./sinceLastSeen");
+      return markDashboardSeen(ctx.user.id);
+    }),
+    /** Overview "Needs you today": what to do now, ownerId-scoped. Staff are refused by the "dashboard." prefix rule. */
+    needsAttention: protectedProcedure.query(async ({ ctx }) => {
+      const { getNeedsAttention } = await import('./needsAttention');
+      return getNeedsAttention(ctx.user.id);
+    }),
+    /** Overview "Today" and "Upcoming Events": today + the next 14 days, whichever month the calendar shows. */
+    upcoming: protectedProcedure.query(async ({ ctx }) => {
+      const { getUpcomingEvents } = await import('./needsAttention');
+      return getUpcomingEvents(ctx.user.id);
+    }),
+  }),
+  // ─── Availability by space ───────────────────────────────────────────────
+  availability: router({
+    // Per-space free/busy for a date (optional inclusive range). Reuses the
+    // clash logic in server/availability.ts; scoped to the owner.
+    forDate: protectedProcedure
+      .input(z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        const { availabilityForDate } = await import("./availability");
+        return availabilityForDate(ctx.user.id, input.date, input.dateTo);
+      }),
   }),
   // ─── Tasks ────────────────────────────────────────────────────────────────
   tasks: router({
     list: protectedProcedure
-      .input(z.object({ filter: z.enum(['all', 'mine', 'overdue', 'upcoming', 'completed']).optional() }).optional())
+      .input(z.object({
+        filter: z.enum(['all', 'mine', 'overdue', 'upcoming', 'completed']).optional(),
+        // Only tasks about this enquiry and/or event (either match counts) —
+        // the "Tasks" section on an enquiry or event.
+        leadId: z.number().optional(),
+        bookingId: z.number().optional(),
+      }).optional())
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { tasks } = await import('../drizzle/schema');
         const { eq, and, lte, gte, desc } = await import('drizzle-orm');
+        const { myTaskName } = await import('./taskLinks');
         const db = await getDb();
         if (!db) return [];
         const now = Date.now();
         const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-        let rows = await db.select().from(tasks).where(eq(tasks.ownerId, ctx.user.id)).orderBy(desc(tasks.createdAt));
+        const { or } = await import('drizzle-orm');
+        const about = [
+          input?.leadId != null ? eq(tasks.linkedLeadId, input.leadId) : undefined,
+          input?.bookingId != null ? eq(tasks.linkedBookingId, input.bookingId) : undefined,
+        ].filter((c): c is NonNullable<typeof c> => !!c);
+        let rows = await db.select().from(tasks)
+          .where(and(eq(tasks.ownerId, ctx.user.id), about.length ? or(...about) : undefined))
+          .orderBy(desc(tasks.createdAt));
         const filter = input?.filter ?? 'all';
         if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < now);
         else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= now);
         else if (filter === 'completed') rows = rows.filter(t => t.completed);
-        else if (filter === 'mine') rows = rows.filter(t => !t.completed);
+        else if (filter === 'mine') {
+          // Open tasks assigned to the signed-in person (by name, as assignedTo
+          // is a name): their own login name, or the team member's name on a
+          // team link.
+          const me = myTaskName(ctx);
+          rows = rows.filter(t => !t.completed && !!me && (t.assignedTo ?? '').trim().toLowerCase() === me);
+        }
         else rows = rows.filter(t => !t.completed);
         // Client names for the "open enquiry / event" links; null when the
         // linked record no longer exists, so the list doesn't link to nothing.
@@ -6780,7 +6953,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         dueDate: z.number().optional(),
         linkedLeadId: z.number().optional(),
         linkedBookingId: z.number().optional(),
-        assignedTo: z.string().optional(),
+        assignedTo: z.string().max(255).optional(),
         priority: z.enum(['low', 'normal', 'high']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -6798,13 +6971,25 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           dueDate: input.dueDate,
           linkedLeadId: input.linkedLeadId,
           linkedBookingId: input.linkedBookingId,
-          assignedTo: input.assignedTo,
+          assignedTo: input.assignedTo?.trim() || null,
           priority: input.priority ?? 'normal',
           completed: false,
           createdAt: now,
           updatedAt: now,
         });
         return { success: true, id: (result as any).insertId };
+      }),
+    // People a task can be assigned to, and who "mine" means for this login.
+    assignees: protectedProcedure.query(async ({ ctx }) => {
+      const { listAssignees } = await import('./taskLinks');
+      return listAssignees(ctx);
+    }),
+    // Enquiries and events matching a client name / email, for the "Link to" picker.
+    searchLinks: protectedProcedure
+      .input(z.object({ q: z.string().max(100) }))
+      .query(async ({ input, ctx }) => {
+        const { searchLinkTargets } = await import('./taskLinks');
+        return searchLinkTargets(ctx.user.id, input.q);
       }),
     complete: protectedProcedure
       .input(z.object({ id: z.number(), completed: z.boolean() }))
@@ -6814,11 +6999,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [before] = await db.select().from(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id))).limit(1);
         await db.update(tasks).set({
           completed: input.completed,
           completedAt: input.completed ? Date.now() : null,
           updatedAt: Date.now(),
         }).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        // A follow-up task and its enquiry's follow-up date go together.
+        if (before && before.completed !== input.completed) {
+          const { clearFollowUpDateForTask, restoreFollowUpDateForTask } = await import('./followUpTask');
+          if (input.completed) await clearFollowUpDateForTask(before);
+          else await restoreFollowUpDateForTask(before);
+        }
         return { success: true };
       }),
     delete: protectedProcedure
@@ -6829,7 +7021,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [gone] = await db.select().from(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id))).limit(1);
         await db.delete(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        if (gone && !gone.completed) {
+          const { clearFollowUpDateForTask } = await import('./followUpTask');
+          await clearFollowUpDateForTask(gone);
+        }
         return { success: true };
       }),
     update: protectedProcedure
@@ -6841,6 +7038,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         priority: z.enum(['low', 'normal', 'high']).optional(),
         linkedLeadId: z.number().nullable().optional(),
         linkedBookingId: z.number().nullable().optional(),
+        assignedTo: z.string().max(255).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -6851,7 +7049,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...rest } = input;
-        await db.update(tasks).set({ ...rest, updatedAt: Date.now() }).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id)));
+        const [before] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id))).limit(1);
+        if (!before) return { success: true };
+        const set: Record<string, unknown> = { ...rest, updatedAt: Date.now() };
+        if (rest.assignedTo !== undefined) set.assignedTo = rest.assignedTo?.trim() || null;
+        // A follow-up task is its enquiry's follow-up date: it keeps a due
+        // date (clearing it is ignored) and stays attached to that enquiry
+        // (re-linking turns it into an ordinary task).
+        const isFollowUp = before.source === 'follow_up' && !before.completed;
+        if (isFollowUp && rest.dueDate === null) delete set.dueDate;
+        const relinked = isFollowUp && rest.linkedLeadId !== undefined && rest.linkedLeadId !== before.linkedLeadId;
+        if (relinked) set.source = null;
+        await db.update(tasks).set(set).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id)));
+        if (relinked) {
+          const { clearFollowUpDateForTask } = await import('./followUpTask');
+          await clearFollowUpDateForTask(before);
+        }
+        if (isFollowUp && !relinked && typeof rest.dueDate === 'number' && rest.dueDate !== before.dueDate) {
+          const { moveFollowUpDateForTask } = await import('./followUpTask');
+          await moveFollowUpDateForTask({ ...before, dueDate: rest.dueDate });
+        }
         return { success: true };
       }),
   }),
@@ -8312,6 +8529,15 @@ Return ONLY valid JSON.`;
         await db.update(staffPortalLinks).set({ lastAccessedAt: Date.now() }).where(eq(staffPortalLinks.id, link.id));
         const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, link.runsheetId)).limit(1);
         if (!runsheet) return null;
+        // The venue's Brand Pack (accent, font, logo, theme, tagline) so the
+        // staff page can brand its header with venueBrand(), like the proposal
+        // page. These aren't secret (not in VENUE_SECRET_FIELDS).
+        const { venueSettings: venueSettingsTable } = await import('../drizzle/schema');
+        const [venue] = await db.select({
+          name: venueSettingsTable.name, logoUrl: venueSettingsTable.logoUrl, primaryColor: venueSettingsTable.primaryColor,
+          brandAccentColor: venueSettingsTable.brandAccentColor, brandFontKey: venueSettingsTable.brandFontKey,
+          themeKey: venueSettingsTable.themeKey, tagline: venueSettingsTable.tagline,
+        }).from(venueSettingsTable).where(eq(venueSettingsTable.ownerId, link.ownerId)).limit(1);
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
         const { checklistInstances } = await import('../drizzle/schema');
@@ -8430,7 +8656,7 @@ Return ONLY valid JSON.`;
             };
           }
         }
-        return { link: { id: link.id, label: link.label }, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
+        return { link: { id: link.id, label: link.label }, venue: venue ?? null, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
       }),
 
     // Protected: create a new staff portal link
@@ -8688,7 +8914,15 @@ Return ONLY valid JSON.`;
         if (!wc) return null;
         const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, wc.runsheetId)).limit(1);
         if (!runsheet) return null;
-        const [venue] = await db.select({ name: venueSettings.name, logoUrl: venueSettings.logoUrl, primaryColor: venueSettings.primaryColor })
+        // Brand Pack fields (accent, font, logo, theme, tagline) ride along so
+        // the client page can brand itself with venueBrand(), the same way the
+        // proposal page does. None of these are secret (not in
+        // VENUE_SECRET_FIELDS), so they're safe on this public link.
+        const [venue] = await db.select({
+          name: venueSettings.name, logoUrl: venueSettings.logoUrl, primaryColor: venueSettings.primaryColor,
+          brandAccentColor: venueSettings.brandAccentColor, brandFontKey: venueSettings.brandFontKey,
+          themeKey: venueSettings.themeKey, tagline: venueSettings.tagline,
+        })
           .from(venueSettings).where(eq(venueSettings.ownerId, wc.ownerId)).limit(1);
         let coupleNames: string | null = null;
         if (runsheet.leadId) {
@@ -8699,7 +8933,9 @@ Return ONLY valid JSON.`;
           answers: wc.answers ?? {},
           submittedAt: wc.submittedAt,
           venueName: venue?.name ?? 'Your Venue',
+          venue: venue ?? null,
           eventTitle: runsheet.title,
+          eventType: runsheet.eventType ?? null,
           eventDate: runsheet.eventDate,
           coupleNames,
         };
