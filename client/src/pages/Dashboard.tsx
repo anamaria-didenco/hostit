@@ -3525,8 +3525,8 @@ export default function Dashboard() {
               onClick={() => setTab(item.id as any)}
               className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
                 tab === item.id
-                  ? "text-sage-dark border-sage-green font-semibold"
-                  : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
+                  ? "text-primary border-primary font-semibold"
+                  : "text-muted-foreground border-transparent hover:text-foreground hover:border-input"
               }`}
             >
               {item.label}
@@ -3542,8 +3542,8 @@ export default function Dashboard() {
             onClick={() => setTab("settings" as any)}
             className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
               tab === "settings"
-                ? "text-sage-dark border-sage-green font-semibold"
-                : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
+                ? "text-primary border-primary font-semibold"
+                : "text-muted-foreground border-transparent hover:text-foreground hover:border-input"
             }`}
           >
             Settings
@@ -4583,7 +4583,7 @@ export default function Dashboard() {
                                 return (
                                   <button key={lead.id}
                                     onClick={() => openEventDrawer({ ...lead, _isLead: true })}
-                                    className="group w-full shrink-0 text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
+                                    className="group w-full shrink-0 text-left bg-cream rounded-[8px] p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] shadow-[var(--shadow-card)] hover:border-[#6e665c] hover:shadow-[var(--shadow-card-hover)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
@@ -11396,14 +11396,21 @@ export default function Dashboard() {
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
         ]).map(item => {
-          // gray-400 measured at 2.5–2.8:1 against this white bar — well
-          // under the 4.5:1 small-text minimum. gray-500 clears it.
+          // Active = primary blue (~7.5:1 on white); idle = warm muted-foreground
+          // #6a6256 (~5:1, clears the 4.5:1 small-text minimum) — one language
+          // with the sidebar and top tabs. A short top bar marks the active tab,
+          // mirroring the top strip's underline.
+          const isActive = tab === item.id;
           const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-            tab === item.id ? "text-sage-dark" : "text-gray-500"
+            isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
           }`;
+          const indicator = isActive ? (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" aria-hidden="true" />
+          ) : null;
           if ((item as any).href) {
             return (
               <a key={item.id} href={(item as any).href} className={baseClass}>
+                {indicator}
                 {item.icon}
                 <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
               </a>
@@ -11416,6 +11423,7 @@ export default function Dashboard() {
               aria-current={tab === item.id ? "page" : undefined}
               className={baseClass}
             >
+              {indicator}
               {item.icon}
               <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
               {item.id === "enquiries" && unreadCount > 0 && (

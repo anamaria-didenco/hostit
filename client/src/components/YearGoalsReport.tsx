@@ -13,10 +13,10 @@ import { fmtSource } from "@/components/ConversionReport";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// Same restrained source palette as the rest of Reports: navy, amber, teal,
-// then muted supporting hues, so neighbouring sources stay distinguishable.
+// Same on-brand series as Reports (mirrors the --chart-* tokens in index.css):
+// blue · amber · light-blue · warm-grey · deep-blue · light-amber · red.
 const SOURCE_COLORS_HEX = [
-  "#2f5488", "#d4952b", "#3f8f8f", "#8a94a6", "#b5626a", "#6d5aa0", "#a9b4c8",
+  "#2f5488", "#b07c25", "#6b98e7", "#8a8073", "#1f3a63", "#d4a65a", "#c0392b",
 ];
 
 export default function YearGoalsReport() {

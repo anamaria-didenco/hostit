@@ -38,7 +38,10 @@ const TABS = [
 
 // Same restrained source palette as the Goals tab: navy, amber, teal, then
 // muted supporting hues, so neighbouring slices stay distinguishable.
-const BRAND_COLORS = ["#2f5488", "#d4952b", "#3f8f8f", "#8a94a6", "#b5626a", "#6d5aa0", "#a9b4c8"];
+// Mirrors the --chart-* tokens in index.css so charts stay on-brand:
+// blue · amber · light-blue · warm-grey · deep-blue · light-amber · red (red last,
+// so a mid-series category never reads as an error state).
+const BRAND_COLORS = ["#2f5488", "#b07c25", "#6b98e7", "#8a8073", "#1f3a63", "#d4a65a", "#c0392b"];
 
 export default function Reports() {
   const { user } = useAuth();
