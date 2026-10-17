@@ -280,7 +280,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             onClick={() => syncXero.mutate({ force: true })}
             disabled={syncXero.isPending}
             title="Check Xero for invoices that have been reconciled and bring those payments in"
-            className="font-bebas tracking-widest text-xs text-blue-800 border border-blue-800/30 rounded-md px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
+            className="font-bebas tracking-widest text-xs text-primary border border-primary/30 rounded-md px-3 py-2 hover:bg-accent transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
             <RefreshCw className={`w-3.5 h-3.5 ${syncXero.isPending ? "animate-spin" : ""}`} aria-hidden="true" />
             {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
           </button>
@@ -913,7 +913,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button onClick={onXero} title="Send a deposit, food or drinks invoice to Xero as a draft"
           aria-label={`Xero invoices for ${row.name}${row.invoices.length > 0 ? ` (${row.invoices.filter(i => i.status !== "VOIDED").length} sent)` : ""}`}
-          className="font-bebas tracking-widest text-xs text-blue-800 border border-blue-800/30 rounded-md px-2.5 py-2 hover:bg-blue-50 transition-colors flex items-center gap-1">
+          className="font-bebas tracking-widest text-xs text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-accent transition-colors flex items-center gap-1">
           <FileText className="w-3 h-3" aria-hidden="true" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
         </button>
         <button onClick={onRecord} aria-label={`Record a payment for ${row.name}`}
