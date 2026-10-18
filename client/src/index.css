@@ -449,6 +449,22 @@
     box-shadow: var(--shadow-card);
   }
 
+  /* ── Attention stat tile ──
+     A dashboard tile that can raise an alert. The accent edge, wash and (via
+     the number class in Dashboard.tsx) the figure colour all come from the
+     brand palette — on-brand destructive red / amber instead of generic
+     Tailwind red — so "needs doing" reads as part of the system, not a patch.
+     Applied with .dante-card via a data-alert attribute, so no inline styles
+     are needed to beat the card's own border. */
+  .stat-tile[data-alert="danger"] {
+    border-left: 3px solid var(--destructive);   /* #c0392b */
+    background-color: #fbeeec;                    /* warm red wash */
+  }
+  .stat-tile[data-alert="warn"] {
+    border-left: 3px solid #b07c25;               /* brand amber */
+    background-color: #faf3e4;                    /* warm amber wash */
+  }
+
   /* ── Primary button = deep blue ── */
   .btn-teal, .btn-forest {
     background-color: #2f5488;

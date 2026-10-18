@@ -3659,14 +3659,14 @@ export default function Dashboard() {
             const overdueTaskCount = stats?.overdueTasks ?? 0;
             const depositsDueCount = stats?.depositsDue ?? 0;
             const allStats = [
-              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
-              { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
-              { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
-              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
-              { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-blue-500" /> },
-              { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
-              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-forest" />, perf: true },
-              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-forest" />, perf: true },
+              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
+              { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-destructive' : 'text-muted-foreground/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
+              { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
+              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-primary" /> },
+              { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-primary" /> },
+              { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-gold-deep" /> },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
+              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-primary" />, perf: true },
             ];
             // Land on exactly the records a tile counted: clear the date, owner,
             // search and status filters the list may have been left with.
@@ -3699,20 +3699,18 @@ export default function Dashboard() {
               }
             };
             const renderTile = (s: (typeof allStats)[number]) => {
-              // When an action tile has a non-zero count, give it a coloured left
-              // accent + tint + coloured number so the eye lands on what needs
-              // doing. Inline styles so they reliably win over .dante-card.
+              // When an action tile has a non-zero count it raises an alert: a
+              // brand-coloured left edge + wash (via .stat-tile[data-alert]) and
+              // a matching figure colour, so the eye lands on what needs doing.
               const alert = (s as any).alert as 'danger' | 'warn' | undefined;
-              const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
-                : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
-              const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
+              const numClass = alert === 'danger' ? 'text-destructive' : alert === 'warn' ? 'text-gold-deep' : 'text-foreground';
               return (
                 <button
                   key={s.id}
                   type="button"
                   onClick={() => tileAction(s.id)}
-                  style={alertStyle}
-                  className="dante-card p-3 md:p-4 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  data-alert={alert}
+                  className="dante-card stat-tile p-3 md:p-4 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <div className="mb-2">{s.icon}</div>
                   <div className={`font-serif text-2xl md:text-3xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
