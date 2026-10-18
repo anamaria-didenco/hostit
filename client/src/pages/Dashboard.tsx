@@ -1132,6 +1132,20 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
+  // "Needs you today" used to sit at the top of the Overview; it now lives
+  // under the calendar as an opt-in panel, off by default and remembered per
+  // browser.
+  const [showCalendarNeeds, setShowCalendarNeeds] = useState<boolean>(() => {
+    try { return localStorage.getItem('vfhq_calendar_needs') === '1'; } catch { return false; }
+  });
+  const toggleCalendarNeeds = () => setShowCalendarNeeds(v => {
+    const next = !v;
+    try { localStorage.setItem('vfhq_calendar_needs', next ? '1' : '0'); } catch { /* private mode */ }
+    // The panel sits below a full-height calendar, so bring it into view when
+    // it's switched on — otherwise nothing visibly happens.
+    if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return next;
+  });
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
@@ -1434,6 +1448,31 @@ export default function Dashboard() {
     const lead = allLeads?.find((l: any) => l && l.id === leadId) ?? await utils.leads.get.fetch({ id: leadId }).catch(() => null);
     if (!lead) { toast.error("That enquiry no longer exists."); return; }
     if (leadViewMode === "list") selectLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+  };
+  // Jump to a filtered enquiries / calendar view, open an event, or run a tile
+  // action. Shared by the Overview tiles and the calendar's "Needs you today"
+  // panel, so they live at component scope rather than inside the Overview body.
+  const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
+    setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
+    setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
+    setTab('enquiries');
+  };
+  const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
+  const openBookingById = async (id: number) => {
+    const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
+    if (!b) { toast.error("That event no longer exists."); return; }
+    openEventDrawer({ ...b, _type: 'booking' });
+  };
+  const tileAction = (id: string) => {
+    switch (id) {
+      case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
+      case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
+      case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
+      case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
+      case 'upcoming_events': return showCalendarList();
+      case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
+      case 'conversion_rate': case 'revenue_month': return setTab('reports');
+    }
   };
   const { data: selectedLeadActivity } = trpc.leads.getActivity.useQuery(
     { leadId: selectedLead?.id ?? 0 },
@@ -3675,33 +3714,11 @@ export default function Dashboard() {
             ];
             // Land on exactly the records a tile counted: clear the date, owner,
             // search and status filters the list may have been left with.
-            const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
-              setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
-              setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
-              setTab('enquiries');
-            };
-            const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
             // Open an event/enquiry from the Today, Upcoming and Needs-you panels in the drawer.
             const openOverviewEvent = (e: UpcomingEventRow) => {
               if (e._type === 'booking') { openEventDrawer({ ...(e.row as any), _type: 'booking' }); return; }
               const full = allLeads?.find((l: any) => l.id === e.id) ?? e.row;
               openEventDrawer({ ...(full as any), _isLead: true });
-            };
-            const openBookingById = async (id: number) => {
-              const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
-              if (!b) { toast.error("That event no longer exists."); return; }
-              openEventDrawer({ ...b, _type: 'booking' });
-            };
-            const tileAction = (id: string) => {
-              switch (id) {
-                case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
-                case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
-                case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
-                case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
-                case 'upcoming_events': return showCalendarList();
-                case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
-                case 'conversion_rate': case 'revenue_month': return setTab('reports');
-              }
             };
             const renderTile = (s: (typeof allStats)[number]) => {
               // When an action tile has a non-zero count it raises an alert: a
@@ -3769,27 +3786,16 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* What to do today: the card hides itself when there is nothing; the
-                  Today panel sits to its right on desktop and below it on a phone. */}
+              {/* Today's events. "Needs you today" used to sit alongside this;
+                  it now lives as an opt-in panel under the calendar. */}
               {!isStaff && (
-                <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-                  <NeedsYouToday
-                    onOpenBooking={openBookingById}
-                    onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
-                    onOpenLink={(link) => { void openAlertLink(link); }}
-                    onGoCalendarList={showCalendarList}
-                    onGoTasksOverdue={() => tileAction('overdue_tasks')}
-                    onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
-                    onGoDeposits={() => tileAction('deposits_due')}
-                  />
-                  <TodayPanel
-                    className="lg:w-[340px] lg:shrink-0 lg:ml-auto"
-                    onOpenEvent={openOverviewEvent}
-                    onCalendar={() => setTab('calendar')}
-                    newEnquiries={newEnquiries.length}
-                    onNewEnquiries={() => showEnquiries({ sub: 'new' })}
-                  />
-                </div>
+                <TodayPanel
+                  className="lg:w-[360px]"
+                  onOpenEvent={openOverviewEvent}
+                  onCalendar={() => setTab('calendar')}
+                  newEnquiries={newEnquiries.length}
+                  onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                />
               )}
 
               {/* Setup steps for a new venue — hidden once everything is done. */}
@@ -4676,6 +4682,12 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <SpaceAvailability />
+                  <button onClick={toggleCalendarNeeds}
+                    aria-pressed={showCalendarNeeds}
+                    title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
+                    className={`font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 border transition-colors ${showCalendarNeeds ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-linen'}`}>
+                    <Bell className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEEDS TODAY</span>
+                  </button>
                   <button onClick={() => setShowPrintWeek(true)}
                     title="Print every event's run sheet for a week, in one PDF"
                     aria-label="Print the week's run sheets"
@@ -5621,6 +5633,25 @@ export default function Dashboard() {
               </div>
 
               </div>{/* end swipe wrapper */}
+            </div>
+          )}
+
+          {/* "Needs you today" — opt-in, below the full-height calendar (toggled
+              from the toolbar, off by default). It hides itself when there is
+              nothing to do, so an empty panel never shows. A sibling of the
+              calendar pane rather than inside it, so the main area scrolls down
+              to it instead of fighting the calendar's own internal scroll. */}
+          {tab === "calendar" && showCalendarNeeds && !isStaff && (
+            <div id="calendar-needs-today" className="px-4 md:px-6 py-5 bg-linen/30 border-t border-gold/15">
+              <NeedsYouToday
+                onOpenBooking={openBookingById}
+                onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                onOpenLink={(link) => { void openAlertLink(link); }}
+                onGoCalendarList={showCalendarList}
+                onGoTasksOverdue={() => tileAction('overdue_tasks')}
+                onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                onGoDeposits={() => tileAction('deposits_due')}
+              />
             </div>
           )}
 
