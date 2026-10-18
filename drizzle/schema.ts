@@ -407,6 +407,11 @@ export const proposals = pgTable("proposals", {
   termsAndConditions: text("termsAndConditions"),
   internalNotes: text("internalNotes"),
   sentAt: timestamp("sentAt"),
+  // When the proposal was actually emailed to the client. Null means it was
+  // marked "sent" (the link is live) but no email went out — SMTP wasn't set
+  // up, the lead had no email, or the send failed. "Sent" must not imply
+  // "delivered" (migration 0100).
+  emailedAt: timestamp("emailedAt"),
   viewedAt: timestamp("viewedAt"),
   respondedAt: timestamp("respondedAt"),
   expiresAt: timestamp("expiresAt"),

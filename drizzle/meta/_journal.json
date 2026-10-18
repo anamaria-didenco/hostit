@@ -672,6 +672,13 @@
       "when": 1792024054410,
       "tag": "0099_welcome_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792024054412,
+      "tag": "0100_proposal_emailed_at",
+      "breakpoints": true
     }
   ]
 }

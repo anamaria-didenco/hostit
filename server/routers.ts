@@ -2243,6 +2243,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const proposal = await getProposalById(input.id, ctx.user.id);
         let emailSent = false;
         let emailedTo: string | null = null;
+        // Why the client did (or didn't) actually get an email. "sent" marks
+        // the link as live and shareable; it must never be read as "delivered".
+        let emailStatus: 'emailed' | 'not_configured' | 'no_client_email' | 'failed' = 'not_configured';
+        let emailError: string | null = null;
         if (proposal) {
           const priorStatus = (await getLeadById(proposal.leadId, ctx.user.id))?.status;
           // A revised proposal for a booked or held event (a menu change, say)
@@ -2251,12 +2255,6 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // would also release the date hold.
           const keepsStatus = ['booked', 'confirmed', 'finished', 'tentative'].includes(priorStatus ?? '');
           if (!keepsStatus) await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
-          await addLeadActivity({
-            leadId: proposal.leadId,
-            ownerId: ctx.user.id,
-            type: "proposal_sent",
-            content: `Proposal "${proposal.title}" sent to client`,
-          });
           if (!keepsStatus) {
             const { onLeadStatusChanged } = await import('./automatedTasks');
             await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
@@ -2285,7 +2283,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             console.error('[proposals.send] could not set follow-up date', err);
           }
 
-          // Attempt to send email to client if SMTP configured
+          // Attempt to send email to client if SMTP configured. The send is
+          // non-fatal — the proposal link is live either way — but we record
+          // exactly what happened so "Sent" never silently means "delivered".
           if (proposal.publicToken) {
             try {
               const { getDb } = await import('./db');
@@ -2297,51 +2297,93 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                   db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1).then(r => r[0]),
                   db.select({ firstName: leads.firstName, lastName: leads.lastName, email: leads.email }).from(leads).where(eq(leads.id, proposal.leadId)).limit(1).then(r => r[0]),
                 ]);
-                if (vs?.smtpHost && vs?.smtpUser && vs?.smtpPass && lead?.email) {
-                  const nodemailer = await import('nodemailer');
-                  const transporter = nodemailer.default.createTransport({
-                    host: vs.smtpHost, port: vs.smtpPort ?? 587,
-                    secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
-                    auth: { user: vs.smtpUser, pass: vs.smtpPass },
-                    tls: smtpTls(),
-                  });
-                  const proposalUrl = `${publicBaseUrl()}/proposal/${proposal.publicToken}`;
-                  const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
-                  const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
-                  const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-                  const subject = `Your event proposal — ${proposal.title}`;
-                  const text = `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`;
-                  // With the inbox connected, replies also reach the polled
-                  // mailbox; without it Reply-To stays unset (replies go to From).
-                  const { leadMailHeaders, recordLeadMessage, inboxAddress } = await import('./inbox');
-                  const threadHeaders = leadMailHeaders(vs, { leadId: proposal.leadId, fromEmail, replyTo: inboxAddress(vs) ? fromEmail : null });
-                  await transporter.sendMail({
-                    from: `"${fromName}" <${fromEmail}>`,
-                    to: `"${clientName}" <${lead.email}>`,
-                    subject,
-                    html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
-                    text,
-                    ...threadHeaders,
-                  });
-                  emailSent = true;
-                  await recordLeadMessage({
-                    ownerId: ctx.user.id, leadId: proposal.leadId, direction: 'out',
-                    fromEmail, fromName, toEmail: lead.email, subject, bodyText: text,
-                    messageId: threadHeaders.messageId,
-                  });
-                  emailedTo = lead.email;
+                const smtpReady = !!(vs?.smtpHost && vs?.smtpUser && vs?.smtpPass);
+                if (!smtpReady) {
+                  emailStatus = 'not_configured';
+                } else if (!lead?.email) {
+                  emailStatus = 'no_client_email';
+                } else {
+                  // SMTP is set up and we have an address — a failure here is a
+                  // real delivery failure, not a config gap, so catch it on its
+                  // own and mark the proposal as failed-to-email (not emailed).
+                  try {
+                    const nodemailer = await import('nodemailer');
+                    const transporter = nodemailer.default.createTransport({
+                      host: vs!.smtpHost!, port: vs!.smtpPort ?? 587,
+                      secure: (vs!.smtpSecure ?? 0) === 1 || (vs!.smtpPort ?? 587) === 465,
+                      auth: { user: vs!.smtpUser!, pass: vs!.smtpPass! },
+                      tls: smtpTls(),
+                    });
+                    const proposalUrl = `${publicBaseUrl()}/proposal/${proposal.publicToken}`;
+                    const fromName = vs!.smtpFromName ?? vs!.name ?? 'VenueFlowHQ';
+                    const fromEmail = vs!.smtpFromEmail ?? vs!.smtpUser!;
+                    const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+                    const subject = `Your event proposal — ${proposal.title}`;
+                    const text = `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`;
+                    // With the inbox connected, replies also reach the polled
+                    // mailbox; without it Reply-To stays unset (replies go to From).
+                    const { leadMailHeaders, recordLeadMessage, inboxAddress } = await import('./inbox');
+                    const threadHeaders = leadMailHeaders(vs, { leadId: proposal.leadId, fromEmail, replyTo: inboxAddress(vs) ? fromEmail : null });
+                    await transporter.sendMail({
+                      from: `"${fromName}" <${fromEmail}>`,
+                      to: `"${clientName}" <${lead.email}>`,
+                      subject,
+                      html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
+                      text,
+                      ...threadHeaders,
+                    });
+                    emailSent = true;
+                    emailStatus = 'emailed';
+                    emailedTo = lead.email;
+                    // Stamp the moment it actually left — null emailedAt is how
+                    // every other surface tells "emailed" from "link only".
+                    await updateProposal(input.id, ctx.user.id, { emailedAt: new Date() });
+                    await recordLeadMessage({
+                      ownerId: ctx.user.id, leadId: proposal.leadId, direction: 'out',
+                      fromEmail, fromName, toEmail: lead.email, subject, bodyText: text,
+                      messageId: threadHeaders.messageId,
+                    });
+                  } catch (sendErr: any) {
+                    emailStatus = 'failed';
+                    emailError = sendErr?.message ? String(sendErr.message).slice(0, 300) : 'Unknown error';
+                    console.error('[ProposalSend] Email delivery failed:', sendErr);
+                  }
                 }
               }
             } catch (emailErr) {
+              // The surrounding lookups failed (DB, settings). Treat it as a
+              // send failure rather than silently claiming success.
+              emailStatus = 'failed';
+              emailError = (emailErr as any)?.message ? String((emailErr as any).message).slice(0, 300) : 'Unknown error';
               console.error('[ProposalSend] Email error (non-fatal):', emailErr);
             }
           }
+
+          // One honest activity entry describing what actually happened, so the
+          // owner never has to guess whether the client was emailed.
+          const sentActivity =
+            emailStatus === 'emailed'
+              ? `Proposal "${proposal.title}" emailed to ${emailedTo}`
+              : emailStatus === 'not_configured'
+                ? `Proposal "${proposal.title}" marked sent — not emailed (email isn't set up). Copy the client link to send it.`
+                : emailStatus === 'no_client_email'
+                  ? `Proposal "${proposal.title}" marked sent — not emailed (no email address on this enquiry). Copy the client link to send it.`
+                  : `Proposal "${proposal.title}" marked sent — the email failed to send${emailError ? ` (${emailError})` : ''}. Copy the client link to send it.`;
+          await addLeadActivity({
+            leadId: proposal.leadId,
+            ownerId: ctx.user.id,
+            type: "proposal_sent",
+            content: sentActivity,
+          });
+
           // Sending a proposal is a response (it moves the lead off "new").
           await markStaffResponse(ctx.user.id, proposal.leadId, { emailed: emailSent });
         }
         // emailSent is only true when the client was actually emailed — the UI
         // must not claim "sent" when SMTP isn't set up or the send failed.
-        return { success: true, token: proposal?.publicToken, emailSent, emailedTo };
+        // emailStatus distinguishes why it wasn't emailed so the UI can tell
+        // the owner what to do (set up email / add an address / retry).
+        return { success: true, token: proposal?.publicToken, emailSent, emailedTo, emailStatus, emailError };
       }),
 
     update: protectedProcedure

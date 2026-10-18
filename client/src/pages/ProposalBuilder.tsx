@@ -101,7 +101,7 @@ export default function ProposalBuilder() {
   const [savedProposal, setSavedProposal] = useState<any>(null);
   // What the last "Send to client" actually did — the email only goes out
   // when SMTP is set up, so the UI must say which happened.
-  const [sendResult, setSendResult] = useState<{ emailSent: boolean; emailedTo: string | null } | null>(null);
+  const [sendResult, setSendResult] = useState<{ emailSent: boolean; emailedTo: string | null; emailStatus?: 'emailed' | 'not_configured' | 'no_client_email' | 'failed'; emailError?: string | null } | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // ── Appearance state ────────────────────────────────────────────────────────
@@ -516,10 +516,20 @@ export default function ProposalBuilder() {
 
   const sendProposal = trpc.proposals.send.useMutation({
     onSuccess: (data) => {
-      setSendResult({ emailSent: data.emailSent, emailedTo: data.emailedTo ?? null });
-      setSavedProposal((p: any) => p ? { ...p, status: "sent", sentAt: new Date() } : p);
+      setSendResult({ emailSent: data.emailSent, emailedTo: data.emailedTo ?? null, emailStatus: (data as any).emailStatus, emailError: (data as any).emailError ?? null });
+      setSavedProposal((p: any) => p ? { ...p, status: "sent", sentAt: new Date(), emailedAt: data.emailSent ? new Date() : p?.emailedAt ?? null } : p);
       if (leadId) utils.proposals.byLead.invalidate({ leadId });
-      toast.success(data.emailSent && data.emailedTo ? `Proposal emailed to ${data.emailedTo}` : "Proposal saved — email isn't set up, so copy the link to send it.");
+      // Be honest about delivery: only a real email gets the success toast; the
+      // other outcomes are warnings telling the owner to share the link.
+      if (data.emailSent && data.emailedTo) {
+        toast.success(`Proposal emailed to ${data.emailedTo}`);
+      } else if ((data as any).emailStatus === 'no_client_email') {
+        toast.warning("Proposal saved, but this enquiry has no email address — copy the link to send it.");
+      } else if ((data as any).emailStatus === 'failed') {
+        toast.warning("Proposal saved, but the email couldn't be sent — copy the link to send it.");
+      } else {
+        toast.warning("Proposal saved, but email isn't set up — copy the link to send it.");
+      }
     },
     onError: (e) => toast.error(e.message || "Couldn't send the proposal"),
   });
@@ -1650,8 +1660,12 @@ export default function ProposalBuilder() {
               <div role="status" className={`border-2 p-3 font-dm text-xs ${sendResult.emailSent ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-amber-50 border-amber-200 text-amber-900"}`}>
                 {sendResult.emailSent && sendResult.emailedTo ? (
                   <div className="flex items-start gap-2"><CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden /> <span>Proposal emailed to <strong>{sendResult.emailedTo}</strong>.</span></div>
+                ) : sendResult.emailStatus === 'no_client_email' ? (
+                  <span><strong>Not emailed.</strong> This enquiry has no email address on file — copy the link below and send it yourself, or add an email and resend.</span>
+                ) : sendResult.emailStatus === 'failed' ? (
+                  <span><strong>Not emailed — the send failed.</strong>{sendResult.emailError ? ` (${sendResult.emailError})` : ""} The proposal link is live — copy it below and send it yourself, then <a href="/dashboard?tab=settings&sub=email" className="underline underline-offset-2">check your email settings</a>.</span>
                 ) : (
-                  <span>Proposal saved, but email isn't set up — copy the link below and send it yourself. <a href="/dashboard?tab=settings&sub=email" className="underline underline-offset-2">Set up email</a></span>
+                  <span><strong>Not emailed.</strong> Email isn't set up, so copy the link below and send it yourself. <a href="/dashboard?tab=settings&sub=email" className="underline underline-offset-2">Set up email</a></span>
                 )}
               </div>
             )}
