@@ -4010,106 +4010,18 @@ export default function Dashboard() {
                         "Events"/"Enquiries". The List/Board toggle says which
                         view this is. */}
                     <h1 className="font-cormorant text-xl font-semibold text-ink">Enquiries</h1>
-                    {leadViewMode !== "kanban" && (() => {
-                      const isAll = leadsSubTab === "all" && leadStatusFilter.length === 0;
-                      const filterIs = (keys: string[]) => leadStatusFilter.length === keys.length && keys.every(k => leadStatusFilter.includes(k));
-                      // flex-shrink-0 + nowrap: on a phone the tabs scroll sideways
-                      // in ONE row instead of wrapping into three.
-                      const tabCls = (on: boolean) => `flex-shrink-0 whitespace-nowrap font-bebas tracking-wider sm:tracking-widest text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1.5 transition-colors ${on ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`;
-                      // Follow-ups are the one tab that means "someone is waiting
-                      // on you", so it carries the same amber as the Overview
-                      // "Needs follow-up" tile whenever there's anything to chase.
-                      const fuAlert = !followUpOnly && followUpCount > 0;
-                      const fuTabCls = fuAlert
-                        ? "flex-shrink-0 whitespace-nowrap font-bebas tracking-wider sm:tracking-widest text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1.5 transition-colors bg-amber-100 text-amber-900 hover:bg-amber-200"
-                        : tabCls(followUpOnly);
-                      // Statuses the quick chips already cover; everything else
-                      // the venue defines (contacted, site visit, tentative,
-                      // cancelled, finished, custom stages…) lives under "More".
-                      const quickKeys = ['new', 'proposal_sent', 'booked', 'confirmed', 'lost'];
-                      const moreStages = pipelineStages.filter(s => !quickKeys.includes(s.key));
-                      const moreActive = leadStatusFilter.length === 1 && moreStages.some(s => s.key === leadStatusFilter[0]);
-                      const moreLabel = moreActive ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0]) : "MORE";
-                      return (
-                        <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 max-w-full min-w-0">
-                          <div className="relative flex min-w-0">
-                          <div className="flex gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                          {newEnquiries.length > 0 && (
-                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("new"); setSelectedLead(null); }}
-                              className={tabCls(leadsSubTab === "new" && !followUpOnly)}>
-                              NEW
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" && !followUpOnly ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
-                            </button>
-                          )}
-                          {/* Action tabs (NEW, FOLLOW-UP) come before the pure status
-                              filters, so on a phone — where the row scrolls — the
-                              one that means "someone is waiting on you" is never
-                              the tab that's off-screen. */}
-                          <button onClick={() => { const on = !followUpOnly; setFollowUpOnly(on); if (on) { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadsSubTab("all"); } setSelectedLead(null); }}
-                            title="Quoted a while ago or gone quiet in their status"
-                            className={fuTabCls}>
-                            <Bell className="w-3 h-3" /> FOLLOW-UP
-                            {followUpCount > 0 && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-800 text-white"}`}>{followUpCount}</span>
-                            )}
-                          </button>
-                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(isAll && !followUpOnly)}>
-                            ALL
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll && !followUpOnly ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
-                          </button>
-                          <button onClick={() => { setLeadStatusFilter(['proposal_sent']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(filterIs(['proposal_sent']) && !followUpOnly)}>
-                            QUOTED
-                          </button>
-                          <button onClick={() => { setLeadStatusFilter(['booked','confirmed']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(filterIs(['booked','confirmed']) && !followUpOnly)}>
-                            CONFIRMED
-                          </button>
-                          <button onClick={() => { setLeadStatusFilter(['lost']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(filterIs(['lost']) && !followUpOnly)}>
-                            LOST
-                          </button>
-                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("winback"); setSelectedLead(null); }}
-                            title="Lost and quiet enquiries, and last year's clients, to invite back"
-                            aria-pressed={leadsSubTab === "winback"}
-                            className={tabCls(leadsSubTab === "winback")}>
-                            <RotateCcw className="w-3 h-3" /> WIN BACK
-                          </button>
-                          </div>
-                          {/* Phone-only fade: tells you the row scrolls sideways. */}
-                          <div aria-hidden="true" className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 rounded-r-xl bg-gradient-to-l from-muted to-transparent" />
-                          </div>
-                          {moreStages.length > 0 && (
-                            <div className="relative flex-shrink-0" ref={statusFilterRef}>
-                              <button type="button" onClick={() => setStatusFilterOpen(o => !o)}
-                                title="Filter by another status"
-                                className={`${tabCls(moreActive && !followUpOnly)} max-w-[9rem]`}>
-                                <span className="truncate">{moreLabel}</span>
-                                <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
-                              </button>
-                              {statusFilterOpen && (
-                                <div className="absolute z-50 mt-1 right-0 sm:right-auto sm:left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
-                                  {moreActive && (
-                                    <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab("all"); setStatusFilterOpen(false); setSelectedLead(null); }}
-                                      className="w-full text-left px-2 py-1.5 rounded hover:bg-linen/40 text-[11px] font-bebas tracking-widest text-forest">
-                                      CLEAR
-                                    </button>
-                                  )}
-                                  {moreStages.map(s => (
-                                    <button key={s.key} onClick={() => { setLeadStatusFilter([s.key]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); setStatusFilterOpen(false); }}
-                                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 text-left ${leadStatusFilter.length === 1 && leadStatusFilter[0] === s.key ? "bg-linen/60" : ""}`}>
-                                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.swatch }} />
-                                      <span className="text-xs font-inter text-ink">{s.label}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    {/* Win-back toggle — the enquiry statuses now live in the
+                        list's own view tabs (Needs reply / Follow-up due /
+                        Confirmed / All), so the one thing left here is the
+                        separate Win-back panel for lost and quiet enquiries. */}
+                    {leadViewMode !== "kanban" && (
+                      <button onClick={() => { setLeadsSubTab(leadsSubTab === "winback" ? "all" : "winback"); setLeadStatusFilter([]); setFollowUpOnly(false); setShowPartialOnly(false); setSelectedLead(null); }}
+                        aria-pressed={leadsSubTab === "winback"}
+                        title="Lost and quiet enquiries, and last year's clients, to invite back"
+                        className={`flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${leadsSubTab === "winback" ? "bg-forest text-cream border-forest" : "text-ink/65 border-gold/30 hover:text-ink hover:bg-linen"}`}>
+                        <RotateCcw className="w-3 h-3" /> {leadsSubTab === "winback" ? "ENQUIRIES" : "WIN BACK"}
+                      </button>
+                    )}
                   </div>
 
                   {/* View toggle: one responsive List (table on desktop, cards
@@ -4187,42 +4099,14 @@ export default function Dashboard() {
                 {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
                 {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
+                    {/* Search + owner feed the list; status / date / sort now live
+                        in the list's own view tabs and signal ordering. */}
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                         aria-label="Search enquiries"
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPartialOnly(v => !v)}
-                      title="Leads who gave a name + email but never finished the enquiry — worth a quick follow-up"
-                      className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 ${showPartialOnly ? "border-amber-400 bg-amber-50 text-amber-800" : "border-gray-200 bg-white text-ink"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${showPartialOnly ? "bg-amber-500" : "bg-amber-400/60"}`} />
-                      Partial{leadsToShow.filter(isPartialLead).length > 0 ? ` (${leadsToShow.filter(isPartialLead).length})` : ""}
-                    </button>
-                    <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
-                      <SelectTrigger aria-label="Filter events by date" title="Filter events by date" className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all" className="font-inter text-xs">All Dates</SelectItem>
-                        <SelectItem value="today" className="font-inter text-xs">Today</SelectItem>
-                        <SelectItem value="weekend" className="font-inter text-xs">This Weekend</SelectItem>
-                        <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
-                        <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
-                        <SelectItem value="future" className="font-inter text-xs">Upcoming</SelectItem>
-                        <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {leadDateFilter === "custom" && (
-                      <>
-                        <input type="date" value={customDateFrom} onChange={e => setCustomDateFrom(e.target.value)}
-                          className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="From" />
-                        <input type="date" value={customDateTo} onChange={e => setCustomDateTo(e.target.value)}
-                          className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="To" />
-                      </>
-                    )}
                     {(teamList ?? []).length > 0 && (
                       <select value={String(leadOwnerFilter)} aria-label="Filter by owner" title="Filter by owner"
                         onChange={e => { const v = e.target.value; setLeadOwnerFilter(v === "all" || v === "unassigned" ? v : Number(v)); }}
@@ -4232,22 +4116,6 @@ export default function Dashboard() {
                         {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     )}
-                    <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
-                      <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="enquiry_date" className="font-inter text-xs">Enquiry Date</SelectItem>
-                        <SelectItem value="event_date" className="font-inter text-xs">Event Date</SelectItem>
-                        <SelectItem value="status" className="font-inter text-xs">Status</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <button onClick={() => setLeadSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                      className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
-                      title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}>
-                      <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
-                    </button>
-                    <span className="font-dm text-xs text-ink/60 ml-auto">{searching && <span className="mr-2">Searching every status and date.</span>}{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
                   </div>
                 )}
                 {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
