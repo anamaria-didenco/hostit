@@ -44,6 +44,7 @@ import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
 import NeedsYouToday from "@/components/NeedsYouToday";
+import EnquiryListC from "@/components/EnquiryListC";
 import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
 import UpcomingEventsCard from "@/components/UpcomingEventsCard";
 import { isOpenEnquiry } from "@shared/needsToday";
@@ -4272,254 +4273,38 @@ export default function Dashboard() {
                   <WinBackPanel onOpenLead={openLeadById} />
                 )}
 
-                {/* ── TABLE VIEW ─────────────────────────────────────── */}
-                {leadViewMode === "table" && leadsSubTab !== "winback" && (
-                  <div className="flex-1 overflow-auto">
-                    {filteredLeads.length === 0 ? (
-                      <div className="p-12 text-center">
-                        <MessageSquare className="w-10 h-10 text-sage/30 mx-auto mb-3" />
-                        <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No records found"}</p>
-                      </div>
-                    ) : (
-                      <table className="w-full text-sm border-collapse min-w-[700px]">
-                        <thead className="sticky top-0 bg-cream z-10 border-b border-gold/20">
-                          <tr>
-                            {bulkSelectMode && <th className="w-10 px-3 py-2.5"><input type="checkbox" checked={selectedLeadIds.size === filteredLeads.length} onChange={e => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())} className="w-3.5 h-3.5 accent-forest" /></th>}
-                            {[
-                              { key: "name", label: "Name" },
-                              { key: "event", label: "Event Type" },
-                              { key: "event_date", label: "Event Date" },
-                              { key: "guests", label: "Guests" },
-                              { key: "status", label: "Status" },
-                              { key: "enquiry_date", label: "Enquiry" },
-                              { key: "followup", label: "Follow-up" },
-                            ].map(col => (
-                              <th key={col.key}
-                                onClick={() => { if (["event_date","status","enquiry_date"].includes(col.key)) { setLeadSortBy(col.key === "enquiry_date" ? "enquiry_date" : col.key as any); setLeadSortDir(d => d === "asc" ? "desc" : "asc"); } }}
-                                className={`px-4 py-2.5 text-left font-bebas tracking-widest text-xs text-ink/60 whitespace-nowrap bg-cream ${["event_date","status","enquiry_date"].includes(col.key) ? "cursor-pointer hover:text-ink select-none" : ""}`}>
-                                {col.label}
-                                {(col.key === "event_date" && leadSortBy === "event_date") || (col.key === "enquiry_date" && leadSortBy === "enquiry_date") || (col.key === "status" && leadSortBy === "status")
-                                  ? <span className="ml-1 opacity-60">{leadSortDir === "asc" ? "↑" : "↓"}</span> : null}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/50">
-                          {filteredLeads.map((lead: any) => {
-                            const statusStage = pipelineStages.find(s => s.key === lead.status);
-                            // Keep the status colour as a left-border accent + the STATUS pill;
-                            // wash the row only faintly so the dark text stays readable.
-                            const rowBg = statusStage?.swatch ? statusStage.swatch + '14' : 'transparent';
-                            return (
-                              <tr key={lead.id}
-                                onClick={() => { if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
-                                className={`transition-colors cursor-pointer ${selectedLeadIds.has(lead.id) ? "brightness-90" : ""}`}
-                                style={{ backgroundColor: rowBg, borderLeft: `4px solid ${statusStage?.swatch ?? '#d4c5a9'}` }}
-                                onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.93)')}
-                                onMouseLeave={e => (e.currentTarget.style.filter = '')}>
-                                {bulkSelectMode && (
-                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                                    <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
-                                      onChange={e => { setSelectedLeadIds(prev => { const n = new Set(prev); e.target.checked ? n.add(lead.id) : n.delete(lead.id); return n; }); }}
-                                      className="w-3.5 h-3.5 accent-forest cursor-pointer" />
-                                  </td>
-                                )}
-                                {/* Long names (some carry a company and address)
-                                    wrap within a sensible width instead of
-                                    pushing Status and Follow-up off-screen. */}
-                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink min-w-[180px] max-w-[320px] break-words">
-                                  {/* A real button so the enquiry is reachable and
-                                      openable from the keyboard — the row's onClick
-                                      only serves the mouse. stopPropagation avoids
-                                      firing both handlers on a pointer click. */}
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
-                                    className="inline-flex items-center gap-1.5 text-left rounded-sm hover:underline focus-visible:underline"
-                                  >
-                                    {lead.firstName} {lead.lastName}
-                                    {isPartialLead(lead) && <PartialChip />}
-                                    {replyStatus.get(lead.id)?.direction === 'in'
-                                      ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
-                                      : leadNeedsReply(lead) && <NeedsReplyChip />}
-                                  </button>
-                                  {" "}<LeadRowBadges lead={lead} teamById={teamById} />
-                                </td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}
-                                  {(holdState(lead) === 'held' || clashMap?.[lead.id]) && (
-                                    <div className="flex items-center gap-1 mt-1">
-                                      {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
-                                      <DateClashChip clashes={clashMap?.[lead.id] as any} />
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
-                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                  <select
-                                    value={lead.status}
-                                    onClick={e => e.stopPropagation()}
-                                    onChange={e => {
-                                      const newStatus = e.target.value;
-                                      if (newStatus === lead.status) return;
-                                      updateStatus.mutate({ id: lead.id, status: newStatus as any }, {
-                                        onError: (err: any) => { if (!getClashes(err)) toast.error(err?.message || "Couldn't change the status"); },
-                                      });
-                                    }}
-                                    title="Change status"
-                                    aria-label={`Change status for ${lead.firstName} ${lead.lastName ?? ""}`.trim()}
-                                    className={`font-bebas text-[10px] tracking-widest pl-2 pr-6 py-0.5 border cursor-pointer hover:opacity-80 transition-opacity appearance-none bg-no-repeat ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}
-                                    style={{
-                                      backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
-                                      backgroundPosition: "right 6px center",
-                                      backgroundSize: "10px",
-                                    }}>
-                                    {pipelineStages.map(s => (
-                                      <option key={s.key} value={s.key}>{s.label}</option>
-                                    ))}
-                                  </select>
-                                  {movedRows[lead.id] && (
-                                    <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
-                                      busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/70 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  {(() => {
-                                    const fu = leadFollowUpState(lead, followUpNowMs);
-                                    const sendingThis = sendFollowUp.isPending && sendFollowUp.variables?.leadId === lead.id;
-                                    if (fu.needs) {
-                                      const badge = fu.reason === 'overdue'
-                                        ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">OVERDUE</span>
-                                        : <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="No activity on this lead for a while">GONE QUIET</span>;
-                                      return (
-                                        <div className="flex items-center gap-1.5">
-                                          {badge}
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); if (!sendFollowUp.isPending) sendFollowUp.mutate({ leadId: lead.id }); }}
-                                            disabled={sendFollowUp.isPending}
-                                            title="Email this enquirer a follow-up now"
-                                            className="inline-flex items-center gap-1 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded border border-forest/30 text-forest hover:bg-forest hover:text-cream transition-colors disabled:opacity-50">
-                                            <Send className="w-3 h-3" /> {sendingThis ? '…' : 'SEND'}
-                                          </button>
-                                        </div>
-                                      );
-                                    }
-                                    if (lead.followUpDate) {
-                                      return <span className="font-dm text-[11px] text-ink/60">{new Date(lead.followUpDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</span>;
-                                    }
-                                    return <span className="text-ink/30">—</span>;
-                                  })()}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-                {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && leadsSubTab !== "winback" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
-                  {leadsError ? (
-                    <div className="p-8 text-center">
+                {/* ── ENQUIRY LIST (Option C) — signal-first rows, replaces the
+                       old table + phone list; Board (kanban) is the alternative view ── */}
+                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                  leadsError ? (
+                    <div className="flex-1 p-8 text-center">
                       <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
                       <p className="font-dm text-ink text-sm mb-3">Couldn't load enquiries.</p>
-                      <button
-                        onClick={() => refetchLeads()}
-                        className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90"
-                      >
-                        RETRY
-                      </button>
+                      <button onClick={() => refetchLeads()} className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90">RETRY</button>
                     </div>
-                  ) : filteredLeads.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
-                      <p className="font-dm text-sage text-sm">{searching ? "No enquiries match that search" : "No leads found"}</p>
-                    </div>
-                  ) : filteredLeads.map((lead: any) => (
-                    // shrink-0: the global `.flex { min-height:0 }` reset (index.css)
-                    // otherwise lets flexbox squash these rows — a tall stack of flex
-                    // children in a fixed-height flex column — down to ~0px, so the
-                    // content overlaps instead of the list scrolling. Keep natural height.
-                    <div key={lead.id} className={`shrink-0 ${selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''}`}>
-                    <div className="flex items-stretch">
-                      {bulkSelectMode && (
-                        <label className="flex items-center px-3 cursor-pointer">
-                          <input type="checkbox"
-                            checked={selectedLeadIds.has(lead.id)}
-                            onChange={(e) => {
-                              setSelectedLeadIds(prev => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(lead.id); else next.delete(lead.id);
-                                return next;
-                              });
-                            }}
-                            className="w-4 h-4 accent-forest cursor-pointer" />
-                        </label>
-                      )}
-                    <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 min-w-0 p-3 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
-                      style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
-                      {/* Row 1: name + status badge. The chips sit on their
-                          own wrapping row — on a phone they used to squeeze the
-                          name to "Z.." and push the status off the edge. */}
-                      <div className="flex items-start gap-2 mb-0.5 min-w-0">
-                        <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
-                        <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 whitespace-nowrap ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mb-0.5 min-w-0 empty:hidden">
-                        {isPartialLead(lead) && <PartialChip />}
-                        {replyStatus.get(lead.id)?.direction === 'in'
-                          ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
-                          : leadNeedsReply(lead) && <NeedsReplyChip />}
-                        <LeadRowBadges lead={lead} teamById={teamById} />
-                      </div>
-                      {/* Row 2: email */}
-                      <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
-                      {/* Row 3: event type + date on one line */}
-                      <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">
-                        <span className="font-dm text-xs text-ink/70 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}</span>
-                        {budgetRangeLabel((lead as any).budgetRange) && (
-                          <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap" title="Budget range the client selected on the enquiry form">
-                            {budgetRangeLabel((lead as any).budgetRange)}
-                          </span>
-                        )}
-                        {lead.eventDate ? (
-                          <span className="font-dm text-xs font-semibold text-forest whitespace-nowrap">
-                            {new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            {fmtEventTime(lead.eventDate) && <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>}
-                          </span>
-                        ) : (lead as any).dateFlexible ? (
-                          <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span>
-                        ) : (
-                          <span className="font-dm text-xs text-ink/55 italic">no date</span>
-                        )}
-                        {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
-                        <DateClashChip clashes={clashMap?.[lead.id] as any} />
-                      </div>
-                      {/* Row 4: follow-up badge — same shared rule as the
-                          table column and the dashboard "Needs follow-up" tile. */}
-                      {(() => {
-                            const fu = leadFollowUpState(lead, followUpNowMs);
-                            if (fu.reason === 'overdue') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
-                            if (fu.reason === 'idle') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-100 text-amber-800 inline-block mt-1" title="No activity on this lead for a while">GONE QUIET</span>;
-                            if (lead.followUpDate && !CLOSED_FOLLOWUP_STATUSES.includes(lead.status)) return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-50 text-amber-800 inline-block mt-1">FOLLOW UP {new Date(lead.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
-                            return null;
-                          })()}
-                    </button>
-                      </div>
-                    {movedRows[lead.id] && (
-                      <div className="px-4 pb-2 border-l-4" style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
-                        <MovedNote toLabel={pipelineStages.find(s => s.key === movedRows[lead.id].to)?.label ?? movedRows[lead.id].to}
-                          busy={updateStatusMut.isPending && updateStatusMut.variables?.id === lead.id} onUndo={() => undoMove(lead.id)} />
-                      </div>
-                    )}
-                    </div>
-                  ))}
-                </div>}
+                  ) : (
+                    <EnquiryListC
+                      leads={(() => {
+                        const ql = leadSearch.trim().toLowerCase();
+                        const base = allEnquiries.filter((l: any) => leadOwnerFilter === 'all' ? true : leadOwnerFilter === 'unassigned' ? !l.assignedTo : l.assignedTo === leadOwnerFilter);
+                        return ql ? base.filter((l: any) => `${l.firstName ?? ''} ${l.lastName ?? ''} ${l.company ?? ''} ${l.email ?? ''} ${l.eventType ?? ''}`.toLowerCase().includes(ql)) : base;
+                      })()}
+                      nowMs={followUpNowMs}
+                      venueName={(venueSettings as any)?.name ?? 'the venue'}
+                      replyStatus={replyStatus}
+                      clashMap={clashMap as any}
+                      isPartial={(l: any) => isPartialLead(l)}
+                      isStaff={isStaff}
+                      statusInfo={(st: any) => { const s = pipelineStages.find(p => p.key === st); return { label: s?.label ?? String(st ?? '').replace(/_/g, ' '), dot: s?.swatch ?? '#8a8073' }; }}
+                      onOpen={(lead: any) => { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); }}
+                      onSend={({ lead, subject, body }: any) => {
+                        if (!lead.email) { toast.error('No email on file for this enquiry.'); return; }
+                        sendEmail.mutate({ to: lead.email, toName: `${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || undefined, subject, body, leadId: lead.id });
+                      }}
+                      sending={sendEmail.isPending}
+                    />
+                  )
+                )}
 
                 {/* ── KANBAN VIEW ──────────────────────────────────────── */}
                 {leadViewMode === "kanban" && (
