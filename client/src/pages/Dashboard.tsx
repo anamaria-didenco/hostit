@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
-  LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
+  LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
@@ -45,6 +45,7 @@ import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
 import NeedsYouToday from "@/components/NeedsYouToday";
 import EnquiryListC from "@/components/EnquiryListC";
+import EnquiryDrawerExtras from "@/components/EnquiryDrawerExtras";
 import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
 import UpcomingEventsCard from "@/components/UpcomingEventsCard";
 import { isOpenEnquiry } from "@shared/needsToday";
@@ -1061,6 +1062,9 @@ export default function Dashboard() {
   }, [isDesktop]);
   // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
   const [followUpOnly, setFollowUpOnly] = useState(false);
+  // The enquiry ids in the order the list shows them, so the drawer can page
+  // prev/next through the same sequence.
+  const [enquiryOrder, setEnquiryOrder] = useState<number[]>([]);
   useEffect(() => {
     setMovedRows(prev => Object.keys(prev).length ? {} : prev);
   }, [tab, leadsSubTab, leadStatusFilter, leadDateFilter, followUpOnly, showPartialOnly, leadOwnerFilter, leadSearch, leadViewMode]);
@@ -4302,6 +4306,7 @@ export default function Dashboard() {
                         sendEmail.mutate({ to: lead.email, toName: `${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || undefined, subject, body, leadId: lead.id });
                       }}
                       sending={sendEmail.isPending}
+                      onRowsChange={setEnquiryOrder}
                     />
                   )
                 )}
@@ -9131,10 +9136,31 @@ export default function Dashboard() {
                     : null;
                 })()}
               </div>
-              <button onClick={() => setSelectedBooking(null)} aria-label="Close details"
-                className="flex-shrink-0 text-cream opacity-85 hover:opacity-100 hover:bg-forest rounded-sm p-1.5 -mr-1.5 -mt-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex-shrink-0 flex items-center gap-1.5 -mt-0.5">
+                {/* Page through the enquiry list without closing the drawer —
+                    same order the list shows (longest wait first, etc.). */}
+                {selectedBooking._isLead && (() => {
+                  const idx = enquiryOrder.indexOf(selectedBooking.id);
+                  if (idx < 0 || enquiryOrder.length < 2) return null;
+                  const go = (d: number) => {
+                    const nextId = enquiryOrder[(idx + d + enquiryOrder.length) % enquiryOrder.length];
+                    const l = (allLeads ?? []).find((x: any) => x && x.id === nextId);
+                    if (l) { if (!l.readAt) markRead.mutate({ id: l.id }); openEventDrawer({ ...l, _isLead: true }); }
+                  };
+                  const btn = "w-7 h-7 grid place-items-center rounded-sm text-cream opacity-85 hover:opacity-100 hover:bg-forest focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-gold";
+                  return (
+                    <>
+                      <button onClick={() => go(-1)} aria-label="Previous enquiry" className={btn}><ChevronUp className="w-4 h-4" /></button>
+                      <button onClick={() => go(1)} aria-label="Next enquiry" className={btn}><ChevronDown className="w-4 h-4" /></button>
+                      <span className="font-dm text-xs text-cream opacity-75 ml-0.5 mr-1 whitespace-nowrap [font-variant-numeric:tabular-nums]">{idx + 1} of {enquiryOrder.length}</span>
+                    </>
+                  );
+                })()}
+                <button onClick={() => setSelectedBooking(null)} aria-label="Close details"
+                  className="text-cream opacity-85 hover:opacity-100 hover:bg-forest rounded-sm p-1.5 -mr-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             {!selectedBooking._isLead && drawerView === 'beo' ? (
               <>
@@ -9300,6 +9326,38 @@ export default function Dashboard() {
                   </Popover>
                 )}
               </div>
+              {/* Worth quoting? + Event facts band + Quote estimate (enquiries) —
+                  a fast, honest read on fit and a rough price, from real space
+                  capacity / minimum-spend and menu per-head pricing. */}
+              {selectedBooking._isLead && !isStaff && (() => {
+                const L = selectedBooking;
+                const sp = (spaces ?? []).find((s: any) => (L.spaceId && s.id === L.spaceId) || (L.spaceName && s.name === L.spaceName)) ?? null;
+                const space = sp ? {
+                  name: sp.name,
+                  minCapacity: sp.minCapacity,
+                  maxCapacity: sp.maxCapacity,
+                  minSpend: sp.minSpend != null ? Number(sp.minSpend) : null,
+                  minSpendWeekend: sp.minSpendWeekend != null ? Number(sp.minSpendWeekend) : null,
+                } : null;
+                const day = L.eventDate ? new Date(L.eventDate).getDay() : null; // 5 Fri, 6 Sat
+                const returningCount = (allLeads ?? []).filter((x: any) =>
+                  x && x.email && L.email && String(x.email).toLowerCase() === String(L.email).toLowerCase() &&
+                  x.id !== L.id && ["booked", "confirmed", "finished"].includes(x.status)).length;
+                const packages = (menuPackages ?? []).map((p: any) => ({
+                  id: p.id, name: p.name,
+                  pricePerHead: p.pricePerHead != null ? Number(p.pricePerHead) : null,
+                  customPriceLabel: p.customPriceLabel,
+                }));
+                return (
+                  <EnquiryDrawerExtras
+                    lead={L} space={space} spaceLabel={L.spaceName ?? null}
+                    hasClash={(clashMap?.[L.id]?.length ?? 0) > 0}
+                    isWeekend={day === 5 || day === 6}
+                    returningCount={returningCount}
+                    packages={packages}
+                  />
+                );
+              })()}
               {/* Notes without leaving the drawer: type, Add, and the latest
                   activity underneath. */}
               {!isStaff && (selectedBooking._isLead || selectedBooking.leadId) && (

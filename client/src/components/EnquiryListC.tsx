@@ -30,6 +30,8 @@ export interface EnquiryListCProps {
   onSend: (args: { lead: any; subject: string; body: string }) => void;
   sending?: boolean;
   isStaff?: boolean;
+  /** Reports the ids in the order shown, so the drawer can page prev/next. */
+  onRowsChange?: (ids: number[]) => void;
 }
 
 const TONE: Record<SignalTone, { fg: string; bg: string }> = {
@@ -125,6 +127,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       tab === "all" ? signal.group !== "closed" : signal.group === tab);
     return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
   }, [enriched, tab]);
+
+  const { onRowsChange } = props;
+  const orderKey = rows.map((r) => r.lead.id).join(",");
+  React.useEffect(() => {
+    onRowsChange?.(rows.map((r) => r.lead.id));
+  }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summary = tab === "reply" ? (counts.reply ? `${counts.reply} waiting on you · longest first` : "Nobody is waiting on a reply")
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
