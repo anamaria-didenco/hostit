@@ -57,7 +57,7 @@ export function SinceLastVisit() {
               <div className="shrink-0 mt-0.5">{ICON[it.kind] ?? <Sparkles className="w-3.5 h-3.5 text-primary/60" />}</div>
               <div className="flex-1 min-w-0">
                 <div className="font-serif text-sm text-foreground tracking-[-0.01em] truncate">{it.title}</div>
-                <div className="font-sans text-[11px] text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{timeAgo(new Date(it.at))}</div>
+                <div className="font-sans text-[12px] text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{timeAgo(new Date(it.at))}</div>
               </div>
             </>
           );

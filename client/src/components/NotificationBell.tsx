@@ -116,7 +116,7 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
         >
           <Bell aria-hidden="true" className={`w-4 h-4 ${variant === "light" ? (unread > 0 ? "text-sage-dark" : "text-gray-500") : ""}`} style={iconColour ? { color: iconColour } : undefined} />
           {unread > 0 && (
-            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none" style={{ background: "#c0392b" }}>
+            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none" style={{ background: "#c0392b" }}>
               {badge}
             </span>
           )}
@@ -166,7 +166,7 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
                         {isUnread && <span className="sr-only">Unread: </span>}{a.title}
                       </span>
                       {a.body && <span className="block font-dm text-xs text-stone-600 mt-0.5 leading-snug line-clamp-2">{a.body}</span>}
-                      <span className="block font-dm text-[11px] text-stone-600 mt-1">{timeAgo(a.createdAt)}</span>
+                      <span className="block font-dm text-[12px] text-stone-600 mt-1">{timeAgo(a.createdAt)}</span>
                     </span>
                   </button>
                 </li>

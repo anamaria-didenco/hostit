@@ -67,7 +67,7 @@ export function RepliedChip({ at, name }: { at: Date; name?: string }) {
   const label = `${name ? `${name} replied` : "Client replied"} ${timeAgo(at)} — awaiting your reply`;
   return (
     <span title={label}
-      className="font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded bg-sage-tint text-sage-dark whitespace-nowrap flex-shrink-0 inline-flex items-center gap-1">
+      className="font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded bg-sage-tint text-sage-dark whitespace-nowrap flex-shrink-0 inline-flex items-center gap-1">
       <CornerUpLeft className="w-3 h-3" aria-hidden="true" />
       REPLIED<span className="sr-only"> — awaiting your reply</span>
     </span>
@@ -110,7 +110,7 @@ function MessageCard({ msg, clientFirstName, onReply }: {
             {inbound ? `${who.toUpperCase()} REPLIED` : "YOU EMAILED"} · <time dateTime={new Date(msg.receivedAt).toISOString()} title={exact} className="normal-case">{when}</time>
           </span>
           {inbound && msg.fromEmail && (
-            <span className="font-dm text-[11px] text-stone-600 truncate max-w-full">{msg.fromEmail}</span>
+            <span className="font-dm text-[12px] text-stone-600 truncate max-w-full">{msg.fromEmail}</span>
           )}
         </div>
         {msg.subject && <div className="font-dm text-sm font-semibold text-ink mt-1 break-words">{msg.subject}</div>}
@@ -119,7 +119,7 @@ function MessageCard({ msg, clientFirstName, onReply }: {
           <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Attachments">
             {files.map((f, i) => (
               <li key={i} title="Attachment names only — open the email in your inbox to download"
-                className="inline-flex items-center gap-1 font-dm text-[11px] text-stone-700 bg-linen border border-stone-200 rounded px-1.5 py-0.5 max-w-full">
+                className="inline-flex items-center gap-1 font-dm text-[12px] text-stone-700 bg-linen border border-stone-200 rounded px-1.5 py-0.5 max-w-full">
                 <Paperclip className="w-3 h-3 flex-shrink-0" aria-hidden="true" /><span className="truncate">{f}</span>
               </li>
             ))}
@@ -186,7 +186,7 @@ export default function LeadConversation({ leadId, clientFirstName, onReply, cla
             AWAITING YOUR REPLY
           </span>
         ) : last ? (
-          <span className="font-dm text-[11px] text-stone-600">Waiting on {first || "the client"}</span>
+          <span className="font-dm text-[12px] text-stone-600">Waiting on {first || "the client"}</span>
         ) : null}
       </div>
       {isLoading ? (

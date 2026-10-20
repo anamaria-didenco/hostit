@@ -23,17 +23,17 @@ export function LeadRowBadges({ lead, teamById }: { lead: any; teamById?: Map<nu
     <span className="inline-flex items-center gap-1 flex-wrap">
       {owner && (
         <span title={`Owner: ${owner.name}`} aria-label={`Owner: ${owner.name}`}
-          className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1 rounded-full bg-stone-200 text-stone-800 font-sans text-[11px] font-bold">
+          className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1 rounded-full bg-stone-200 text-stone-800 font-sans text-[12px] font-bold">
           {initialsOf(owner.name)}
         </span>
       )}
       {labels.returning && (
-        <span title={labels.returning} className="font-sans text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+        <span title={labels.returning} className="font-sans text-[12px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
           Returning{lead.clientFlag.pastEvents > 0 ? ` · ${lead.clientFlag.pastEvents}` : ""}
         </span>
       )}
       {labels.duplicate && (
-        <span title="Another open enquiry from this client in the last 60 days" className="font-sans text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap">
+        <span title="Another open enquiry from this client in the last 60 days" className="font-sans text-[12px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap">
           Possible duplicate
         </span>
       )}

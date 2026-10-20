@@ -9,6 +9,7 @@
 import { leadNeedsReply, leadReplyWaitMs, type LeadNeedsReplyInput } from "./needsReply";
 import {
   leadFollowUpState,
+  leadDatePassed,
   leadLastActivityMs,
   CLOSED_LEAD_STATUSES,
   type LeadFollowUpInput,
@@ -127,6 +128,10 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     };
   }
 
+  // ── Event date has passed: nothing left to chase, offer to close it ──────
+  if (leadDatePassed(lead, now)) {
+    return { group: "progress", tone: "gray", icon: "calendar-clock", text: "Date passed", sortKey: 0 };
+  }
   // ── Follow-up due (overdue after a quote, or gone quiet) ─────────────────
   const fu = leadFollowUpState(lead, now);
   if (fu.needs) {
@@ -189,7 +194,9 @@ export function enquiryAction(group: EnquiryGroup): EnquiryAction {
     case "reply":
       return { label: "Reply", icon: "corner-up-left", primary: true, reply: true };
     case "followup":
-      return { label: "Nudge", icon: "send", primary: true, reply: true };
+      // A quiet button: a list of follow-ups is a dozen rows deep, and a dozen
+      // identical filled buttons drown out the one "Reply" that is urgent.
+      return { label: "Nudge", icon: "send", primary: false, reply: true };
     default:
       return { label: "Open", icon: "arrow-right", primary: false, reply: false };
   }

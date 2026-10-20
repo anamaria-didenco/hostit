@@ -449,7 +449,7 @@ export async function restoreCancelledBooking(id: number, ownerId: number, statu
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
-  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, needsFollowUp: 0, upcomingEvents: 0, overdueTasks: 0, depositsDue: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
+  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, bookingsMissingTotal: 0, overdueFollowUps: 0, needsFollowUp: 0, upcomingEvents: 0, overdueTasks: 0, depositsDue: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
   const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
   const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')));
   // The pipeline's "won" statuses. 'booked' was renamed to 'confirmed' app-wide
@@ -463,10 +463,12 @@ export async function getDashboardStats(ownerId: number) {
   // NEW / OPEN / FOLLOW-UP are defined once in shared/needsToday.ts.
   const newLeads = allLeads.filter(l => !CLOSED.includes(l.status ?? '')).length;
   const now = new Date();
+  const { leadDatePassed } = await import('../shared/followUp');
   const overdueFollowUps = allLeads.filter(l =>
     l.followUpDate &&
     new Date(l.followUpDate) <= now &&
-    !CLOSED.includes(l.status ?? '')
+    !CLOSED.includes(l.status ?? '') &&
+    !leadDatePassed(l, now.getTime())
   ).length;
   // Broader "needs a follow-up" count: overdue follow-ups PLUS active leads that
   // have gone idle in their status (shared rule, so the list and this agree).
@@ -475,7 +477,14 @@ export async function getDashboardStats(ownerId: number) {
   const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ownerId));
   const proposalsSent = allProposals.filter(p => ['sent', 'viewed', 'accepted'].includes(p.status)).length;
   const monthBookings = await getBookingsByMonth(ownerId, now.getFullYear(), now.getMonth() + 1);
-  const revenueThisMonth = monthBookings.reduce((sum, b) => sum + Number(b.totalNzd ?? 0), 0);
+  // Revenue only counts bookings that are going ahead, and only what has a
+  // total. Bookings without a total are counted separately so the Overview can
+  // say "3 bookings have no total" instead of quietly showing $0.
+  const { isImportedBooking } = await import('../shared/conversion');
+  const monthLive = monthBookings.filter(b => b.status !== 'cancelled');
+  const revenueThisMonth = monthLive.reduce((sum, b) => sum + Number(b.totalNzd ?? 0), 0);
+  // NowBookIt table reservations never carry a total — they aren't events to price.
+  const bookingsMissingTotal = monthLive.filter(b => !isImportedBooking(b) && !(Number(b.totalNzd ?? 0) > 0)).length;
   // Upcoming events (next 30 days) — bookings table + booked leads
   const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const allBookings = await db.select().from(bookingsTable).where(eq(bookingsTable.ownerId, ownerId));
@@ -520,8 +529,9 @@ export async function getDashboardStats(ownerId: number) {
     newLeads,
     totalLeads: allLeads.length,
     proposalsSent,
-    bookingsThisMonth: monthBookings.length,
+    bookingsThisMonth: monthLive.length,
     revenueThisMonth,
+    bookingsMissingTotal,
     overdueFollowUps,
     needsFollowUp,
     upcomingEvents,

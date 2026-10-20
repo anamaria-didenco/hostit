@@ -8,10 +8,10 @@
  */
 import { and, desc, eq, inArray, isNull, isNotNull, gte, lte, ne, or } from "drizzle-orm";
 import { getDb } from "./db";
-import { bookings, leads, runsheets, tasks, venueNotifications, venueSettings, proposals } from "../drizzle/schema";
+import { bookings, leads, runsheets, tasks, venueNotifications, venueSettings, proposals, xeroInvoices } from "../drizzle/schema";
 import { zonedYmd, zonedMidnight } from "./availability";
 import { eventDayKey, startTimeOf, DEFAULT_VENUE_TZ } from "@shared/eventDate";
-import { CLOSED_LEAD_STATUSES } from "@shared/followUp";
+import { CLOSED_LEAD_STATUSES, leadDatePassed } from "@shared/followUp";
 import { DEFAULT_BUSINESS_HOURS } from "@shared/businessHours";
 import { isAwaitingFirstReply, replyDueAt, DEFAULT_REPLY_OVERDUE_HOURS } from "./speedToLead";
 import { doubledProposal } from "./proposalDoubleCheck";
@@ -155,6 +155,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     id: leads.id, firstName: leads.firstName, lastName: leads.lastName, status: leads.status, source: leads.source,
     internalNotes: leads.internalNotes, createdAt: leads.createdAt, firstResponseAt: leads.firstResponseAt,
     respondedAt: leads.respondedAt, followUpDate: leads.followUpDate, eventType: leads.eventType,
+    eventDate: leads.eventDate,
   }).from(leads).where(and(
     eq(leads.ownerId, ownerId), ne(leads.source, "healthcheck"),
     or(eq(leads.status, "new"), isNotNull(leads.followUpDate)),
@@ -175,7 +176,9 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
   }
   const followUps: EnquiryItem[] = candidates
     .filter(l => !awaitingIds.has(l.id) && l.followUpDate != null && !CLOSED_LEAD_STATUSES.includes(l.status ?? "")
-      && l.followUpDate.getTime() < endOfToday.getTime())
+      && l.followUpDate.getTime() < endOfToday.getTime()
+      // Same rule as the follow-up list: nothing to chase once the date has gone.
+      && !leadDatePassed(l, nowMs))
     .sort((a, b) => a.followUpDate!.getTime() - b.followUpDate!.getTime())
     .map(l => ({
       leadId: l.id, name: fullName(l), eventType: l.eventType ?? null, reason: "follow_up" as const,
@@ -315,7 +318,12 @@ export async function countDepositsDue(ownerId: number, now: Date = new Date()):
   const { tz } = await venueTz(ownerId);
   const todayKey = zonedYmd(now, tz);
   const from = new Date(zonedMidnight(todayKey, tz).getTime() - DAY_MS);
-  const rows = await db.select({ b: bookings.eventDate, status: bookings.status, depositRequired: bookings.depositRequired, depositPaid: bookings.depositPaid })
+  const rows = await db.select({ id: bookings.id, b: bookings.eventDate, status: bookings.status, depositRequired: bookings.depositRequired, depositPaid: bookings.depositPaid })
     .from(bookings).where(and(eq(bookings.ownerId, ownerId), eq(bookings.status, "confirmed"), gte(bookings.eventDate, from)));
-  return rows.filter(r => isDepositDue(r) && daysBetweenYmd(todayKey, eventDayKey(r.b, tz)) >= 0).length;
+  // Same rule as the Payments board: a deposit invoice PAID in Xero is a paid
+  // deposit, even before the payment itself has been imported.
+  const paidInXero = new Set((await db.select({ bookingId: xeroInvoices.bookingId })
+    .from(xeroInvoices).where(and(eq(xeroInvoices.ownerId, ownerId), eq(xeroInvoices.stream, "deposit"), eq(xeroInvoices.status, "PAID"))))
+    .map(r => r.bookingId));
+  return rows.filter(r => isDepositDue(r) && !paidInXero.has(r.id) && daysBetweenYmd(todayKey, eventDayKey(r.b, tz)) >= 0).length;
 }

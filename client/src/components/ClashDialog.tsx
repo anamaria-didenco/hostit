@@ -63,8 +63,8 @@ const KIND_LABEL: Record<ClientClash["kind"], string> = { booked: "Booked", hold
 
 export function ClashKindTag({ kind }: { kind: ClientClash["kind"] }) {
   return kind === "hold"
-    ? <span className="vf-hold-chip font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm flex-shrink-0">HOLD</span>
-    : <span className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm flex-shrink-0 ${kind === "booked" ? "bg-red-50 text-red-800 border border-red-200" : "bg-amber-50 text-amber-900 border border-amber-200"}`}>{KIND_LABEL[kind].toUpperCase()}</span>;
+    ? <span className="vf-hold-chip font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm flex-shrink-0">HOLD</span>
+    : <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm flex-shrink-0 ${kind === "booked" ? "bg-red-50 text-red-800 border border-red-200" : "bg-amber-50 text-amber-900 border border-amber-200"}`}>{KIND_LABEL[kind].toUpperCase()}</span>;
 }
 
 export function ClashDialogHost() {

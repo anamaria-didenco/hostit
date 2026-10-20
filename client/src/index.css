@@ -465,6 +465,57 @@
     background-color: #faf3e4;                    /* warm amber wash */
   }
 
+  /* ── Page shell: one toolbar button set and one tab style ──────────────────
+     Used by every staff page (Overview, Enquiries, Calendar, Payments, Tasks,
+     Reports) so the same action looks the same wherever it sits. Before this,
+     "Add enquiry" alone came in three shapes (square, rounded, tracked/untracked)
+     and tab strips switched between uppercase and sentence case page to page. */
+  .vf-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    height: 2.25rem;              /* 36px — comfortable on a tablet */
+    padding: 0 0.875rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-size: 0.75rem;           /* 12px tracked caps */
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  @media (max-width: 639px) { .vf-btn { padding: 0 0.625rem; letter-spacing: 0.1em; } }
+  .vf-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .vf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .vf-btn-primary { background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .vf-btn-primary:hover:not(:disabled) { background-color: #25426c; border-color: #25426c; }
+  .vf-btn-secondary { background-color: var(--card); color: var(--primary); border-color: var(--border); }
+  .vf-btn-secondary:hover:not(:disabled) { border-color: var(--primary); background-color: var(--accent); }
+  .vf-btn-secondary[aria-pressed="true"] { background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+
+  .vf-tab {
+    position: relative;
+    padding: 0.625rem 0.875rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    font-family: var(--font-body);
+    font-size: 0.875rem;          /* 14px sentence case */
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .vf-tab:hover { color: var(--foreground); }
+  .vf-tab[aria-selected="true"], .vf-tab[aria-pressed="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  .vf-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
   /* ── Primary button = deep blue ── */
   .btn-teal, .btn-forest {
     background-color: #2f5488;
@@ -617,7 +668,7 @@
   --sidebar-border:             rgba(255,255,255,0.12);
   --sidebar-ring:               #6b98e7;
 }
-.vf-blue-sidebar .nav-item { color: #bcc8db; }
+.vf-blue-sidebar .nav-item { color: #d6deea; }
 .vf-blue-sidebar .nav-item:hover { color: #ffffff; background-color: rgba(255,255,255,0.08); }
 .vf-blue-sidebar .nav-item.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
 

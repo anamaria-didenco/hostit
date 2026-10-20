@@ -1673,7 +1673,8 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) return [];
       const now = new Date();
-      return db.select().from(leads).where(
+      const { leadDatePassed } = await import('../shared/followUp');
+      const rows = await db.select().from(leads).where(
         and(
           eq(leads.ownerId, ctx.user.id),
           ne(leads.source, 'healthcheck'),
@@ -1683,6 +1684,8 @@ export const appRouter = router({
           notInArray(leads.status, ['booked', 'confirmed', 'finished', 'lost', 'cancelled']),
         )
       ).orderBy(leads.followUpDate);
+      // An enquiry whose event date has gone isn't overdue for a follow-up any more.
+      return rows.filter(l => !leadDatePassed(l, now.getTime()));
     }),
     // Active leads that need a follow-up — overdue follow-up date OR gone idle in
     // their status — each tagged with the reason, most urgent first. Powers the
@@ -5819,6 +5822,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // being invoiced in advance.
         const onNightRe = /(on the (night|day)|pay(?:ing)? on the|cash on|settle(?:d)? on|on arrival|on the door)/i;
 
+        const { streamStateFromXero, depositStateFromXero } = await import('../shared/xeroStreamState');
         return allBookings
           .filter(b => b.status !== 'cancelled')
           .map(b => {
@@ -5855,9 +5859,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             // before the push began setting it). Upgrade only — paid is never
             // downgraded and nothing is ever auto-marked paid from here.
             const liveInv = invByBooking.get(b.id) ?? [];
-            const hasLive = (stream: string) => liveInv.some((i: any) => i.stream === stream && i.status !== 'VOIDED');
-            if (hasLive('food') && (foodStatus === 'to_invoice' || foodStatus === 'on_night')) foodStatus = 'invoiced';
-            if (hasLive('drinks') && (drinksStatus === 'to_invoice' || drinksStatus === 'on_night')) drinksStatus = 'invoiced';
+            const liveFor = (stream: string) => liveInv.filter((i: any) => i.stream === stream && i.status !== 'VOIDED');
+            const hasLive = (stream: string) => liveFor(stream).length > 0;
+            // Xero first: drafts haven't reached the client, sent = invoiced,
+            // all PAID = paid (shared/xeroStreamState.ts). Display only.
+            const foodX = streamStateFromXero(liveInv, 'food', foodStatus);
+            const drinksX = streamStateFromXero(liveInv, 'drinks', drinksStatus);
+            foodStatus = foodX.status;
+            drinksStatus = drinksX.status;
+            const depositLive = liveFor('deposit');
+            const depX = depositStateFromXero(liveInv);
+            const depositXeroPaid = depX.paid;
+            const depositDraft = depX.draft;
             // Contra: given in kind, so there's nothing to invoice or collect.
             // Shown as settled unless an invoice really did go out.
             const foodContra = (b as any).billingFood === 'contra';
@@ -5877,9 +5890,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               hasPrice,
               paidToDate: net,
               outstanding: foodContra && outstanding != null ? 0 : outstanding,
-              depositNzd: depAmt,
-              depositPaid: Boolean(b.depositPaid),
-              depositRequired: (b as any).depositRequired !== false,
+              // A deposit invoice paid in Xero is a paid deposit, even when the
+              // payment itself couldn't be imported (e.g. a lapsed Xero permission).
+              depositNzd: depAmt > 0 ? depAmt : depositXeroPaid ? Number(depositLive.find((i: any) => i.status === 'PAID')?.total ?? 0) : depAmt,
+              depositPaid: Boolean(b.depositPaid) || depositXeroPaid,
+              depositPaidInXero: depositXeroPaid && !b.depositPaid,
+              depositDraft,
+              depositRequired: (b as any).depositRequired !== false || depositXeroPaid,
               depositRequestedAt: (b as any).depositRequestedAt ?? null,
               onNightSignal,
               stage,
@@ -5887,6 +5904,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               drinksStatus,
               foodContra,
               drinksContra,
+              foodDraft: foodX.draft,
+              drinksDraft: drinksX.draft,
+              foodPaidInXero: foodX.xeroPaid,
+              drinksPaidInXero: drinksX.xeroPaid,
               // true when drinks mode was inferred (not explicitly set) — the UI
               // can show it as a suggestion the team can confirm/override.
               drinksInferred: (b as any).drinksStatus == null && !hasLive('drinks'),
@@ -6397,12 +6418,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const g: any = globalThis as any;
         if (!g.__xeroSyncAt) g.__xeroSyncAt = new Map<number, number>();
         const last: number | undefined = g.__xeroSyncAt.get(ctx.user.id);
+        if (!g.__xeroSyncErr) g.__xeroSyncErr = new Map<number, string | null>();
         if (!input?.force && last && Date.now() - last < 60_000) {
-          return { skipped: true as const, statusChanges: 0, paymentsImported: 0 };
+          // Throttled: still report the last problem, so the board's warning
+          // doesn't vanish just because this call was skipped.
+          return { skipped: true as const, statusChanges: 0, paymentsImported: 0, lastError: g.__xeroSyncErr.get(ctx.user.id) ?? null };
         }
         g.__xeroSyncAt.set(ctx.user.id, Date.now());
         const { syncXeroInvoicesForOwner } = await import('./xeroSync');
-        return { skipped: false as const, ...(await syncXeroInvoicesForOwner(ctx.user.id)) };
+        try {
+          const res = await syncXeroInvoicesForOwner(ctx.user.id);
+          g.__xeroSyncErr.set(ctx.user.id, res.lastError ?? null);
+          return { skipped: false as const, ...res };
+        } catch (err: any) {
+          g.__xeroSyncErr.set(ctx.user.id, String(err?.message ?? err));
+          throw err;
+        }
       }),
     // Pull current statuses from Xero for a booking's invoices; when one is
     // PAID, tick the matching food/drinks stream on the Payments board too.

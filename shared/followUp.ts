@@ -22,6 +22,8 @@ export type FollowUpReason = "overdue" | "idle" | null;
 
 export type LeadFollowUpInput = {
   status?: string | null;
+  /** The event date. Once it has passed, chasing the enquiry is pointless. */
+  eventDate?: Date | string | number | null;
   followUpDate?: Date | string | number | null;
   lastActivityAt?: Date | string | number | null;
   // Fallbacks for rows read before lastActivityAt existed.
@@ -40,9 +42,22 @@ const toMs = (v: Date | string | number | null | undefined): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 
+/**
+ * An open enquiry whose event date is more than a day behind us. It can't be
+ * won any more, so it drops out of follow-ups (and gets offered for closing)
+ * instead of sitting in "Gone quiet" for months. The one-day margin means an
+ * event later today is never treated as passed, whatever the server's timezone.
+ */
+export function leadDatePassed(lead: LeadFollowUpInput, nowMs: number = Date.now()): boolean {
+  if (CLOSED_STATUSES.includes(lead.status ?? "")) return false;
+  const ev = toMs(lead.eventDate);
+  return ev != null && ev < nowMs - 86_400_000;
+}
+
 export function leadFollowUpState(lead: LeadFollowUpInput, nowMs: number = Date.now()): { needs: boolean; reason: FollowUpReason } {
   const status = lead.status ?? "";
   if (CLOSED_STATUSES.includes(status)) return { needs: false, reason: null };
+  if (leadDatePassed(lead, nowMs)) return { needs: false, reason: null };
   const fu = toMs(lead.followUpDate);
   if (fu != null) {
     // A set follow-up date is the explicit signal: due/past = needs it now,

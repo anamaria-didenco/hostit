@@ -136,21 +136,21 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
               profit figure earns colour, and only when it's actually positive.
               Red on "expenses" read as an error on every event that had costs. */}
           <div className="px-3 py-2 text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">REVENUE</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">REVENUE</div>
             <div className="font-cormorant text-base font-semibold text-ink">{money(revenueTotal)}</div>
-            <div className="font-dm text-[9px] text-ink/45">F&amp;B + cost lines + bar tab</div>
+            <div className="font-dm text-[12px] text-ink/45">F&amp;B + cost lines + bar tab</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">EXPENSES</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">EXPENSES</div>
             <div className="font-cormorant text-base font-semibold text-ink">{money(expensesTotal)}</div>
-            <div className="font-dm text-[9px] text-ink/45">your costs</div>
+            <div className="font-dm text-[12px] text-ink/45">your costs</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">PROFIT</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">PROFIT</div>
             <div className={`font-cormorant text-base font-semibold ${profit > 0 ? "text-emerald-700" : profit < 0 ? "text-[#b3261e]" : "text-ink"}`}>{money(profit)}</div>
             {/* Margin against zero expenses is just "100%" — noise until there
                 is something to measure the revenue against. */}
-            <div className="font-dm text-[9px] text-ink/45">
+            <div className="font-dm text-[12px] text-ink/45">
               {expensesTotal > 0 && revenueTotal > 0 ? `${margin.toFixed(0)}% margin` : "add an expense for margin"}
             </div>
           </div>
@@ -248,20 +248,20 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
                 <div className="flex-1 min-w-0">
                   <div className="font-dm text-xs text-ink truncate">{item.name}</div>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm ${CAT_COLOURS[item.category] ?? CAT_COLOURS.other}`}>
+                    <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm ${CAT_COLOURS[item.category] ?? CAT_COLOURS.other}`}>
                       {item.category}
                     </span>
-                    <span className={`font-bebas text-[10px] tracking-widest ${item.type === "income" ? "text-forest" : "text-rose-500"}`}>
+                    <span className={`font-bebas text-[11px] tracking-widest ${item.type === "income" ? "text-forest" : "text-rose-500"}`}>
                       {item.type === "income" ? "INCOME" : "EXPENSE"}
                     </span>
                   </div>
                 </div>
                 <div className="text-right min-w-[56px]">
-                  <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST</div>
+                  <div className="font-bebas text-[11px] tracking-widest text-ink/65">EST</div>
                   <div className="font-dm text-xs text-ink/60">{currencyWhole(item.estimatedAmount ?? 0)}</div>
                 </div>
                 <div className="text-right min-w-[64px]">
-                  <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL</div>
+                  <div className="font-bebas text-[11px] tracking-widest text-ink/65">ACTUAL</div>
                   {isEditing ? (
                     <input
                       type="number"
@@ -300,19 +300,19 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
       {items.length > 0 && !hasCharges && (
         <div className="bg-forest-dark/5 border border-gold/20 border-t-0 px-3 py-2 grid grid-cols-3 gap-2">
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST NET</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">EST NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalEst >= 0 ? "text-forest" : "text-rose-500"}`}>
               {currencyWhole(totalEst)}
             </div>
           </div>
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL NET</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">ACTUAL NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalActual >= 0 ? "text-forest" : "text-rose-500"}`}>
               {currencyWhole(totalActual)}
             </div>
           </div>
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/65">VARIANCE</div>
+            <div className="font-bebas text-[11px] tracking-widest text-ink/65">VARIANCE</div>
             <div className={`font-cormorant text-base font-semibold flex items-center justify-center gap-0.5 ${
               variance > 0 ? "text-forest" : variance < 0 ? "text-rose-500" : "text-ink/70"
             }`}>

@@ -2,6 +2,7 @@ import React from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useActivityText } from "@/lib/activityText";
 
 /**
  * A note box for the top of an enquiry's drawer / phone panel: type, Add, and
@@ -27,6 +28,8 @@ export default function QuickNote({ leadId, className = "" }: { leadId: number; 
   const utils = trpc.useUtils();
   const [text, setText] = React.useState("");
   const [showAll, setShowAll] = React.useState(false);
+  // "Status changed to proposal_sent" → "Status changed to Proposal Sent".
+  const activityText = useActivityText();
   const { data: activity } = trpc.leads.getActivity.useQuery({ leadId }, { enabled: leadId > 0 });
   const add = trpc.leads.addNote.useMutation({
     onSuccess: () => {
@@ -78,8 +81,8 @@ export default function QuickNote({ leadId, className = "" }: { leadId: number; 
               <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" aria-hidden />
               <span className="min-w-0">
                 <span className="font-bebas tracking-widest text-ink/70">{labelFor(r.type)} · </span>
-                <span className="text-ink break-words">{r.content}</span>
-                <span className="block text-ink/65 text-[11px]">{fmtWhen(r.createdAt)}</span>
+                <span className="text-ink break-words">{activityText(r.content)}</span>
+                <span className="block text-ink/65 text-[12px]">{fmtWhen(r.createdAt)}</span>
               </span>
             </li>
           ))}

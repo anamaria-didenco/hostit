@@ -62,7 +62,7 @@ export default function XeroSettingsCard() {
             <div className="font-cormorant font-semibold text-base text-ink flex items-center gap-2">
               Xero
               {status?.connected && (
-                <span className="inline-flex items-center gap-1 font-bebas tracking-widest text-[10px] text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 font-bebas tracking-widest text-[11px] text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                   <CheckCircle2 className="w-3 h-3" /> CONNECTED
                 </span>
               )}
@@ -113,7 +113,7 @@ export default function XeroSettingsCard() {
           invoice the wrong company. */}
       {(status?.needsOrgChoice || (status?.organisations?.length ?? 0) > 1) && (
         <div className="mt-4 pt-4 border-t border-gold/15">
-          <div className="font-bebas tracking-widest text-[10px] text-ink/70 mb-1.5">
+          <div className="font-bebas tracking-widest text-[11px] text-ink/70 mb-1.5">
             {status?.needsOrgChoice ? "CHOOSE THE ORGANISATION TO INVOICE" : "ORGANISATION"}
           </div>
           {status?.needsOrgChoice && (
@@ -133,7 +133,7 @@ export default function XeroSettingsCard() {
             ))}
           </div>
           {(status?.organisations?.length ?? 0) > 1 && (
-            <p className="font-dm text-[11px] text-ink/60 mt-2">
+            <p className="font-dm text-[12px] text-ink/60 mt-2">
               Tip: once testing is done, remove VenueFlowHQ from the organisations you don't invoice
               (Xero → Settings → Connected apps) so there's no ambiguity.
             </p>
@@ -150,7 +150,7 @@ export default function XeroSettingsCard() {
       {status?.connected && (
         <div className="mt-4 pt-4 border-t border-gold/15 flex items-end gap-4 flex-wrap">
           <div>
-            <label htmlFor="xero-account-code" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">SALES ACCOUNT CODE</label>
+            <label htmlFor="xero-account-code" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SALES ACCOUNT CODE</label>
             {accounts && accounts.length > 0 ? (
               <select id="xero-account-code" value={accountCode}
                 onChange={e => setAccountCode(e.target.value)}

@@ -64,7 +64,7 @@ export function ThemeSwitcher() {
                     />
                   ))}
                 </div>
-                <span className="text-[10px] font-medium text-foreground leading-tight text-center">
+                <span className="text-[12px] font-medium text-foreground leading-tight text-center">
                   {t.label}
                 </span>
                 {colourTheme === t.id && (
@@ -113,7 +113,7 @@ export function ThemeSwitcher() {
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border bg-muted/30">
-          <p className="text-[10px] text-muted-foreground text-center">
+          <p className="text-[12px] text-muted-foreground text-center">
             Theme is saved automatically to your browser
           </p>
         </div>

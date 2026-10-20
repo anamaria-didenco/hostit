@@ -18,6 +18,11 @@ export interface XeroSyncResult {
   statusChanges: number;
   paymentsImported: number;
   amountImported: number;
+  /** Payment lookups Xero refused or failed this run. They used to be skipped
+   *  silently, so a lapsed Xero permission left paid deposits showing "due". */
+  paymentLookupFailures?: number;
+  /** The last error Xero gave, for the Payments board to show. */
+  lastError?: string | null;
 }
 
 /** Sync tracked invoices for an owner — all of them, or one booking's. */
@@ -38,6 +43,8 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
   const statuses = await getXeroInvoiceStatuses(ownerId, ids);
 
   let statusChanges = 0, paymentsImported = 0, amountImported = 0;
+  let paymentLookupFailures = 0;
+  let lastError: string | null = null;
   // Cap the per-run detail fetches so a large backlog can't blow the rate limit
   // in one go; the next run picks up the remainder. Status-recovery lookups and
   // payment-import fetches get SEPARATE budgets so a backlog of invoices Xero
@@ -149,6 +156,8 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
       xeroPayments = await getXeroInvoicePayments(ownerId, r.xeroInvoiceId);
     } catch (err: any) {
       console.warn(`[XeroSync] payments lookup failed for ${r.invoiceNumber ?? r.xeroInvoiceId}:`, err?.message ?? err);
+      paymentLookupFailures++;
+      lastError = String(err?.message ?? err);
       continue;
     }
     if (xeroPayments.length === 0) continue;
@@ -206,7 +215,7 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
   if (paymentsImported > 0) {
     console.log(`[XeroSync] owner ${ownerId}: imported ${paymentsImported} payment(s), $${amountImported.toFixed(2)}`);
   }
-  return { statusChanges, paymentsImported, amountImported };
+  return { statusChanges, paymentsImported, amountImported, paymentLookupFailures, lastError };
 }
 
 /**

@@ -33,7 +33,7 @@ const DEPOSIT_REASON: Record<string, string> = {
   send_failed: "The email didn't send. Please try again.",
 };
 
-export default function EventNextSteps({ bookingId, leadId, leadStatus, onOpenRunsheet, onOpenSettings, className = "" }: {
+export default function EventNextSteps({ bookingId, leadId, leadStatus, onOpenRunsheet, onOpenSettings, onSetDeposit, className = "" }: {
   /** The event, when the drawer is showing a booking. */
   bookingId?: number | null;
   /** The enquiry, when the drawer is still showing the (just confirmed) enquiry. */
@@ -42,6 +42,9 @@ export default function EventNextSteps({ bookingId, leadId, leadStatus, onOpenRu
   /** Open the run sheet builder for this event (the host closes its panel). */
   onOpenRunsheet: (bookingId: number) => void;
   onOpenSettings?: () => void;
+  /** Open the event's Financials so a deposit amount can be set. Without it the
+   *  "no deposit amount" step is a dead end (a disabled button and no way on). */
+  onSetDeposit?: () => void;
   className?: string;
 }) {
   const { isStaff } = useAuth();
@@ -165,10 +168,15 @@ export default function EventNextSteps({ bookingId, leadId, leadStatus, onOpenRu
                   className="mt-1 font-dm text-xs font-semibold text-forest underline underline-offset-2 hover:no-underline">Open email settings</button>
               )}
             </div>
-            <button type="button" className={BTN} disabled={!!depositBlock || requestDeposit.isPending}
-              onClick={() => requestDeposit.mutate({ bookingId: id })}>
-              {requestDeposit.isPending ? "SENDING…" : requestedOn ? "SEND AGAIN" : "REQUEST DEPOSIT"}
-            </button>
+            {depositBlock === DEPOSIT_REASON.no_deposit_set && onSetDeposit ? (
+              // The fix is one tap away: open Financials rather than show a dead, greyed-out button.
+              <button type="button" className={BTN} onClick={onSetDeposit}>SET DEPOSIT</button>
+            ) : (
+              <button type="button" className={BTN} disabled={!!depositBlock || requestDeposit.isPending}
+                onClick={() => requestDeposit.mutate({ bookingId: id })}>
+                {requestDeposit.isPending ? "SENDING…" : requestedOn ? "SEND AGAIN" : "REQUEST DEPOSIT"}
+              </button>
+            )}
           </li>
         )}
         {noRunsheet && (

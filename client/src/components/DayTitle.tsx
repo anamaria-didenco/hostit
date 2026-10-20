@@ -23,7 +23,7 @@ export function useDayTitles(around: Date, enabled = true): Map<string, string> 
 /** The title under a date. Click it to edit (unless read-only). */
 export function DayTitleText({ title, onEdit, className = "" }: { title?: string; onEdit?: () => void; className?: string }) {
   if (!title) return null;
-  const cls = `block w-full text-left font-dm text-[10px] sm:text-[11px] font-semibold italic leading-tight text-[#7a5a12] break-words ${className}`;
+  const cls = `block w-full text-left font-dm text-[12px] font-semibold italic leading-tight text-[#7a5a12] break-words ${className}`;
   return onEdit ? (
     <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} className={`${cls} hover:underline`} title="Edit the title for this day">
       {title}

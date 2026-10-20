@@ -88,7 +88,7 @@ describe("enquirySignal", () => {
 describe("enquiryAction", () => {
   it("reply → Reply (inline), followup → Nudge (inline), else Open", () => {
     expect(enquiryAction("reply")).toMatchObject({ label: "Reply", reply: true, primary: true });
-    expect(enquiryAction("followup")).toMatchObject({ label: "Nudge", reply: true, primary: true });
+    expect(enquiryAction("followup")).toMatchObject({ label: "Nudge", reply: true, primary: false });
     expect(enquiryAction("confirmed")).toMatchObject({ label: "Open", reply: false, primary: false });
     expect(enquiryAction("progress")).toMatchObject({ label: "Open", reply: false });
   });

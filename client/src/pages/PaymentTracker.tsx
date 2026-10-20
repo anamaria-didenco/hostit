@@ -60,6 +60,9 @@ export default function PaymentTracker() {
   const [amountError, setAmountError] = useState<string | null>(null);
   const amountRef = useRef<HTMLInputElement>(null);
   const prefilled = useRef(false);
+  // Notes of payments recorded in this visit (the list refetch can lag the
+  // prefill), so a just-paid invoice isn't suggested again.
+  const recordedThisVisit = useRef("");
 
   const utils = trpc.useUtils();
   const { data: booking } = trpc.bookings.getById.useQuery(
@@ -71,6 +74,12 @@ export default function PaymentTracker() {
     { enabled: !!bookingId }
   );
   const { data: summary, refetch: refetchSummary } = trpc.payments.summary.useQuery(
+    { bookingId: bookingId! },
+    { enabled: !!bookingId }
+  );
+  // The booking's Xero invoices (shared cache with the list further down):
+  // what's actually been billed is the best guess at what's being paid.
+  const { data: xeroInvoices, isFetched: invoicesFetched } = trpc.xero.invoicesForBooking.useQuery(
     { bookingId: bookingId! },
     { enabled: !!bookingId }
   );
@@ -86,21 +95,55 @@ export default function PaymentTracker() {
   // otherwise the outstanding balance as the final payment. Used to always
   // open on a blank "Deposit" — even after the deposit was paid, and a
   // payment saved as Deposit counts toward the deposit.
+  //
+  // Without a deposit amount or a total, the unpaid invoice that went out to
+  // the client is the best guess: amount, type and its number filled in (it
+  // used to open blank on "Deposit" while Food INV-0351 was what was owed).
   useEffect(() => {
-    if (prefilled.current || !booking || !summary) return;
+    // Wait for the invoices too (fetched, even if that failed — then they're skipped).
+    if (prefilled.current || !booking || !summary || !invoicesFetched) return;
     prefilled.current = true;
     const b: any = booking;
     const dep = Number(b.depositNzd ?? 0);
     const depositDue = b.depositRequired !== false && !b.depositPaid;
     const outstanding = Number(summary.outstanding ?? 0);
     const hasTotal = Number(summary.total ?? 0) > 0;
-    setNewPayment(p => depositDue
-      ? { ...p, type: "deposit", amount: dep > 0 ? String(dep) : "" }
-      : { ...p, type: hasTotal && outstanding > 0 ? "final" : "partial", amount: hasTotal && outstanding > 0 ? String(outstanding) : "" });
-  }, [booking, summary]);
+    // Sent (not draft, not paid, not voided) invoices, deposit first, then oldest.
+    const order: Record<string, number> = { deposit: 0, food: 1, drinks: 2 };
+    const unpaid = ((xeroInvoices ?? []) as any[])
+      .filter(i => ["AUTHORISED", "SUBMITTED"].includes(String(i.status ?? "")) && Number(i.total ?? 0) > 0)
+      .sort((x, y) => (order[x.stream] ?? 9) - (order[y.stream] ?? 9) || new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime());
+    // Skip an invoice already recorded here (its number is in a payment's
+    // notes) — Xero still says AUTHORISED until the next sync.
+    const recordedNotes = ((payments ?? []) as any[]).map(pm => String(pm.notes ?? "")).join(" ") + " " + recordedThisVisit.current;
+    const inv = unpaid.find(i => (i.stream === "deposit" ? depositDue : true)
+      && !(i.invoiceNumber && recordedNotes.includes(String(i.invoiceNumber))));
+    // With a total set, never suggest more than what's still outstanding.
+    const useInv = inv && (!hasTotal || outstanding > 0);
+    setNewPayment(p => {
+      if (p.amount) return p; // never overwrite what someone has started typing
+      if (depositDue && dep > 0) return { ...p, type: "deposit", amount: String(dep) };
+      if (inv && useInv) {
+        const amt = hasTotal ? Math.min(Number(inv.total), outstanding) : Number(inv.total);
+        const type = inv.stream === "deposit" ? "deposit" : hasTotal && outstanding > 0 && amt >= outstanding ? "final" : "partial";
+        const label = inv.stream === "deposit" ? "Deposit" : inv.stream === "food" ? "Food" : "Drinks";
+        return { ...p, type, amount: String(amt), notes: `${inv.invoiceNumber ?? "Xero invoice"} (${label})` };
+      }
+      return depositDue
+        ? { ...p, type: "deposit", amount: "" }
+        : { ...p, type: hasTotal && outstanding > 0 ? "final" : "partial", amount: hasTotal && outstanding > 0 ? String(outstanding) : "" };
+    });
+  }, [booking, summary, xeroInvoices, invoicesFetched, payments]);
+
+  // With no total set, what's been invoiced is the next best figure to show.
+  const invoicedSoFar = ((xeroInvoices ?? []) as any[])
+    // Sent invoices only: drafts and ones awaiting approval haven't been billed.
+    .filter(i => ["AUTHORISED", "PAID"].includes(String(i.status ?? "")))
+    .reduce((sum, i) => sum + Number(i.total ?? 0), 0);
 
   const addMutation = trpc.payments.add.useMutation({
-    onSuccess: async (r: any) => {
+    onSuccess: async (r: any, vars: any) => {
+      recordedThisVisit.current += ` ${String(vars?.notes ?? "")}`;
       toast.success(r?.fullyPaid ? "Payment recorded — this booking is now paid in full" : "Payment recorded");
       setNewPayment(blankPayment());
       setAmountError(null);
@@ -183,7 +226,8 @@ export default function PaymentTracker() {
       {/* Header. text-cream/NN opacity classes don't compile in this theme —
           they fell back to dark ink on this dark bar, so the back button and
           the client name were invisible. Use text-cream + opacity-* instead. */}
-      <div className="bg-ink border-b border-amber/20 px-4 md:px-6 py-3 flex items-center justify-between">
+      {/* Brand blue, like the app's sidebar, so this reads as part of VenueFlow. */}
+      <div className="bg-forest border-b border-black/10 px-4 md:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <button
             onClick={() => navigate(backTarget)}
@@ -197,7 +241,7 @@ export default function PaymentTracker() {
           </button>
           <div className="w-px h-4 bg-cream opacity-25 flex-shrink-0" aria-hidden="true" />
           <h1 className="min-w-0 flex items-baseline gap-2">
-            <span className="font-bebas tracking-widest text-gold-bright text-sm flex-shrink-0">PAYMENTS</span>
+            <span className="font-bebas tracking-widest text-cream opacity-85 text-sm flex-shrink-0">PAYMENTS</span>
             {booking && (
               <span className="font-dm text-sm text-cream truncate">
                 {booking.firstName} {booking.lastName}
@@ -236,6 +280,9 @@ export default function PaymentTracker() {
                 {hasTotal
                   ? <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(summary.total ?? 0)}</div>
                   : <NoTotalSet className="font-dm text-sm italic text-ink/55 py-1.5" />}
+                {!hasTotal && invoicedSoFar > 0 && (
+                  <div className="font-dm text-xs text-ink/70 mt-1">Invoiced in Xero so far: {fmtNZD(invoicedSoFar)}</div>
+                )}
               </div>
               <div className="text-center p-4 bg-green-50">
                 <div className="font-bebas tracking-widest text-xs text-green-700 mb-1">TOTAL PAID</div>

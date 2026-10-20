@@ -149,11 +149,11 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
             </div>
             <div className="grid grid-cols-2 border border-gold/30 divide-x divide-gold/20 text-center">
               <div className="p-3 bg-green-50/60">
-                <div className="font-bebas tracking-widest text-[10px] text-green-700">PAID SO FAR</div>
+                <div className="font-bebas tracking-widest text-[11px] text-green-700">PAID SO FAR</div>
                 <div className="font-cormorant text-xl font-semibold text-green-700 [font-variant-numeric:tabular-nums_lining-nums]">{currency(result.totalPaid)}</div>
               </div>
               <div className={`p-3 ${result.hasTotal && result.outstanding > 0 ? "bg-red-50/60" : "bg-green-50/60"}`}>
-                <div className={`font-bebas tracking-widest text-[10px] ${result.hasTotal && result.outstanding > 0 ? "text-red-600" : "text-green-700"}`}>OUTSTANDING</div>
+                <div className={`font-bebas tracking-widest text-[11px] ${result.hasTotal && result.outstanding > 0 ? "text-red-600" : "text-green-700"}`}>OUTSTANDING</div>
                 {result.hasTotal
                   ? <div className={`font-cormorant text-xl font-semibold [font-variant-numeric:tabular-nums_lining-nums] ${result.outstanding > 0 ? "text-red-600" : "text-green-700"}`}>{currency(result.outstanding)}</div>
                   : <div className="font-dm text-xs italic text-ink/65 py-1.5">No total set yet</div>}

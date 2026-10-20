@@ -67,6 +67,9 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // Anything the operator typed that would be lost by closing. A stray click on
   // the backdrop (or Escape) used to throw it all away without a word.
   const [dirty, setDirty] = useState(false);
+  // A second live invoice for the same stream is almost always a mistake
+  // (double-billing). Sending one needs an explicit tick.
+  const [allowAnother, setAllowAnother] = useState(false);
 
   const { data: existing } = trpc.xero.invoicesForBooking.useQuery(
     { bookingId: booking?.bookingId ?? 0 },
@@ -351,7 +354,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     return { subtotal: r2(sum), gst: g, total: r2(sum + g) };
   }, [lines, inclusive]);
 
+  // (Hook before the early return below — hooks must run on every render.)
+  useEffect(() => { setAllowAnother(false); }, [stream, open]);
+
   if (!open || !booking) return null;
+
+  const liveSameStream = ((existing ?? []) as any[]).filter(inv => inv.stream === stream && !isGone(inv.status));
+  const duplicateRisk = editingId === null && replacing === null && liveSameStream.length > 0;
 
   const send = () => {
     const parsed = lines
@@ -376,6 +385,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       inclusive,
       updateInvoiceId: editingId ?? undefined,
       replaceInvoiceId: replacing?.id,
+      // Ticking "send a second invoice anyway" already confirmed the duplicate.
+      allowDuplicate: duplicateRisk && allowAnother ? true : undefined,
     };
     lastSendRef.current = payload;
     // The server builds the Xero contact from the BOOKING, so an edited name
@@ -431,7 +442,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           <div className="border border-gold/20 bg-linen/50 p-3 space-y-2">
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <span className="font-bebas tracking-widest text-[11px] text-ink/70">INVOICE TO</span>
-              <span className="font-dm text-[11px] text-ink/45">Changes save to the event</span>
+              <span className="font-dm text-[12px] text-ink/45">Changes save to the event</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="min-w-0">
@@ -447,7 +458,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   className="w-full border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
               </div>
             </div>
-            <p className="font-dm text-[11px] text-ink/50">
+            <p className="font-dm text-[12px] text-ink/50">
               Xero files the invoice under this contact. It emails nothing until you approve the draft there.
             </p>
           </div>
@@ -543,10 +554,34 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                       className="font-bebas tracking-widest text-[11px] text-amber-800 hover:underline disabled:opacity-50"
                       title="Approved in Xero: send a corrected draft and void this one (only if nothing has been paid)">REPLACE</button>
                   ) : (
-                    <span className="font-dm text-[11px] text-ink/50" title="Paid in Xero — credit or refund it there">locked</span>
+                    <span className="font-dm text-[12px] text-ink/50" title="Paid in Xero — credit or refund it there">locked</span>
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Same stream already billed: point at the existing invoice instead
+              of quietly creating a second one. */}
+          {duplicateRisk && (
+            <div role="alert" className="border border-amber-300 bg-amber-50 p-3 rounded-sm">
+              <p className="font-dm text-sm text-amber-950">
+                {stream === "food" ? "Food" : stream === "drinks" ? "Drinks" : "The deposit"} already {liveSameStream.length === 1 ? "has an invoice" : `has ${liveSameStream.length} invoices`} in Xero
+                ({liveSameStream.map((i: any) => `${i.invoiceNumber ?? "no number yet"} · ${(i.status ?? "DRAFT").toLowerCase()}`).join(", ")}).
+                Sending this would bill the client twice.
+              </p>
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                {liveSameStream.filter((i: any) => !i.status || i.status === "DRAFT" || i.status === "SUBMITTED").slice(0, 1).map((i: any) => (
+                  <button key={i.id} onClick={() => startEdit(i)} disabled={loadingDraft}
+                    className="font-bebas tracking-widest text-xs px-3 py-1.5 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
+                    EDIT {i.invoiceNumber ?? "THE DRAFT"} INSTEAD
+                  </button>
+                ))}
+                <label className="flex items-center gap-2 font-dm text-xs text-amber-950 cursor-pointer">
+                  <input type="checkbox" checked={allowAnother} onChange={e => setAllowAnother(e.target.checked)} className="w-4 h-4" />
+                  Send a separate, second invoice anyway
+                </label>
+              </div>
             </div>
           )}
 
@@ -558,21 +593,21 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   BEO and one typed by hand look identical otherwise, and the
                   operator needs to know which they are checking. */}
               {loadingDraft ? (
-                <span className="font-dm text-[11px] text-ink/60" role="status">Loading this draft from Xero…</span>
+                <span className="font-dm text-[12px] text-ink/60" role="status">Loading this draft from Xero…</span>
               ) : replacing ? (
-                <span className="font-dm text-[11px] text-ink/60">The old invoice&rsquo;s lines, read from Xero — correct them, then send</span>
+                <span className="font-dm text-[12px] text-ink/60">The old invoice&rsquo;s lines, read from Xero — correct them, then send</span>
               ) : editingId !== null ? (
-                <span className="font-dm text-[11px] text-ink/60">The draft&rsquo;s current lines, read from Xero — edit, then update</span>
+                <span className="font-dm text-[12px] text-ink/60">The draft&rsquo;s current lines, read from Xero — edit, then update</span>
               ) : loadingSuggested ? (
-                <span className="font-dm text-[11px] text-ink/50">Reading the BEO…</span>
+                <span className="font-dm text-[12px] text-ink/50">Reading the BEO…</span>
               ) : suggested?.source === "beo" ? (
-                <span className="font-dm text-[11px] text-ink/60">
+                <span className="font-dm text-[12px] text-ink/60">
                   {stream === "deposit"
                     ? "From the deposit set on this event · amount includes GST"
                     : `Pulled from this event\u2019s BEO ${suggested.gstInclusive ? "· amounts include GST" : "· amounts exclude GST"} — edit anything before sending`}
                 </span>
               ) : (
-                <span className="font-dm text-[11px] text-ink/50">
+                <span className="font-dm text-[12px] text-ink/50">
                   {stream === "food"
                     ? "Nothing priced on the BEO yet — enter the amount"
                     : stream === "drinks"
@@ -637,7 +672,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </div>
           </div>
 
-          <p className="font-dm text-[11px] text-ink/60">
+          <p className="font-dm text-[12px] text-ink/60">
             Creates a <b>draft</b> in Xero — nothing is emailed to the client until you approve it there.
           </p>
 
@@ -647,7 +682,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10">
               CANCEL
             </button>
-            <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing}
+            <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing || (duplicateRisk && !allowAnother)}
+              title={duplicateRisk && !allowAnother ? "This stream already has an invoice in Xero — edit it, or tick 'send a second invoice anyway'" : undefined}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
               {push.isPending ? "SENDING…" : replacing ? `VOID ${replacing.number ?? "OLD"} & SEND CORRECTED DRAFT` : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>
