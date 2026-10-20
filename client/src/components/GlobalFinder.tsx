@@ -11,7 +11,7 @@ export function StatusChip({ status, stages }: { status: string; stages?: Finder
   const stage = stages?.find(s => s.key === status);
   const label = stage?.label ?? status.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
   return (
-    <span className="inline-flex items-center gap-1 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 border border-gray-200 bg-white text-ink/80 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 font-bebas tracking-widest text-[11px] px-1.5 py-0.5 border border-gray-200 bg-white text-ink/80 whitespace-nowrap">
       <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: stage?.swatch ?? "#9ca3af" }} />
       {label.toUpperCase()}
     </span>
@@ -128,7 +128,7 @@ export default function GlobalFinder({
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <StatusChip status={it.status} stages={it.kind === "lead" ? stages : undefined} />
-                {it.date && <span className="font-dm text-[11px] text-ink/60 whitespace-nowrap">{it.date}</span>}
+                {it.date && <span className="font-dm text-[12px] text-ink/60 whitespace-nowrap">{it.date}</span>}
               </div>
             </li>
           );
@@ -165,7 +165,7 @@ export default function GlobalFinder({
             autoComplete="off" autoCorrect="off" spellCheck={false}
             className="flex-1 h-11 px-1 rounded-sm bg-transparent font-dm text-sm text-ink placeholder:text-ink/50 focus:outline-none"
           />
-          <kbd className="hidden sm:inline font-dm text-[10px] text-ink/60 border border-gray-200 rounded px-1.5 py-0.5">ESC</kbd>
+          <kbd className="hidden sm:inline font-dm text-[12px] text-ink/60 border border-gray-200 rounded px-1.5 py-0.5">ESC</kbd>
         </div>
         <ul id={listId} role="listbox" aria-label="Results" className="max-h-[50vh] overflow-y-auto pb-2 empty:hidden">
           {renderGroup("Enquiries", <Mail className="w-3 h-3" aria-hidden="true" />, leadItems)}
@@ -173,7 +173,7 @@ export default function GlobalFinder({
         </ul>
         <div role="status" aria-live="polite" className={`px-4 py-3 font-dm text-xs text-ink/60 ${items.length ? "sr-only" : ""}`}>{status}</div>
         {items.length > 0 && (
-          <div aria-hidden="true" className="hidden sm:flex items-center gap-3 px-4 py-2 border-t border-gray-200 font-dm text-[11px] text-ink/60">
+          <div aria-hidden="true" className="hidden sm:flex items-center gap-3 px-4 py-2 border-t border-gray-200 font-dm text-[12px] text-ink/60">
             <span>↑↓ to move</span><span>Enter to open</span><span>Esc to close</span>
           </div>
         )}

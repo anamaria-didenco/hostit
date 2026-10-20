@@ -49,7 +49,7 @@ function InfoBand({
         >
           <span
             className={cn(
-              "font-sans text-[9px] font-extrabold uppercase tracking-[0.16em]",
+              "font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]",
               cell.invert ? "text-primary-foreground/70" : "text-muted-foreground"
             )}
           >

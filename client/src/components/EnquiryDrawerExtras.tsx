@@ -42,7 +42,7 @@ function SectionHead({ title, meta }: { title: string; meta?: string }) {
     <div className="flex items-center gap-3 mb-2">
       <h3 className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground flex-shrink-0">{title}</h3>
       <span className="h-px flex-1" style={{ background: "var(--vf-hair, #eee6d8)" }} />
-      {meta && <span className="font-sans text-[11px] text-muted-foreground flex-shrink-0">{meta}</span>}
+      {meta && <span className="font-sans text-[12px] text-muted-foreground flex-shrink-0">{meta}</span>}
     </div>
   );
 }
@@ -92,7 +92,7 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
             return (
               <div key={f.key} className="grid items-baseline gap-2.5 py-2 border-b last:border-b-0" style={{ gridTemplateColumns: "20px 72px 1fr", borderColor: "var(--vf-hair, #eee6d8)" }}>
                 <span style={{ color: TONE_FG[f.tone], position: "relative", top: 2 }}><I style={{ width: 16, height: 16 }} strokeWidth={2.4} aria-hidden /></span>
-                <span className="font-sans text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">{f.label}</span>
+                <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">{f.label}</span>
                 <span className="font-sans text-[13px] text-muted-foreground leading-snug"><span className="font-bold" style={{ color: "#211d18" }}>{f.head}.</span> {f.text}</span>
               </div>
             );
@@ -111,7 +111,7 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
               borderRight: "1px solid var(--vf-line, #e3ddd0)",
               borderBottom: "1px solid var(--vf-line, #e3ddd0)",
             }}>
-              <div className="font-sans text-[9px] font-extrabold uppercase tracking-[0.16em]" style={{ opacity: 0.8 }}>{b.label}</div>
+              <div className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ opacity: 0.8 }}>{b.label}</div>
               <div className="font-serif text-[16px] font-semibold truncate mt-0.5">{b.value}</div>
             </div>
           ))}

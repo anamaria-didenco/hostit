@@ -12,10 +12,7 @@ export type PageTab = { key: string; label: string };
 
 type Accent = "forest" | "burgundy";
 
-const ACCENT_ON: Record<Accent, string> = {
-  forest: "border-forest text-forest",
-  burgundy: "border-burgundy text-burgundy",
-};
+// Kept for API compatibility; tabs now take the shared .vf-tab style.
 
 function PageHeader({
   title,
@@ -25,7 +22,7 @@ function PageHeader({
   tabs,
   activeTab,
   onTabChange,
-  accent = "forest",
+  accent: _accent = "forest",
   className,
   subtitleClassName,
   tabStripRef,
@@ -61,7 +58,7 @@ function PageHeader({
       {tabs && tabs.length > 0 && (
         <div
           ref={tabStripRef}
-          className="flex gap-0 mt-6 border-b border-border overflow-x-auto"
+          className="flex gap-1 mt-6 border-b border-border overflow-x-auto"
           role="tablist"
         >
           {tabs.map(t => {
@@ -74,10 +71,9 @@ function PageHeader({
                 aria-selected={on}
                 aria-pressed={on}
                 onClick={() => onTabChange?.(t.key)}
-                className={cn(
-                  "font-bebas tracking-widest text-xs px-4 sm:px-5 py-3 transition-colors border-b-2 -mb-px whitespace-nowrap",
-                  on ? ACCENT_ON[accent] : "border-transparent text-sage hover:text-ink",
-                )}
+                // The shared .vf-tab style (index.css): sentence case, 14px —
+                // the same tabs as Enquiries, Payments and Tasks.
+                className="vf-tab"
               >
                 {t.label}
               </button>

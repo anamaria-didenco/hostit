@@ -38,7 +38,7 @@ function ChangeFlag({
       <span className="text-destructive" aria-hidden>→</span>
       <span className={cn(valueClass, "font-bold text-foreground")}>{newValue}</span>
       {showTag ? (
-        <span className="inline-flex items-center gap-1 rounded-[3px] bg-[#f9e3e0] px-1.5 py-0.5 font-sans text-[9px] font-extrabold uppercase tracking-[0.12em] leading-none text-[#a02b1f]">
+        <span className="inline-flex items-center gap-1 rounded-[3px] bg-[#f9e3e0] px-1.5 py-0.5 font-sans text-[11px] font-extrabold uppercase tracking-[0.12em] leading-none text-[#a02b1f]">
           <span className="size-1 rounded-full bg-destructive" />
           Changed — was {oldValue}
         </span>

@@ -165,7 +165,7 @@ function SequenceCard({ def, cfg, smtpConfigured }: { def: SequenceDef; cfg: Seq
 
       <p className="font-dm text-xs text-stone-600">
         You can use: {vars.map((v, i) => (
-          <span key={v.token}><code className="bg-linen px-1 py-0.5 rounded text-[11px] text-ink" title={v.label}>{v.token}</code>{i < vars.length - 1 ? " " : ""}</span>
+          <span key={v.token}><code className="bg-linen px-1 py-0.5 rounded text-[12px] text-ink" title={v.label}>{v.token}</code>{i < vars.length - 1 ? " " : ""}</span>
         ))}
       </p>
 

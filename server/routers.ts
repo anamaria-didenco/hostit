@@ -1673,7 +1673,8 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) return [];
       const now = new Date();
-      return db.select().from(leads).where(
+      const { leadDatePassed } = await import('../shared/followUp');
+      const rows = await db.select().from(leads).where(
         and(
           eq(leads.ownerId, ctx.user.id),
           ne(leads.source, 'healthcheck'),
@@ -1683,6 +1684,8 @@ export const appRouter = router({
           notInArray(leads.status, ['booked', 'confirmed', 'finished', 'lost', 'cancelled']),
         )
       ).orderBy(leads.followUpDate);
+      // An enquiry whose event date has gone isn't overdue for a follow-up any more.
+      return rows.filter(l => !leadDatePassed(l, now.getTime()));
     }),
     // Active leads that need a follow-up — overdue follow-up date OR gone idle in
     // their status — each tagged with the reason, most urgent first. Powers the

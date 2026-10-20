@@ -216,7 +216,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                 </span>
 
                 {/* Calendar card preview */}
-                <span className={`text-[10px] font-bebas tracking-widest px-2 py-0.5 rounded shrink-0 ${calPreview}`}>
+                <span className={`text-[11px] font-bebas tracking-widest px-2 py-0.5 rounded shrink-0 ${calPreview}`}>
                   CAL
                 </span>
 
@@ -293,7 +293,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
               <span className={`text-xs font-bebas tracking-widest px-2 py-0.5 border ${getStatusClasses(addColorId)}`}>
                 {addLabel || "Preview"} — Pipeline
               </span>
-              <span className={`text-[10px] font-bebas tracking-widest px-2 py-0.5 rounded ${getStatusCalClasses(addColorId)}`}>
+              <span className={`text-[11px] font-bebas tracking-widest px-2 py-0.5 rounded ${getStatusCalClasses(addColorId)}`}>
                 {addLabel || "Preview"} — Calendar
               </span>
             </div>

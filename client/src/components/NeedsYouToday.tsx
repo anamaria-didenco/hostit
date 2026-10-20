@@ -28,7 +28,7 @@ export interface NeedsYouTodayProps {
   onGoDeposits: () => void;
 }
 
-const chip = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-sans text-[10.5px] font-bold leading-none whitespace-nowrap";
+const chip = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-sans text-[12px] font-bold leading-none whitespace-nowrap";
 const OK = `${chip} bg-emerald-100 text-emerald-900`;
 const WARN = `${chip} bg-amber-100 text-amber-900`;
 const MUTED = `${chip} bg-muted text-muted-foreground`;
@@ -39,7 +39,7 @@ function GroupHead({ icon, title, count }: { icon: React.ReactNode; title: strin
     <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-y border-border first:border-t-0">
       <span className="text-muted-foreground" aria-hidden>{icon}</span>
       <h3 className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-foreground m-0">{title}</h3>
-      <span className="font-sans text-[11px] font-bold text-muted-foreground tabular-nums">{count}</span>
+      <span className="font-sans text-[12px] font-bold text-muted-foreground tabular-nums">{count}</span>
     </div>
   );
 }

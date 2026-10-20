@@ -140,7 +140,7 @@ export default function XeroEventInvoices({ q }: { q: string }) {
                 className={`px-4 py-2.5 text-[14px] whitespace-nowrap border border-b-0 rounded-t-sm transition-colors ${
                   on ? "bg-white border-stone-300 text-[#000a1e]" : "bg-transparent border-transparent hover:underline"}`}
                 style={on ? undefined : { color: XERO_BLUE }}>
-                {t.label}{t.count ? <span className="text-[11px]"> ({counts[t.key]})</span> : null}
+                {t.label}{t.count ? <span className="text-[12px]"> ({counts[t.key]})</span> : null}
               </button>
             );
           })}
@@ -195,7 +195,7 @@ export default function XeroEventInvoices({ q }: { q: string }) {
                             aria-label={`Open ${i.number ?? "draft invoice"} in Xero`}>
                             {i.number ?? <span className="text-stone-500">Draft</span>}
                           </a>
-                          {i.status === "VOIDED" && <span className="ml-1 text-[11px] text-stone-500">(voided)</span>}
+                          {i.status === "VOIDED" && <span className="ml-1 text-[12px] text-stone-500">(voided)</span>}
                         </td>
                         <td className="px-3 py-3 max-w-[260px]">
                           <div className="leading-snug">{i.reference}</div>

@@ -71,12 +71,12 @@ export default function LeadProposals({ leadId, compact = false, onNavigate }: {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-dm text-sm text-ink truncate">{p.title}</span>
-                  <span className={`font-dm text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                  <span className={`font-dm text-[12px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
                   {/* Loud cue: this one went "sent" but the client was never
                       emailed, so the owner knows to send the link themselves. */}
                   {(p.status === "sent" || p.status === "viewed") && !p.emailedAt && (
                     <span title="This proposal was marked sent but no email went out — copy the link and send it to the client."
-                      className="font-dm text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">Not emailed</span>
+                      className="font-dm text-[12px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">Not emailed</span>
                   )}
                 </div>
                 <div className="font-dm text-xs text-stone-600 mt-0.5">{proposalTimeline(p)}</div>

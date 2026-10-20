@@ -22,7 +22,7 @@ import { trpc } from "@/lib/trpc";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { showCascadedToast } from "@/lib/cascadedToast";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
-import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
+import { fmtEventTime, combineLocalDateTime, fmtTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
@@ -60,7 +60,7 @@ import InboxSettingsCard from "@/components/InboxSettingsCard";
 import LeadConversation, { RepliedChip, useReplyStatus, type buildReply } from "@/components/LeadConversation";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
-import { leadFollowUpState, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
+import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel } from "@shared/emailSignatures";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
@@ -171,7 +171,7 @@ function PartialChip() {
   return (
     <span
       title="Gave a name + email but never finished the enquiry"
-      className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap flex-shrink-0">
+      className="font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap flex-shrink-0">
       PARTIAL
     </span>
   );
@@ -330,7 +330,7 @@ function ApiTokensSection() {
             <button onClick={() => { navigator.clipboard.writeText(mcpUrl); toast.success("Copied"); }}
               className="font-bebas tracking-widest text-xs px-3 py-2 border border-gold/30 hover:bg-gold/10">COPY</button>
           </div>
-          <p className="font-dm text-[11px] text-ink/70 mt-1">In Claude Desktop or Claude.ai, add this as a custom MCP connector with HTTP transport. Use a token below as the bearer auth header.</p>
+          <p className="font-dm text-[12px] text-ink/70 mt-1">In Claude Desktop or Claude.ai, add this as a custom MCP connector with HTTP transport. Use a token below as the bearer auth header.</p>
         </div>
 
         <div className="border-t border-gold/20 pt-4">
@@ -348,7 +348,7 @@ function ApiTokensSection() {
             <div className="mt-3 bg-amber-50 border border-amber-300 p-3">
               <div className="font-bebas text-xs tracking-widest text-amber-800 mb-1">COPY THIS TOKEN NOW — IT WON'T BE SHOWN AGAIN</div>
               <div className="flex items-center gap-2">
-                <code className="font-mono text-[11px] bg-white border border-amber-300 px-2 py-1.5 flex-1 break-all">{newToken}</code>
+                <code className="font-mono text-[12px] bg-white border border-amber-300 px-2 py-1.5 flex-1 break-all">{newToken}</code>
                 <button onClick={() => { navigator.clipboard.writeText(newToken); toast.success("Copied"); }}
                   className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-amber-400 bg-white hover:bg-amber-100">COPY</button>
                 <button onClick={() => setNewToken(null)} className="font-bebas tracking-widest text-xs px-2 py-1.5 text-amber-800 hover:underline">DISMISS</button>
@@ -367,7 +367,7 @@ function ApiTokensSection() {
                 <div key={t.id} className="flex items-center justify-between bg-white border border-gold/20 px-3 py-2">
                   <div className="min-w-0">
                     <div className="font-dm text-sm text-ink truncate">{t.name} {t.revokedAt ? <span className="text-red-600 text-xs">(revoked)</span> : null}</div>
-                    <div className="font-mono text-[11px] text-ink/60">{t.prefix}…{t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ''}</div>
+                    <div className="font-mono text-[12px] text-ink/60">{t.prefix}…{t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ''}</div>
                   </div>
                   {!t.revokedAt && (
                     <button onClick={() => { if (confirm(`Revoke "${t.name}"?`)) revokeMutation.mutate({ id: t.id }); }}
@@ -854,7 +854,7 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
       </div>
       {spaces.length > 1 && (
         <button type="button" onClick={() => onChange(allSelected ? "" : names.join(", "))}
-          className="mt-2 font-bebas tracking-widest text-[10px] text-forest hover:underline">
+          className="mt-2 font-bebas tracking-widest text-[11px] text-forest hover:underline">
           {allSelected ? "✕ CLEAR ALL" : "⛶ FULL VENUE (ALL SPACES)"}
         </button>
       )}
@@ -1131,6 +1131,8 @@ export default function Dashboard() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
+  // Overview calendar: start at this week (default) or show the whole month.
+  const [overviewShowPast, setOverviewShowPast] = useState(false);
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   // "Needs you today" used to sit at the top of the Overview; it now lives
   // under the calendar as an opt-in panel, off by default and remembered per
@@ -1322,7 +1324,7 @@ export default function Dashboard() {
   // Where the Overview tiles send you: a one-shot filter for Tasks / Payments,
   // dropped again when you leave that tab so the sidebar link opens it plain.
   const [tasksOpenFilter, setTasksOpenFilter] = useState<"overdue" | undefined>(undefined);
-  const [paymentsOpenFilter, setPaymentsOpenFilter] = useState<"deposits_due" | undefined>(undefined);
+  const [paymentsOpenFilter, setPaymentsOpenFilter] = useState<"deposits_due" | "no_total" | undefined>(undefined);
   useEffect(() => {
     if (tab !== "tasks") setTasksOpenFilter(undefined);
     if (tab !== "payments") setPaymentsOpenFilter(undefined);
@@ -1478,7 +1480,12 @@ export default function Dashboard() {
       case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
       case 'upcoming_events': return showCalendarList();
       case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
-      case 'conversion_rate': case 'revenue_month': return setTab('reports');
+      // Revenue with bookings missing a total opens exactly those bookings, so
+      // the number can be fixed rather than trusted.
+      case 'revenue_month':
+        if ((stats?.bookingsMissingTotal ?? 0) > 0) { setPaymentsOpenFilter('no_total'); return setTab('payments'); }
+        return setTab('reports');
+      case 'conversion_rate': return setTab('reports');
     }
   };
   const { data: selectedLeadActivity } = trpc.leads.getActivity.useQuery(
@@ -1567,6 +1574,15 @@ export default function Dashboard() {
   // A booking's side panel opens on its BEO: the quickest way to read an
   // event. "Status, payments & more" switches to the editable details.
   const [drawerView, setDrawerView] = React.useState<'beo' | 'details'>('beo');
+  // "Set deposit" from Next steps: switch to the details view, open Financials
+  // and bring it into view.
+  const openDrawerFinancials = () => {
+    setDrawerView('details');
+    setDrawerSections(prev => saveDrawerSections({ ...prev, money: true }));
+    window.setTimeout(() => {
+      document.getElementById('drawer-sec-money')?.closest('section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  };
   const [drawerBeoNonce, setDrawerBeoNonce] = React.useState(0);
   const [drawerBeoLoaded, setDrawerBeoLoaded] = React.useState(false);
   const [drawerShowEnd, setDrawerShowEnd] = React.useState(false);
@@ -1989,12 +2005,15 @@ export default function Dashboard() {
     if (!full) return "";
     return fmtEventTime(iso) ? full : localYmd(iso!);
   }
+  // Finished events: an outline, not a filled block. The past should be the
+  // quietest thing on a calendar, not compete with what's coming up.
+  const PAST_CHIP = 'bg-transparent border border-border text-muted-foreground';
   // A short status word for month-view chips, so status isn't colour alone.
   // Confirmed is the default and gets none.
   function monthChipTag(ev: any): string {
     if (ev._kind === 'lead') return 'ENQ';
     if (ev.status === 'tentative') return 'TBC';
-    if (ev.status === 'finished') return 'DONE';
+    if (ev.status === 'finished') return 'FINISHED';
     if (ev.status === 'cancelled') return 'CXL';
     return '';
   }
@@ -3345,6 +3364,9 @@ export default function Dashboard() {
     </div>
   );
 
+  // The Overview calendar looks ahead on the current month (see below).
+  const isCurrentCalMonth = year === new Date().getFullYear() && month === new Date().getMonth();
+  const overviewRolling = isCurrentCalMonth && !overviewShowPast;
   const monthCalendarCard = (
                   <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
                   <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
@@ -3394,10 +3416,17 @@ export default function Dashboard() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <button onClick={() => setCalDate(new Date())} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    {isCurrentCalMonth && (
+                      <button onClick={() => setOverviewShowPast(v => !v)} aria-pressed={overviewShowPast}
+                        title={overviewShowPast ? "Start at this week" : "Show the weeks already gone this month"}
+                        className="hidden sm:inline-flex flex-shrink-0 whitespace-nowrap font-sans text-xs font-semibold px-2 sm:px-3 py-1.5 text-sage hover:text-ink transition-colors">
+                        {overviewShowPast ? "From this week" : "Earlier weeks"}
+                      </button>
+                    )}
+                    <button onClick={() => setCalDate(new Date())} className="vf-btn vf-btn-secondary">TODAY</button>
                     <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print the week's run sheets"
-                      className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors inline-flex items-center gap-1"><Printer className="w-3 h-3" /><span className="hidden sm:inline">PRINT WEEK</span></button>
-                    <button onClick={() => setTab('calendar' as any)} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"><span className="hidden sm:inline">FULL </span>VIEW</button>
+                      className="vf-btn vf-btn-secondary"><Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">PRINT WEEK</span></button>
+                    <button onClick={() => setTab('calendar' as any)} className="vf-btn vf-btn-secondary"><span className="hidden sm:inline">FULL </span>VIEW</button>
                   </div>
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
                     {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -3414,23 +3443,39 @@ export default function Dashboard() {
                       const nxtYear = adjNextMonthDate.getFullYear();
                       const nxtMonth = adjNextMonthDate.getMonth();
                       const adjBLIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
-                      const cells = Array.from({ length: totalCells }, (_, i) => {
+                      // Only this month and next are loaded, so the window stops at
+                      // the end of next month (never a made-up "32 Dec").
+                      const daysInNextMonth = new Date(nxtYear, nxtMonth + 1, 0).getDate();
+                      const cellAt = (i: number) => {
                         const dayNum = i - mondayOffset + 1;
                         if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
-                        if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                        if (dayNum > daysInMonth && dayNum - daysInMonth <= daysInNextMonth) return { day: dayNum - daysInMonth, isOverflow: true };
                         return null;
-                      });
+                      };
+                      // On the current month the Overview looks ahead: it starts at
+                      // this week and runs five weeks on (into next month), instead
+                      // of opening on weeks that are already over.
+                      const startCell = overviewRolling ? Math.floor((mondayOffset + new Date().getDate() - 1) / 7) * 7 : 0;
+                      const cellCount = overviewRolling ? 35 : totalCells;
+                      const cells = Array.from({ length: cellCount }, (_, k) => cellAt(startCell + k));
                       const weeks = [];
-                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                      for (let i = 0; i < cells.length; i += 7) {
+                        const wk = cells.slice(i, i + 7);
+                        if (wk.some(Boolean)) weeks.push(wk); // drop weeks past the loaded range
+                      }
                       const numWeeks = weeks.length;
                       return weeks.map((week, wi) => (
                         <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
                           {week.map((cell, di) => {
                             if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
                             const { day, isOverflow } = cell;
+                            // In the look-ahead view next month's days are real,
+                            // usable days, not greyed-out spill-over.
+                            const muted = isOverflow && !overviewRolling;
                             const cellYear = isOverflow ? nxtYear : year;
                             const cellMonth = isOverflow ? nxtMonth : month;
                             const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
+                            const isPastDay = new Date(cellYear, cellMonth, day, 23, 59, 59).getTime() < Date.now();
                             const isWeekend = di >= 5;
                             const dayBookings = isOverflow
                               ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
@@ -3443,20 +3488,20 @@ export default function Dashboard() {
                               <div key={di}
                                 aria-current={isToday ? "date" : undefined}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  isOverflow ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
-                                onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
-                                onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
-                                onDrop={!isOverflow ? (e) => {
+                                  muted || isPastDay ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!muted ? 'hover:bg-linen/30 transition-colors' : ''}`}
+                                onDragOver={!muted ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
+                                onDragLeave={!muted ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
+                                onDrop={!muted ? (e) => {
                                   e.preventDefault(); setDragOverDate(null);
                                   try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                                 } : undefined}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
-                                  }`}>{day}</span>
-                                  {!isOverflow && (
+                                  <span aria-hidden={muted ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                  }`}>{day}{day === 1 && isOverflow && overviewRolling ? <span className="hidden sm:inline"> {adjNextMonthDate.toLocaleDateString('en-NZ', { month: 'short' })}</span> : null}</span>
+                                  {!muted && (
                                     <span className="flex items-center">
                                     {editDayTitle && !dayTitles.get(dateStr) && (
                                       <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
@@ -3478,15 +3523,15 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
                                     style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
+                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{b.firstName} {b.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                       {(b.guestCount || b.spaceName) && (
-                                        <div className="opacity-95 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                        <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -3496,20 +3541,20 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
-                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
+                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{l.firstName} {l.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                       {l.guestCount && (
-                                        <div className="opacity-95 truncate text-[9px]">{l.guestCount} pax</div>
+                                        <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
                                       )}
-                                      <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
                                 {(dayBookings.length + dayLeads.length) > 3 && (
-                                  <span className="font-dm text-[9px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
+                                  <span className="font-dm text-[12px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
                                 )}
                               </div>
                             );
@@ -3582,7 +3627,7 @@ export default function Dashboard() {
             >
               {item.label}
               {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -3637,7 +3682,7 @@ export default function Dashboard() {
           </button>
           <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event (Ctrl or Cmd + K)" title="Find (Ctrl/Cmd + K)"
             className="ml-auto w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white transition-colors">
-            <Search className="w-4 h-4" aria-hidden="true" style={{ color: '#bcc8db' }} />
+            <Search className="w-4 h-4" aria-hidden="true" style={{ color: '#d6deea' }} />
           </button>
         </div>
         {/* Nav */}
@@ -3661,12 +3706,12 @@ export default function Dashboard() {
             const active = tab === item.id;
             return (
               <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors ${active ? "font-bold text-white" : "font-medium text-[#bcc8db] hover:text-white hover:bg-white/[0.08]"}`}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${active ? "font-bold text-white" : "font-medium text-[#d6deea] hover:text-white hover:bg-white/[0.08]"}`}
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.id === "enquiries" && unreadCount > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-px rounded-[3px]" style={{ background: "rgba(255,255,255,0.18)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px]" style={{ background: "rgba(255,255,255,0.18)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
                 )}
               </button>
             );
@@ -3684,11 +3729,11 @@ export default function Dashboard() {
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold text-white truncate">{user?.name ?? "User"}</div>
-              <div className="text-[11.5px] truncate" style={{ color: '#bcc8db' }}>{venueSettings?.name ?? "Your Venue"}</div>
+              <div className="text-[12px] truncate" style={{ color: '#d6deea' }}>{venueSettings?.name ?? "Your Venue"}</div>
             </div>
             <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors flex-shrink-0">
-              <LogOut className="w-4 h-4" aria-hidden="true" style={{ color: '#bcc8db' }} />
+              <LogOut className="w-4 h-4" aria-hidden="true" style={{ color: '#d6deea' }} />
             </button>
           </div>
         </div>
@@ -3709,13 +3754,17 @@ export default function Dashboard() {
             const followUpTileCount = allLeads ? followUpCount : (stats?.needsFollowUp ?? 0);
             const overdueTaskCount = stats?.overdueTasks ?? 0;
             const depositsDueCount = stats?.depositsDue ?? 0;
+            // Never show a confident $0 when the real problem is missing totals.
+            const missingTotals = stats?.bookingsMissingTotal ?? 0;
+            const revenueRounded = Math.round(stats?.revenueThisMonth ?? 0);
+            const revenueValue = revenueRounded === 0 && missingTotals > 0 ? "—" : `$${revenueRounded.toLocaleString()}`;
             const allStats = [
               { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
               { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-destructive' : 'text-muted-foreground/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
               { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
               { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-primary" /> },
               { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-primary" /> },
-              { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-gold-deep" /> },
+              { id: "revenue_month", label: "Revenue This Month", value: revenueValue, sub: missingTotals > 0 ? `${missingTotals} booking${missingTotals === 1 ? "" : "s"} not counted — no total` : "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-gold-deep" />, alert: missingTotals > 0 ? 'warn' as const : undefined },
               { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-primary" />, perf: true },
             ];
@@ -3743,8 +3792,8 @@ export default function Dashboard() {
                 >
                   <div className="mb-2">{s.icon}</div>
                   <div className={`font-serif text-2xl md:text-3xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
-                  <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
-                  <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
+                  <div className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
+                  <div className="font-sans text-[12px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
                 </button>
               );
             };
@@ -3762,10 +3811,8 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
                     <PopoverTrigger asChild>
-                      <button
-                        className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
-                      >
-                        <Settings className="w-3 h-3" /> CUSTOMISE
+                      <button className="vf-btn vf-btn-secondary">
+                        <Settings className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
                     </PopoverTrigger>
                     <PopoverContent align="end" sideOffset={4} className="bg-white border border-border shadow-lg p-3 w-52">
@@ -3787,7 +3834,7 @@ export default function Dashboard() {
                   </Popover>
                   <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                    className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 bg-forest text-cream hover:bg-forest-dark transition-colors">
+                    className="vf-btn vf-btn-primary">
                     <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
                   </button>
                 </div>
@@ -3948,7 +3995,7 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -4022,7 +4069,7 @@ export default function Dashboard() {
                         flip to "Pipeline" on the board while the nav still said
                         "Events"/"Enquiries". The List/Board toggle says which
                         view this is. */}
-                    <h1 className="font-cormorant text-xl font-semibold text-ink">Enquiries</h1>
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink mr-1">Enquiries</h1>
                     {/* Win-back toggle — the enquiry statuses now live in the
                         list's own view tabs (Needs reply / Follow-up due /
                         Confirmed / All), so the one thing left here is the
@@ -4031,8 +4078,8 @@ export default function Dashboard() {
                       <button onClick={() => { setLeadsSubTab(leadsSubTab === "winback" ? "all" : "winback"); setLeadStatusFilter([]); setFollowUpOnly(false); setShowPartialOnly(false); setSelectedLead(null); }}
                         aria-pressed={leadsSubTab === "winback"}
                         title="Lost and quiet enquiries, and last year's clients, to invite back"
-                        className={`flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${leadsSubTab === "winback" ? "bg-forest text-cream border-forest" : "text-ink/65 border-gold/30 hover:text-ink hover:bg-linen"}`}>
-                        <RotateCcw className="w-3 h-3" /> {leadsSubTab === "winback" ? "ENQUIRIES" : "WIN BACK"}
+                        className="vf-btn vf-btn-secondary">
+                        <RotateCcw className="w-3.5 h-3.5" /> {leadsSubTab === "winback" ? "ENQUIRIES" : "WIN BACK"}
                       </button>
                     )}
                   </div>
@@ -4057,7 +4104,7 @@ export default function Dashboard() {
                       toolbar reads clearly. */}
                   <div className="ml-auto flex items-center gap-2">
                     <button onClick={openAddEnquiry} aria-label="Add enquiry"
-                      className="flex items-center gap-1.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 hover:bg-forest transition-colors">
+                      className="vf-btn vf-btn-primary">
                       {/* Short label on phones so the view toggle and the
                           primary action share one row instead of two. */}
                       <Plus className="w-3.5 h-3.5" /> <span className="sm:hidden">ADD</span><span className="hidden sm:inline">ADD ENQUIRY</span>
@@ -4067,14 +4114,14 @@ export default function Dashboard() {
                       if (closedCount === 0) return null;
                       return (
                         <button onClick={() => setShowClosedStages(v => !v)} aria-pressed={showClosedStages}
-                          className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
+                          className="vf-btn vf-btn-secondary">
                           {showClosedStages ? "HIDE LOST" : `SHOW LOST (${closedCount})`}
                         </button>
                       );
                     })()}
                     {leadViewMode === "kanban" && (
                       <button onClick={() => setKanbanSettingsOpen(true)}
-                        className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
+                        className="vf-btn vf-btn-secondary">
                         <SlidersHorizontal className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
                     )}
@@ -4180,7 +4227,9 @@ export default function Dashboard() {
                       clashMap={clashMap as any}
                       isPartial={(l: any) => isPartialLead(l)}
                       isStaff={isStaff}
-                      statusInfo={(st: any) => { const s = pipelineStages.find(p => p.key === st); return { label: s?.label ?? String(st ?? '').replace(/_/g, ' '), dot: s?.swatch ?? '#8a8073' }; }}
+                      // getStatusInfo maps the retired 'booked'/'confirmed' keys to one label,
+                      // so a confirmed enquiry reads "Confirmed", not raw "confirmed".
+                      statusInfo={(st: any) => { const s = getStatusInfo(String(st ?? '')); return { label: s?.label ?? String(st ?? '').replace(/_/g, ' '), dot: s?.swatch ?? '#8a8073' }; }}
                       onOpen={(lead: any) => { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); }}
                       onSend={({ lead, subject, body }: any) => {
                         if (!lead.email) { toast.error('No email on file for this enquiry.'); return; }
@@ -4188,6 +4237,10 @@ export default function Dashboard() {
                       }}
                       sending={sendEmail.isPending}
                       onRowsChange={setEnquiryOrder}
+                      // Enquiries left open past their date: close them in one go
+                      // (reason recorded, so Reports' lost-reason split stays true).
+                      onCloseAsLost={(ids: number[]) => bulkUpdateStatusMut.mutate({ ids, status: 'lost', lostReason: 'other', lostReasonNote: 'Event date passed without a booking' })}
+                      closing={bulkUpdateStatusMut.isPending}
                     />
                   )
                 )}
@@ -4238,7 +4291,7 @@ export default function Dashboard() {
                                   text on cream. */}
                               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
                               <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
-                              <span className="font-sans text-[11px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
+                              <span className="font-sans text-[12px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
                               <span className="flex-1" />
                               {stageTotalLabel && (
                                 <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
@@ -4265,7 +4318,7 @@ export default function Dashboard() {
                                         <div className="mt-1 empty:hidden"><LeadRowBadges lead={lead} teamById={teamById} /></div>
                                       </div>
                                       {lead.status === 'booked' && (
-                                        <span className="font-sans text-[9.5px] font-extrabold uppercase tracking-[0.1em] px-2 py-[3px] rounded-[3px] flex-shrink-0" style={{ background: '#e8edf6', color: '#2f5488' }}>BEO</span>
+                                        <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.1em] px-2 py-[3px] rounded-[3px] flex-shrink-0" style={{ background: '#e8edf6', color: '#2f5488' }}>BEO</span>
                                       )}
                                     </div>
                                     {/* Meta — date + guests */}
@@ -4286,16 +4339,20 @@ export default function Dashboard() {
                                       </div>
                                     )}
                                     {/* Footer — serif value + age / overdue flag */}
-                                    <div className="flex items-baseline justify-between pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
-                                      <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? '—'}</span>
-                                      {fuReason === 'overdue' ? (
-                                        <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
+                                    {/* Footer — value (only when there is one) + age / overdue flag.
+                                        An em dash on every card without a value was noise. */}
+                                    <div className="flex items-baseline justify-between gap-2 pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
+                                      <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? ''}</span>
+                                      {leadDatePassed(lead, nowTs) ? (
+                                        <span className="text-xs font-semibold" style={{ color: '#6a6256' }}>Date passed</span>
+                                      ) : fuReason === 'overdue' ? (
+                                        <span className="text-[12px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
                                       ) : fuReason === 'idle' ? (
-                                        <span className="text-[11px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
+                                        <span className="text-[12px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
                                       ) : leadNeedsReply(lead) ? (
-                                        <span className="text-[11px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
+                                        <span className="text-[12px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
                                       ) : (
-                                        <span className="text-[11px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
+                                        <span className="text-[12px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
                                       )}
                                     </div>
                                   </button>
@@ -4515,7 +4572,7 @@ export default function Dashboard() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="font-bebas text-xs tracking-widest text-sage">ATTACHMENTS</label>
-                      <label className="font-bebas tracking-widest text-[10px] text-forest cursor-pointer hover:text-gold transition-colors flex items-center gap-1">
+                      <label className="font-bebas tracking-widest text-[11px] text-forest cursor-pointer hover:text-gold transition-colors flex items-center gap-1">
                         <Paperclip className="w-3 h-3" /> ATTACH FILE
                         <input
                           type="file"
@@ -4592,7 +4649,32 @@ export default function Dashboard() {
                   account lands on this tab by default and can't navigate
                   by heading at all otherwise. Visually hidden since "Sep
                   2026" in the toolbar already reads as the page's title. */}
-              <h1 className="sr-only">Calendar</h1>
+              {/* Same page header as Overview, Enquiries, Payments and Tasks:
+                  the title on the left, the page's actions on the right. The
+                  navigation toolbar sits underneath. */}
+              <div className="flex items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
+                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Calendar</h1>
+                <div className="flex items-center gap-2">
+                  <button onClick={toggleCalendarNeeds}
+                    aria-pressed={showCalendarNeeds}
+                    title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
+                    className="vf-btn vf-btn-secondary">
+                    <Bell className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEEDS TODAY</span>
+                  </button>
+                  <button onClick={() => setShowPrintWeek(true)}
+                    title="Print every event's run sheet for a week, in one PDF"
+                    aria-label="Print the week's run sheets"
+                    className="vf-btn vf-btn-secondary">
+                    <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
+                  </button>
+                  {/* Staff are read-only server-side, so hide create. */}
+                  {!isStaff && (
+                    <button onClick={() => setShowAddLead(true)} className="vf-btn vf-btn-primary">
+                      <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
+                    </button>
+                  )}
+                </div>
+              </div>
               {monthBookingsError && (
                 <div className="flex items-center justify-center gap-3 px-4 py-2 bg-red-50 border-b border-red-200">
                   <AlertCircle className="w-4 h-4 text-red-500/80 flex-shrink-0" />
@@ -4615,9 +4697,9 @@ export default function Dashboard() {
                   <button onClick={() => navCalendar(1)} aria-label="Next" title="Next (→)"
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
                   <button onClick={navCalendarToday} title="Today (T)"
-                    className="hidden md:inline-flex font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
-                  <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Go to enquiries list">
-                    <List className="w-3 h-3" /> ENQUIRIES
+                    className="vf-btn vf-btn-secondary hidden! md:inline-flex!">TODAY</button>
+                  <button onClick={() => setTab('enquiries')} className="vf-btn vf-btn-secondary hidden! sm:inline-flex!" title="Go to enquiries list">
+                    <List className="w-3.5 h-3.5" /> ENQUIRIES
                   </button>
                   <div className="flex-1 min-w-0 relative">
                     <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
@@ -4672,7 +4754,7 @@ export default function Dashboard() {
                             onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
                             className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
                         </div>
-                        <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
+                        <p className="hidden md:block font-dm text-[12px] text-sage/60 mt-3 leading-snug">
                           Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
                         </p>
                       </PopoverContent>
@@ -4689,25 +4771,6 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <SpaceAvailability />
-                  <button onClick={toggleCalendarNeeds}
-                    aria-pressed={showCalendarNeeds}
-                    title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
-                    className={`font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 border transition-colors ${showCalendarNeeds ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-linen'}`}>
-                    <Bell className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEEDS TODAY</span>
-                  </button>
-                  <button onClick={() => setShowPrintWeek(true)}
-                    title="Print every event's run sheet for a week, in one PDF"
-                    aria-label="Print the week's run sheets"
-                    className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors">
-                    <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
-                  </button>
-                  {/* Staff are read-only server-side, so hide create. */}
-                  {!isStaff && (
-                  <button onClick={() => setShowAddLead(true)}
-                    className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
-                    <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
-                  </button>
-                  )}
                 </div>
                 {/* Row 2 (mobile only): Big tap-friendly nav controls */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-3">
@@ -4745,6 +4808,20 @@ export default function Dashboard() {
                     <span>{s.label}</span>
                   </div>
                 ))}
+                {/* Spaces: the coloured stripe on each day and the left edge of each
+                    event. Without this key the second colour system was a guess. */}
+                {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).length > 0 && (
+                  <>
+                    <span aria-hidden className="w-px h-4 bg-border flex-shrink-0" />
+                    <span className="font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground flex-shrink-0">Spaces</span>
+                    {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).map((sp: any) => (
+                      <div key={`space-${sp.id}`} className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
+                        <span>{sp.name}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
 
               {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
@@ -4879,15 +4956,15 @@ export default function Dashboard() {
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
                                           style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
-                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
+                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : ev.status === 'finished' ? PAST_CHIP : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
-                                          {isHold && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug">HOLD</span>}
-                                          {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
+                                          {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
+                                          {time && <span className="shrink-0 text-[12px] tabular-nums opacity-70 leading-snug">{time}</span>}
                                           {/* Status in words too, not only the chip colour. */}
-                                          {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
+                                          {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
                                           {!isLead && <DoubleBookedTag flaggedAt={ev.clashFlaggedAt} compact />}
                                           {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
-                                          <span className="truncate font-semibold text-[10px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
+                                          <span className="truncate font-semibold text-[12px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
                                         </button>
                                         {/* The hover-only 14px "×" delete that used to sit on every chip is gone:
                                             it was a pixel-sized, destructive control on top of the event name.
@@ -4898,7 +4975,7 @@ export default function Dashboard() {
                                   {extra > 0 && (
                                     <button
                                       onClick={() => { setCalDate(new Date(cellYear, cellMonth, day)); setCalendarView('day'); }}
-                                      className="w-full text-left font-dm font-semibold text-[11px] text-primary hover:underline px-1.5 h-6 flex items-center transition-colors"
+                                      className="w-full text-left font-dm font-semibold text-[12px] text-primary hover:underline px-1.5 h-6 flex items-center transition-colors"
                                       title={`View all ${dayEvents.length} events on this day`}>
                                       +{extra} more
                                     </button>
@@ -4913,8 +4990,8 @@ export default function Dashboard() {
                                 onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
                                 className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
                                 title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
-                                <span className="shrink-0 text-[9px] tabular-nums text-stone leading-snug">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
-                                <span className="truncate font-semibold text-[10px] leading-snug">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
+                                <span className="shrink-0 text-[12px] tabular-nums text-stone leading-snug">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
+                                <span className="truncate font-semibold text-[12px] leading-snug">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
                               </button>
                             ))}
                             {/* Add enquiry on this day — opens the dated quick-create
@@ -4925,7 +5002,7 @@ export default function Dashboard() {
                               <button
                                 onClick={() => setQuickCreateDate(dateStr)}
                                 aria-label={`Add enquiry on ${dateStr}`}
-                                className="self-start mt-auto text-forest/50 hover:text-forest transition-colors w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center"
+                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
                                 title="Add enquiry on this day">
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -4994,7 +5071,7 @@ export default function Dashboard() {
                               {d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
                               {isToday && <span className="ml-2 opacity-80">· TODAY</span>}
                             </div>
-                            <div className={`text-[10px] font-dm ${isToday ? 'opacity-80' : 'text-ink/65'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
+                            <div className={`text-[12px] font-dm ${isToday ? 'opacity-80' : 'text-ink/65'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
                           </div>
                           {dayTitles.get(key) && (
                             <div className="px-3 pt-1.5 pb-1"><DayTitleText title={dayTitles.get(key)} onEdit={editDayTitle ? () => editDayTitle(key) : undefined} className="!text-xs" /></div>
@@ -5016,7 +5093,7 @@ export default function Dashboard() {
                                 </div>
                                 {e._kind === 'booking' && <DoubleBookedTag flaggedAt={e.clashFlaggedAt} />}
                                 {e._kind === 'lead' && holdState(e) === 'held' ? <HoldTag until={e.holdUntil} /> : (
-                                <span className={`font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
+                                <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
                                   {getStatusInfo(e.status).label.toUpperCase()}
                                 </span>
                                 )}
@@ -5069,7 +5146,7 @@ export default function Dashboard() {
                         <SlidersHorizontal className="w-3 h-3" />
                         Status
                         {eventTablePrefs.hideStatuses.length > 0 && (
-                          <span className="bg-sage-green text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                          <span className="bg-sage-green text-white text-[11px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
                             {eventTablePrefs.hideStatuses.length}
                           </span>
                         )}
@@ -5078,11 +5155,11 @@ export default function Dashboard() {
                       {eventStatusFilterOpen && (
                         <div className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">HIDE STATUSES</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/65">HIDE STATUSES</span>
                             {eventTablePrefs.hideStatuses.length > 0 && (
                               <button
                                 onClick={() => setEventTablePrefs({ hideStatuses: [] })}
-                                className="text-[10px] font-dm text-forest hover:underline">
+                                className="text-[12px] font-dm text-forest hover:underline">
                                 SHOW ALL
                               </button>
                             )}
@@ -5249,7 +5326,7 @@ export default function Dashboard() {
                                 <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0">{item.firstName} {item.lastName}</div>
                                 {/* Event type */}
                                 <div className="font-dm text-xs text-ink/75 truncate min-w-0">
-                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/65 mr-1">TYPE</span>
+                                  <span className="lg:hidden font-bebas tracking-widest text-[11px] text-ink/65 mr-1">TYPE</span>
                                   {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
                                 </div>
                                 {/* Date */}
@@ -5258,17 +5335,17 @@ export default function Dashboard() {
                                 </div>
                                 {/* Guests */}
                                 <div className="font-dm text-xs text-ink/75">
-                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/65 mr-1">GUESTS</span>
+                                  <span className="lg:hidden font-bebas tracking-widest text-[11px] text-ink/65 mr-1">GUESTS</span>
                                   {item.guestCount ?? '—'}
                                 </div>
                                 {/* Status (+ deposit for bookings) */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {item._type === 'lead' && holdState(item) === 'held'
                                     ? <HoldTag until={item.holdUntil} />
-                                    : <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
+                                    : <span className="font-bebas text-[11px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
                                   {item._type === 'booking' && <DoubleBookedTag flaggedAt={item.clashFlaggedAt} />}
                                   {item._type === 'booking' && item.depositRequired !== false && (
-                                    <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
+                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
                                   )}
                                 </div>
                                 {/* Actions */}
@@ -5338,7 +5415,7 @@ export default function Dashboard() {
                           onClick={() => { setCalDate(d); setCalendarView('day'); }}
                           className={`text-center py-2 border-r border-gold/10 last:border-r-0 hover:bg-linen/60 transition-colors w-full ${isToday ? 'bg-gold/10' : ''}`}
                           title={d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}>
-                          <div className="font-bebas tracking-widest text-[10px] text-ink/70">
+                          <div className="font-bebas tracking-widest text-[11px] text-ink/70">
                             {['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}
                           </div>
                           <div className={`font-serif text-lg font-semibold leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
@@ -5376,22 +5453,22 @@ export default function Dashboard() {
                           {dayBookings.map((b: any) => (
                             <button key={b.id}
                               onClick={() => setSelectedBooking(b)}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[12px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                               {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
                               {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
                               {b.guestCount && <div className="opacity-95">{b.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
+                              <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{statusLabel(b.status)}</div>
                             </button>
                           ))}
                           {dayLeads.map((l: any) => (
                             <button key={l.id}
                               onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${holdState(l) === 'held' ? 'vf-hold-chip' : statusCard(l.status)} hover:opacity-80 transition-opacity`}>
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[12px] leading-snug font-dm ${holdState(l) === 'held' ? 'vf-hold-chip' : statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
                               {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{holdState(l) === 'held' ? `HOLD · TO ${fmtHoldDay(l.holdUntil).toUpperCase()}` : statusLabel(l.status)}</div>
+                              <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{holdState(l) === 'held' ? `HOLD · TO ${fmtHoldDay(l.holdUntil).toUpperCase()}` : statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
@@ -5449,7 +5526,7 @@ export default function Dashboard() {
                         <div className="font-cormorant text-xl text-ink">
                           {calDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}
                         </div>
-                        {isToday && <div className="font-bebas tracking-widest text-[10px] text-forest mt-0.5">TODAY</div>}
+                        {isToday && <div className="font-bebas tracking-widest text-[11px] text-forest mt-0.5">TODAY</div>}
                         {dayTitles.get(ds) ? (
                           <DayTitleText title={dayTitles.get(ds)} onEdit={editDayTitle ? () => editDayTitle(ds) : undefined} className="!text-sm mt-1" />
                         ) : editDayTitle ? (
@@ -5459,7 +5536,7 @@ export default function Dashboard() {
                       <div className="ml-auto flex items-center gap-3">
                         <div className="text-right">
                           <div className="font-bebas tracking-widest text-2xl text-ink/80">{totalEvents}</div>
-                          <div className="font-dm text-[10px] text-ink/65 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
+                          <div className="font-dm text-[12px] text-ink/65 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
                         </div>
                         <button
                           onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
@@ -5494,7 +5571,7 @@ export default function Dashboard() {
                                     {b.firstName} {b.lastName}
                                   </span>
                                   {b.eventType && (
-                                    <span className="font-bebas tracking-widest text-[10px] text-gold bg-gold/15 px-1.5 py-0.5">
+                                    <span className="font-bebas tracking-widest text-[11px] text-gold bg-gold/15 px-1.5 py-0.5">
                                       {b.eventType}
                                     </span>
                                   )}
@@ -5511,7 +5588,7 @@ export default function Dashboard() {
                                   {b.spaceName && <span>{b.spaceName}</span>}
                                 </div>
                               </div>
-                              <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(b.status).calClasses}`}>
+                              <div className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(b.status).calClasses}`}>
                                 {getStatusInfo(b.status).label.toUpperCase()}
                               </div>
                             </div>
@@ -5529,7 +5606,7 @@ export default function Dashboard() {
                                     {l.firstName} {l.lastName}
                                   </span>
                                   {l.eventType && (
-                                    <span className="font-bebas tracking-widest text-[10px] text-gold bg-gold/15 px-1.5 py-0.5">
+                                    <span className="font-bebas tracking-widest text-[11px] text-gold bg-gold/15 px-1.5 py-0.5">
                                       {l.eventType}
                                     </span>
                                   )}
@@ -5540,7 +5617,7 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               {holdState(l) === 'held' ? <HoldTag until={l.holdUntil} /> : (
-                              <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
+                              <div className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
                                 {getStatusInfo(l.status).label.toUpperCase()}
                               </div>
                               )}
@@ -5615,17 +5692,17 @@ export default function Dashboard() {
                       >
                         <span className={`${textClass} text-xs leading-none mb-0.5`}>{day}</span>
                         {dayBookings.slice(0, 2).map((b: any) => (
-                          <div key={b.id} className="text-[9px] leading-tight font-dm text-forest bg-forest/10 px-0.5 rounded truncate w-full">
+                          <div key={b.id} className="text-[12px] leading-tight font-dm text-forest bg-forest/10 px-0.5 rounded truncate w-full">
                             {b.firstName} {b.lastName ? b.lastName[0] + '.' : ''}
                           </div>
                         ))}
                         {dayLeads.slice(0, 1).map((l: any) => (
-                          <div key={l.id} className="text-[9px] leading-tight font-dm text-rose-700 bg-rose-50 px-0.5 rounded truncate w-full">
+                          <div key={l.id} className="text-[12px] leading-tight font-dm text-rose-700 bg-rose-50 px-0.5 rounded truncate w-full">
                             {l.firstName} {l.lastName ? l.lastName[0] + '.' : ''}
                           </div>
                         ))}
                         {(dayBookings.length + dayLeads.length) > 2 && (
-                          <div className="text-[9px] text-ink/65">+{dayBookings.length + dayLeads.length - 2} more</div>
+                          <div className="text-[12px] text-ink/65">+{dayBookings.length + dayLeads.length - 2} more</div>
                         )}
                       </div>
                     );
@@ -6329,7 +6406,7 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">SENDER NAME (shown on the email)</p>
+                            <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">SENDER NAME (shown on the email)</p>
                             <input
                               value={sig.fromName ?? ""}
                               onChange={e => patch({ fromName: e.target.value })}
@@ -6338,7 +6415,7 @@ export default function Dashboard() {
                             />
                           </div>
                           <div>
-                            <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">REPLY-TO EMAIL (where replies go)</p>
+                            <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">REPLY-TO EMAIL (where replies go)</p>
                             <input
                               type="email"
                               value={sig.replyTo ?? ""}
@@ -6349,7 +6426,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">LOGO / PHOTO</p>
+                          <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">LOGO / PHOTO</p>
                           <div className="flex items-start gap-3">
                             {sig.signatureLogo && (
                               <div className="relative flex-shrink-0">
@@ -6357,7 +6434,7 @@ export default function Dashboard() {
                                 <button
                                   type="button"
                                   onClick={() => patch({ signatureLogo: "" })}
-                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center leading-none hover:bg-red-600"
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[11px] flex items-center justify-center leading-none hover:bg-red-600"
                                 >✕</button>
                               </div>
                             )}
@@ -6380,7 +6457,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">SIGN-OFF TEXT</p>
+                          <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">SIGN-OFF TEXT</p>
                           <Textarea
                             value={sig.signature ?? ""}
                             onChange={e => patch({ signature: e.target.value })}
@@ -6630,7 +6707,7 @@ export default function Dashboard() {
                       {/* Customiser controls */}
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">ACCENT COLOUR</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">ACCENT COLOUR</label>
                           <div className="flex items-center gap-1.5">
                             <input type="color" value={accentValid ? `#${cleanHex}` : (venueSettings?.primaryColor || "#2D4A3E")}
                               aria-label="Accent colour"
@@ -6642,7 +6719,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">FONT</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">FONT</label>
                           <select value={embedFont} onChange={e => setEmbedFont(e.target.value)}
                             aria-label="Font"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
@@ -6650,13 +6727,13 @@ export default function Dashboard() {
                           </select>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">START HEIGHT</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">START HEIGHT</label>
                           <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
                             aria-label="Start height in pixels"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">MAX WIDTH</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">MAX WIDTH</label>
                           <input type="text" value={embedMaxWidth} onChange={e => setEmbedMaxWidth(e.target.value.replace(/[^0-9a-z]/gi, ""))}
                             aria-label="Maximum width in pixels, or none for full width"
                             placeholder="520 · none = full"
@@ -6667,7 +6744,7 @@ export default function Dashboard() {
                       {embedSnippetTab === "script" && (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">LAYOUT</label>
+                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">LAYOUT</label>
                             <select value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
                               aria-label="Layout"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
@@ -6676,7 +6753,7 @@ export default function Dashboard() {
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">PLACEMENT</label>
+                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PLACEMENT</label>
                             <select value={embedPlacement} onChange={e => setEmbedPlacement(e.target.value as "" | "floating")}
                               aria-label="Placement"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
@@ -6685,13 +6762,13 @@ export default function Dashboard() {
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">PREFILL EVENT TYPE</label>
+                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PREFILL EVENT TYPE</label>
                             <input type="text" value={embedPrefillEventType} onChange={e => setEmbedPrefillEventType(e.target.value)}
                               aria-label="Prefill event type"
                               placeholder="e.g. Christmas Party" className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">GOOGLE ADS LABEL</label>
+                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">GOOGLE ADS LABEL</label>
                             <input type="text" value={embedGadsLabel} onChange={e => setEmbedGadsLabel(e.target.value)}
                               aria-label="Google Ads conversion label"
                               placeholder="AW-XXXXXXX/yyyy" className="w-full border border-border rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-sage-green" />
@@ -6703,10 +6780,10 @@ export default function Dashboard() {
 
                       {embedSnippetTab === "script" ? (
                         <div className="mt-2 space-y-1">
-                          <p className="font-inter text-[11px] text-gray-600">
+                          <p className="font-inter text-[12px] text-gray-600">
                             This one tag builds the form, auto-resizes it, and captures which ad (Google, Facebook, or a utm_ link) sent the enquiry — stored on the lead automatically, no setup needed.
                           </p>
-                          <p className="font-inter text-[11px] text-gray-600">
+                          <p className="font-inter text-[12px] text-gray-600">
                             Run Google Ads? Paste your conversion label above (Google Ads → Goals → Conversions → your action → "Use Google tag") and every submission reports as a conversion automatically — as long as your site already has the Google tag (gtag.js) installed.
                           </p>
                         </div>
@@ -6717,7 +6794,7 @@ export default function Dashboard() {
                             <ExternalLink className="w-3 h-3" /> Preview this embed
                           </a>
                           <span className="text-gray-300">·</span>
-                          <span className="font-inter text-[11px] text-gray-600">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
+                          <span className="font-inter text-[12px] text-gray-600">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
                         </div>
                       )}
                     </div>
@@ -6765,7 +6842,7 @@ export default function Dashboard() {
                         {settingsForm.logoUrl ? (
                           <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: 'contain' }} />
                         ) : (
-                          <span className="text-[10px] text-gray-600 text-center px-1">No logo</span>
+                          <span className="text-[12px] text-gray-600 text-center px-1">No logo</span>
                         )}
                       </div>
                       <div className="flex-1">
@@ -6799,7 +6876,7 @@ export default function Dashboard() {
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
                           className="w-full accent-sage-green" />
-                        <div className="flex justify-between font-dm text-[10px] text-ink/65 mt-0.5">
+                        <div className="flex justify-between font-dm text-[12px] text-ink/65 mt-0.5">
                           <span>Smaller</span><span>Larger</span>
                         </div>
                       </div>
@@ -6847,7 +6924,7 @@ export default function Dashboard() {
                       <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
                       <div className="text-sm text-white mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
                   </div>
                 </div>
 
@@ -6869,7 +6946,7 @@ export default function Dashboard() {
                           aria-label="Page background hex value"
                           placeholder="#f8f5f0" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
-                      <p className="font-dm text-[10px] text-ink/65 mt-1">Colour behind the form</p>
+                      <p className="font-dm text-[12px] text-ink/65 mt-1">Colour behind the form</p>
                     </div>
 
                     {/* Form card background colour */}
@@ -6885,12 +6962,12 @@ export default function Dashboard() {
                           aria-label="Form card background hex value"
                           placeholder="#ffffff" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
-                      <p className="font-dm text-[10px] text-ink/65 mt-1">Colour of the form panels</p>
+                      <p className="font-dm text-[12px] text-ink/65 mt-1">Colour of the form panels</p>
                     </div>
 
                     {/* Button colour */}
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[9px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[11px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
                           aria-label="Button colour"
@@ -6910,7 +6987,7 @@ export default function Dashboard() {
 
                   {/* Background image */}
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BACKGROUND IMAGE <span className="font-dm text-[9px] tracking-normal normal-case text-ink/65">(optional — shows behind the form)</span></label>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BACKGROUND IMAGE <span className="font-dm text-[11px] tracking-normal normal-case text-ink/65">(optional — shows behind the form)</span></label>
                     {settingsForm.formPageBgImage ? (
                       <div className="flex items-start gap-3">
                         <div className="w-32 h-20 rounded border border-gold/20 overflow-hidden flex-shrink-0">
@@ -6937,7 +7014,7 @@ export default function Dashboard() {
                           }} />
                       </label>
                     )}
-                    <p className="font-dm text-[10px] text-ink/65 mt-1">When set, the background image overlays your page background colour. The form cards sit on top.</p>
+                    <p className="font-dm text-[12px] text-ink/65 mt-1">When set, the background image overlays your page background colour. The form cards sit on top.</p>
                   </div>
 
                   {/* Live preview of bg */}
@@ -6953,20 +7030,20 @@ export default function Dashboard() {
                         Form panel preview
                       </div>
                       <div className="mt-2 mx-auto w-fit">
-                        <div className="rounded-sm text-white text-[10px] font-bold px-4 py-1.5"
+                        <div className="rounded-sm text-white text-[12px] font-bold px-4 py-1.5"
                           style={{ backgroundColor: settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E' }}>
                           SUBMIT ENQUIRY
                         </div>
                       </div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
                   </div>
                 </div>
 
                 {/* ── SUCCESS MESSAGE ── */}
                 <div className="dante-card p-5 space-y-3">
                   <h2 className="font-bebas text-xs tracking-widest text-sage">SUCCESS MESSAGE</h2>
-                  <p className="font-dm text-xs text-ink/70">Shown after the form is submitted. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-[10px]">&#123;venueName&#125;</code> to insert your venue name.</p>
+                  <p className="font-dm text-xs text-ink/70">Shown after the form is submitted. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-[12px]">&#123;venueName&#125;</code> to insert your venue name.</p>
                   <Textarea
                     value={settingsForm.formSuccessMessage ?? ''}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
@@ -7097,7 +7174,7 @@ export default function Dashboard() {
                       value={settingsForm.galleryPhotoHeight ?? 128}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, galleryPhotoHeight: Number(e.target.value) }))}
                       className="w-full accent-sage-green" />
-                    <div className="flex justify-between font-dm text-[10px] text-ink/65 mt-0.5">
+                    <div className="flex justify-between font-dm text-[12px] text-ink/65 mt-0.5">
                       <span>Shorter</span><span>Taller</span>
                     </div>
                   </div>
@@ -7199,10 +7276,10 @@ export default function Dashboard() {
                     <div className="border border-gold/20 divide-y divide-gold/10">
                       {/* Header */}
                       <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-linen">
-                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/70">VIS</div>
-                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/70">REQ</div>
-                        <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/70">LABEL</div>
-                        <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/70">TYPE</div>
+                        <div className="col-span-1 font-bebas text-[11px] tracking-widest text-ink/70">VIS</div>
+                        <div className="col-span-1 font-bebas text-[11px] tracking-widest text-ink/70">REQ</div>
+                        <div className="col-span-5 font-bebas text-[11px] tracking-widest text-ink/70">LABEL</div>
+                        <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70">TYPE</div>
                         <div className="col-span-3"></div>
                       </div>
                       {formFields.map((field, i) => (
@@ -7233,7 +7310,7 @@ export default function Dashboard() {
                           </div>
                           {/* Type badge */}
                           <div className="col-span-2">
-                            <span className="font-bebas text-[10px] tracking-wide text-ink/65 bg-linen px-1.5 py-0.5">{field.type}</span>
+                            <span className="font-bebas text-[11px] tracking-wide text-ink/65 bg-linen px-1.5 py-0.5">{field.type}</span>
                           </div>
                           {/* Actions */}
                           <div className="col-span-3 flex items-center gap-1 justify-end">
@@ -7329,12 +7406,12 @@ export default function Dashboard() {
                           <div className="font-cormorant font-semibold text-base text-ink flex items-center gap-2">
                             NowBookIt
                             {nbiConnected && nbiEnabled && (
-                              <span className="inline-flex items-center gap-1 font-dm text-[10px] font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              <span className="inline-flex items-center gap-1 font-dm text-[12px] font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />CONNECTED
                               </span>
                             )}
                             {nbiConnected && !nbiEnabled && (
-                              <span className="inline-flex items-center gap-1 font-dm text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">PAUSED</span>
+                              <span className="inline-flex items-center gap-1 font-dm text-[12px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">PAUSED</span>
                             )}
                           </div>
                           <div className="font-dm text-xs text-ink/60">When a booking is confirmed, it's automatically created in your NowBookIt diary so tables can't be double-booked.</div>
@@ -7403,14 +7480,14 @@ export default function Dashboard() {
                           </select>
                         </div>
                       </div>
-                      <p className="font-dm text-[11px] text-ink/70 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
+                      <p className="font-dm text-[12px] text-ink/70 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
 
                       {/* ── Space → NBI Service mappings ──────────────────── */}
                       <div className="border border-gold/20 bg-linen/30 p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-bebas tracking-widest text-xs text-forest">SPACE → SERVICE ROUTING</div>
-                            <p className="font-dm text-[11px] text-ink/70 mt-0.5">Override the default service per space — e.g. Restaurant bookings → Restaurant service, Bar → Drinks &amp; Snacks. Space name matching is partial (case-insensitive).</p>
+                            <p className="font-dm text-[12px] text-ink/70 mt-0.5">Override the default service per space — e.g. Restaurant bookings → Restaurant service, Bar → Drinks &amp; Snacks. Space name matching is partial (case-insensitive).</p>
                           </div>
                           <button
                             onClick={() => setNbiMappings(prev => [...prev, { spaceName: '', serviceId: '', sectionId: 'all' }])}
@@ -7531,7 +7608,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="bg-blue-50 border border-blue-200/50 rounded p-3 text-xs font-dm text-ink/60 leading-relaxed">
-                        <strong className="text-ink/80">No API key needed.</strong> VenueFlow uses NowBookIt's public booking endpoint — the same one a customer hits when they book through your widget. Find your <strong>Account ID</strong> and <strong>Venue ID</strong> in your NowBookIt booking widget URL: <code className="bg-white/70 px-1 rounded text-[10px]">bookings.nowbookit.com/?accountid=<strong>&lt;ACCOUNT_ID&gt;</strong>&amp;venueid=<strong>&lt;VENUE_ID&gt;</strong></code>. Once connected, confirmed VenueFlow bookings appear in your NowBookIt diary automatically. You can also push individual bookings manually from each booking's side panel.
+                        <strong className="text-ink/80">No API key needed.</strong> VenueFlow uses NowBookIt's public booking endpoint — the same one a customer hits when they book through your widget. Find your <strong>Account ID</strong> and <strong>Venue ID</strong> in your NowBookIt booking widget URL: <code className="bg-white/70 px-1 rounded text-[12px]">bookings.nowbookit.com/?accountid=<strong>&lt;ACCOUNT_ID&gt;</strong>&amp;venueid=<strong>&lt;VENUE_ID&gt;</strong></code>. Once connected, confirmed VenueFlow bookings appear in your NowBookIt diary automatically. You can also push individual bookings manually from each booking's side panel.
                       </div>
 
                       {/* ── Inbound webhook (NBI → VFHQ) ── */}
@@ -7539,7 +7616,7 @@ export default function Dashboard() {
                         <div className="border-t border-gold/20 pt-4 mt-2">
                           <div className="font-bebas text-xs tracking-widest text-sage mb-2">NOWBOOKIT → VENUEFLOW (pull bookings in)</div>
                           <label className="font-bebas text-[11px] tracking-widest text-ink/60 block mb-1">INBOUND WEBHOOK URL</label>
-                          <p className="font-dm text-[11px] text-ink/60 mb-2 leading-relaxed">
+                          <p className="font-dm text-[12px] text-ink/60 mb-2 leading-relaxed">
                             <strong className="text-ink/80">Only needed for the reverse direction.</strong> Paste this URL into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made <em>directly in NowBookIt</em> will then appear in VenueFlow automatically.
                             <br />
                             <span className="text-ink/70">Bookings made in VenueFlow already push to NowBookIt via the auto-sync toggle above — you don't need this URL for that.</span>
@@ -7550,7 +7627,7 @@ export default function Dashboard() {
                               readOnly
                               value={nbiWebhook?.url ?? 'Loading…'}
                               onFocus={(e) => e.currentTarget.select()}
-                              className="flex-1 font-mono text-[11px] border border-gold/30 rounded px-3 py-2 bg-white text-ink/80 focus:outline-none focus:border-forest"
+                              className="flex-1 font-mono text-[12px] border border-gold/30 rounded px-3 py-2 bg-white text-ink/80 focus:outline-none focus:border-forest"
                             />
                             <button
                               onClick={() => {
@@ -7683,7 +7760,7 @@ export default function Dashboard() {
                         {settingsForm.logoUrl ? (
                           <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: "contain" }} />
                         ) : (
-                          <span className="text-[10px] text-gray-600 text-center px-1">No logo</span>
+                          <span className="text-[12px] text-gray-600 text-center px-1">No logo</span>
                         )}
                       </div>
                       <div className="flex-1">
@@ -7804,11 +7881,11 @@ export default function Dashboard() {
                     <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD RECIPIENT</h2>
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NAME</label>
+                        <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME</label>
                         <input value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                       </div>
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EMAIL</label>
+                        <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL</label>
                         <input value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} type="email" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz"
                           onKeyDown={e => { if (e.key === 'Enter' && newStaffName.trim() && emailValid) addStaffEmailMut.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() }); }} />
                       </div>
@@ -7820,7 +7897,7 @@ export default function Dashboard() {
                         <Plus className="w-3 h-3" /> {addStaffEmailMut.isPending ? 'ADDING…' : 'ADD'}
                       </button>
                     </div>
-                    <button onClick={() => setStaffBulkOpen(v => !v)} className="font-bebas tracking-widest text-[10px] text-forest hover:underline mt-3">
+                    <button onClick={() => setStaffBulkOpen(v => !v)} className="font-bebas tracking-widest text-[11px] text-forest hover:underline mt-3">
                       {staffBulkOpen ? '− PASTE MULTIPLE' : '+ PASTE MULTIPLE'}
                     </button>
                     {staffBulkOpen && (
@@ -7908,15 +7985,15 @@ export default function Dashboard() {
                       <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD TEAM MEMBER</h2>
                       <div className="space-y-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NAME *</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
                           <input value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EMAIL (OPTIONAL)</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL (OPTIONAL)</label>
                           <input value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">ROLE</label>
+                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">ROLE</label>
                           <select value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white">
                             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                           </select>
@@ -7943,7 +8020,7 @@ export default function Dashboard() {
                             <div className="flex-1 min-w-0">
                               <div className="font-dm text-sm font-semibold text-ink">{member.name}</div>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 bg-linen text-ink/60">{member.role.toUpperCase()}</span>
+                                <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 bg-linen text-ink/60">{member.role.toUpperCase()}</span>
                                 {member.email && <span className="font-dm text-xs text-ink/60 truncate">{member.email}</span>}
                                 {member.lastAccessedAt && <span className="font-dm text-xs text-ink/65">Last login: {new Date(member.lastAccessedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
                               </div>
@@ -8281,7 +8358,7 @@ export default function Dashboard() {
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-300 text-[10px] flex-shrink-0">none</div>
+                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-300 text-[12px] flex-shrink-0">none</div>
                                 )}
                                 <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
                                   <Upload className="w-3 h-3" /> UPLOAD PNG
@@ -8303,7 +8380,7 @@ export default function Dashboard() {
                                   }} />
                                 </label>
                               </div>
-                              <p className="font-dm text-[10px] text-gray-300 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
+                              <p className="font-dm text-[12px] text-gray-300 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -8619,7 +8696,7 @@ export default function Dashboard() {
                           <div className="p-4 border-b border-gold/10 bg-forest/5 space-y-3">
                             <div>
                               <p className="font-dm text-xs text-ink/70 mb-1"><span className="font-semibold text-forest">✨ AI Smart Add</span> — paste anything: a menu PDF excerpt, a supplier list, an email, even a rough description. AI will extract items into the current category.</p>
-                              <p className="font-dm text-[11px] text-ink/60">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
+                              <p className="font-dm text-[12px] text-ink/60">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
                             </div>
                             <Textarea value={catalogAiText} onChange={e => setCatalogAiText(e.target.value)}
                               placeholder={catalogActiveType === 'food'
@@ -8634,7 +8711,7 @@ export default function Dashboard() {
                                     <div key={i} className="flex items-center justify-between gap-2 px-1 py-1.5">
                                       <div className="min-w-0 flex-1">
                                         <div className="font-dm text-sm text-ink truncate">{it.name}</div>
-                                        {it.description && <div className="font-dm text-[11px] text-ink/70 truncate">{it.description}</div>}
+                                        {it.description && <div className="font-dm text-[12px] text-ink/70 truncate">{it.description}</div>}
                                       </div>
                                       <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/65">/ {it.unit ?? (it.pricingType === 'per_item' ? 'item' : 'person')}</span></span>
                                       <button aria-label="Remove item" onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -8866,7 +8943,7 @@ export default function Dashboard() {
                                   }}
                                   className="cursor-pointer"
                                 />
-                                <span className="font-bebas tracking-widest text-[10px] text-ink/65">{allSelected ? 'DESELECT ALL' : 'SELECT ALL'}</span>
+                                <span className="font-bebas tracking-widest text-[11px] text-ink/65">{allSelected ? 'DESELECT ALL' : 'SELECT ALL'}</span>
                               </div>
                             )}
                             <div className="divide-y divide-gold/10">
@@ -8891,10 +8968,10 @@ export default function Dashboard() {
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className={`font-dm text-sm font-medium ${item.available ? 'text-ink' : 'text-stone-500 line-through'}`}>{item.name}</span>
                                       {!item.available && <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 bg-stone-200 text-stone-700">NOT ON MENU</span>}
-                                      <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 ${
+                                      <span className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 ${
                                         item.pricingType === 'per_person' ? 'bg-forest/10 text-forest' : 'bg-gold/15 text-amber-700'
                                       }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
-                                      {item.allergens && <span className="font-dm text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
+                                      {item.allergens && <span className="font-dm text-[12px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
                                     </div>
                                     {item.description && <p className="font-dm text-xs text-ink/70 mt-0.5 truncate">{item.description}</p>}
                                   </div>
@@ -9016,7 +9093,7 @@ export default function Dashboard() {
             aria-modal="true"
             aria-labelledby="event-drawer-title"
             tabIndex={-1}
-            className={`w-full ${!selectedBooking._isLead && drawerView === 'beo' ? 'md:max-w-[880px] overflow-hidden' : 'md:max-w-lg overflow-y-auto'} bg-cream md:border-l border-gold/20 flex flex-col h-full shadow-2xl outline-none`}
+            className={`w-full md:max-w-[760px] ${!selectedBooking._isLead && drawerView === 'beo' ? 'overflow-hidden' : 'overflow-y-auto'} bg-cream md:border-l border-gold/20 flex flex-col h-full shadow-2xl outline-none`}
           >
             {/* Header — sticky, so the name, the when/who summary and the close
                 button stay in view however far down the panel you scroll. */}
@@ -9075,7 +9152,8 @@ export default function Dashboard() {
                   <div className="flex-shrink-0 px-4 md:px-5 pt-3 bg-cream empty:hidden">
                     <EventNextSteps key={`ns-b${selectedBooking.id}`} bookingId={selectedBooking.id}
                       onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
-                      onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+                      onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }}
+                      onSetDeposit={openDrawerFinancials} />
                   </div>
                 )}
                 {/* Two jobs only: change it, or take the PDF. Everything else
@@ -9218,7 +9296,7 @@ export default function Dashboard() {
                         <Ban className="w-3.5 h-3.5 mt-0.5 text-amber-800 flex-shrink-0" />
                         <span>
                           <span className="block font-bebas tracking-widest text-xs text-amber-900">{selectedBooking._isLead ? 'CANCEL ENQUIRY' : 'CANCEL EVENT'}</span>
-                          <span className="block font-dm text-[11px] text-ink/70 leading-snug">{selectedBooking._isLead ? 'Marks it Lost. Keeps the record.' : 'Frees the date. Keeps the record.'}</span>
+                          <span className="block font-dm text-[12px] text-ink/70 leading-snug">{selectedBooking._isLead ? 'Marks it Lost. Keeps the record.' : 'Frees the date. Keeps the record.'}</span>
                         </span>
                       </button>
                       <button onClick={deleteSelectedEvent}
@@ -9226,7 +9304,7 @@ export default function Dashboard() {
                         <Trash2 className="w-3.5 h-3.5 mt-0.5 text-red-700 flex-shrink-0" />
                         <span>
                           <span className="block font-bebas tracking-widest text-xs text-red-700">DELETE PERMANENTLY</span>
-                          <span className="block font-dm text-[11px] text-ink/70 leading-snug">Removes it for good.</span>
+                          <span className="block font-dm text-[12px] text-ink/70 leading-snug">Removes it for good.</span>
                         </span>
                       </button>
                     </PopoverContent>
@@ -9278,7 +9356,10 @@ export default function Dashboard() {
                   leadId={selectedBooking._isLead ? selectedBooking.id : null}
                   leadStatus={selectedBooking._isLead ? drawerLeadServerStatus : selectedBooking.status}
                   onOpenRunsheet={(bid) => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${bid}`); }}
-                  onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }} />
+                  onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("email"); }}
+                  // Financials only renders for a booking; an enquiry's drawer
+                  // keeps the old explanatory text rather than a button that goes nowhere.
+                  onSetDeposit={selectedBooking._isLead ? undefined : openDrawerFinancials} />
               )}
               {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
               {selectedBooking._isLead && !isStaff && (
@@ -9335,7 +9416,7 @@ export default function Dashboard() {
               {/* Expand/collapse every block at once. */}
               <div className="flex justify-end">
                 <button onClick={() => setAllDrawerSections(!allDrawerSectionsOpen)}
-                  className="font-bebas tracking-widest text-[10px] text-ink/70 hover:text-ink hover:underline underline-offset-2">
+                  className="font-bebas tracking-widest text-[11px] text-ink/70 hover:text-ink hover:underline underline-offset-2">
                   {allDrawerSectionsOpen ? 'COLLAPSE ALL' : 'EXPAND ALL'}
                 </button>
               </div>
@@ -9745,10 +9826,10 @@ export default function Dashboard() {
                     if (!attribution) return null;
                     return (
                       <div className="mt-3 pt-3 border-t border-gold/20">
-                        <div className="font-bebas text-[10px] tracking-widest text-ink/50 mb-1">AD CLICK ATTRIBUTION</div>
+                        <div className="font-bebas text-[11px] tracking-widest text-ink/50 mb-1">AD CLICK ATTRIBUTION</div>
                         <div className="font-dm text-sm text-foreground">{attribution.label}</div>
                         {attribution.clickId && (
-                          <div className="font-dm text-[11px] text-ink/60 mt-0.5 break-all">{attribution.clickId}</div>
+                          <div className="font-dm text-[12px] text-ink/60 mt-0.5 break-all">{attribution.clickId}</div>
                         )}
                       </div>
                     );
@@ -9915,7 +9996,7 @@ export default function Dashboard() {
                         </Fragment>
                       );
                     })}
-                    <p className="font-dm text-[11px] text-ink/45 leading-relaxed pt-0.5">
+                    <p className="font-dm text-[12px] text-ink/45 leading-relaxed pt-0.5">
                       {isStaff
                         ? 'This is how the event is charged — it also prints on the BEO.'
                         : 'Prints on the BEO under \u201cHow this event is billed\u201d.'}
@@ -10002,7 +10083,7 @@ export default function Dashboard() {
                           event page — so it was dropped to avoid two buttons for
                           one action. */}
                       {/* Plan */}
-                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">PLAN</div>
+                      <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70 mt-1">PLAN</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
@@ -10013,7 +10094,7 @@ export default function Dashboard() {
                       </button>
 
                       {/* Documents */}
-                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">DOCUMENTS</div>
+                      <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70 mt-1">DOCUMENTS</div>
                       <button onClick={() => downloadBeo(selectedBooking.id)}
                         title="The event order for the team: no prices or signature lines"
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
@@ -10040,7 +10121,7 @@ export default function Dashboard() {
                       )}
 
                       {/* Money */}
-                      <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
+                      <div className={`col-span-2 font-bebas text-[11px] tracking-widest text-ink/70 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
                         className={`flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs ${isStaff ? "hidden" : ""}`}>
                         <TrendingUp className="w-3 h-3" /> SPEND
@@ -10067,12 +10148,12 @@ export default function Dashboard() {
                       {/* Sync — staff are read-only server-side, so hide it. */}
                       {!isStaff && (venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
-                          <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">SYNC</div>
+                          <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70 mt-1">SYNC</div>
                           <button
                             onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
                             disabled={pushToNbiMutation.isPending}
                             className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
-                            <span className="font-bebas text-[10px] tracking-wider">NBI</span>
+                            <span className="font-bebas text-[11px] tracking-wider">NBI</span>
                             {pushToNbiMutation.isPending
                               ? 'PUSHING…'
                               : selectedBooking.nbiBookingId
@@ -10139,17 +10220,17 @@ export default function Dashboard() {
                     return (
                     <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
                       <div className="px-2 py-3 sm:p-3 text-center min-w-0">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/70">TOTAL VALUE</div>
+                        <div className="font-bebas tracking-widest text-[11px] text-ink/70">TOTAL VALUE</div>
                         {hasTotal
                           ? <div className="font-cormorant text-base sm:text-lg font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.total))}</div>
                           : noTotal}
                       </div>
                       <div className="px-2 py-3 sm:p-3 text-center bg-green-50/60 min-w-0">
-                        <div className="font-bebas tracking-widest text-[10px] text-green-700">PAID</div>
+                        <div className="font-bebas tracking-widest text-[11px] text-green-700">PAID</div>
                         <div className="font-cormorant text-base sm:text-lg font-semibold text-green-700 [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.totalPaid))}</div>
                       </div>
                       <div className={`px-2 py-3 sm:p-3 text-center min-w-0 ${!hasTotal ? '' : drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
-                        <div className={`font-bebas tracking-widest text-[10px] ${!hasTotal ? 'text-ink/70' : drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
+                        <div className={`font-bebas tracking-widest text-[11px] ${!hasTotal ? 'text-ink/70' : drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
                         {hasTotal
                           ? <div className={`font-cormorant text-base sm:text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] break-words ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>{currency(Number(drawerPaymentSummary.outstanding))}</div>
                           : noTotal}
@@ -10165,12 +10246,12 @@ export default function Dashboard() {
                           <div>
                             <span className="font-bebas tracking-widest text-xs text-forest capitalize">{p.type.replace(/_/g, ' ')}</span>
                             <span className="font-dm text-xs text-ink/70 ml-2">{p.method?.replace(/_/g, ' ')}</span>
-                            {p.notes && <div className="font-dm text-[11px] text-ink/60">{p.notes}</div>}
+                            {p.notes && <div className="font-dm text-[12px] text-ink/60">{p.notes}</div>}
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="text-right">
                               <div className="font-cormorant font-semibold text-sm text-ink">{currency(Number(p.amount))}</div>
-                              <div className="font-dm text-[10px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                              <div className="font-dm text-[12px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
                             <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
@@ -10185,7 +10266,7 @@ export default function Dashboard() {
                   )}
                   {/* Add payment form */}
                   <div className="border-t border-gold/20 bg-white/50 p-4 space-y-2">
-                    <div className="font-bebas tracking-widest text-[10px] text-ink/70 mb-2">RECORD PAYMENT</div>
+                    <div className="font-bebas tracking-widest text-[11px] text-ink/70 mb-2">RECORD PAYMENT</div>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         type="number" step="0.01" min="0"
@@ -10276,16 +10357,17 @@ export default function Dashboard() {
                       setupText ? 'set-up' : null,
                     ].filter(Boolean).join(' · ')}
                     open={secOpen('overview')} onToggle={() => toggleDrawerSection('overview')}
-                    action={<button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-forest hover:underline">EDIT →</button>}>
+                    action={<button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[11px] text-forest hover:underline">EDIT →</button>}>
                     <div className="divide-y divide-gold/10 -mx-3 -mt-2">
                       {/* Run of day */}
                       {timeline.length > 0 && (
                         <div className="px-4 py-2">
-                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> RUN OF DAY</div>
+                          <div className="font-bebas tracking-widest text-[11px] text-forest mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> RUN OF DAY</div>
                           <div className="space-y-0.5">
                             {timeline.map((t: any, idx: number) => (
                               <div key={idx} className="flex items-baseline gap-2">
-                                {t.time && <span className="font-dm text-[11px] text-ink/70 tabular-nums flex-shrink-0 w-14">{t.time}</span>}
+                                {/* Same clock as the BEO and the rest of the app ("5:30 pm"), not raw 24h. */}
+                                {t.time && <span className="font-dm text-xs text-ink/70 tabular-nums flex-shrink-0 w-16">{fmtTime(t.time) || t.time}</span>}
                                 <span className="font-dm text-xs text-ink">{t.title}</span>
                               </div>
                             ))}
@@ -10297,12 +10379,12 @@ export default function Dashboard() {
                         const items = foodItems.filter((i: any) => i.course === course);
                         return (
                           <div key={course} className="px-4 py-2">
-                            <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">{course}</div>
+                            <div className="font-bebas tracking-widest text-[11px] text-forest mb-1">{course}</div>
                             <div className="space-y-0.5">
                               {items.map((item: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
                                   <span className="font-dm text-xs text-ink">{item.dishName}{item.dietary ? <span className="text-ink/60 ml-1">({item.dietary})</span> : null}</span>
-                                  {item.qty > 1 && <span className="font-dm text-[11px] text-ink/60">×{item.qty}</span>}
+                                  {item.qty > 1 && <span className="font-dm text-[12px] text-ink/60">×{item.qty}</span>}
                                 </div>
                               ))}
                             </div>
@@ -10312,10 +10394,10 @@ export default function Dashboard() {
                       {/* Drinks */}
                       {drinkItems.length > 0 && (
                         <div className="px-4 py-2">
-                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">DRINKS</div>
+                          <div className="font-bebas tracking-widest text-[11px] text-forest mb-1">DRINKS</div>
                           <div className="flex flex-wrap gap-1">
                             {drinkItems.map((item: any, idx: number) => (
-                              <span key={idx} className="bg-cream border border-gold/30 font-dm text-[11px] px-2 py-0.5 text-ink/70">{item.dishName}</span>
+                              <span key={idx} className="bg-cream border border-gold/30 font-dm text-[12px] px-2 py-0.5 text-ink/70">{item.dishName}</span>
                             ))}
                           </div>
                         </div>
@@ -10323,20 +10405,20 @@ export default function Dashboard() {
                       {/* Dietaries & allergies */}
                       {dietaries.length > 0 && (
                         <div className="px-4 py-2">
-                          <div className="font-bebas tracking-widest text-[10px] text-red-600 mb-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> DIETARY & ALLERGIES</div>
+                          <div className="font-bebas tracking-widest text-[11px] text-red-600 mb-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> DIETARY & ALLERGIES</div>
                           <div className="space-y-1">
                             {dietaries.map((d: any, idx: number) => (
                               <div key={idx} className="flex items-start gap-2">
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${isSevere(d.name) ? 'bg-red-500' : 'bg-amber-500'}`} />
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    {d.count > 1 && <span className="font-dm text-[11px] text-ink/70 tabular-nums">×{d.count}</span>}
+                                    {d.count > 1 && <span className="font-dm text-[12px] text-ink/70 tabular-nums">×{d.count}</span>}
                                     <span className="font-dm text-xs text-ink font-medium">{d.name}</span>
-                                    {isSevere(d.name) && <span className="font-bebas tracking-widest text-[8px] text-red-600">SEVERE</span>}
+                                    {isSevere(d.name) && <span className="font-bebas tracking-widest text-[11px] text-red-600">SEVERE</span>}
                                   </div>
-                                  {d.notes && <div className="font-dm text-[11px] text-ink/70 leading-snug">{d.notes}</div>}
+                                  {d.notes && <div className="font-dm text-[12px] text-ink/70 leading-snug">{d.notes}</div>}
                                   {Array.isArray(d.names) && d.names.length > 0 && (
-                                    <div className="font-dm text-[11px] text-ink/60 leading-snug">{d.names.join(' · ')}</div>
+                                    <div className="font-dm text-[12px] text-ink/60 leading-snug">{d.names.join(' · ')}</div>
                                   )}
                                 </div>
                               </div>
@@ -10347,7 +10429,7 @@ export default function Dashboard() {
                       {/* Set-up */}
                       {setupText && (
                         <div className="px-4 py-2">
-                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">SET-UP</div>
+                          <div className="font-bebas tracking-widest text-[11px] text-forest mb-1">SET-UP</div>
                           <div className="font-dm text-xs text-ink/70 leading-relaxed">{setupText}</div>
                         </div>
                       )}
@@ -10760,8 +10842,8 @@ export default function Dashboard() {
                             <div className="font-dm text-xs text-ink/70">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
-                            {ev.staffPortalToken && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
-                            {ev.bookingId != null && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>}
+                            {ev.staffPortalToken && <span className="font-bebas text-[11px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
+                            {ev.bookingId != null && <span className="font-bebas text-[11px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>}
                           </div>
                         </div>
                       ))}
@@ -10827,7 +10909,7 @@ export default function Dashboard() {
               <div className="border border-gold/20">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-gold/20 bg-linen/30">
                   <span className="font-bebas tracking-widest text-[11px] text-ink/70">SAVED STAFF ({(staffEmailsForWeekly.data as any[] ?? []).length})</span>
-                  <div className="flex items-center gap-2 text-[11px] font-dm">
+                  <div className="flex items-center gap-2 text-[12px] font-dm">
                     <button onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
                       className="text-forest hover:underline">Select all</button>
                     <span className="text-ink/20">|</span>
@@ -10854,7 +10936,7 @@ export default function Dashboard() {
                 )}
                 {/* Add to saved list */}
                 <div className="border-t border-gold/20 px-3 py-2.5 space-y-2">
-                  <div className="font-bebas tracking-widest text-[10px] text-ink/65">ADD TO LIST</div>
+                  <div className="font-bebas tracking-widest text-[11px] text-ink/65">ADD TO LIST</div>
                   <div className="flex gap-1.5">
                     <input value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
                       placeholder="Name" className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
@@ -10881,7 +10963,7 @@ export default function Dashboard() {
                   rows={2}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-none" />
                 {weeklyExtraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).length > 0 && (
-                  <p className="font-dm text-[11px] text-red-600 mt-1">
+                  <p className="font-dm text-[12px] text-red-600 mt-1">
                     Invalid: {weeklyExtraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).join(', ')}
                   </p>
                 )}
@@ -11160,7 +11242,7 @@ export default function Dashboard() {
               <a key={item.id} href={(item as any).href} className={baseClass}>
                 {indicator}
                 {item.icon}
-                <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
+                <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
               </a>
             );
           }
@@ -11173,9 +11255,9 @@ export default function Dashboard() {
             >
               {indicator}
               {item.icon}
-              <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
+              <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
               {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}

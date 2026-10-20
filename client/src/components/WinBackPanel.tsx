@@ -73,7 +73,7 @@ export default function WinBackPanel({ onOpenLead }: { onOpenLead: (id: number) 
             <button key={t.key} type="button" aria-pressed={view === t.key} title={t.hint} onClick={() => setView(t.key)}
               className={`font-bebas tracking-widest text-xs px-3 py-1.5 border rounded-sm flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest ${view === t.key ? "bg-forest-dark text-cream border-forest" : "bg-white text-ink border-stone-300 hover:border-forest"}`}>
               {t.label.toUpperCase()}
-              <span className={`text-[11px] px-1.5 rounded-full font-sans font-bold ${view === t.key ? "bg-cream text-ink" : "bg-stone-200 text-stone-800"}`}>{t.count}</span>
+              <span className={`text-[12px] px-1.5 rounded-full font-sans font-bold ${view === t.key ? "bg-cream text-ink" : "bg-stone-200 text-stone-800"}`}>{t.count}</span>
             </button>
           ))}
         </div>

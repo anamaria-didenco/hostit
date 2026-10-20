@@ -36,7 +36,7 @@ export function HoldTag({ until, className = "" }: { until?: Date | string | nul
   return (
     <span
       title={until ? `Date held until ${fmtHoldDay(until)}` : "Date on hold"}
-      className={`vf-hold-chip font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm whitespace-nowrap flex-shrink-0 ${className}`}>
+      className={`vf-hold-chip font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm whitespace-nowrap flex-shrink-0 ${className}`}>
       HOLD{until ? ` · ${fmtHoldDay(until).toUpperCase()}` : ""}
     </span>
   );
@@ -51,7 +51,7 @@ export function DateClashChip({ clashes, className = "" }: { clashes: ClientClas
     <span
       title={text}
       aria-label={`Date clash. ${text}`}
-      className={`inline-flex items-center gap-1 font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm bg-red-50 text-red-800 border border-red-200 whitespace-nowrap flex-shrink-0 ${className}`}>
+      className={`inline-flex items-center gap-1 font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm bg-red-50 text-red-800 border border-red-200 whitespace-nowrap flex-shrink-0 ${className}`}>
       <AlertCircle className="w-3 h-3" aria-hidden="true" /> DATE CLASH
     </span>
   );
@@ -78,7 +78,7 @@ export function DoubleBookedTag({ flaggedAt, compact = false, className = "" }: 
     <span
       title={title}
       aria-label={title}
-      className={`inline-flex items-center gap-1 font-bebas text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm bg-red-50 text-red-800 border border-red-200 whitespace-nowrap flex-shrink-0 ${className}`}>
+      className={`inline-flex items-center gap-1 font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded-sm bg-red-50 text-red-800 border border-red-200 whitespace-nowrap flex-shrink-0 ${className}`}>
       <AlertCircle className="w-3 h-3" aria-hidden="true" /> DOUBLE-BOOKED
     </span>
   );

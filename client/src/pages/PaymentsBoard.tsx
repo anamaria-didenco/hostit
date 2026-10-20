@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { NBI_IMPORT_EVENT_TYPE } from "@shared/conversion";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -93,7 +94,7 @@ const BUCKET_LABEL: Record<Bucket, string> = {
 const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices"], ["received", "Received"]] as const;
 type View = typeof TABS[number][0];
 
-export default function PaymentsBoard({ initialFilter }: { initialFilter?: "deposits_due" } = {}) {
+export default function PaymentsBoard({ initialFilter }: { initialFilter?: "deposits_due" | "no_total" } = {}) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
@@ -103,7 +104,8 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
   // Default to Upcoming (what's coming up and where is its money at). Past
   // events that still need something are surfaced by a banner above the list,
   // so a forgotten post-event drinks bill can't hide behind this default.
-  const [filter, setFilter] = useState<"action" | "upcoming" | "all" | "deposits">(initialFilter === "deposits_due" ? "deposits" : "upcoming");
+  const [filter, setFilter] = useState<"action" | "upcoming" | "all" | "deposits" | "no_total">(
+    initialFilter === "deposits_due" ? "deposits" : initialFilter === "no_total" ? "no_total" : "upcoming");
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
   // "Bookings" tracks where each booking's money is up to; "Invoices sent" is
@@ -157,6 +159,14 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
   // The Overview "Deposits due" tile: confirmed events from today on whose deposit is
   // required and unpaid (same rule as server/needsAttention.ts countDepositsDue).
   const isUpcomingDepositDue = (r: Row) => r.status === "confirmed" && isDepositDue(r) && !!r.eventDate && isFuture(r);
+  // The Overview "Revenue this month" tile: this month's bookings (not
+  // cancelled) with no total, which it can't count (same rule as server/db.ts).
+  const isThisMonthNoTotal = (r: Row) => {
+    if (r.hasPrice || r.status === "cancelled" || !r.eventDate) return false;
+    if (r.eventType === NBI_IMPORT_EVENT_TYPE) return false; // table reservations, not events
+    const d = new Date(r.eventDate), now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  };
   const needsAction = (r: Row) =>
     isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
   const bucketOf = (r: Row): Bucket | null => {
@@ -181,6 +191,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     if (bucket) list = list.filter(r => bucketOf(r) === bucket);
     else if (filter === "action") list = list.filter(needsAction);
     else if (filter === "deposits") list = list.filter(isUpcomingDepositDue);
+    else if (filter === "no_total") list = list.filter(isThisMonthNoTotal);
     else if (filter === "upcoming") list = list.filter(isFuture);
     // Sort: soonest event first, except "All" which is most recent first.
     const ts = (r: Row) => (r.eventDate ? new Date(r.eventDate).getTime() : Number.MAX_SAFE_INTEGER);
@@ -266,7 +277,8 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     : "Search client, type, space…";
 
   return (
-    <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
+    // Same page frame as the other staff pages: full width, same padding.
+    <div className="p-4 md:p-6">
       <PageHeader
         className="mb-4"
         icon={<DollarSign className="w-6 h-6 text-forest" aria-hidden="true" />}
@@ -280,7 +292,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             onClick={() => syncXero.mutate({ force: true })}
             disabled={syncXero.isPending}
             title="Check Xero for invoices that have been reconciled and bring those payments in"
-            className="font-bebas tracking-widest text-xs text-primary border border-primary/30 rounded-md px-3 py-2 hover:bg-accent transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
+            className="vf-btn vf-btn-secondary">
             <RefreshCw className={`w-3.5 h-3.5 ${syncXero.isPending ? "animate-spin" : ""}`} aria-hidden="true" />
             {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
           </button>
@@ -305,7 +317,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             )}
           </select>
         )}
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full sm:w-64 sm:min-w-[16rem] flex-shrink-0">
           <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
             type="search"
@@ -323,14 +335,13 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
       />
 
       {/* View switcher — a real tab set: arrow keys / Home / End move between tabs. */}
-      <div className="flex gap-1.5 mb-4 border-b border-gold/20 overflow-x-auto" role="tablist" aria-label="Payments view">
+      <div className="flex gap-1 mb-4 border-b border-border overflow-x-auto" role="tablist" aria-label="Payments view">
         {TABS.map(([k, lbl], i) => (
           <button key={k} ref={el => { tabRefs.current[i] = el; }}
             id={`pay-tab-${k}`} role="tab" aria-selected={view === k} aria-controls="pay-tabpanel"
             tabIndex={view === k ? 0 : -1}
             onClick={() => setView(k)} onKeyDown={e => onTabKey(e, i)}
-            className={`font-bebas tracking-widest text-sm px-3 sm:px-4 py-2.5 border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${
-              view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
+            className="vf-tab">
             {lbl}
           </button>
         ))}
@@ -368,7 +379,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
 
       {/* Filters */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap" role="group" aria-label="Which bookings to show">
-        {([["action", "Needs action"], ["deposits", "Deposits due"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
+        {([["action", "Needs action"], ["deposits", "Deposits due"], ["no_total", "No total"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
           const on = !bucket && filter === id;
           return (
             <button key={id} aria-pressed={on} onClick={() => { setFilter(id); setBucket(null); }}
@@ -421,7 +432,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         <div className="text-center py-16">
           <CheckCircle2 className="w-8 h-8 text-green-600/60 mx-auto mb-2" aria-hidden="true" />
           <p className="font-dm text-sage text-sm">
-            {q ? "No bookings match your search." : bucket ? `Nothing in "${BUCKET_LABEL[bucket]}" right now.` : filter === "action" ? "Nothing needs action — you're all caught up." : "No events yet."}
+            {q ? "No bookings match your search." : bucket ? `Nothing in "${BUCKET_LABEL[bucket]}" right now.` : filter === "action" ? "Nothing needs action — you're all caught up." : filter === "no_total" ? "Every booking this month has a total." : "No events yet."}
           </p>
         </div>
       ) : (

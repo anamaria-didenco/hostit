@@ -27,7 +27,7 @@ export default function TodayPanel(p: {
     <section aria-label="Today" className={`dante-card overflow-hidden ${p.className ?? ""}`}>
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <SectionHead title="Today" meta={todays.length ? `${todays.length} event${todays.length !== 1 ? "s" : ""}` : undefined} className="flex-1" />
-        <button onClick={p.onCalendar} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary min-h-[44px]">Calendar</button>
+        <button onClick={p.onCalendar} className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary min-h-[44px]">Calendar</button>
       </div>
       {!data ? (
         <p className="px-4 py-3 font-dm text-sm text-sage">Loading…</p>

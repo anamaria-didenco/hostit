@@ -214,17 +214,19 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
   const now = Date.now();
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto pb-24 md:pb-6">
+    // Same page frame as the other staff pages (full width, same padding, header
+    // in the same place); only the list itself keeps a readable measure.
+    <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-6">
         <div className="min-w-0">
-          <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Tasks</h1>
-          <p className="font-dm text-xs md:text-sm text-sage mt-0.5">Track follow-ups, event prep, and team to-dos</p>
+          <h1 className="font-cormorant text-3xl font-semibold text-ink">Tasks</h1>
+          <p className="font-dm text-sm text-sage mt-0.5">Track follow-ups, event prep, and team to-dos</p>
         </div>
         {!isStaff && (
           <button
             onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-1.5 bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark active:bg-burg-dark transition-colors min-h-[44px] flex-shrink-0"
+            className="vf-btn vf-btn-primary"
           >
             <Plus className="w-3.5 h-3.5" />
             {showForm ? "CANCEL" : "NEW TASK"}
@@ -235,6 +237,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
       {/* Create Form */}
       {showForm && (
         <TaskForm
+          className="max-w-3xl mb-6"
           heading="NEW TASK"
           initial={EMPTY_FORM}
           submitLabel="CREATE TASK"
@@ -246,16 +249,13 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
       )}
 
       {/* Filter tabs — horizontally scrollable on mobile to prevent overflow */}
-      <div className="flex gap-1 mb-4 border-b border-border overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+      <div className="flex gap-1 mb-4 border-b border-border overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none max-w-3xl">
         {FILTERS.map(f => (
           <button
             key={f.key}
             onClick={() => setFilter(f.key as any)}
-            className={`flex-shrink-0 font-bebas tracking-widest text-xs px-4 py-2.5 transition-colors border-b-2 -mb-px min-h-[44px] ${
-              filter === f.key
-                ? "border-burgundy text-burgundy"
-                : "border-transparent text-sage hover:text-ink"
-            }`}
+            aria-pressed={filter === f.key}
+            className="vf-tab min-h-[44px]"
           >
             {f.label}
           </button>
@@ -264,7 +264,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
 
       {/* Task list */}
       {!taskList || taskList.length === 0 ? (
-        <div className="text-center py-16">
+        <div className="text-center py-16 max-w-3xl">
           <CheckCircle2 className="w-12 h-12 text-sage/30 mx-auto mb-3" />
           <p className="font-cormorant text-xl text-ink/65 italic">
             {filter === "completed" ? "No completed tasks yet" : "No tasks here"}
@@ -274,7 +274,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-w-3xl">
           {taskList.map((task: any) => {
             const isOverdue = !task.completed && task.dueDate && task.dueDate < now;
             const isDueToday = !task.completed && task.dueDate && new Date(task.dueDate).toDateString() === new Date().toDateString();
@@ -317,7 +317,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                       {task.title}
                     </span>
                     {task.priority !== "normal" && (
-                      <span className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border ${PRIORITY_COLORS[task.priority]}`}>
+                      <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 border ${PRIORITY_COLORS[task.priority]}`}>
                         {task.priority.toUpperCase()}
                       </span>
                     )}

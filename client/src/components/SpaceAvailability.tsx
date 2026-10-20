@@ -84,7 +84,7 @@ export function SpaceAvailability() {
           <button
             type="button"
             onClick={() => { setShowRange(v => !v); if (showRange) setDateTo(""); }}
-            className="mt-2 font-dm text-[11px] text-forest hover:underline"
+            className="mt-2 font-dm text-[12px] text-forest hover:underline"
           >
             {showRange ? "Single day" : "+ Check a range"}
           </button>
@@ -113,14 +113,14 @@ export function SpaceAvailability() {
                         <div key={sp.spaceId} className="px-4 py-2.5">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-serif text-sm text-ink truncate">{sp.spaceName}</span>
-                            <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 rounded-sm shrink-0 ${sp.busy ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
+                            <span className={`font-bebas tracking-widest text-[11px] px-2 py-0.5 rounded-sm shrink-0 ${sp.busy ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
                               {sp.busy ? "BUSY" : "FREE"}
                             </span>
                           </div>
                           {sp.events.length > 0 && (
                             <ul className="mt-1 space-y-0.5">
                               {sp.events.map(e => (
-                                <li key={`${e.source}-${e.id}`} className="font-dm text-[11px] text-ink/70 flex items-start gap-1.5">
+                                <li key={`${e.source}-${e.id}`} className="font-dm text-[12px] text-ink/70 flex items-start gap-1.5">
                                   <span className="text-ink/40 mt-0.5">·</span>
                                   <span className="flex-1">{eventLine(e)}</span>
                                   <span className="text-ink/45 shrink-0">{KIND_LABEL[e.kind] ?? e.kind}</span>
@@ -134,10 +134,10 @@ export function SpaceAvailability() {
                   )}
                   {day.unknownSpace.length > 0 && (
                     <div className="px-4 py-2.5 bg-amber-50/50 border-t border-amber-200/40">
-                      <div className="font-bebas tracking-widest text-[10px] text-amber-700 mb-1">SPACE NOT SET</div>
+                      <div className="font-bebas tracking-widest text-[11px] text-amber-700 mb-1">SPACE NOT SET</div>
                       <ul className="space-y-0.5">
                         {day.unknownSpace.map(e => (
-                          <li key={`${e.source}-${e.id}`} className="font-dm text-[11px] text-ink/70">{eventLine(e)} — {KIND_LABEL[e.kind] ?? e.kind}</li>
+                          <li key={`${e.source}-${e.id}`} className="font-dm text-[12px] text-ink/70">{eventLine(e)} — {KIND_LABEL[e.kind] ?? e.kind}</li>
                         ))}
                       </ul>
                     </div>
