@@ -1141,11 +1141,18 @@ export default function Dashboard() {
   const toggleCalendarNeeds = () => setShowCalendarNeeds(v => {
     const next = !v;
     try { localStorage.setItem('vfhq_calendar_needs', next ? '1' : '0'); } catch { /* private mode */ }
-    // The panel sits below a full-height calendar, so bring it into view when
-    // it's switched on — otherwise nothing visibly happens.
+    // On a tall calendar the panel can still start below the fold, so bring it
+    // into view when it's switched on — otherwise nothing visibly happens.
     if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     return next;
   });
+  // With the "Needs you today" panel showing, the calendar sizes to its content
+  // (the whole page scrolls in <main>) so the panel sits flush under the grid.
+  // Off, each view fills the pane and scrolls on its own. Applied to every view
+  // root; dropping flex-1/overflow is what lets them flow at natural height
+  // (a flex item with overflow-auto has min-height 0, so it would otherwise
+  // collapse once the pane is no longer a fixed height).
+  const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto';
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
@@ -4578,7 +4585,7 @@ export default function Dashboard() {
 
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
-            <div className="flex flex-col h-full overflow-hidden">
+            <div className={`flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
               {/* Every other tab has a page-level <h1> (Overview, Pipeline,
                   Contacts, Tasks, Settings, …) — Calendar was the one
                   exception, which matters most here since a restricted staff
@@ -4741,11 +4748,11 @@ export default function Dashboard() {
               </div>
 
               {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
-              <div className="flex-1 flex flex-col overflow-hidden" onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
+              <div className={`flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
 
               {/* Month View — desktop grid */}
               {calendarView === "month" && (
-              <div className="hidden md:block flex-1 overflow-auto" style={{ minHeight: '600px' }}>
+              <div className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
                 <div className="grid grid-cols-7 border-b border-border">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -4934,7 +4941,7 @@ export default function Dashboard() {
 
               {/* Month View — mobile agenda (grouped by day, only days with events) */}
               {calendarView === "month" && (
-                <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
+                <div className={`md:hidden ${calFill} p-3 space-y-3`}>
                   {(() => {
                     const allEvents = [
                       ...((monthBookings ?? []).filter(Boolean) as any[]).map((b: any) => ({ ...b, _kind: 'booking' as const })),
@@ -5025,7 +5032,7 @@ export default function Dashboard() {
 
               {/* List View */}
               {calendarView === "list" && (
-              <div className="flex-1 overflow-auto p-6">
+              <div className={`${calFill} p-6`}>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All enquiries — {MONTHS[month]} {year}</h2>
                   <div className="flex items-center gap-2">
@@ -5319,7 +5326,7 @@ export default function Dashboard() {
                 const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
                 const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
                 return (
-                <div className="flex-1 overflow-auto">
+                <div className={calFill || undefined}>
                   <div className="md:min-w-0 min-w-[700px]">
                   {/* Day column headers */}
                   <div className="grid grid-cols-7 border-b border-gold/15 sticky top-0 bg-cream z-10">
@@ -5428,7 +5435,7 @@ export default function Dashboard() {
                 const ds = `${calDate.getFullYear()}-${String(calDate.getMonth()+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`;
                 const totalEvents = dayBookings.length + dayLeads.length;
                 return (
-                <div className="flex-1 overflow-auto p-4 md:p-6">
+                <div className={`${calFill} p-4 md:p-6`}>
                   <div className="max-w-3xl mx-auto">
                     {/* Day header */}
                     <div className={`flex items-center gap-3 mb-6 pb-4 border-b ${isToday ? 'border-gold/40' : 'border-gold/15'}`}>
@@ -5636,11 +5643,12 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* "Needs you today" — opt-in, below the full-height calendar (toggled
-              from the toolbar, off by default). It hides itself when there is
-              nothing to do, so an empty panel never shows. A sibling of the
-              calendar pane rather than inside it, so the main area scrolls down
-              to it instead of fighting the calendar's own internal scroll. */}
+          {/* "Needs you today" — opt-in, flush under the calendar grid (toggled
+              from the toolbar, off by default). When it's on, the calendar pane
+              sizes to its content and the whole page scrolls in <main>, so this
+              sits directly beneath the grid rather than a screen below it. It
+              hides itself when there is nothing to do, so an empty panel never
+              shows. */}
           {tab === "calendar" && showCalendarNeeds && !isStaff && (
             <div id="calendar-needs-today" className="px-4 md:px-6 py-5 bg-linen/30 border-t border-gold/15">
               <NeedsYouToday
