@@ -67,6 +67,9 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // Anything the operator typed that would be lost by closing. A stray click on
   // the backdrop (or Escape) used to throw it all away without a word.
   const [dirty, setDirty] = useState(false);
+  // A second live invoice for the same stream is almost always a mistake
+  // (double-billing). Sending one needs an explicit tick.
+  const [allowAnother, setAllowAnother] = useState(false);
 
   const { data: existing } = trpc.xero.invoicesForBooking.useQuery(
     { bookingId: booking?.bookingId ?? 0 },
@@ -351,7 +354,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     return { subtotal: r2(sum), gst: g, total: r2(sum + g) };
   }, [lines, inclusive]);
 
+  // (Hook before the early return below — hooks must run on every render.)
+  useEffect(() => { setAllowAnother(false); }, [stream, open]);
+
   if (!open || !booking) return null;
+
+  const liveSameStream = ((existing ?? []) as any[]).filter(inv => inv.stream === stream && !isGone(inv.status));
+  const duplicateRisk = editingId === null && replacing === null && liveSameStream.length > 0;
 
   const send = () => {
     const parsed = lines
@@ -376,6 +385,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       inclusive,
       updateInvoiceId: editingId ?? undefined,
       replaceInvoiceId: replacing?.id,
+      // Ticking "send a second invoice anyway" already confirmed the duplicate.
+      allowDuplicate: duplicateRisk && allowAnother ? true : undefined,
     };
     lastSendRef.current = payload;
     // The server builds the Xero contact from the BOOKING, so an edited name
@@ -550,6 +561,30 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </div>
           )}
 
+          {/* Same stream already billed: point at the existing invoice instead
+              of quietly creating a second one. */}
+          {duplicateRisk && (
+            <div role="alert" className="border border-amber-300 bg-amber-50 p-3 rounded-sm">
+              <p className="font-dm text-sm text-amber-950">
+                {stream === "food" ? "Food" : stream === "drinks" ? "Drinks" : "The deposit"} already {liveSameStream.length === 1 ? "has an invoice" : `has ${liveSameStream.length} invoices`} in Xero
+                ({liveSameStream.map((i: any) => `${i.invoiceNumber ?? "no number yet"} · ${(i.status ?? "DRAFT").toLowerCase()}`).join(", ")}).
+                Sending this would bill the client twice.
+              </p>
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                {liveSameStream.filter((i: any) => !i.status || i.status === "DRAFT" || i.status === "SUBMITTED").slice(0, 1).map((i: any) => (
+                  <button key={i.id} onClick={() => startEdit(i)} disabled={loadingDraft}
+                    className="font-bebas tracking-widest text-xs px-3 py-1.5 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
+                    EDIT {i.invoiceNumber ?? "THE DRAFT"} INSTEAD
+                  </button>
+                ))}
+                <label className="flex items-center gap-2 font-dm text-xs text-amber-950 cursor-pointer">
+                  <input type="checkbox" checked={allowAnother} onChange={e => setAllowAnother(e.target.checked)} className="w-4 h-4" />
+                  Send a separate, second invoice anyway
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* Line editor */}
           <div>
             <div className="flex items-baseline justify-between gap-2 mb-1.5 flex-wrap">
@@ -647,7 +682,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10">
               CANCEL
             </button>
-            <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing}
+            <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing || (duplicateRisk && !allowAnother)}
+              title={duplicateRisk && !allowAnother ? "This stream already has an invoice in Xero — edit it, or tick 'send a second invoice anyway'" : undefined}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
               {push.isPending ? "SENDING…" : replacing ? `VOID ${replacing.number ?? "OLD"} & SEND CORRECTED DRAFT` : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>

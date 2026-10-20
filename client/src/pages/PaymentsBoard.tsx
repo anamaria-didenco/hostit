@@ -11,6 +11,7 @@ import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import { fmtDate as fmtDateTz } from "@/lib/dateTime";
 import { currencyWhole } from "@/lib/money";
 import { PageHeader } from "@/components/ui/page-header";
+import { xeroErrorHelp, XERO_SETTINGS_URL } from "@/lib/xeroError";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -46,6 +47,15 @@ interface Row {
   foodContra?: boolean;
   drinksContra?: boolean;
   drinksInferred: boolean;
+  /** Only a draft invoice exists in Xero for this stream — nothing sent yet. */
+  foodDraft?: boolean;
+  drinksDraft?: boolean;
+  /** Every invoice for this stream is PAID in Xero. */
+  foodPaidInXero?: boolean;
+  drinksPaidInXero?: boolean;
+  /** The deposit invoice is paid in Xero (the payment may not be imported yet). */
+  depositPaidInXero?: boolean;
+  depositDraft?: boolean;
   invoices: SentInvoice[];
 }
 
@@ -119,8 +129,13 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
   // Pull anything reconciled in Xero into VenueFlow. Runs quietly when the
   // board opens (the server throttles to once a minute per venue) and can be
   // forced from the button; imported payments land in each event's history.
+  // The last thing Xero refused, shown as a warning above the board. A lapsed
+  // Xero permission used to fail silently, leaving paid deposits "due".
+  const [xeroProblem, setXeroProblem] = useState<string | null>(null);
   const syncXero = trpc.xero.syncAll.useMutation({
     onSuccess: (r) => {
+      const err = (r as any).lastError as string | null | undefined;
+      setXeroProblem(err ?? null);
       if (r.skipped) return;
       if (r.paymentsImported > 0) {
         toast.success(`Imported ${r.paymentsImported} payment${r.paymentsImported === 1 ? "" : "s"} from Xero (${fmtNZD(r.amountImported)})`);
@@ -129,7 +144,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
       }
       if (r.paymentsImported > 0 || r.statusChanges > 0) utils.payments.overview.invalidate();
     },
-    onError: () => { /* quiet on the automatic pass; the button reports below */ },
+    onError: (e) => setXeroProblem(e.message || "Xero didn't answer"),
   });
   const autoSynced = useRef(false);
   useEffect(() => {
@@ -148,10 +163,24 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
 
   const all: Row[] = useMemo(() => (data as Row[] | undefined) ?? [], [data]);
 
+  // Close off past events in bulk: tick the ones that are done, mark them settled.
+  const [settleIds, setSettleIds] = useState<Set<number>>(new Set());
+  const [confirmSettle, setConfirmSettle] = useState(false);
+  const [settling, setSettling] = useState<{ done: number; total: number } | null>(null);
+  const settleOne = trpc.bookings.update.useMutation();
+  const toggleSettle = (id: number) => setSettleIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   // Per-event flags used for filtering + the summary.
-  const isDepositDue = (r: Row) => r.depositRequired && !r.depositPaid;
+  // A deposit secures a FUTURE date. Once the event has happened an unpaid
+  // deposit is moot (the final bill covers it), so it no longer counts as due —
+  // this alone was keeping months-old events in "Needs action".
+  const isDepositDue = (r: Row) => r.depositRequired && !r.depositPaid && isFuture(r);
   const chipsSettled = (r: Row) =>
-    (!r.depositRequired || r.depositPaid) && r.foodStatus === "paid" && r.drinksStatus === "paid";
+    (!r.depositRequired || r.depositPaid || !isFuture(r)) && r.foodStatus === "paid" && r.drinksStatus === "paid";
   const isFuture = (r: Row) => !r.eventDate || new Date(r.eventDate).getTime() >= startOfToday();
   // A stream settling on the night needs nothing until the event has happened.
   const streamNeedsAction = (r: Row, status: string) =>
@@ -255,6 +284,32 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     { onSuccess: () => toast.success(`${r.name} marked fully settled`) },
   );
 
+  // Close off past events: food and drinks marked paid, and an unpaid deposit
+  // recorded as "not taken" (never as paid — no money is invented).
+  const settlePast = async (ids: number[]) => {
+    setSettling({ done: 0, total: ids.length });
+    let ok = 0;
+    for (const id of ids) {
+      const r = all.find(x => x.bookingId === id);
+      if (!r) continue;
+      try {
+        await settleOne.mutateAsync({
+          id, foodStatus: "paid", drinksStatus: "paid",
+          ...(r.depositRequired && !r.depositPaid ? { depositRequired: false } : {}),
+        } as any);
+        ok++;
+      } catch { /* counted below */ }
+      setSettling({ done: ok, total: ids.length });
+    }
+    setSettling(null);
+    setConfirmSettle(false);
+    setSettleIds(new Set());
+    utils.payments.overview.invalidate();
+    utils.bookings.list.invalidate();
+    if (ok === ids.length) toast.success(`${ok} past event${ok === 1 ? "" : "s"} marked settled`);
+    else toast.error(`${ok} of ${ids.length} marked settled — try the rest again`);
+  };
+
   const onTabKey = (e: React.KeyboardEvent, i: number) => {
     let n: number | null = null;
     if (e.key === "ArrowRight") n = (i + 1) % TABS.length;
@@ -347,6 +402,24 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         ))}
       </div>
 
+      {/* Xero refused us: say so plainly and offer the fix (it isn't a wait). */}
+      {xeroProblem && (() => {
+        const help = xeroErrorHelp(xeroProblem);
+        return (
+          <div role="alert" className="mb-4 flex items-start justify-between gap-3 flex-wrap rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5">
+            <div className="min-w-0">
+              <p className="font-dm text-sm text-red-900 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> {help.title}
+              </p>
+              <p className="font-dm text-xs text-red-900/80 mt-0.5 ml-6">{help.detail}</p>
+            </div>
+            {help.reconnect && (
+              <a href={XERO_SETTINGS_URL} className="vf-btn vf-btn-primary">RECONNECT XERO</a>
+            )}
+          </div>
+        );
+      })()}
+
       <div role="tabpanel" id="pay-tabpanel" aria-labelledby={`pay-tab-${view}`}>
       {view === "received" ? (xeroStatus?.connected ? <XeroEventPayments q={q} /> : <PaymentsReceived q={q} />) : view === "deposits" ? (
         <DepositsSent rows={all} q={q} loading={isLoading}
@@ -414,7 +487,46 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         </div>
       )}
 
-      <p className="font-dm text-xs text-sage mb-3">Tap a chip to set its status.</p>
+      {/* Close off past events in bulk (Needs action shows them). */}
+      {!bucket && filter === "action" && (() => {
+        const pastIds = rows.filter(r => !isFuture(r)).map(r => r.bookingId);
+        if (pastIds.length === 0) return null;
+        const picked = [...settleIds].filter(id => pastIds.includes(id));
+        return (
+          <div className="mb-3 flex items-center justify-between gap-3 flex-wrap rounded-md border border-border bg-card px-3.5 py-2.5">
+            <p className="font-dm text-sm text-ink">
+              {picked.length > 0
+                ? `${picked.length} past event${picked.length === 1 ? "" : "s"} ticked.`
+                : "Already dealt with some of these past events? Tick them and mark them settled."}
+            </p>
+            <div className="flex items-center gap-2">
+              <button className="vf-btn vf-btn-secondary" disabled={!!settling}
+                onClick={() => setSettleIds(picked.length === pastIds.length ? new Set() : new Set(pastIds))}>
+                {picked.length === pastIds.length ? "CLEAR" : `TICK ALL ${pastIds.length}`}
+              </button>
+              {confirmSettle ? (
+                <>
+                  <button className="vf-btn vf-btn-secondary" disabled={!!settling} onClick={() => setConfirmSettle(false)}>CANCEL</button>
+                  <button className="vf-btn vf-btn-primary" disabled={!!settling || picked.length === 0} onClick={() => settlePast(picked)}>
+                    {settling ? `SETTLING ${settling.done}/${settling.total}…` : `YES, SETTLE ${picked.length}`}
+                  </button>
+                </>
+              ) : (
+                <button className="vf-btn vf-btn-primary" disabled={picked.length === 0} onClick={() => setConfirmSettle(true)}>
+                  MARK {picked.length || ""} SETTLED
+                </button>
+              )}
+            </div>
+            {confirmSettle && (
+              <p className="basis-full font-dm text-xs text-sage">
+                Food and drinks become Paid; an unpaid deposit is recorded as not taken. No payments are recorded, so nothing changes in Xero.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
+      <p className="font-dm text-xs text-sage mb-3">Tap a chip to change its status.</p>
 
       {/* Rows */}
       {isError ? (
@@ -447,7 +559,11 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
                 onRecord={() => navigate(recordUrl(r))}
                 onXero={() => setXeroFor(r)}
                 onMarkAllPaid={() => markAllPaid(r)}
-                busy={update.isPending}
+                busy={update.isPending || !!settling}
+                past={!isFuture(r)}
+                selectable={!bucket && filter === "action" && !isFuture(r)}
+                selected={settleIds.has(r.bookingId)}
+                onSelect={() => toggleSettle(r.bookingId)}
               />
             </li>
           ))}
@@ -490,6 +606,8 @@ type DepositEntry = {
   sentAt: number;
   how: string[];
   paid: boolean;
+  /** Only a Xero draft exists and no request was emailed: the client hasn't been asked yet. */
+  draft: boolean;
   waitingDays: number | null;
 };
 
@@ -510,13 +628,16 @@ function depositEntries(rows: Row[]): DepositEntry[] {
     if (emailedAt != null) how.push(`Request emailed ${day(emailedAt)}`);
     if (inv) how.push(`Xero ${inv.invoiceNumber ?? "invoice"}${inv.status === "DRAFT" ? " (draft — not sent from Xero yet)" : ""} ${day(invAt!)}`);
     const paid = r.depositPaid || inv?.status === "PAID";
+    // A draft never left Xero, so nobody is "waiting" on it yet.
+    const draft = !paid && (inv?.status === "DRAFT" || inv?.status === "SUBMITTED") && emailedAt == null;
     out.push({
       row: r,
       amount: inv && inv.total > 0 ? inv.total : r.depositNzd,
       sentAt,
       how,
       paid,
-      waitingDays: paid ? null : Math.floor((Date.now() - sentAt) / DAY_MS),
+      draft,
+      waitingDays: paid || draft ? null : Math.floor((Date.now() - sentAt) / DAY_MS),
     });
   }
   return out;
@@ -528,12 +649,13 @@ function DepositsSent({ rows, q, loading, onOpen, onRecord }: {
   const [only, setOnly] = useState<"waiting" | "paid" | "all">("waiting");
   const entries = useMemo(() => depositEntries(rows), [rows]);
   const totals = useMemo(() => {
-    let waiting = 0, waitingN = 0, paid = 0, paidN = 0, chase = 0;
+    let waiting = 0, waitingN = 0, paid = 0, paidN = 0, chase = 0, drafts = 0, draftAmt = 0;
     for (const e of entries) {
       if (e.paid) { paid += e.amount; paidN++; }
+      else if (e.draft) { drafts++; draftAmt += e.amount; }
       else { waiting += e.amount; waitingN++; if ((e.waitingDays ?? 0) >= CHASE_AFTER_DAYS) chase++; }
     }
-    return { waiting, waitingN, paid, paidN, chase };
+    return { waiting, waitingN, paid, paidN, chase, drafts, draftAmt };
   }, [entries]);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -576,6 +698,7 @@ function DepositsSent({ rows, q, loading, onOpen, onRecord }: {
           <div className="font-bebas tracking-widest text-xs text-sage">WAITING · {totals.waitingN}</div>
           <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(totals.waiting)}</div>
           {totals.chase > 0 && <div className="font-dm text-xs text-amber-800 mt-0.5">{totals.chase} waiting {CHASE_AFTER_DAYS}+ days</div>}
+          {totals.drafts > 0 && <div className="font-dm text-xs text-sage mt-0.5">+ {totals.drafts} draft{totals.drafts === 1 ? "" : "s"} ({fmtNZD(totals.draftAmt)}) not sent from Xero yet</div>}
         </div>
         <div className="bg-white border border-stone-200 rounded-lg px-4 py-3">
           <div className="font-bebas tracking-widest text-xs text-sage">PAID · {totals.paidN}</div>
@@ -601,10 +724,12 @@ function DepositsSent({ rows, q, loading, onOpen, onRecord }: {
             const r = e.row;
             const chase = !e.paid && (e.waitingDays ?? 0) >= CHASE_AFTER_DAYS;
             const chip = e.paid
-              ? { label: "PAID", bg: "#dcfce7", text: "#166534" }
+              ? { label: "Paid", bg: "#dcfce7", text: "#166534" }
+              : e.draft
+                ? { label: "Draft · not sent yet", bg: "#f1f0ec", text: "#6b6457" }
               : chase
-                ? { label: `WAITING ${e.waitingDays} DAYS`, bg: "#fef3c7", text: "#92400e" }
-                : { label: e.waitingDays === 0 ? "SENT TODAY" : `WAITING ${e.waitingDays} DAY${e.waitingDays === 1 ? "" : "S"}`, bg: "#dbeafe", text: "#1e40af" };
+                ? { label: `Waiting ${e.waitingDays} days`, bg: "#fef3c7", text: "#92400e" }
+                : { label: e.waitingDays === 0 ? "Sent today" : `Waiting ${e.waitingDays} day${e.waitingDays === 1 ? "" : "s"}`, bg: "#dbeafe", text: "#1e40af" };
             return (
               <li key={r.bookingId} className="bg-white border border-stone-200 rounded-lg px-3.5 py-3">
                 <div className="flex items-center gap-3">
@@ -612,18 +737,23 @@ function DepositsSent({ rows, q, loading, onOpen, onRecord }: {
                     <div className="font-cormorant text-base font-semibold text-ink truncate group-hover:underline">{r.name}</div>
                     <div className="font-dm text-xs text-stone-600 truncate">{fmtDate(r.eventDate)}{r.eventType ? ` · ${r.eventType}` : ""}</div>
                   </button>
-                  <span className="hidden sm:inline font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
+                  <span className="hidden sm:inline font-sans font-semibold text-[13px] px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
                   <span className="font-cormorant text-lg font-semibold text-ink tabular-nums w-20 sm:w-24 text-right">{fmtNZD(e.amount)}</span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-x-4 gap-y-1.5 flex-wrap">
-                  <span className="sm:hidden font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
+                  <span className="sm:hidden font-sans font-semibold text-[13px] px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
                   <span className="font-dm text-xs text-stone-600">{e.how.join(" · ")}</span>
                   {!e.paid && (
                     <span className="ml-auto flex items-center gap-3">
+                      {e.draft ? (
+                        // A reminder for an invoice the client never got would confuse them.
+                        <span className="font-dm text-xs text-sage">Approve it in Xero to send it</span>
+                      ) : (
                       <button onClick={() => sendReminder(r)} disabled={remind.isPending}
                         className="font-bebas tracking-widest text-xs text-forest hover:underline underline-offset-2 disabled:opacity-50">
                         EMAIL REMINDER
                       </button>
+                      )}
                       <button onClick={() => onRecord(r)}
                         className="font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md bg-forest text-cream hover:opacity-90">
                         RECORD PAYMENT
@@ -765,17 +895,27 @@ function SummaryCard({ label, value, tone, icon, selected, onClick }: {
 
 // A status chip that opens a menu of its states (arrow keys, Enter, Escape all
 // work, and screen readers hear which one is selected).
-function StatusChip<V extends string>({ label, state, value, options, onChange, disabled, title }: {
+function StatusChip<V extends string>({ label, state, value, options, onChange, disabled, title, locked }: {
   label: string; state: keyof typeof CHIP; value: V; disabled?: boolean; title?: string;
   options: Array<{ value: V; label: string; state: keyof typeof CHIP }>;
   onChange: (v: V) => void;
+  /** The state comes from Xero, so picking another here wouldn't stick: show it, don't offer a menu. */
+  locked?: boolean;
 }) {
   const c = CHIP[state];
+  if (locked) {
+    return (
+      <span title={title} className="font-sans font-semibold text-[13px] px-2.5 py-1.5 rounded-md border border-black/10 whitespace-nowrap inline-flex items-center gap-1"
+        style={{ background: c.bg, color: c.text }}>
+        {label}
+      </span>
+    );
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={disabled}>
         <button type="button" title={title}
-          className="font-bebas tracking-widest text-xs px-2.5 py-1.5 rounded-md border border-black/10 shadow-sm hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
+          className="font-sans font-semibold text-[13px] px-2.5 py-1.5 rounded-md border border-black/10 hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
           style={{ background: c.bg, color: c.text }}>
           {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
         </button>
@@ -784,7 +924,7 @@ function StatusChip<V extends string>({ label, state, value, options, onChange, 
         <DropdownMenuRadioGroup value={value} onValueChange={(v) => { if (v !== value) onChange(v as V); }}>
           {options.map(o => (
             <DropdownMenuRadioItem key={o.value} value={o.value} className="py-2">
-              <span className="font-bebas tracking-widest text-xs px-2 py-0.5 rounded" style={{ background: CHIP[o.state].bg, color: CHIP[o.state].text }}>{o.label}</span>
+              <span className="font-sans font-semibold text-[13px] px-2 py-0.5 rounded" style={{ background: CHIP[o.state].bg, color: CHIP[o.state].text }}>{o.label}</span>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -793,9 +933,13 @@ function StatusChip<V extends string>({ label, state, value, options, onChange, 
   );
 }
 
-function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, onMarkAllPaid, busy }: {
+function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, onMarkAllPaid, busy, past, selectable, selected, onSelect }: {
   row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (next: "due" | "paid" | "not_taken") => void;
   onOpen: () => void; onRecord: () => void; onXero: () => void; onMarkAllPaid: () => void; busy: boolean;
+  /** The event has happened. */
+  past?: boolean;
+  /** Show a tick box for closing off past events in bulk. */
+  selectable?: boolean; selected?: boolean; onSelect?: () => void;
 }) {
   // Deposit chip — Due / Paid / Not taken, all in one menu so "no deposit"
   // can be undone where it was set.
@@ -803,12 +947,20 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
   // No made-up figure: the deposit used to show "$575" (one venue's standard
   // amount) whenever none was set on the booking.
   const depAmt = row.depositNzd > 0 ? `${fmtNZD(row.depositNzd)} ` : "";
+  // After the event an unpaid deposit is moot: shown quietly, not as a to-do.
+  const depositMoot = !!past && row.depositRequired && !row.depositPaid;
   const depositLabel = !row.depositRequired ? "No deposit"
+    : row.depositPaidInXero ? `Deposit ${depAmt}paid in Xero`
     : row.depositPaid ? `Deposit ${depAmt}paid`
+    : depositMoot ? "No deposit taken"
+    : row.depositDraft ? "Deposit · draft in Xero"
     : row.depositNzd > 0 ? `Deposit ${depAmt}due` : "Deposit due · no amount set";
   const depositChip = (
-    <StatusChip label={depositLabel} state={!row.depositRequired ? "none" : row.depositPaid ? "paid" : "todo"}
-      value={depositValue} disabled={busy} title="Choose the deposit status"
+    <StatusChip label={depositLabel} state={!row.depositRequired || depositMoot ? "none" : row.depositPaid ? "paid" : "todo"}
+      value={depositValue} disabled={busy} locked={row.depositPaidInXero}
+      title={row.depositPaidInXero ? "Paid in Xero — the payment hasn't come into VenueFlow yet"
+        : row.depositDraft ? "A draft deposit invoice is waiting in Xero — approve it there to send it"
+        : "Choose the deposit status"}
       options={[
         { value: "due", label: "Due", state: "todo" },
         { value: "paid", label: "Paid", state: "paid" },
@@ -819,21 +971,30 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
 
   const stateFor = (s: string): keyof typeof CHIP =>
     s === "paid" ? "paid" : s === "invoiced" ? "invoiced" : s === "on_night" ? "night" : "todo";
+  // What Xero says beats the stored chip: a draft hasn't reached the client,
+  // and an invoice paid in Xero is paid.
+  const streamWord = (status: string, contra?: boolean, draft?: boolean, xeroPaid?: boolean) =>
+    contra && status === "paid" ? "contra"
+    : xeroPaid ? "paid in Xero"
+    : draft ? "draft in Xero"
+    : labelFor(status).toLowerCase();
+  const draftTitle = "A draft invoice is waiting in Xero — approve it there to send it (this updates on the next Xero sync)";
   const foodChip = (
-    <StatusChip label={`Food · ${row.foodContra && row.foodStatus === "paid" ? "Contra" : labelFor(row.foodStatus)}`} state={stateFor(row.foodStatus)}
-      value={row.foodStatus} disabled={busy} title="Choose the food payment status"
+    <StatusChip label={`Food · ${streamWord(row.foodStatus, row.foodContra, row.foodDraft, row.foodPaidInXero)}`} state={stateFor(row.foodStatus)}
+      value={row.foodStatus} disabled={busy} locked={row.foodDraft || row.foodPaidInXero}
+      title={row.foodDraft ? draftTitle : row.foodPaidInXero ? "Paid in Xero" : "Choose the food payment status"}
       options={STREAM_STATES} onChange={v => onFood(v as FoodStatus)} />
   );
   // An inferred drinks status is spelled out ("suggested"), not a bare "?".
   const suggested = row.drinksInferred && row.drinksStatus !== "paid";
   const drinksChip = (
-    <StatusChip label={`Drinks · ${row.drinksContra && row.drinksStatus === "paid" ? "Contra" : labelFor(row.drinksStatus)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
-      value={row.drinksStatus} disabled={busy}
-      title={suggested ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
+    <StatusChip label={`Drinks · ${streamWord(row.drinksStatus, row.drinksContra, row.drinksDraft, row.drinksPaidInXero)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
+      value={row.drinksStatus} disabled={busy} locked={row.drinksDraft || row.drinksPaidInXero}
+      title={row.drinksDraft ? draftTitle : row.drinksPaidInXero ? "Paid in Xero" : suggested ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
       options={STREAM_STATES} onChange={v => onDrinks(v as DrinksStatus)} />
   );
 
-  const settled = (!row.depositRequired || row.depositPaid) && row.foodStatus === "paid" && row.drinksStatus === "paid";
+  const settled = (!row.depositRequired || row.depositPaid || depositMoot) && row.foodStatus === "paid" && row.drinksStatus === "paid";
   const owed = row.outstanding ?? 0;
   const eventPast = !!row.eventDate && new Date(row.eventDate).getTime() < new Date().setHours(0, 0, 0, 0);
   // Overdue only once the event has happened. A future booking with its deposit
@@ -843,7 +1004,13 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
   const ledgerPaid = row.hasPrice && owed === 0 && row.paidToDate > 0;
 
   return (
-    <div className={`bg-white border rounded-lg px-3.5 py-3 flex flex-col lg:flex-row lg:items-center gap-3 ${settled ? "border-green-200/70" : "border-gold/20"}`}>
+    <div className={`bg-white border rounded-lg px-3.5 py-3 flex flex-col lg:flex-row lg:items-center gap-3 ${selected ? "border-primary ring-1 ring-primary" : settled ? "border-green-200/70" : "border-gold/20"}`}>
+      {selectable && (
+        <label className="flex items-center justify-center w-11 h-11 -m-2 flex-shrink-0 cursor-pointer" title="Tick to mark settled">
+          <input type="checkbox" checked={!!selected} onChange={onSelect} disabled={busy}
+            aria-label={`Tick ${row.name} to mark settled`} className="w-4 h-4 accent-[#2f5488]" />
+        </label>
+      )}
       {/* Event info */}
       <button onClick={onOpen} className="text-left min-w-0 lg:w-64 flex-shrink-0 group" aria-label={`Open ${row.name}, ${fmtDate(row.eventDate)}`}>
         <div className="font-cormorant text-base font-semibold text-ink truncate leading-tight group-hover:underline">{row.name}</div>
@@ -910,8 +1077,11 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
             <div className={`font-bebas tracking-widest text-[11px] mt-0.5 ${isOverdue ? "text-red-700" : "text-sage"}`}>{isOverdue ? "OVERDUE" : "OWED"}</div>
             {row.paidToDate > 0 && <div className="font-dm text-xs text-sage mt-0.5">{fmtNZD(row.paidToDate)} paid</div>}
           </>
-        ) : row.paidToDate > 0 ? (
+        ) : row.paidToDate > 0 && row.hasPrice ? (
           <div className="font-bebas tracking-widest text-xs text-green-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Paid in full</div>
+        ) : row.paidToDate > 0 ? (
+          // Without a total there's nothing to be "in full" of — say what came in.
+          <div className="font-dm text-sm text-ink tabular-nums">{fmtNZD(row.paidToDate)} <span className="text-sage">received</span></div>
         ) : null}
         {!row.hasPrice && (
           <div className="font-dm text-xs text-amber-800 flex items-center gap-1 mt-0.5" title="No total set on this booking">
@@ -924,16 +1094,16 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button onClick={onXero} title="Send a deposit, food or drinks invoice to Xero as a draft"
           aria-label={`Xero invoices for ${row.name}${row.invoices.length > 0 ? ` (${row.invoices.filter(i => i.status !== "VOIDED").length} sent)` : ""}`}
-          className="font-bebas tracking-widest text-xs text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-accent transition-colors flex items-center gap-1">
-          <FileText className="w-3 h-3" aria-hidden="true" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
+          className="vf-btn vf-btn-secondary">
+          <FileText className="w-3.5 h-3.5" aria-hidden="true" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
         </button>
         <button onClick={onRecord} aria-label={`Record a payment for ${row.name}`}
-          className="font-bebas tracking-widest text-xs text-forest border border-forest/30 rounded-md px-2.5 py-2 hover:bg-linen transition-colors flex items-center gap-1">
-          <DollarSign className="w-3 h-3" aria-hidden="true" /> RECORD
+          className="vf-btn vf-btn-secondary">
+          <DollarSign className="w-3.5 h-3.5" aria-hidden="true" /> RECORD
         </button>
         <button onClick={onOpen} aria-label={`Open ${row.name}`}
-          className="font-bebas tracking-widest text-xs text-sage border border-gold/20 rounded-md px-2.5 py-2 hover:text-ink transition-colors flex items-center gap-1">
-          <ExternalLink className="w-3 h-3" aria-hidden="true" /> OPEN
+          className="vf-btn vf-btn-secondary">
+          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> OPEN
         </button>
       </div>
     </div>

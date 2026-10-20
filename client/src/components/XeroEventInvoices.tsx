@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { xeroErrorHelp, XERO_SETTINGS_URL } from "@/lib/xeroError";
 import { useLocation } from "wouter";
 import { RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -46,7 +47,9 @@ const inTab = (i: Inv, t: Tab) =>
 type SortKey = "number" | "to" | "date" | "due" | "paid" | "amountDue";
 
 // Xero's own palette for this screen.
-const XERO_BLUE = "#0078c8";
+// Links and headers in the app's own blue, so this tab reads as part of
+// VenueFlow rather than an embedded Xero screen.
+const XERO_BLUE = "#2f5488";
 const XERO_RED = "#d1342f";
 const XERO_GREEN = "#14783a";
 
@@ -129,30 +132,27 @@ export default function XeroEventInvoices({ q }: { q: string }) {
   }
 
   return (
-    <div className="font-[system-ui,-apple-system,'Segoe_UI',Roboto,sans-serif] text-[#000a1e]">
+    <div className="font-sans text-ink">
       {/* Status tabs — Xero's wording and counts. */}
-      <div className="flex items-end justify-between gap-3 flex-wrap mb-0">
-        <div role="tablist" aria-label="Invoice status" className="flex overflow-x-auto -mb-px">
+      <div className="flex items-end justify-between gap-3 flex-wrap border-b border-border">
+        <div role="tablist" aria-label="Invoice status" className="flex gap-1 overflow-x-auto">
           {TABS.map(t => {
             const on = tab === t.key;
             return (
               <button key={t.key} role="tab" aria-selected={on} onClick={() => setTab(t.key)}
-                className={`px-4 py-2.5 text-[14px] whitespace-nowrap border border-b-0 rounded-t-sm transition-colors ${
-                  on ? "bg-white border-stone-300 text-[#000a1e]" : "bg-transparent border-transparent hover:underline"}`}
-                style={on ? undefined : { color: XERO_BLUE }}>
+                className="vf-tab">
                 {t.label}{t.count ? <span className="text-[12px]"> ({counts[t.key]})</span> : null}
               </button>
             );
           })}
         </div>
         <button type="button" onClick={() => { setFresh(true); refetch(); }} disabled={isFetching}
-          className="mb-1.5 inline-flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded border border-stone-300 bg-white hover:bg-stone-50 disabled:opacity-60"
-          style={{ color: XERO_BLUE }}>
+          className="vf-btn vf-btn-secondary mb-1.5">
           <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden /> {isFetching ? "Refreshing…" : "Refresh from Xero"}
         </button>
       </div>
 
-      <div className="bg-white border border-stone-300 rounded-b-sm rounded-tr-sm">
+      <div className="bg-white border border-border rounded-md mt-3">
         <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-stone-200 text-[12px] text-stone-600 flex-wrap">
           <span>Only invoices for events are shown. Click an invoice to open it in Xero.</span>
           <span aria-live="polite">{list.length} item{list.length === 1 ? "" : "s"} | {money(totalDue)} {currency}</span>
@@ -161,7 +161,12 @@ export default function XeroEventInvoices({ q }: { q: string }) {
         {data?.error && (
           <div role="alert" className="m-3 flex items-start gap-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">
             <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden />
-            <span>Couldn't read invoices from Xero just now ({data.error}). Try "Refresh from Xero" in a minute.</span>
+            <span>
+              {(() => { const h = xeroErrorHelp(data.error); return (<>
+                <span className="font-semibold">{h.reconnect ? "Xero isn't letting VenueFlow read invoices." : "Couldn't reach Xero just now."}</span>{" "}{h.detail}
+                {h.reconnect && <>{" "}<a href={XERO_SETTINGS_URL} className="font-semibold underline underline-offset-2">Reconnect Xero</a></>}
+              </>); })()}
+            </span>
           </div>
         )}
 

@@ -8,7 +8,7 @@
  */
 import { and, desc, eq, inArray, isNull, isNotNull, gte, lte, ne, or } from "drizzle-orm";
 import { getDb } from "./db";
-import { bookings, leads, runsheets, tasks, venueNotifications, venueSettings, proposals } from "../drizzle/schema";
+import { bookings, leads, runsheets, tasks, venueNotifications, venueSettings, proposals, xeroInvoices } from "../drizzle/schema";
 import { zonedYmd, zonedMidnight } from "./availability";
 import { eventDayKey, startTimeOf, DEFAULT_VENUE_TZ } from "@shared/eventDate";
 import { CLOSED_LEAD_STATUSES, leadDatePassed } from "@shared/followUp";
@@ -318,7 +318,12 @@ export async function countDepositsDue(ownerId: number, now: Date = new Date()):
   const { tz } = await venueTz(ownerId);
   const todayKey = zonedYmd(now, tz);
   const from = new Date(zonedMidnight(todayKey, tz).getTime() - DAY_MS);
-  const rows = await db.select({ b: bookings.eventDate, status: bookings.status, depositRequired: bookings.depositRequired, depositPaid: bookings.depositPaid })
+  const rows = await db.select({ id: bookings.id, b: bookings.eventDate, status: bookings.status, depositRequired: bookings.depositRequired, depositPaid: bookings.depositPaid })
     .from(bookings).where(and(eq(bookings.ownerId, ownerId), eq(bookings.status, "confirmed"), gte(bookings.eventDate, from)));
-  return rows.filter(r => isDepositDue(r) && daysBetweenYmd(todayKey, eventDayKey(r.b, tz)) >= 0).length;
+  // Same rule as the Payments board: a deposit invoice PAID in Xero is a paid
+  // deposit, even before the payment itself has been imported.
+  const paidInXero = new Set((await db.select({ bookingId: xeroInvoices.bookingId })
+    .from(xeroInvoices).where(and(eq(xeroInvoices.ownerId, ownerId), eq(xeroInvoices.stream, "deposit"), eq(xeroInvoices.status, "PAID"))))
+    .map(r => r.bookingId));
+  return rows.filter(r => isDepositDue(r) && !paidInXero.has(r.id) && daysBetweenYmd(todayKey, eventDayKey(r.b, tz)) >= 0).length;
 }
