@@ -9,6 +9,7 @@ import {
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
+import MovedNote from "@/components/MovedNote";
 
 /**
  * The Option-C enquiries list: one signal-first list where every row leads with
@@ -36,6 +37,11 @@ export interface EnquiryListCProps {
   /** Close enquiries whose event date has passed (marks them Lost). */
   onCloseAsLost?: (ids: number[]) => void;
   closing?: boolean;
+  /** Enquiries whose status was just changed — kept in place with a "Moved to
+      … · Undo" note instead of vanishing from the tab they no longer match. */
+  movedRows?: Record<number, { from: string; to: string; at: number }>;
+  onUndoMove?: (id: number) => void;
+  undoPendingId?: number | null;
 }
 
 const TONE: Record<SignalTone, { fg: string; bg: string }> = {
@@ -110,7 +116,7 @@ function moneyRange(lead: any): string {
 }
 
 export default function EnquiryListC(props: EnquiryListCProps) {
-  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing } = props;
+  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
   // null = not chosen yet: open on the first tab that has something in it,
   // rather than an empty "Needs reply 0" while follow-ups are due.
   const [pickedTab, setTab] = React.useState<ListTab | null>(null);
@@ -118,6 +124,11 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [replyId, setReplyId] = React.useState<number | null>(null);
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
+  // A just-moved row keeps its place in the tab it was moved from, even though
+  // its new status no longer matches it. We remember which tab each move was
+  // pinned to; the pin drops when the parent clears the mark (undo, or a
+  // search/filter change) so it doesn't leak into other tabs.
+  const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, ListTab>>(new Map());
 
   const enriched = React.useMemo(() => leads.map((lead) => {
     const id = lead.id as number;
@@ -154,12 +165,29 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     if (pickedTab === null && enriched.length > 0) setTab(defaultTab);
   }, [pickedTab, enriched.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track which tab each moved row is pinned to, and drop pins the parent has
+  // cleared (undo, or a search/filter change empties movedRows).
+  React.useEffect(() => {
+    const moved = movedRows ?? {};
+    setPinnedMoves((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      for (const id of next.keys()) if (!(id in moved)) { next.delete(id); changed = true; }
+      for (const key of Object.keys(moved)) {
+        const id = Number(key);
+        if (!next.has(id)) { next.set(id, tab); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [movedRows, tab]);
+
   const rows = React.useMemo(() => {
     const picked = enriched.filter(({ lead, signal }) =>
-      tab === "passed" ? signal.group === "progress" && isPassed(lead)
+      pinnedMoves.get(lead.id) === tab ? true
+      : tab === "passed" ? signal.group === "progress" && isPassed(lead)
       : tab === "all" ? signal.group !== "closed" : signal.group === tab);
     return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
-  }, [enriched, tab, isPassed]);
+  }, [enriched, tab, isPassed, pinnedMoves]);
 
   // Leaving the "Date passed" tab (or emptying it) cancels a pending confirm.
   React.useEffect(() => { setConfirmClose(false); }, [tab, counts.passed]);
@@ -338,6 +366,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* "Moved to … · Undo" — shown in place of the row vanishing
+                    after its status was changed from the drawer. */}
+                {movedRows?.[lead.id] && (
+                  <div className="px-3.5 pb-2.5" onClick={(e) => e.stopPropagation()}>
+                    <MovedNote toLabel={statusInfo(movedRows[lead.id].to).label}
+                      onUndo={() => onUndoMove?.(lead.id)} busy={undoPendingId === lead.id} />
+                  </div>
+                )}
 
                 {/* Inline quick reply */}
                 {replying && (
