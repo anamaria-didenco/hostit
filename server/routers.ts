@@ -210,6 +210,8 @@ export const appRouter = router({
         autoCancelTentative: z.number().optional(),
         defaultHoldDays: z.coerce.number().int().min(1).max(90).optional(),
         holdClientReminderEnabled: z.coerce.number().optional(),
+        // Show money on the anonymous staff/shift portal links (0/1, default 0).
+        staffPortalShowMoney: z.coerce.number().optional(),
         // Venue profile fields
         bannerImageUrl: z.string().optional(),
         venueType: z.string().optional(),
@@ -8610,9 +8612,15 @@ Return ONLY valid JSON.`;
           name: venueSettingsTable.name, logoUrl: venueSettingsTable.logoUrl, primaryColor: venueSettingsTable.primaryColor,
           brandAccentColor: venueSettingsTable.brandAccentColor, brandFontKey: venueSettingsTable.brandFontKey,
           themeKey: venueSettingsTable.themeKey, tagline: venueSettingsTable.tagline,
+          staffPortalShowMoney: venueSettingsTable.staffPortalShowMoney,
         }).from(venueSettingsTable).where(eq(venueSettingsTable.ownerId, link.ownerId)).limit(1);
+        // Money on this anonymous link is opt-in. Off by default, we strip
+        // payment figures, F&B unit prices and billing steps server-side so
+        // they never leave the building through a shared link.
+        const showMoney = (venue as any)?.staffPortalShowMoney === 1;
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
-        const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
+        const fnbRaw = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
+        const fnb = showMoney ? fnbRaw : fnbRaw.map((f: any) => ({ ...f, unitPrice: null }));
         const { checklistInstances } = await import('../drizzle/schema');
         const cryptoMod = await import('crypto');
         let [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
@@ -8729,7 +8737,7 @@ Return ONLY valid JSON.`;
             };
           }
         }
-        return { link: { id: link.id, label: link.label }, venue: venue ?? null, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
+        return { link: { id: link.id, label: link.label }, venue: venue ?? null, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: showMoney ? paymentsData : [], checklist: checklistInstance ?? null, billing: showMoney ? billing : null, showMoney };
       }),
 
     // Protected: create a new staff portal link
@@ -9491,8 +9499,11 @@ Return ONLY valid JSON.`;
         const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
         if (!sr) return null;
         // Fetch venue logo/name for header display
-        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name, shiftSections: venueSettings.shiftSections, paymentInstructions: venueSettings.paymentInstructions, primaryColor: venueSettings.primaryColor, timezone: venueSettings.timezone })
+        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name, shiftSections: venueSettings.shiftSections, paymentInstructions: venueSettings.paymentInstructions, primaryColor: venueSettings.primaryColor, timezone: venueSettings.timezone, staffPortalShowMoney: venueSettings.staffPortalShowMoney })
           .from(venueSettings).where(eq(venueSettings.ownerId, sr.ownerId)).limit(1);
+        // Money on this anonymous link is opt-in (default off): strip F&B unit
+        // prices so the shift sheet can't total up figures from a shared link.
+        const showMoney = (venue as any)?.staffPortalShowMoney === 1;
         const ids = (sr.linkedChecklistIds as number[] | null) ?? [];
         let checklists: { id: number; name: string; token: string; items: any[] }[] = [];
         if (ids.length > 0) {
@@ -9546,7 +9557,8 @@ Return ONLY valid JSON.`;
             if (dayRunsheets.length > 0) {
               const rsIds = dayRunsheets.map((r: any) => r.id);
               const bookingIds = dayRunsheets.map((r: any) => r.bookingId).filter(Boolean) as number[];
-              const allFnb = await db.select().from(fnbItems).where(inArray(fnbItems.runsheetId, rsIds));
+              const allFnbRaw = await db.select().from(fnbItems).where(inArray(fnbItems.runsheetId, rsIds));
+              const allFnb = showMoney ? allFnbRaw : allFnbRaw.map((f: any) => ({ ...f, unitPrice: null }));
               const bks = bookingIds.length > 0
                 ? await db.select({ id: bookings.id, firstName: bookings.firstName, lastName: bookings.lastName, eventType: bookings.eventType, guestCount: bookings.guestCount, spaceName: bookings.spaceName }).from(bookings).where(inArray(bookings.id, bookingIds))
                 : [];
@@ -9573,7 +9585,7 @@ Return ONLY valid JSON.`;
           }
         }
 
-        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venuePrimaryColor: (venue as any)?.primaryColor ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null, paymentInstructions: (venue as any)?.paymentInstructions ?? null };
+        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venuePrimaryColor: (venue as any)?.primaryColor ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null, paymentInstructions: (venue as any)?.paymentInstructions ?? null, showMoney };
       }),
 
     create: protectedProcedure

@@ -3149,6 +3149,7 @@ export default function Dashboard() {
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
         emailSignatures: Array.isArray((vs as any)?.emailSignatures) ? (vs as any).emailSignatures : [],
         paymentInstructions: (vs as any)?.paymentInstructions ?? "",
+        staffPortalShowMoney: (vs as any)?.staffPortalShowMoney ?? 0,
         staffBriefingSubject: (vs as any)?.staffBriefingSubject ?? "",
         staffBriefingBody: (vs as any)?.staffBriefingBody ?? "",
         customCourses: (() => {
@@ -5964,6 +5965,18 @@ export default function Dashboard() {
                           rows={4}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="flex items-start gap-3">
+                          <input type="checkbox" id="staffPortalShowMoney" checked={settingsForm.staffPortalShowMoney === 1}
+                            onChange={e => setSettingsForm((f: any) => ({ ...f, staffPortalShowMoney: e.target.checked ? 1 : 0 }))}
+                            aria-describedby="staffPortalShowMoney-help"
+                            className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                          <div>
+                            <label htmlFor="staffPortalShowMoney" className="font-dm text-sm text-ink">Show money on the staff link</label>
+                            <p id="staffPortalShowMoney-help" className="font-dm text-xs text-stone-600 mt-0.5">Lets the live staff &amp; shift links show payments received, F&amp;B prices and running totals — handy for collecting the balance on the night. Off by default, since anyone with the link can open it.</p>
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2 border-t border-gold/20 pt-4 mt-2">
                         <label htmlFor="vs-staff-briefing-subject" className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
