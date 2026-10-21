@@ -11,7 +11,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
  *
  * Reads availability.forDate, which reuses the server's clash logic, so "busy"
  * means exactly what a date clash means everywhere else. Self-contained: mount
- * once as <SpaceAvailability /> wherever the trigger button belongs.
+ * as <SpaceAvailability /> wherever the trigger button belongs. Pass initialDate
+ * (YYYY-MM-DD) to open on a specific day — the enquiry drawer uses the event's
+ * date so you can check it without leaving the record.
  */
 const NZ_TZ = "Pacific/Auckland";
 const todayYmd = () => new Date().toLocaleDateString("en-CA", { timeZone: NZ_TZ });
@@ -32,9 +34,9 @@ function eventLine(e: { name: string; eventType: string | null; start: string; e
   return [e.name, e.eventType, time].filter(Boolean).join(" · ");
 }
 
-export function SpaceAvailability() {
+export function SpaceAvailability({ initialDate, label = "CHECK A DATE" }: { initialDate?: string; label?: string } = {}) {
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(todayYmd);
+  const [date, setDate] = useState(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayYmd);
   const [showRange, setShowRange] = useState(false);
   const [dateTo, setDateTo] = useState("");
 
@@ -53,7 +55,7 @@ export function SpaceAvailability() {
           aria-label="Check availability by space"
           className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors"
         >
-          <CalendarCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">CHECK A DATE</span>
+          <CalendarCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{label}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} aria-label="Availability by space" className="w-[20rem] max-w-[92vw] bg-white border border-gold/30 shadow-xl p-0">

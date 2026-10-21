@@ -2,6 +2,7 @@ import React from "react";
 import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from "lucide-react";
 import { enquiryFit, fitOkCount, type FitTone, type FitSpace } from "@shared/enquiryFit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
+import { SpaceAvailability } from "@/components/SpaceAvailability";
 
 /**
  * The three Option-C sections the enquiry drawer adds for a lead:
@@ -71,6 +72,8 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
   const dateStr = lead.eventDate
     ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })
     : (lead as any).dateFlexible ? "Flexible" : "TBC";
+  // The enquiry's date as YYYY-MM-DD (NZ) for the in-drawer availability check.
+  const availDate = lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" }) : null;
   const timeStr = lead.eventDate ? new Date(lead.eventDate).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : "—";
   const band = [
     { label: "Date", value: dateStr },
@@ -116,6 +119,12 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
             </div>
           ))}
         </div>
+        {/* Check which spaces are free on this date without leaving the drawer. */}
+        {availDate && (
+          <div className="mt-2">
+            <SpaceAvailability initialDate={availDate} label="Check this date" />
+          </div>
+        )}
       </div>
 
       {/* Quote estimate */}
