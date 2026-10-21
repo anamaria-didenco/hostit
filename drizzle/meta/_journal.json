@@ -679,6 +679,13 @@
       "when": 1792024054412,
       "tag": "0100_proposal_emailed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1792531200000,
+      "tag": "0101_staff_portal_show_money",
+      "breakpoints": true
     }
   ]
 }

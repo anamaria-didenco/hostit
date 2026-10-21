@@ -1459,27 +1459,48 @@ export default function RunsheetBuilder() {
     }
   }
 
-  function addFnbItem() {
-    const name = fnbCustomMode ? fnbCustomName.trim() : newFnbItem.dishName?.trim();
-    if (!name) { toast.error('Enter a dish name'); return; }
+  // Build the food row from the "add" inputs, or null when nothing's been typed.
+  // Service time falls back to the event's start time instead of staying blank.
+  function buildPendingFnbItem(): FnbItem | null {
+    const name = (fnbCustomMode ? fnbCustomName : newFnbItem.dishName ?? '').trim();
+    if (!name) return null;
     const course = fnbCustomMode ? fnbCustomCourse : newFnbItem.course;
-    const item: FnbItem = {
+    return {
       section: 'foh',
       course,
       dishName: name,
       qty: newFnbItem.qty ?? defaultCovers,
       dietary: newFnbItem.dietary,
-      serviceTime: newFnbItem.serviceTime,
+      serviceTime: (newFnbItem.serviceTime ?? '').trim() || eventStartTime || undefined,
       staffAssigned: newFnbItem.staffAssigned,
       sortOrder: fnbItems.length,
       _tempId: String(Date.now()),
       ...(course === 'Drinks' && fnbCustomDrinkCat ? { drinkCategory: fnbCustomDrinkCat } : {}),
-    };
-    setFnbItems(prev => [...prev, item]);
+    } as FnbItem;
+  }
+  function clearFnbInputs() {
     setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', serviceTime: '', dietary: '', staffAssigned: '' });
     setFnbCustomName('');
     setFnbCustomDrinkCat('');
     if (fnbCustomMode) setFnbCustomMode(false);
+  }
+  function addFnbItem() {
+    const item = buildPendingFnbItem();
+    if (!item) { toast.error('Enter a dish name'); return; }
+    setFnbItems(prev => [...prev, item]);
+    clearFnbInputs();
+  }
+  // A dish typed but not yet added (no tap on "Add") was silently lost on Save.
+  // Commit it first and show the row count, so nothing disappears. Returns the
+  // items to persist so the save uses them without waiting on a state update.
+  function flushPendingFnb(): FnbItem[] {
+    const item = buildPendingFnbItem();
+    if (!item) return fnbItems;
+    const next = [...fnbItems, item];
+    setFnbItems(next);
+    clearFnbInputs();
+    toast.success(`Added “${item.dishName}” before saving`);
+    return next;
   }
 
   function updateFnbItem(idx: number, field: keyof FnbItem, value: any) {
@@ -2379,6 +2400,8 @@ export default function RunsheetBuilder() {
   async function handleSave() {
     if (isStaff) return;
     setSaving(true);
+    // Rescue a half-filled food row the user typed but didn't tap "Add" on.
+    const fnbToSave = flushPendingFnb();
     try {
       if (!sheetId) {
         const created = await createMutation.mutateAsync({
@@ -2424,7 +2447,7 @@ export default function RunsheetBuilder() {
             highlight: item.highlight,
           })),
         } as any);
-        if (fnbItems.length > 0 && created?.id) await saveFnb(created.id);
+        if (fnbToSave.length > 0 && created?.id) await saveFnb(created.id, fnbToSave);
       } else {
         await updateMutation.mutateAsync({
           ...versioned(),
@@ -2457,7 +2480,7 @@ export default function RunsheetBuilder() {
           paymentInstructions: paymentInstructions || null,
         } as any);
         await persistTimelineItems(sheetId);
-        if (fnbItems.length > 0) await saveFnb();
+        if (fnbToSave.length > 0) await saveFnb(undefined, fnbToSave);
       }
       // "Save now" writes the whole document, so every channel is clean.
       setDirtyChannels(new Set());

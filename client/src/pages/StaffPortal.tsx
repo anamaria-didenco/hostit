@@ -168,6 +168,10 @@ export default function StaffPortal() {
 
   const { runsheet, items = [], fnb = [], contactName, contactEmail, contactPhone } = data;
   const payments: any[] = (data as any).payments ?? [];
+  // Money on this anonymous link is opt-in (venue setting, default off). The
+  // server already strips payments, billing and F&B prices when it's off; this
+  // also hides the bar-tab amount, which rides in the (unstripped) drinks data.
+  const showMoney: boolean = (data as any).showMoney === true;
   const fnbCols = (runsheet as any).fnbColumns ?? {};
   const showDietary = fnbCols.dietary !== false;
   const showServiceTime = fnbCols.serviceTime !== false;
@@ -554,7 +558,7 @@ export default function StaffPortal() {
                 {dd.barOption && (
                   <p className="font-dm text-sm text-ink">
                     <span className="font-semibold">{formatBar(dd.barOption)}</span>
-                    {dd.tabAmount && (dd.barOption === 'bar_tab' || dd.barOption === 'bar_tab_then_cash')
+                    {showMoney && dd.tabAmount && (dd.barOption === 'bar_tab' || dd.barOption === 'bar_tab_then_cash')
                       ? ` — Bar tab: ${currency(Number(dd.tabAmount))}` : ''}
                   </p>
                 )}

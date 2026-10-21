@@ -126,6 +126,11 @@ export const venueSettings = pgTable("venue_settings", {
   defaultHoldDays: integer("defaultHoldDays").default(7),
   // Email the client a day before their hold expires. Off by default.
   holdClientReminderEnabled: integer("holdClientReminderEnabled").default(0),
+  // Show money (payments received, F&B unit prices, how-it's-billed steps) on
+  // the anonymous staff/shift portal links. Off by default so a shared link
+  // never leaks payment figures; a venue opts in to collect balances on the
+  // night (migration 0101).
+  staffPortalShowMoney: integer("staffPortalShowMoney").default(0),
   bannerImageUrl: text("bannerImageUrl"),
   venueType: varchar("venueType", { length: 100 }),
   priceCategory: varchar("priceCategory", { length: 10 }).default("$$$"),

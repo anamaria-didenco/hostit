@@ -1336,7 +1336,15 @@ export default function Dashboard() {
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
-  const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
+  // Remember the last Add-Enquiry entry mode (Smart Paste vs the form) per
+  // browser, instead of always defaulting back to Smart Paste.
+  const [enquiryPasteMode, setEnquiryPasteMode] = useState<boolean>(() => {
+    try { return localStorage.getItem('vfhq_enquiry_paste_mode') !== '0'; } catch { return true; }
+  });
+  const chooseEnquiryMode = (paste: boolean) => {
+    setEnquiryPasteMode(paste);
+    try { localStorage.setItem('vfhq_enquiry_paste_mode', paste ? '1' : '0'); } catch { /* private mode */ }
+  };
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '', source: '' });
   const addEnquiryFormId = useId();
   const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
@@ -2472,7 +2480,12 @@ export default function Dashboard() {
       setShowAddLead(false);
       setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '', source: '' });
       setEnquiryPasteText('');
-      setEnquiryPasteMode(true);
+      // Keep the entry mode the user chose (handled by chooseEnquiryMode).
+      // Open the new enquiry so they land on it instead of an empty list. A
+      // booked one becomes an event via ensureBookingForLead above, so leave it.
+      if (created?.id && vars?.status !== 'booked') {
+        if (leadViewMode === "list") selectLead(created); else openEventDrawer({ ...created, _isLead: true });
+      }
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
     },
     onError: (err, vars) => {
@@ -3136,6 +3149,7 @@ export default function Dashboard() {
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
         emailSignatures: Array.isArray((vs as any)?.emailSignatures) ? (vs as any).emailSignatures : [],
         paymentInstructions: (vs as any)?.paymentInstructions ?? "",
+        staffPortalShowMoney: (vs as any)?.staffPortalShowMoney ?? 0,
         staffBriefingSubject: (vs as any)?.staffBriefingSubject ?? "",
         staffBriefingBody: (vs as any)?.staffBriefingBody ?? "",
         customCourses: (() => {
@@ -4237,6 +4251,11 @@ export default function Dashboard() {
                       }}
                       sending={sendEmail.isPending}
                       onRowsChange={setEnquiryOrder}
+                      // Keep a just-moved row in place with "Moved to … · Undo"
+                      // instead of it vanishing from the tab it no longer matches.
+                      movedRows={movedRows}
+                      onUndoMove={undoMove}
+                      undoPendingId={updateStatusMut.isPending ? ((updateStatusMut.variables as any)?.id ?? null) : null}
                       // Enquiries left open past their date: close them in one go
                       // (reason recorded, so Reports' lost-reason split stays true).
                       onCloseAsLost={(ids: number[]) => bulkUpdateStatusMut.mutate({ ids, status: 'lost', lostReason: 'other', lostReasonNote: 'Event date passed without a booking' })}
@@ -5946,6 +5965,18 @@ export default function Dashboard() {
                           rows={4}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="flex items-start gap-3">
+                          <input type="checkbox" id="staffPortalShowMoney" checked={settingsForm.staffPortalShowMoney === 1}
+                            onChange={e => setSettingsForm((f: any) => ({ ...f, staffPortalShowMoney: e.target.checked ? 1 : 0 }))}
+                            aria-describedby="staffPortalShowMoney-help"
+                            className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                          <div>
+                            <label htmlFor="staffPortalShowMoney" className="font-dm text-sm text-ink">Show money on the staff link</label>
+                            <p id="staffPortalShowMoney-help" className="font-dm text-xs text-stone-600 mt-0.5">Lets the live staff &amp; shift links show payments received, F&amp;B prices and running totals — handy for collecting the balance on the night. Off by default, since anyone with the link can open it.</p>
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2 border-t border-gold/20 pt-4 mt-2">
                         <label htmlFor="vs-staff-briefing-subject" className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
@@ -10548,24 +10579,24 @@ export default function Dashboard() {
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="The Main Dining Room" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                placeholder="e.g. The Main Dining Room" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
                 <Input type="number" value={spaceForm.minCapacity} onChange={e => setSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
-                  placeholder="20" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  placeholder="e.g. 20" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
                 <Input type="number" value={spaceForm.maxCapacity} onChange={e => setSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
-                  placeholder="120" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  placeholder="e.g. 120" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
             </div>
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
               <Input type="number" value={spaceForm.minSpend} onChange={e => setSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
-                placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                placeholder="e.g. 2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <SpacePricingFields form={spaceForm} setForm={setSpaceForm} />
             <div>
@@ -11014,11 +11045,11 @@ export default function Dashboard() {
           {/* Mode switch — makes the two ways to add explicit, instead of
               hiding "manual" behind a button inside the paste panel. */}
           <div role="tablist" aria-label="How to add this enquiry" className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
-            <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => setEnquiryPasteMode(true)}
+            <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => chooseEnquiryMode(true)}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               SMART PASTE
             </button>
-            <button type="button" role="tab" aria-selected={!enquiryPasteMode} onClick={() => setEnquiryPasteMode(false)}
+            <button type="button" role="tab" aria-selected={!enquiryPasteMode} onClick={() => chooseEnquiryMode(false)}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${!enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               ENTER MANUALLY
             </button>
