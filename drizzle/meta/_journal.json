@@ -686,6 +686,13 @@
       "when": 1792531200000,
       "tag": "0101_staff_portal_show_money",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1792628800000,
+      "tag": "0102_space_color",
+      "breakpoints": true
     }
   ]
 }

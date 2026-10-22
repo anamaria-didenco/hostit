@@ -257,6 +257,9 @@ export const eventSpaces = pgTable("event_spaces", {
   minSpendWeekend: decimal("minSpendWeekend", { precision: 10, scale: 2 }),
   packagesFromPp: decimal("packagesFromPp", { precision: 10, scale: 2 }),
   showPricingOnForm: boolean("showPricingOnForm").default(false).notNull(),
+  // Custom calendar colour, as #RRGGBB. Null = pick one automatically from the
+  // space name (migration 0102).
+  color: varchar("color", { length: 9 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
