@@ -5868,6 +5868,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const invByBooking = new Map<number, any[]>();
         for (const inv of allInvoices) {
           if (inv.status === 'DELETED') continue;
+          // Standalone invoices (no booking) aren't part of any booking row.
+          if (inv.bookingId == null) continue;
           const arr = invByBooking.get(inv.bookingId) ?? [];
           arr.push({
             id: inv.id,
@@ -6454,6 +6456,64 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           }
         }
         return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName, updated: input.updateInvoiceId !== undefined, replaced };
+      }),
+    /** Raise a standalone DRAFT invoice straight from the Payments board — not
+     *  tied to a booking. Bill it to an existing enquiry (contact prefilled) or
+     *  to a one-off new contact (name + email). Always a draft; the operator
+     *  approves and sends it in Xero, same as every other invoice here. */
+    createCustomInvoice: protectedProcedure
+      .input(z.object({
+        contactName: z.string().trim().min(1).max(255),
+        contactEmail: z.string().trim().email().max(320).optional().or(z.literal('')),
+        // Attach to this enquiry (its details were used); recorded for context.
+        leadId: z.number().int().positive().optional(),
+        reference: z.string().trim().max(255).optional(),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        inclusive: z.boolean().optional(),
+        lines: z.array(z.object({
+          description: z.string().trim().min(1).max(500),
+          quantity: z.number().positive().max(100000),
+          unitAmount: z.number().min(-100000).max(1000000),
+        })).min(1).max(100),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.isStaff) throw new Error("Your login can't send invoices to Xero");
+        const { getDb } = await import('./db');
+        const { xeroInvoices, leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        // If attaching to an enquiry, it must be the venue's own.
+        if (input.leadId !== undefined) {
+          const [lead] = await db.select({ id: leads.id }).from(leads)
+            .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+          if (!lead) throw new Error('That enquiry no longer exists.');
+        }
+        const email = input.contactEmail && input.contactEmail.length ? input.contactEmail : undefined;
+        const reference = input.reference?.trim() || `Invoice — ${input.contactName}`;
+        const { createXeroDraftInvoice } = await import('./xero');
+        const result = await createXeroDraftInvoice(ctx.user.id, {
+          contactName: input.contactName,
+          contactEmail: email,
+          reference,
+          dueDate: input.dueDate,
+          inclusive: input.inclusive,
+          lines: input.lines,
+        });
+        // Track it so it shows in the Payments → Invoices list (bookingId null =
+        // standalone) and its payments mirror into Received.
+        await db.insert(xeroInvoices).values({
+          ownerId: ctx.user.id,
+          bookingId: null,
+          leadId: input.leadId ?? null,
+          stream: 'custom',
+          xeroInvoiceId: result.invoiceId,
+          invoiceNumber: result.invoiceNumber,
+          status: result.status,
+          total: String(result.total),
+          sentBy: (ctx.isTeamMember ? ctx.actorName : ctx.user?.name) ?? null,
+        });
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName };
       }),
     /** Delete a DRAFT invoice in Xero and drop it from our ledger. Approved or
      *  paid invoices are refused — those must be voided/credited in Xero. */

@@ -7,6 +7,7 @@ import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
 import XeroEventInvoices from "@/components/XeroEventInvoices";
 import XeroEventPayments from "@/components/XeroEventPayments";
+import { NewInvoiceDialog } from "@/components/NewInvoiceDialog";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import { fmtDate as fmtDateTz } from "@/lib/dateTime";
 import { currencyWhole } from "@/lib/money";
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
-  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, ChevronDown, X,
+  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, ChevronDown, X, Plus,
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
@@ -121,6 +122,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
   // "Bookings" tracks where each booking's money is up to; "Invoices sent" is
   // what went to Xero; "Received" is the ledger of money that actually landed.
   const [view, setView] = useState<View>("events");
+  const [showNewInvoice, setShowNewInvoice] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
@@ -342,6 +344,14 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         subtitleClassName="hidden sm:block"
         subtitle="Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night."
         actions={<>
+        {xeroStatus?.connected && (
+          <button
+            onClick={() => setShowNewInvoice(true)}
+            title="Create a new invoice in Xero — bill an enquiry or a new contact"
+            className="vf-btn vf-btn-primary">
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> NEW INVOICE
+          </button>
+        )}
         {xeroStatus?.connected && (
           <button
             onClick={() => syncXero.mutate({ force: true })}
@@ -586,6 +596,13 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         initialStream={xeroFor && xeroFor.depositRequired && !xeroFor.depositPaid ? "deposit"
           : xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
       />
+
+      {showNewInvoice && (
+        <NewInvoiceDialog
+          onClose={() => setShowNewInvoice(false)}
+          onCreated={() => { utils.xero.eventInvoices.invalidate(); setView("invoices"); }}
+        />
+      )}
     </div>
   );
 }
