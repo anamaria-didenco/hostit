@@ -413,16 +413,31 @@ export async function handleProposalPdf(req: Request, res: Response) {
       db.select().from(quoteItems).where(eq(quoteItems.proposalId, proposal.id)).orderBy(quoteItems.sortOrder),
     ]);
 
-    const html = buildHtml({
-      proposal,
-      lead: leadRows[0] ?? null,
-      venue: venueRows[0] ?? null,
-      drinks: drinksRows[0] ?? null,
-      quoteData: qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null,
-      menus: await (await import("./proposalMenus")).proposalMenus(proposal.ownerId, proposal.lineItems),
-      photos: (await (await import("./proposalPhotos")).proposalPhotosWithData(proposal.id))
-        .map(ph => ({ src: `data:${ph.contentType};base64,${ph.data}`, caption: ph.caption })),
-    });
+    const lead = leadRows[0] ?? null;
+    const venue = venueRows[0] ?? null;
+    const drinks = drinksRows[0] ?? null;
+    const quoteData = qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null;
+    const menus = await (await import("./proposalMenus")).proposalMenus(proposal.ownerId, proposal.lineItems);
+    const photos = (await (await import("./proposalPhotos")).proposalPhotosWithData(proposal.id))
+      .map(ph => ({ src: `data:${ph.contentType};base64,${ph.data}`, caption: ph.caption }));
+
+    // A venue's custom branded template, when enabled, renders in place of the
+    // built-in layout (sanitised, same data). A render failure falls back.
+    let html: string | null = null;
+    if ((venue as any)?.proposalTemplateEnabled && (venue as any)?.proposalTemplateHtml) {
+      try {
+        const { renderProposalTemplate } = await import("./proposalTemplateRender");
+        html = renderProposalTemplate((venue as any).proposalTemplateHtml, {
+          proposal, lead, venue, brand: venueBrand(venue), menus, drinks, quoteData, photos,
+        }, "pdf");
+      } catch (err) {
+        console.error("[ProposalPDF] custom template render failed, using default:", err);
+        html = null;
+      }
+    }
+    if (!html) {
+      html = buildHtml({ proposal, lead, venue, drinks, quoteData, menus, photos });
+    }
 
     // Generate PDF with Puppeteer's bundled Chromium (no system browser needed)
     const puppeteer = await import("puppeteer");

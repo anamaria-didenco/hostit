@@ -246,6 +246,10 @@ export const appRouter = router({
         enquiryAutoReplyEnabled: z.coerce.number().optional(),
         enquiryAutoReplyMessage: z.string().optional(),
         proposalAcceptEmailEnabled: z.coerce.number().optional(),
+        // Per-venue custom proposal template (Settings → Brand Pack). Capped so
+        // a pasted document can't bloat the row; sanitised at render time.
+        proposalTemplateHtml: z.string().max(200000).optional(),
+        proposalTemplateEnabled: z.coerce.number().int().min(0).max(1).optional(),
         // Enquiry form: availability on the date picker + walkthrough booking.
         showAvailabilityOnForm: z.coerce.number().int().min(0).max(1).optional(),
         walkthroughEnabled: z.coerce.number().int().min(0).max(1).optional(),
@@ -2171,7 +2175,79 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const menus = await proposalMenus(proposal.ownerId, proposal.lineItems);
         const { listProposalPhotos } = await import('./proposalPhotos');
         const photos = await listProposalPhotos(proposal.id);
-        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null, menus, photos };
+
+        // When the venue has a custom branded proposal template, render it
+        // server-side (sanitised, with the venue's data merged in) and hand the
+        // client the finished HTML instead of the built-in layout. The raw
+        // template is never shipped to the public page.
+        let customHtml: string | null = null;
+        const safeVenue: any = venue ? stripVenueSecrets(venue) : null;
+        if (venue?.proposalTemplateEnabled && venue?.proposalTemplateHtml) {
+          try {
+            const { getDb } = await import('./db');
+            const { leads: leadsTbl, proposalDrinks, quoteSettings, quoteItems } = await import('../drizzle/schema');
+            const { eq } = await import('drizzle-orm');
+            const { venueBrand } = await import('@shared/brand');
+            const { renderProposalTemplate } = await import('./proposalTemplateRender');
+            const db = await getDb();
+            if (db) {
+              const [leadRows, drinksRows, qSettingsRows, qItemRows] = await Promise.all([
+                db.select().from(leadsTbl).where(eq(leadsTbl.id, proposal.leadId)).limit(1),
+                db.select().from(proposalDrinks).where(eq(proposalDrinks.proposalId, proposal.id)).limit(1),
+                db.select().from(quoteSettings).where(eq(quoteSettings.proposalId, proposal.id)).limit(1),
+                db.select().from(quoteItems).where(eq(quoteItems.proposalId, proposal.id)).orderBy(quoteItems.sortOrder),
+              ]);
+              customHtml = renderProposalTemplate(venue.proposalTemplateHtml, {
+                proposal, lead: leadRows[0] ?? null, venue, brand: venueBrand(venue), menus,
+                drinks: drinksRows[0] ?? null,
+                quoteData: qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null,
+                photos: photos.map((ph: any) => ({ src: `/api/proposal-photo/${input.token}/${ph.id}`, caption: ph.caption })),
+              }, 'web');
+            }
+          } catch (err) {
+            // A broken template must never take down the proposal page — fall
+            // back to the built-in layout.
+            console.error('[Proposal] custom template render failed:', err);
+            customHtml = null;
+          }
+        }
+        // The raw template isn't needed (and shouldn't be exposed) on the
+        // public page — the rendered customHtml carries everything.
+        if (safeVenue) safeVenue.proposalTemplateHtml = null;
+        return { proposal: publicProposal, venue: safeVenue, menus, photos, customHtml };
+      }),
+
+    // Live preview for the Brand Pack template editor: render the (unsaved)
+    // HTML with representative sample data, in the venue's own branding.
+    previewTemplate: protectedProcedure
+      .input(z.object({ html: z.string().max(200000) }))
+      .mutation(async ({ input, ctx }) => {
+        const venue = await getVenueSettings(ctx.user.id);
+        const { venueBrand } = await import('@shared/brand');
+        const { renderProposalTemplate } = await import('./proposalTemplateRender');
+        const sampleProposal = {
+          title: "Sample Event Proposal",
+          eventDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 45),
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14),
+          guestCount: 80,
+          spaceName: "The Main Room",
+          introMessage: "Thank you for considering us for your event — we'd love to host you. Here's everything we've put together.",
+          termsAndConditions: "A 25% deposit secures your date. The balance is due 7 days before the event. Final numbers are confirmed 72 hours out.",
+          lineItems: JSON.stringify([
+            { description: "Venue hire", qty: 1, unitPrice: 2000, total: 2000 },
+            { description: "Catering (per guest)", qty: 80, unitPrice: 50, total: 4000 },
+          ]),
+          subtotalNzd: "6000.00", taxNzd: "900.00", totalNzd: "6900.00",
+          depositNzd: "1725.00", depositPercent: "25", taxPercent: "15",
+          menuChoice: false,
+        };
+        const sampleLead = { firstName: "Jamie", lastName: "Rivera", email: "jamie@example.com", phone: "+64 21 555 0123", company: "" };
+        const sampleDrinks = { barOption: "bar_tab", tabAmount: "1500", selectedDrinks: [], customDrinks: [{ name: "House Red", description: "NZ Pinot Noir" }], selectedSampleItems: [] };
+        const html = renderProposalTemplate(input.html, {
+          proposal: sampleProposal, lead: sampleLead, venue, brand: venueBrand(venue),
+          menus: [], drinks: sampleDrinks, quoteData: null, photos: [],
+        }, 'web');
+        return { html };
       }),
 
     create: protectedProcedure

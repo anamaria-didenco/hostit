@@ -207,6 +207,13 @@ export default function ProposalView() {
   const shownLines = lineItems.filter(l => !isEmptyLine(l) && !(menuOptions.length && isPackageLine(l.description)));
   const chosenOption = menuOptions.find(o => o.line === chosenMenu) ?? null;
 
+  // When the venue has a custom branded template, the server renders the whole
+  // proposal document (sanitised) and we show that instead of the built-in
+  // sections — but the status banners, the menu picker (when there's a choice)
+  // and the Accept/Decline controls stay, so the client can still respond.
+  const customHtml = (data as any).customHtml as string | null | undefined;
+  const useCustom = !!customHtml;
+
   const isExpired = proposal.expiresAt && new Date(proposal.expiresAt) < new Date();
   const canRespond = ["sent", "viewed"].includes(proposal.status) && !isExpired && !responded;
   const alreadyResponded = responded ?? (["accepted", "declined"].includes(proposal.status) ? proposal.status as any : null);
@@ -219,6 +226,7 @@ export default function ProposalView() {
       <style>{`.vf-proposal .font-playfair{font-family:${brand.serif}} .vf-proposal, .vf-proposal .font-inter{font-family:${brand.sans}}`}</style>
 
       {/* ── Hero: venue photo (or the venue's colour), logo, and the title ── */}
+      {!useCustom && (
       <header className="relative overflow-hidden" style={{ backgroundColor: T.header, color: T.headerText }}>
         {venuePhoto && (
           <>
@@ -246,10 +254,16 @@ export default function ProposalView() {
           </div>
         </div>
       </header>
+      )}
 
-      <main className="max-w-3xl mx-auto px-6 pt-0 pb-10">
+      {/* Custom branded template (server-rendered + sanitised) */}
+      {useCustom && (
+        <div className="vf-custom-proposal" dangerouslySetInnerHTML={{ __html: customHtml! }} />
+      )}
+
+      <main className={`max-w-3xl mx-auto px-6 pb-10 ${useCustom ? 'pt-8' : 'pt-0'}`}>
         {/* Key facts */}
-        {(() => {
+        {!useCustom && (() => {
           const facts = [
             { icon: <Calendar className="w-4 h-4" />, label: "Date", value: proposal.eventDate ? new Date(proposal.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : null },
             { icon: <Users className="w-4 h-4" />, label: "Guests", value: proposal.guestCount ? String(proposal.guestCount) : null },
@@ -305,6 +319,7 @@ export default function ProposalView() {
           </div>
         )}
 
+        {!useCustom && (<>
         {/* Intro message */}
         {proposal.introMessage && (
           <div className="p-6 mb-6 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
@@ -529,6 +544,30 @@ export default function ProposalView() {
             <h3 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>TERMS & CONDITIONS</h3>
             <div className="font-inter text-xs whitespace-pre-line leading-relaxed" style={{ color: T.stone }}>
               {proposal.termsAndConditions}
+            </div>
+          </div>
+        )}
+        </>)}
+
+        {/* Menu picker for a custom template (the branded doc shows the options,
+            but the client still chooses here before accepting). */}
+        {useCustom && menuOptions.length > 0 && (
+          <div className="p-6 mb-6 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
+            <div className="font-bebas text-sm tracking-widest mb-1" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
+            <div className="font-inter text-xs mb-3" style={{ color: T.stone }}>Each price includes everything in your proposal and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
+            <div className="space-y-2">
+              {menuOptions.map(o => {
+                const picked = chosenMenu === o.line;
+                return (
+                  <label key={o.line} className={`flex items-center gap-3 p-3 rounded-sm ${canRespond ? 'cursor-pointer' : ''}`} style={{ border: `2px solid ${picked ? T.accent : T.border}` }}>
+                    {canRespond && <input type="radio" name="menu-choice" checked={picked} onChange={() => setChosenMenu(o.line)} className="w-4 h-4" style={{ accentColor: T.accent }} />}
+                    <span className="flex-1 flex justify-between items-baseline gap-3">
+                      <span className="font-playfair text-base font-bold" style={{ color: T.ink }}>{o.name}</span>
+                      <span className="font-playfair text-lg font-bold whitespace-nowrap" style={{ color: T.accent }}>{currency(o.total)}</span>
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         )}
