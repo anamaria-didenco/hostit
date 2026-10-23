@@ -1056,33 +1056,52 @@ export const appRouter = router({
               if (mailer) {
                 const { escapeHtml: esc } = await import('./sanitizeHtml');
                 const { DEFAULT_AUTO_REPLY_INTRO } = await import('../shared/enquiryCopy');
+                const { venueBrand } = await import('@shared/brand');
                 const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
-                const accent = (vs.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
+                // Brand Pack: accent colour, ink-on-accent and the font pairing,
+                // so the auto-reply wears the venue's branding like the proposal
+                // and BEO — not a generic green serif.
+                const brand = venueBrand(vs);
+                const accent = brand.accent;
+                const onAccent = brand.onAccent;
                 const firstName = esc(input.firstName);
                 const introRaw = vs.enquiryAutoReplyMessage?.trim();
                 const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
                 const fmtDate = input.eventDate
-                  ? (() => {
-                      return formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ);
-                    })()
+                  ? formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ)
                   : null;
+                // The venue logo, embedded as an inline (CID) image: logos are
+                // stored as data: URLs, which Gmail/Outlook block in <img src>.
+                // A dark accent gets the same whitening the proposal/BEO use.
+                const logoAttachments: Array<{ filename: string; content: Buffer; contentType: string; cid: string }> = [];
+                let logoHtml = '';
+                const logoRaw = String(vs.logoUrl ?? '');
+                const logoStyle = `max-height:46px;max-width:190px;object-fit:contain;display:block;margin-bottom:10px${onAccent === '#fff' ? ';filter:brightness(0) invert(1)' : ''}`;
+                const dataM = /^data:([^;]+);base64,(.+)$/s.exec(logoRaw);
+                if (dataM) {
+                  logoAttachments.push({ filename: 'logo', content: Buffer.from(dataM[2], 'base64'), contentType: dataM[1], cid: 'venuelogo' });
+                  logoHtml = `<img src="cid:venuelogo" alt="${esc(venueName)}" style="${logoStyle}"/>`;
+                } else if (/^https?:\/\//.test(logoRaw)) {
+                  logoHtml = `<img src="${esc(logoRaw)}" alt="${esc(venueName)}" style="${logoStyle}"/>`;
+                }
                 const details = [
                   input.eventType && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px;width:120px">Event</td><td style="padding:3px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
                   fmtDate && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Date</td><td style="padding:3px 0;font-size:14px;font-weight:600">${esc(fmtDate)}${input.dateFlexible ? ' (flexible)' : ''}</td></tr>`,
                   input.guestCount && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Guests</td><td style="padding:3px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
                 ].filter(Boolean).join('');
                 const contactBits = [vs.phone && esc(vs.phone), esc(mailer.fromEmail)].filter(Boolean).join(' · ');
-                const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
-  <div style="background:${accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
-    <div style="font-size:23px;font-weight:bold;margin-top:4px">We've got your enquiry</div>
+                const html = `<div style="font-family:${brand.sans};max-width:520px;margin:0 auto;color:#1f2430">
+  <div style="background:${accent};color:${onAccent};padding:22px 26px;border-radius:10px 10px 0 0">
+    ${logoHtml}
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:${brand.sans}">${esc(venueName)}</div>
+    <div style="font-size:23px;font-weight:bold;margin-top:4px;font-family:${brand.serif}">We've got your enquiry</div>
   </div>
   <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
-    <p style="font-size:16px;margin:0 0 12px">Hi ${firstName},</p>
+    <p style="font-size:16px;margin:0 0 12px;font-family:${brand.serif}">Hi ${firstName},</p>
     <p style="font-size:15px;line-height:1.6;margin:0 0 ${details ? '16px' : '18px'}">${intro}</p>
     ${details ? `<table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px;padding:6px 12px"><tbody>${details}</tbody></table>` : ''}
     <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">If anything's changed in the meantime, just reply to this email${contactBits ? ` or reach us on ${contactBits}` : ''}.</p>
-    <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
+    <p style="font-size:15px;margin:16px 0 0;font-family:${brand.serif}">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
   </div>
 </div>`;
                 const text = `Hi ${input.firstName},\n\n${introRaw || DEFAULT_AUTO_REPLY_INTRO}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
@@ -1094,6 +1113,7 @@ export const appRouter = router({
                   subject,
                   html,
                   text,
+                  ...(logoAttachments.length ? { attachments: logoAttachments } : {}),
                 });
                 autoReplySent = true;
                 console.log(`[LeadSubmit] Auto-reply sent to ${input.email}`);
