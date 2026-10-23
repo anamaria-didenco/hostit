@@ -60,6 +60,7 @@ import InboxSettingsCard from "@/components/InboxSettingsCard";
 import LeadConversation, { RepliedChip, useReplyStatus, type buildReply } from "@/components/LeadConversation";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel } from "@shared/emailSignatures";
@@ -2536,6 +2537,12 @@ export default function Dashboard() {
     onSuccess: () => toast.success("Test email sent! Check your inbox."),
     onError: (err) => toast.error(err.message || "Failed to send test email"),
   });
+  // Live preview for the branded proposal-template editor (Brand Pack).
+  const [proposalTemplatePreview, setProposalTemplatePreview] = useState<string | null>(null);
+  const previewProposalTemplate = trpc.proposals.previewTemplate.useMutation({
+    onSuccess: (r) => setProposalTemplatePreview(r.html),
+    onError: (err) => toast.error(err.message || "Couldn't build the preview"),
+  });
   const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number; sections?: { id: string; name: string }[] }[]>([]);
   // Stores the selected service NAME (not ID — NBI IDs have a random prefix that changes each API call)
   const [nbiSelectedServiceId, setNbiSelectedServiceId] = useState<string>('');
@@ -3130,6 +3137,8 @@ export default function Dashboard() {
         themeKey: vs?.themeKey ?? "sage",
         brandAccentColor: vs?.brandAccentColor ?? "",
         brandFontKey: vs?.brandFontKey ?? "editorial",
+        proposalTemplateHtml: (vs as any)?.proposalTemplateHtml ?? "",
+        proposalTemplateEnabled: (vs as any)?.proposalTemplateEnabled ?? 0,
         logoUrl: vs?.logoUrl ?? "",
         coverImageUrl: vs?.coverImageUrl ?? "",
         formFont: vs?.formFont ?? "inter",
@@ -7789,6 +7798,8 @@ export default function Dashboard() {
                         logoScale: settingsForm.logoScale,
                         brandAccentColor: settingsForm.brandAccentColor || "",
                         brandFontKey: settingsForm.brandFontKey || "editorial",
+                        proposalTemplateHtml: settingsForm.proposalTemplateHtml || "",
+                        proposalTemplateEnabled: settingsForm.proposalTemplateEnabled ? 1 : 0,
                       })}
                       disabled={updateSettings.isPending}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream disabled:opacity-40"
@@ -7906,6 +7917,98 @@ export default function Dashboard() {
                       </div>
                     </div>
                     {isDefault && <p className="font-dm text-xs text-ink/60 mt-2">Currently showing the VenueFlow default (editorial navy + Spectral). Pick a colour or font above to make it yours.</p>}
+                  </div>
+
+                  {/* Branded proposal template (custom HTML) */}
+                  <div className="dante-card p-5 mb-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="font-bebas tracking-widest text-base text-ink">BRANDED PROPOSAL (HTML)</h2>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox"
+                          checked={!!settingsForm.proposalTemplateEnabled}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, proposalTemplateEnabled: e.target.checked ? 1 : 0 }))}
+                          className="w-4 h-4 accent-sage-green" />
+                        <span className="font-bebas text-xs tracking-widest text-ink/80">{settingsForm.proposalTemplateEnabled ? "ON" : "OFF"}</span>
+                      </label>
+                    </div>
+                    <p className="font-dm text-xs text-ink/60">
+                      Paste your own HTML proposal design and it's used for every proposal — the client page and the PDF — with each booking's details filled in. Leave this OFF to keep the built-in layout. Use <span className="font-mono">inline styles</span> (like an email); <span className="font-mono">&lt;script&gt;</span>, <span className="font-mono">&lt;style&gt;</span> blocks and external stylesheets are removed on save for safety. Drop in the tokens below — single values like <span className="font-mono">{"{{clientName}}"}</span>, and ready-made branded blocks like <span className="font-mono">{"{{pricing}}"}</span>.
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button"
+                        onClick={() => setSettingsForm((f: any) => ({ ...f, proposalTemplateHtml: DEFAULT_PROPOSAL_TEMPLATE, proposalTemplateEnabled: 1 }))}
+                        className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/40 text-ink hover:bg-gold/10">
+                        LOAD STARTER TEMPLATE
+                      </button>
+                      <button type="button"
+                        onClick={() => previewProposalTemplate.mutate({ html: settingsForm.proposalTemplateHtml || DEFAULT_PROPOSAL_TEMPLATE })}
+                        disabled={previewProposalTemplate.isPending}
+                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-40">
+                        {previewProposalTemplate.isPending ? "BUILDING…" : "PREVIEW WITH SAMPLE DATA"}
+                      </button>
+                      <button type="button"
+                        onClick={() => {
+                          // Open the tab synchronously (inside the click) so pop-up
+                          // blockers don't stop it, then fill it once the server
+                          // returns the rendered page — exactly what the client sees.
+                          const w = window.open("", "_blank");
+                          if (w) w.document.write('<!doctype html><title>Loading preview…</title><body style="font-family:system-ui,sans-serif;padding:40px;color:#555">Building your client preview…</body>');
+                          previewProposalTemplate.mutate(
+                            { html: settingsForm.proposalTemplateHtml || DEFAULT_PROPOSAL_TEMPLATE },
+                            {
+                              onSuccess: (r) => { if (w) { w.document.open(); w.document.write(r.html); w.document.close(); } },
+                              onError: () => { if (w) w.close(); },
+                            },
+                          );
+                          if (!w) toast.error("Allow pop-ups to open the full client preview.");
+                        }}
+                        disabled={previewProposalTemplate.isPending}
+                        className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/40 text-ink hover:bg-gold/10 disabled:opacity-40 inline-flex items-center gap-1">
+                        OPEN CLIENT VIEW <ExternalLink className="w-3 h-3" />
+                      </button>
+                      {settingsForm.proposalTemplateHtml && (
+                        <button type="button"
+                          onClick={() => setSettingsForm((f: any) => ({ ...f, proposalTemplateHtml: "" }))}
+                          className="font-dm text-xs text-red-400 hover:text-red-600 self-center">Clear template</button>
+                      )}
+                    </div>
+
+                    <textarea
+                      value={settingsForm.proposalTemplateHtml ?? ""}
+                      onChange={e => setSettingsForm((f: any) => ({ ...f, proposalTemplateHtml: e.target.value }))}
+                      spellCheck={false}
+                      placeholder="Paste your branded proposal HTML here, or click “Load starter template”."
+                      className="w-full h-64 border border-gold/30 rounded p-3 font-mono text-xs leading-relaxed focus:outline-none focus:border-gold resize-y"
+                    />
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-sage mb-1">VALUE TOKENS</div>
+                        <div className="flex flex-wrap gap-1">
+                          {PROPOSAL_SCALAR_TOKENS.map(t => (
+                            <code key={t.token} title={t.label} className="text-[11px] bg-gold/10 border border-gold/20 rounded px-1.5 py-0.5 text-ink/80">{t.token}</code>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-sage mb-1">BRANDED BLOCKS</div>
+                        <div className="flex flex-wrap gap-1">
+                          {PROPOSAL_BLOCK_TOKENS.map(t => (
+                            <code key={t.token} title={t.label} className="text-[11px] bg-forest/10 border border-forest/20 rounded px-1.5 py-0.5 text-ink/80">{t.token}</code>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {proposalTemplatePreview != null && (
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-sage mb-1">PREVIEW (SAMPLE DATA)</div>
+                        <iframe title="Proposal template preview" sandbox="allow-same-origin"
+                          srcDoc={proposalTemplatePreview}
+                          className="w-full h-[480px] border border-gold/30 rounded bg-white" />
+                      </div>
+                    )}
                   </div>
                 </div>
                 );

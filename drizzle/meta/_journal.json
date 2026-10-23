@@ -693,6 +693,13 @@
       "when": 1792628800000,
       "tag": "0102_space_color",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0103_proposal_template",
+      "breakpoints": true
     }
   ]
 }

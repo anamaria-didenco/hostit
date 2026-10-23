@@ -163,6 +163,14 @@ export const venueSettings = pgTable("venue_settings", {
   // Confirmation email to the client when they accept a proposal online
   // (needs SMTP). On by default — it answers the client's own action.
   proposalAcceptEmailEnabled: integer("proposalAcceptEmailEnabled").default(1),
+  // Optional per-venue custom HTML for the proposal document — pasted/edited in
+  // Settings → Brand Pack. When enabled, the client proposal page and the PDF
+  // render this branded HTML (with {{token}} and {{block}} substitution)
+  // instead of the built-in layout. Null/off = the built-in layout (migration
+  // 0103). Scalars are HTML-escaped and the HTML is sanitised before the
+  // venue's data is merged in, so a pasted template can't inject script.
+  proposalTemplateHtml: text("proposalTemplateHtml"),
+  proposalTemplateEnabled: integer("proposalTemplateEnabled").default(0),
   // Enquiry form shows booked / busy dates on its date picker (dates and
   // states only — never who booked). On by default.
   showAvailabilityOnForm: integer("showAvailabilityOnForm").default(1),
