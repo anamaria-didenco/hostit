@@ -117,7 +117,7 @@ export async function getEventSpaces(ownerId: number) {
   return db.select().from(eventSpaces).where(and(eq(eventSpaces.ownerId, ownerId), eq(eventSpaces.isActive, true)));
 }
 
-export async function createEventSpace(data: { ownerId: number; name: string; description?: string; minCapacity?: number; maxCapacity?: number; minSpend?: number; minSpendWeekend?: number; packagesFromPp?: number; showPricingOnForm?: boolean }) {
+export async function createEventSpace(data: { ownerId: number; name: string; description?: string; minCapacity?: number; maxCapacity?: number; minSpend?: number; minSpendWeekend?: number; packagesFromPp?: number; showPricingOnForm?: boolean; color?: string }) {
   const db = await getDb();
   if (!db) return null;
   await db.insert(eventSpaces).values({
@@ -130,6 +130,7 @@ export async function createEventSpace(data: { ownerId: number; name: string; de
     minSpendWeekend: data.minSpendWeekend?.toString() as any,
     packagesFromPp: data.packagesFromPp?.toString() as any,
     showPricingOnForm: data.showPricingOnForm ?? false,
+    color: data.color ?? null,
   });
   const result = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, data.ownerId)).orderBy(desc(eventSpaces.id)).limit(1);
   return result[0] ?? null;

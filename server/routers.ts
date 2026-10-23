@@ -507,6 +507,8 @@ export const appRouter = router({
         minSpendWeekend: z.number().min(0).optional(),
         packagesFromPp: z.number().min(0).optional(),
         showPricingOnForm: z.boolean().optional(),
+        // Custom calendar colour, #RRGGBB. Omitted = automatic from the name.
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         return createEventSpace({ ownerId: ctx.user.id, ...input });
@@ -522,6 +524,8 @@ export const appRouter = router({
         minSpendWeekend: z.number().min(0).optional().nullable(),
         packagesFromPp: z.number().min(0).optional().nullable(),
         showPricingOnForm: z.boolean().optional(),
+        // Custom calendar colour, #RRGGBB; null clears it back to automatic.
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');

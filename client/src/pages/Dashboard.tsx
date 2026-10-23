@@ -1074,10 +1074,17 @@ export default function Dashboard() {
   // is at a glance. Hash the space name into a fixed palette of soft accents
   // (returns a CSS color string usable as borderLeftColor / a small dot).
   const SPACE_PALETTE = ['#2f5488','#996d3d','#5d804d','#a1627d','#7c6ea3','#43817b','#ae6249','#91703a','#627898','#8869a7'];
-  const spaceColor = (name?: string | null) => {
+  // A space's calendar colour: the custom one the venue picked, else a stable
+  // auto colour from the name. The map is filled once `spaces` has loaded.
+  const autoSpaceColor = (name?: string | null) => {
     if (!name) return null;
     let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return SPACE_PALETTE[h % SPACE_PALETTE.length];
+  };
+  const spaceColorRef = useRef<Map<string, string>>(new Map());
+  const spaceColor = (name?: string | null) => {
+    if (!name) return null;
+    return spaceColorRef.current.get(name) ?? autoSpaceColor(name);
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   // Lost/cancelled are dead ends, not work — the board hides them until asked
@@ -1245,10 +1252,10 @@ export default function Dashboard() {
     navCalendar(dx > 0 ? -1 : 1);
   };
   const [showAddSpace, setShowAddSpace] = useState(false);
-  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
+  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false, color: "" });
   const [showEditSpace, setShowEditSpace] = useState(false);
   const [editingSpace, setEditingSpace] = useState<any>(null);
-  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
+  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false, color: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
@@ -1715,6 +1722,13 @@ export default function Dashboard() {
   }, [pipelineStages, kanbanStagePrefs, showClosedStages]);
 
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
+  // Keep the name→custom-colour map current so spaceColor() (defined earlier)
+  // picks up the venue's chosen colours.
+  spaceColorRef.current = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of (spaces ?? [])) if ((s as any)?.name && (s as any)?.color) m.set((s as any).name, (s as any).color);
+    return m;
+  }, [spaces]);
   const { data: monthBookings, isError: monthBookingsError, refetch: refetchMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
@@ -2622,7 +2636,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to clear sync"),
   });
   const createSpace = trpc.spaces.create.useMutation({
-    onSuccess: () => { refetchSpaces(); utils.quickstart.setupStatus.invalidate(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
+    onSuccess: () => { refetchSpaces(); utils.quickstart.setupStatus.invalidate(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false, color: "" }); toast.success("Space added!"); },
   });
   const updateSpace = trpc.spaces.update.useMutation({
     onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
@@ -6250,7 +6264,11 @@ export default function Dashboard() {
                   <div className="space-y-2">
                     {(spaces ?? []).map((s: any) => (
                       <div key={s.id} className="dante-card p-4 flex items-center justify-between">
-                        <div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-3.5 h-3.5 rounded-sm flex-shrink-0 border border-black/10" aria-hidden
+                            title={s.color ? "Custom calendar colour" : "Automatic calendar colour"}
+                            style={{ background: spaceColor(s.name) ?? '#c9a84c' }} />
+                          <div className="min-w-0">
                           <div className="font-cormorant font-semibold text-base text-ink">{s.name}</div>
                           <div className="font-dm text-xs text-ink/60">
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
@@ -6260,10 +6278,11 @@ export default function Dashboard() {
                             {s.showPricingOnForm ? " · Pricing shown on enquiry form" : ""}
                           </div>
                           {s.description && <div className="font-dm text-xs text-ink/60 mt-0.5">{s.description}</div>}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '', minSpendWeekend: s.minSpendWeekend ? String(Number(s.minSpendWeekend)) : '', packagesFromPp: s.packagesFromPp ? String(Number(s.packagesFromPp)) : '', showPricingOnForm: !!s.showPricingOnForm }); setShowEditSpace(true); }}
+                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '', minSpendWeekend: s.minSpendWeekend ? String(Number(s.minSpendWeekend)) : '', packagesFromPp: s.packagesFromPp ? String(Number(s.packagesFromPp)) : '', showPricingOnForm: !!s.showPricingOnForm, color: s.color ?? '' }); setShowEditSpace(true); }}
                             className="text-sage hover:text-forest-dark p-1"
                             title="Edit space"
                           >
@@ -10575,7 +10594,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined, minSpendWeekend: spaceForm.minSpendWeekend ? parseFloat(spaceForm.minSpendWeekend) : undefined, packagesFromPp: spaceForm.packagesFromPp ? parseFloat(spaceForm.packagesFromPp) : undefined, showPricingOnForm: spaceForm.showPricingOnForm }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined, minSpendWeekend: spaceForm.minSpendWeekend ? parseFloat(spaceForm.minSpendWeekend) : undefined, packagesFromPp: spaceForm.packagesFromPp ? parseFloat(spaceForm.packagesFromPp) : undefined, showPricingOnForm: spaceForm.showPricingOnForm, color: spaceForm.color || undefined }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10600,6 +10619,21 @@ export default function Dashboard() {
             </div>
             <SpacePricingFields form={spaceForm} setForm={setSpaceForm} />
             <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
+              <div className="flex items-center gap-2.5">
+                <input type="color" aria-label="Calendar colour for this space"
+                  value={spaceForm.color || autoSpaceColor(spaceForm.name) || '#2f5488'}
+                  onChange={e => setSpaceForm(f => ({ ...f, color: e.target.value }))}
+                  className="w-10 h-9 p-0.5 border border-gold/30 rounded cursor-pointer bg-white" />
+                <span className="font-dm text-xs text-ink/70">{spaceForm.color || "Automatic (from the name)"}</span>
+                {spaceForm.color && (
+                  <button type="button" onClick={() => setSpaceForm(f => ({ ...f, color: "" }))}
+                    className="font-dm text-xs text-forest underline underline-offset-2 ml-auto">Reset to automatic</button>
+                )}
+              </div>
+              <p className="font-dm text-xs text-sage/60 mt-1">Colour-codes this space's events on the calendar.</p>
+            </div>
+            <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={spaceForm.description} onChange={e => setSpaceForm(f => ({ ...f, description: e.target.value }))}
                 rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
@@ -10620,7 +10654,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Edit Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null, minSpendWeekend: editSpaceForm.minSpendWeekend ? parseFloat(editSpaceForm.minSpendWeekend) : null, packagesFromPp: editSpaceForm.packagesFromPp ? parseFloat(editSpaceForm.packagesFromPp) : null, showPricingOnForm: editSpaceForm.showPricingOnForm }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null, minSpendWeekend: editSpaceForm.minSpendWeekend ? parseFloat(editSpaceForm.minSpendWeekend) : null, packagesFromPp: editSpaceForm.packagesFromPp ? parseFloat(editSpaceForm.packagesFromPp) : null, showPricingOnForm: editSpaceForm.showPricingOnForm, color: editSpaceForm.color || null }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10644,6 +10678,21 @@ export default function Dashboard() {
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <SpacePricingFields form={editSpaceForm} setForm={setEditSpaceForm} />
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
+              <div className="flex items-center gap-2.5">
+                <input type="color" aria-label="Calendar colour for this space"
+                  value={editSpaceForm.color || autoSpaceColor(editSpaceForm.name) || '#2f5488'}
+                  onChange={e => setEditSpaceForm(f => ({ ...f, color: e.target.value }))}
+                  className="w-10 h-9 p-0.5 border border-gold/30 rounded cursor-pointer bg-white" />
+                <span className="font-dm text-xs text-ink/70">{editSpaceForm.color || "Automatic (from the name)"}</span>
+                {editSpaceForm.color && (
+                  <button type="button" onClick={() => setEditSpaceForm(f => ({ ...f, color: "" }))}
+                    className="font-dm text-xs text-forest underline underline-offset-2 ml-auto">Reset to automatic</button>
+                )}
+              </div>
+              <p className="font-dm text-xs text-sage/60 mt-1">Colour-codes this space's events on the calendar.</p>
+            </div>
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}
