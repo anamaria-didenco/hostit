@@ -167,7 +167,7 @@ export const venueSettings = pgTable("venue_settings", {
   // Settings → Brand Pack. When enabled, the client proposal page and the PDF
   // render this branded HTML (with {{token}} and {{block}} substitution)
   // instead of the built-in layout. Null/off = the built-in layout (migration
-  // 0102). Scalars are HTML-escaped and the HTML is sanitised before the
+  // 0103). Scalars are HTML-escaped and the HTML is sanitised before the
   // venue's data is merged in, so a pasted template can't inject script.
   proposalTemplateHtml: text("proposalTemplateHtml"),
   proposalTemplateEnabled: integer("proposalTemplateEnabled").default(0),
@@ -265,6 +265,9 @@ export const eventSpaces = pgTable("event_spaces", {
   minSpendWeekend: decimal("minSpendWeekend", { precision: 10, scale: 2 }),
   packagesFromPp: decimal("packagesFromPp", { precision: 10, scale: 2 }),
   showPricingOnForm: boolean("showPricingOnForm").default(false).notNull(),
+  // Custom calendar colour, as #RRGGBB. Null = pick one automatically from the
+  // space name (migration 0102).
+  color: varchar("color", { length: 9 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
