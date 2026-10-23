@@ -7928,6 +7928,26 @@ export default function Dashboard() {
                         className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-40">
                         {previewProposalTemplate.isPending ? "BUILDING…" : "PREVIEW WITH SAMPLE DATA"}
                       </button>
+                      <button type="button"
+                        onClick={() => {
+                          // Open the tab synchronously (inside the click) so pop-up
+                          // blockers don't stop it, then fill it once the server
+                          // returns the rendered page — exactly what the client sees.
+                          const w = window.open("", "_blank");
+                          if (w) w.document.write('<!doctype html><title>Loading preview…</title><body style="font-family:system-ui,sans-serif;padding:40px;color:#555">Building your client preview…</body>');
+                          previewProposalTemplate.mutate(
+                            { html: settingsForm.proposalTemplateHtml || DEFAULT_PROPOSAL_TEMPLATE },
+                            {
+                              onSuccess: (r) => { if (w) { w.document.open(); w.document.write(r.html); w.document.close(); } },
+                              onError: () => { if (w) w.close(); },
+                            },
+                          );
+                          if (!w) toast.error("Allow pop-ups to open the full client preview.");
+                        }}
+                        disabled={previewProposalTemplate.isPending}
+                        className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/40 text-ink hover:bg-gold/10 disabled:opacity-40 inline-flex items-center gap-1">
+                        OPEN CLIENT VIEW <ExternalLink className="w-3 h-3" />
+                      </button>
                       {settingsForm.proposalTemplateHtml && (
                         <button type="button"
                           onClick={() => setSettingsForm((f: any) => ({ ...f, proposalTemplateHtml: "" }))}
