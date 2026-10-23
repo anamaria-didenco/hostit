@@ -87,6 +87,11 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
       if (s.status !== r.status) statusChanges++;
     }
 
+    // Standalone invoices (raised from the Payments board, no booking) have no
+    // per-booking stream or payment ledger to reconcile — their status is
+    // mirrored above, and their payments surface in Received straight from Xero.
+    if (r.bookingId == null) continue;
+
     // Approving the draft in Xero means the invoice has gone out, so the
     // Payments board should say "invoiced" without anyone re-marking it here.
     // Only the not-yet-invoiced states advance — a stream already marked paid

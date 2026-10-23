@@ -904,8 +904,13 @@ export const xeroConnections = pgTable("xero_connections", {
 export const xeroInvoices = pgTable("xero_invoices", {
   id: serial("id").primaryKey(),
   ownerId: integer("ownerId").notNull(),
-  bookingId: integer("bookingId").notNull(),
-  stream: varchar("stream", { length: 10 }).notNull(), // 'food' | 'drinks'
+  // Null for a standalone invoice raised straight from the Payments board
+  // (not tied to a booking) — migration 0104.
+  bookingId: integer("bookingId"),
+  // Optional enquiry this standalone invoice was billed to (its contact details
+  // were used). Null for booking invoices and for a one-off new contact.
+  leadId: integer("leadId"),
+  stream: varchar("stream", { length: 10 }).notNull(), // 'food' | 'drinks' | 'deposit' | 'custom'
   xeroInvoiceId: varchar("xeroInvoiceId", { length: 64 }),
   invoiceNumber: varchar("invoiceNumber", { length: 50 }),
   status: varchar("status", { length: 20 }), // DRAFT | AUTHORISED | PAID | VOIDED
