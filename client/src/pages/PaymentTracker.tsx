@@ -89,6 +89,12 @@ export default function PaymentTracker() {
     // Booking row's depositPaid flag is auto-synced server-side — refresh
     // any cached view of it so EventDetail/Dashboard pick up the change.
     if (bookingId) await utils.bookings.getById.invalidate({ id: bookingId });
+    // A recorded/removed payment also moves the Payments board rows/totals
+    // and the Overview money tiles (Deposits Due, Revenue). Invalidate them
+    // here — called by both add and delete — so every view stays in step
+    // instead of going stale until a reload.
+    utils.payments.overview.invalidate();
+    utils.dashboard.invalidate();
   };
 
   // Prefill what you're most likely recording: the deposit while it's due,
@@ -151,7 +157,6 @@ export default function PaymentTracker() {
       // Re-run the prefill against the refreshed totals for the next payment.
       prefilled.current = false;
       await refreshAll();
-      utils.payments.overview.invalidate();
     },
     onError: () => toast.error("Failed to record payment"),
   });
