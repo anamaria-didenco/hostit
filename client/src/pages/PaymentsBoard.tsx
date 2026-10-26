@@ -144,7 +144,12 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
       } else if (r.statusChanges > 0) {
         toast.success(`Updated ${r.statusChanges} invoice status${r.statusChanges === 1 ? "" : "es"} from Xero`);
       }
-      if (r.paymentsImported > 0 || r.statusChanges > 0) utils.payments.overview.invalidate();
+      if (r.paymentsImported > 0 || r.statusChanges > 0) {
+        utils.payments.overview.invalidate();
+        // Imported deposit payments can flip depositPaid, which moves the
+        // Overview's Deposits Due tile.
+        utils.dashboard.invalidate();
+      }
     },
     onError: (e) => setXeroProblem(e.message || "Xero didn't answer"),
   });
@@ -159,6 +164,10 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     onSuccess: () => {
       utils.payments.overview.invalidate();
       utils.bookings.list.invalidate();
+      // Ticking a deposit paid / settling here also moves the Overview money
+      // tiles (Deposits Due, Revenue This Month) — keep them in step instead
+      // of stale until a reload.
+      utils.dashboard.invalidate();
     },
     onError: () => toast.error("Failed to update — try again"),
   });
@@ -308,6 +317,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     setSettleIds(new Set());
     utils.payments.overview.invalidate();
     utils.bookings.list.invalidate();
+    utils.dashboard.invalidate();
     if (ok === ids.length) toast.success(`${ok} past event${ok === 1 ? "" : "s"} marked settled`);
     else toast.error(`${ok} of ${ids.length} marked settled — try the rest again`);
   };

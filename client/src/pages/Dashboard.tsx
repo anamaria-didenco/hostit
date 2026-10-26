@@ -1623,9 +1623,16 @@ export default function Dashboard() {
   );
   const refreshDrawerPayments = async () => {
     await Promise.all([refetchDrawerPayments(), refetchDrawerPaymentSummary()]);
-    // Recording a deposit can tick the deposit paid (and set its amount) on
-    // the server; the calendar data carries it back into the open panel.
-    void utils.bookings.byMonth.invalidate();
+    // A payment recorded (or removed) here changes far more than this panel:
+    // the Payments board rows/totals (payments.overview) and the Overview
+    // money tiles — Revenue This Month, Deposits Due (dashboard.stats) — and
+    // recording a deposit can tick depositPaid server-side. Invalidate the
+    // same surfaces the Record-payment dialog does, so the board and home
+    // tiles update with the drawer instead of going stale until a hard
+    // refresh. (bookings.invalidate covers byMonth too.)
+    void utils.payments.invalidate();
+    void utils.bookings.invalidate();
+    void utils.dashboard.invalidate();
   };
   const addDrawerPaymentMutation = trpc.payments.add.useMutation({
     onSuccess: async () => { toast.success('Payment recorded'); await refreshDrawerPayments(); setDrawerNewPayment({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' }); },
