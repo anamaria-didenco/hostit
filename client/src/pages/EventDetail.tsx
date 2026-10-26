@@ -29,6 +29,7 @@ import { DoubleBookedTag } from "@/components/DateHold";
 import LeadProposals from "@/components/LeadProposals";
 import LinkedTasks from "@/components/LinkedTasks";
 import RecordPaymentButton from "@/components/RecordPaymentDialog";
+import ClientSubmissionPanel from "@/components/ClientSubmissionPanel";
 import { savedToastLabel } from "@/lib/editToast";
 
 const EVENT_TYPES = [
@@ -487,6 +488,10 @@ export default function EventDetail() {
             </div>
             <BookingInvoices bookingId={bookingId} />
           </div>
+
+          {/* What the client submitted through their portal (final numbers,
+              dietaries, uploaded files). Hidden until they've sent something. */}
+          <ClientSubmissionPanel bookingId={bookingId} />
 
           {/* Event spend & profitability tracking */}
           <div className="dante-card p-6">

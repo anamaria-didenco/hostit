@@ -533,6 +533,13 @@ export const bookings = pgTable("bookings", {
   // Set when a client accepted a proposal for a date/space that was already
   // taken. The public accept is never blocked; the venue is alerted instead.
   clashFlaggedAt: timestamp("clashFlaggedAt"),
+  // Details the client confirms from their portal (migration 0105): the
+  // guaranteed final guest count, dietaries (JSON [{name,count,notes}]), a free
+  // note, and when they submitted. Kept separate from the planning guestCount.
+  finalGuestCount: integer("finalGuestCount"),
+  clientDietaries: text("clientDietaries"),
+  clientDetailNotes: text("clientDetailNotes"),
+  clientDetailsSubmittedAt: bigint("clientDetailsSubmittedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (t) => ({
@@ -1307,6 +1314,27 @@ export const clientPortalTokens = pgTable("client_portal_tokens", {
 });
 export type ClientPortalToken = typeof clientPortalTokens.$inferSelect;
 export type InsertClientPortalToken = typeof clientPortalTokens.$inferInsert;
+
+// ─── Client Portal Uploads ────────────────────────────────────────────────────
+// Files a client uploads from their portal (inspiration, floor-plan notes,
+// documents). Stored as base64 in the DB like proposal photos; served only via
+// the portal token (migration 0105).
+export const portalUploads = pgTable("portal_uploads", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  bookingId: integer("booking_id"),
+  leadId: integer("lead_id"),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  contentType: varchar("content_type", { length: 100 }).notNull(),
+  size: integer("size").notNull(),
+  data: text("data").notNull(), // base64
+  caption: varchar("caption", { length: 255 }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+}, (t) => ({
+  bookingIdx: index("portal_uploads_booking_idx").on(t.bookingId),
+  leadIdx: index("portal_uploads_lead_idx").on(t.leadId),
+}));
+export type PortalUpload = typeof portalUploads.$inferSelect;
 
 // ─── Setup Instructions ───────────────────────────────────────────────────────
 export const setupInstructions = pgTable("setup_instructions", {
