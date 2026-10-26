@@ -55,7 +55,7 @@ async function bookingsWithMoney(tx: Tx, bookingIds: number[]): Promise<number[]
     tx.selectDistinct({ id: payments.bookingId }).from(payments).where(inArray(payments.bookingId, bookingIds)),
     tx.selectDistinct({ id: xeroInvoices.bookingId }).from(xeroInvoices).where(inArray(xeroInvoices.bookingId, bookingIds)),
   ]);
-  return Array.from(new Set([...paid, ...invoiced].map(r => r.id)));
+  return Array.from(new Set([...paid, ...invoiced].map(r => r.id).filter((x): x is number => x != null)));
 }
 
 /** The rows keyed by both leadId and bookingId (contracts, budgets, …). */

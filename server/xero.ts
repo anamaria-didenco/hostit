@@ -727,7 +727,7 @@ const VENUEFLOW_REF = /\(VenueFlow #(\d+)\)/;
 /** Pure: keep only event invoices from a Xero /Invoices page. */
 export function pickEventInvoices(
   raw: any[],
-  ledger: Map<string, number>, // Xero InvoiceID → our bookingId
+  ledger: Map<string, number | null>, // Xero InvoiceID → our bookingId (null = standalone)
 ): XeroEventInvoice[] {
   const out: XeroEventInvoice[] = [];
   for (const inv of raw) {
@@ -735,8 +735,11 @@ export function pickEventInvoices(
     if (inv?.Status === "DELETED") continue;
     const ref: string | null = inv?.Reference ?? null;
     const refMatch = ref ? VENUEFLOW_REF.exec(ref) : null;
-    const fromLedger = ledger.get(inv?.InvoiceID);
-    if (fromLedger == null && !refMatch) continue;
+    // A tracked standalone invoice sits in the ledger with a null bookingId, so
+    // membership is by key — not by the value, which can legitimately be null.
+    const inLedger = ledger.has(inv?.InvoiceID);
+    const fromLedger = ledger.get(inv?.InvoiceID) ?? null;
+    if (!inLedger && !refMatch) continue;
     out.push({
       invoiceId: inv.InvoiceID,
       number: inv.InvoiceNumber ?? null,
@@ -749,7 +752,7 @@ export function pickEventInvoices(
       amountPaid: Number(inv?.AmountPaid ?? 0),
       amountDue: Number(inv?.AmountDue ?? 0),
       sentToContact: Boolean(inv?.SentToContact),
-      bookingId: fromLedger ?? (refMatch ? Number(refMatch[1]) : null),
+      bookingId: inLedger ? fromLedger : (refMatch ? Number(refMatch[1]) : null),
       currency: inv?.CurrencyCode ?? "NZD",
     });
   }
@@ -785,7 +788,7 @@ async function loadXeroEventInvoices(ownerId: number): Promise<XeroEventInvoice[
   const { xeroInvoices } = await import("../drizzle/schema");
   const { eq } = await import("drizzle-orm");
   const db = await getDb();
-  const ledger = new Map<string, number>();
+  const ledger = new Map<string, number | null>();
   if (db) {
     const rows = await db.select({ xeroInvoiceId: xeroInvoices.xeroInvoiceId, bookingId: xeroInvoices.bookingId })
       .from(xeroInvoices).where(eq(xeroInvoices.ownerId, ownerId));
