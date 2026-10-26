@@ -8596,7 +8596,17 @@ Return ONLY valid JSON.`;
             .orderBy(desc(proposals.createdAt), desc(proposals.id)).limit(1);
           proposal = pr[0] ?? null;
         }
-        const [venueRow] = await db.select({ name: venueSettings.name }).from(venueSettings).where(eq(venueSettings.ownerId, row.ownerId)).limit(1);
+        // Brand Pack + contact fields so the portal can wear the venue's
+        // branding (same fields the wedding-checklist public link already uses —
+        // none are secret). A stranger with a stolen token sees only branding.
+        const [venueRow] = await db.select({
+          name: venueSettings.name, logoUrl: venueSettings.logoUrl,
+          primaryColor: venueSettings.primaryColor, brandAccentColor: venueSettings.brandAccentColor,
+          brandFontKey: venueSettings.brandFontKey, themeKey: venueSettings.themeKey,
+          tagline: venueSettings.tagline, phone: venueSettings.phone,
+          email: venueSettings.email, website: venueSettings.website,
+          address: venueSettings.address, city: venueSettings.city,
+        }).from(venueSettings).where(eq(venueSettings.ownerId, row.ownerId)).limit(1);
         const contractList = permissions.signContract ? await portalContracts({ ownerId: row.ownerId, bookingId: row.bookingId, leadId: row.bookingId ? null : leadId }) : [];
         // Payments the venue has recorded against this booking, so the client
         // can see which deposits/payments have landed and what's still owing —
@@ -8671,12 +8681,36 @@ Return ONLY valid JSON.`;
           eventDate: lead.eventDate, guestCount: lead.guestCount, spaceName: lead.spaceName,
         } : null;
         const safeProposal = proposal ? (({ internalNotes: _n, ...rest }) => rest)(proposal) : null;
+        // Client-confirmed details (final numbers + dietaries), for pre-fill —
+        // only when there's a booking to store them against.
+        const details = booking ? {
+          finalGuestCount: booking.finalGuestCount ?? null,
+          dietaries: (() => { try { return booking.clientDietaries ? JSON.parse(booking.clientDietaries) : []; } catch { return []; } })() as Array<{ name: string; count: number; notes?: string }>,
+          notes: booking.clientDetailNotes ?? null,
+          submittedAt: booking.clientDetailsSubmittedAt ? Number(booking.clientDetailsSubmittedAt) : null,
+        } : null;
+        // The branded "event pack" (menu + run-of-day) the venue shared, if any.
+        const eventPackUrl = booking?.beoShareToken ? `/api/beo/public/${booking.beoShareToken}` : null;
+        // Files the client has uploaded for this event.
+        const { listPortalUploads, tokenEventScope } = await import('./portalUploads');
+        const scope = tokenEventScope({ ownerId: row.ownerId, bookingId: row.bookingId, leadId: row.leadId }, booking?.leadId ?? null);
+        const uploads = (permissions.uploadFiles !== false)
+          ? (await listPortalUploads(scope)).map(u => ({ ...u, url: `/api/portal-upload/${row.token}/${u.id}` }))
+          : [];
         return {
           token: { token: row.token, clientName: row.clientName },
           permissions, booking: safeBooking, lead: safeLead, proposal: safeProposal,
-          venue: { name: venueRow?.name?.trim() || null },
+          venue: venueRow ? {
+            name: venueRow.name?.trim() || null, logoUrl: venueRow.logoUrl ?? null,
+            primaryColor: venueRow.primaryColor ?? null, brandAccentColor: venueRow.brandAccentColor ?? null,
+            brandFontKey: venueRow.brandFontKey ?? null, themeKey: venueRow.themeKey ?? null,
+            tagline: venueRow.tagline ?? null, phone: venueRow.phone ?? null,
+            email: venueRow.email ?? null, website: venueRow.website ?? null,
+            address: venueRow.address ?? null, city: venueRow.city ?? null,
+          } : null,
           contracts: contractList,
           paymentSummary, payments: clientPayments, paymentInstructions,
+          details, eventPackUrl, uploads,
         };
       }),
     // Public: sign a contract from the client's portal link. The portal token
@@ -8708,6 +8742,172 @@ Return ONLY valid JSON.`;
         }
         if (!contract || !belongs) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
         return signContract({ contract, signerName: input.signerName, signerIp: getRequestIp(ctx.req) });
+      }),
+    // Public: the client confirms their final numbers + dietaries from the
+    // portal. Saved on the booking (kept apart from the planning guestCount),
+    // and the venue is told.
+    submitDetails: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        finalGuestCount: z.number().int().min(0).max(100000).nullable().optional(),
+        dietaries: z.array(z.object({
+          name: z.string().trim().min(1).max(120),
+          count: z.number().int().min(0).max(100000),
+          notes: z.string().trim().max(500).optional(),
+        })).max(100).optional(),
+        notes: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('portal:submitDetails', getRequestIp(ctx.req), 30, 5 * 60_000);
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { parsePermissions } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        const expiresMs = row?.expiresAt != null ? Number(row.expiresAt) : null;
+        if (!row || (expiresMs != null && expiresMs < Date.now())) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link has expired. Please contact the venue.' });
+        if (parsePermissions(row.permissions).submitDetails === false) throw new TRPCError({ code: 'FORBIDDEN', message: 'This link can\'t submit details. Please contact the venue.' });
+        if (!row.bookingId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Your event isn\'t confirmed yet, so there\'s nowhere to save these. Please contact the venue.' });
+        const [booking] = await db.select({ id: bookings.id, leadId: bookings.leadId, firstName: bookings.firstName, lastName: bookings.lastName })
+          .from(bookings).where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, row.ownerId))).limit(1);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' });
+        const diet = (input.dietaries ?? []).map(d => ({ name: d.name.trim(), count: d.count, ...(d.notes?.trim() ? { notes: d.notes.trim() } : {}) }));
+        await db.update(bookings).set({
+          finalGuestCount: input.finalGuestCount ?? null,
+          clientDietaries: diet.length ? JSON.stringify(diet) : null,
+          clientDetailNotes: input.notes?.trim() || null,
+          clientDetailsSubmittedAt: Date.now(),
+          updatedAt: new Date(),
+        }).where(and(eq(bookings.id, booking.id), eq(bookings.ownerId, row.ownerId)));
+        const { notifyVenue, bookingLink } = await import('./notify');
+        const who = row.clientName || [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'The client';
+        await notifyVenue(row.ownerId, {
+          kind: 'portal_details',
+          title: `${who} confirmed event details`,
+          body: [input.finalGuestCount != null ? `${input.finalGuestCount} guests` : null, diet.length ? `${diet.length} dietary note(s)` : null].filter(Boolean).join(' · ') || undefined,
+          bookingId: booking.id, leadId: booking.leadId ?? null,
+          link: bookingLink(booking.id), dedupeKey: `portal_details:${booking.id}`,
+        });
+        if (booking.leadId) {
+          const { addLeadActivity } = await import('./db');
+          await addLeadActivity({ leadId: booking.leadId, ownerId: row.ownerId, type: 'note', content: `${who} submitted final numbers / dietaries via the client portal.` }, { countsAsReply: false });
+        }
+        return { success: true };
+      }),
+    // Public: the client uploads a file (image or PDF) from the portal.
+    uploadFile: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        dataUrl: z.string().max(7_000_000, 'That file is too large — keep it under about 5 MB.'),
+        filename: z.string().trim().min(1).max(255),
+        caption: z.string().trim().max(255).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('portal:upload', getRequestIp(ctx.req), 30, 5 * 60_000);
+        const { UPLOAD_DATA_URL_RE, MAX_UPLOADS_PER_EVENT, tokenEventScope } = await import('./portalUploads');
+        const m = UPLOAD_DATA_URL_RE.exec(input.dataUrl);
+        if (!m) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only images (JPG, PNG, WebP, GIF, HEIC) and PDFs can be uploaded.' });
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings, portalUploads } = await import('../drizzle/schema');
+        const { eq, and, sql } = await import('drizzle-orm');
+        const { parsePermissions } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        const expiresMs = row?.expiresAt != null ? Number(row.expiresAt) : null;
+        if (!row || (expiresMs != null && expiresMs < Date.now())) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link has expired. Please contact the venue.' });
+        if (parsePermissions(row.permissions).uploadFiles === false) throw new TRPCError({ code: 'FORBIDDEN', message: 'Uploads aren\'t switched on for this link.' });
+        let leadId = row.leadId;
+        if (!leadId && row.bookingId) { const [b] = await db.select({ leadId: bookings.leadId }).from(bookings).where(eq(bookings.id, row.bookingId)).limit(1); leadId = b?.leadId ?? null; }
+        const scope = tokenEventScope(row, leadId);
+        if (!scope.bookingId && !scope.leadId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This link has no event to attach files to.' });
+        const whereCount = scope.bookingId
+          ? and(eq(portalUploads.ownerId, scope.ownerId), eq(portalUploads.bookingId, scope.bookingId))
+          : and(eq(portalUploads.ownerId, scope.ownerId), eq(portalUploads.leadId, scope.leadId!));
+        const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(portalUploads).where(whereCount);
+        if (n >= MAX_UPLOADS_PER_EVENT) throw new TRPCError({ code: 'BAD_REQUEST', message: `Up to ${MAX_UPLOADS_PER_EVENT} files can be uploaded.` });
+        const data = m[2];
+        const [ins] = await db.insert(portalUploads).values({
+          ownerId: scope.ownerId, bookingId: scope.bookingId, leadId: scope.bookingId ? null : scope.leadId,
+          filename: input.filename.trim().slice(0, 255), contentType: m[1], size: Math.floor(data.length * 3 / 4),
+          data, caption: input.caption?.trim() || null, createdAt: Date.now(),
+        }).returning({ id: portalUploads.id });
+        const { notifyVenue, bookingLink } = await import('./notify');
+        const who = row.clientName || 'The client';
+        await notifyVenue(scope.ownerId, {
+          kind: 'portal_upload', title: `${who} uploaded a file`, body: input.filename.trim(),
+          bookingId: scope.bookingId ?? null, leadId: scope.leadId ?? null,
+          link: scope.bookingId ? bookingLink(scope.bookingId) : undefined, dedupeKey: `portal_upload:${ins.id}`,
+        });
+        return { id: ins.id };
+      }),
+    // Public: the client removes a file they uploaded from the portal.
+    removeUpload: publicProcedure
+      .input(z.object({ token: z.string(), uploadId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('portal:removeUpload', getRequestIp(ctx.req), 60, 5 * 60_000);
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings, portalUploads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { parsePermissions } = await import('./clientPortal');
+        const { tokenEventScope } = await import('./portalUploads');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link not found' });
+        if (parsePermissions(row.permissions).uploadFiles === false) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not allowed.' });
+        let leadId = row.leadId;
+        if (!leadId && row.bookingId) { const [b] = await db.select({ leadId: bookings.leadId }).from(bookings).where(eq(bookings.id, row.bookingId)).limit(1); leadId = b?.leadId ?? null; }
+        const scope = tokenEventScope(row, leadId);
+        const match = scope.bookingId
+          ? and(eq(portalUploads.id, input.uploadId), eq(portalUploads.ownerId, scope.ownerId), eq(portalUploads.bookingId, scope.bookingId))
+          : scope.leadId
+            ? and(eq(portalUploads.id, input.uploadId), eq(portalUploads.ownerId, scope.ownerId), eq(portalUploads.leadId, scope.leadId))
+            : null;
+        if (match) await db.delete(portalUploads).where(match);
+        return { success: true };
+      }),
+    // Staff: what the client submitted through their portal (final numbers,
+    // dietaries, uploaded files) — shown on the event page.
+    clientSubmission: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { listPortalUploads } = await import('./portalUploads');
+        const db = await getDb();
+        if (!db) return null;
+        const [b] = await db.select({
+          finalGuestCount: bookings.finalGuestCount, clientDietaries: bookings.clientDietaries,
+          clientDetailNotes: bookings.clientDetailNotes, clientDetailsSubmittedAt: bookings.clientDetailsSubmittedAt, leadId: bookings.leadId,
+        }).from(bookings).where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!b) return null;
+        const uploads = await listPortalUploads({ ownerId: ctx.user.id, bookingId: input.bookingId, leadId: b.leadId ?? null });
+        return {
+          finalGuestCount: b.finalGuestCount ?? null,
+          dietaries: (() => { try { return b.clientDietaries ? JSON.parse(b.clientDietaries) : []; } catch { return []; } })() as Array<{ name: string; count: number; notes?: string }>,
+          notes: b.clientDetailNotes ?? null,
+          submittedAt: b.clientDetailsSubmittedAt ? Number(b.clientDetailsSubmittedAt) : null,
+          uploads,
+        };
+      }),
+    // Staff: one uploaded file's bytes as a data URL, for viewing/downloading
+    // from the event page (owner-scoped).
+    uploadData: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { portalUploads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [u] = await db.select({ filename: portalUploads.filename, contentType: portalUploads.contentType, data: portalUploads.data })
+          .from(portalUploads).where(and(eq(portalUploads.id, input.id), eq(portalUploads.ownerId, ctx.user.id))).limit(1);
+        if (!u) throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found' });
+        return { filename: u.filename, contentType: u.contentType, dataUrl: `data:${u.contentType};base64,${u.data}` };
       }),
     // Email the portal link to the client (venue's own SMTP). Reports honestly.
     emailLink: protectedProcedure

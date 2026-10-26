@@ -25,6 +25,9 @@ import { notifyVenue, bookingLink } from "./notify";
 export type PortalPermissions = {
   viewProposal?: boolean; viewRunsheet?: boolean; viewBudget?: boolean;
   approveProposal?: boolean; signContract?: boolean;
+  // Client portal v1 — default on (treated as enabled unless explicitly false),
+  // so links made before these existed still get the new sections.
+  submitDetails?: boolean; uploadFiles?: boolean;
 };
 
 export function parsePermissions(raw: string | null | undefined): PortalPermissions {

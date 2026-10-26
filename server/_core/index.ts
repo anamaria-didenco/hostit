@@ -433,6 +433,10 @@ async function startServer() {
   app.get("/api/proposal-photo/:token/:id", expressRateLimit("photo:public", 240, 60_000), (req, res) => {
     import("../proposalPhotos").then(m => m.handleProposalPhoto(req, res)).catch(() => res.status(500).end());
   });
+  // Client portal uploads — public, but only with the portal's own token.
+  app.get("/api/portal-upload/:token/:id", expressRateLimit("portalupload:public", 240, 60_000), (req, res) => {
+    import("../portalUploads").then(m => m.handlePortalUpload(req, res)).catch(() => res.status(500).end());
+  });
 
   // Floor Plan PDF download (public — share token acts as auth)
   app.get("/api/floor-plan-pdf/:token", pdfPublicLimit, handleFloorPlanPdf);
