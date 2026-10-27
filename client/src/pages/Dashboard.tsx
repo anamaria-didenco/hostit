@@ -53,6 +53,8 @@ import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import XeroPushModal from "@/components/XeroPushModal";
+import InvoiceLauncher, { type InvoiceTarget } from "@/components/InvoiceLauncher";
+import { NewInvoiceDialog } from "@/components/NewInvoiceDialog";
 import { NotificationBell } from "@/components/NotificationBell";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import { LeadResponseInfo } from "@/components/LeadResponseInfo";
@@ -1261,6 +1263,20 @@ export default function Dashboard() {
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
   const [xeroInvoiceFor, setXeroInvoiceFor] = useState<any>(null);
+  // Global "Invoice" launcher: one tap from anywhere to the send modal, by
+  // typing a client's name — no hunting the Payments board for the row or
+  // drilling into an event drawer. Also offers a one-off (no-event) invoice.
+  const [invoiceLauncherOpen, setInvoiceLauncherOpen] = useState(false);
+  const [showNewInvoice, setShowNewInvoice] = useState(false);
+  // Open the send-to-Xero modal for a booking, from any entry point. Carries
+  // the stream to start on so the modal opens on the right invoice type.
+  const openInvoiceFor = React.useCallback((b: {
+    bookingId: number; name: string; eventDate: string | null; depositPaid: boolean; depositNzd: number;
+    initialStream?: "deposit" | "food" | "drinks";
+  }) => {
+    setInvoiceLauncherOpen(false);
+    setXeroInvoiceFor(b);
+  }, []);
   // Event drawer accessibility: close on Escape, trap Tab focus inside the
   // panel, hide the rest of the app from assistive tech while it's open, and
   // return focus to whatever opened it (keyed on the booking id so inline
@@ -3704,6 +3720,12 @@ export default function Dashboard() {
             className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
             <Search className="w-4 h-4 text-gray-500" aria-hidden="true" />
           </button>
+          {!isStaff && (
+            <button onClick={() => setInvoiceLauncherOpen(true)} aria-label="Send an invoice" title="Invoice"
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+              <FileText className="w-4 h-4 text-gray-500" aria-hidden="true" />
+            </button>
+          )}
           {!isStaff && !isDesktop && <NotificationBell variant="light" onOpenLink={openAlertLink} side="bottom" align="end" />}
           <ThemeSwitcher />
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
@@ -3731,6 +3753,15 @@ export default function Dashboard() {
         </div>
         {/* Nav */}
         <nav aria-label="Main" className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
+          {/* Always-there way to invoice: type a client's name and go straight
+              to the send modal, or raise a one-off. Owners only. */}
+          {!isStaff && (
+            <button onClick={() => setInvoiceLauncherOpen(true)}
+              aria-label="Send an invoice"
+              className="mb-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md font-bebas tracking-widest text-sm text-[#2f5488] bg-white hover:bg-[#f3f6fb] transition-colors">
+              <FileText className="w-4 h-4" aria-hidden="true" /> INVOICE
+            </button>
+          )}
           {(isStaff
             ? [
                 // Staff login: upcoming events + runsheets only. The server
@@ -9237,8 +9268,21 @@ export default function Dashboard() {
           open={xeroInvoiceFor !== null}
           onClose={() => setXeroInvoiceFor(null)}
           booking={xeroInvoiceFor}
-          initialStream={xeroInvoiceFor && !xeroInvoiceFor.depositPaid && xeroInvoiceFor.depositNzd > 0 ? "deposit" : "food"}
+          initialStream={xeroInvoiceFor?.initialStream ?? (xeroInvoiceFor && !xeroInvoiceFor.depositPaid && xeroInvoiceFor.depositNzd > 0 ? "deposit" : "food")}
         />
+        {invoiceLauncherOpen && (
+          <InvoiceLauncher
+            onClose={() => setInvoiceLauncherOpen(false)}
+            onPickEvent={(t: InvoiceTarget) => openInvoiceFor(t)}
+            onOneOff={() => { setInvoiceLauncherOpen(false); setShowNewInvoice(true); }}
+          />
+        )}
+        {showNewInvoice && (
+          <NewInvoiceDialog
+            onClose={() => setShowNewInvoice(false)}
+            onCreated={() => { utils.payments.overview.invalidate(); utils.xero.eventInvoices.invalidate(); }}
+          />
+        )}
       </div>
 
       {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
@@ -9335,6 +9379,20 @@ export default function Dashboard() {
                     <RecordPaymentButton bookingId={selectedBooking.id}
                       className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm" />
                   )}
+                  {!isStaff && (
+                    <button
+                      onClick={() => openInvoiceFor({
+                        bookingId: selectedBooking.id,
+                        name: `${selectedBooking.firstName ?? ''}${selectedBooking.lastName ? ' ' + selectedBooking.lastName : ''}`.trim() || 'Event',
+                        eventDate: selectedBooking.eventDate ?? null,
+                        depositPaid: Boolean(selectedBooking.depositPaid),
+                        depositNzd: Number(selectedBooking.depositNzd ?? 0),
+                      })}
+                      title="Send a deposit, food or drinks invoice to Xero as a draft"
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm">
+                      <DollarSign className="w-4 h-4" /> INVOICE
+                    </button>
+                  )}
                   <button
                     onClick={() => setDrawerView('details')}
                     className="ml-auto font-dm text-sm font-semibold text-forest underline underline-offset-4 hover:no-underline px-1 py-2">
@@ -9386,6 +9444,20 @@ export default function Dashboard() {
                   {!isStaff && (
                     <RecordPaymentButton bookingId={selectedBooking.id}
                       className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs" />
+                  )}
+                  {!isStaff && (
+                    <button
+                      onClick={() => openInvoiceFor({
+                        bookingId: selectedBooking.id,
+                        name: `${selectedBooking.firstName ?? ''}${selectedBooking.lastName ? ' ' + selectedBooking.lastName : ''}`.trim() || 'Event',
+                        eventDate: selectedBooking.eventDate ?? null,
+                        depositPaid: Boolean(selectedBooking.depositPaid),
+                        depositNzd: Number(selectedBooking.depositNzd ?? 0),
+                      })}
+                      title="Send a deposit, food or drinks invoice to Xero as a draft"
+                      className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs">
+                      <DollarSign className="w-3.5 h-3.5" /> INVOICE
+                    </button>
                   )}
                 </div>
               )}
