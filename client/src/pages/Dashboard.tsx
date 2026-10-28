@@ -63,7 +63,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
-import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel } from "@shared/emailSignatures";
+import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
@@ -2689,6 +2689,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (showEmailModal) setEmailSigId(defaultSignatureId(venueSettings as any) ?? '');
   }, [showEmailModal]);
+  // One-click "Attach proposal": when set, the reply carries this enquiry's
+  // proposal as a PDF (server renders it from the token) AND its clickable link
+  // is dropped into the body. Cleared whenever the modal closes.
+  const [proposalAttached, setProposalAttached] = useState<{ token: string; filename: string } | null>(null);
+  useEffect(() => { if (!showEmailModal) setProposalAttached(null); }, [showEmailModal]);
   // Email Templates
   const { data: emailTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
   // One-click templates in the compose window: links ({{proposalLink}} etc.)
@@ -4588,18 +4593,19 @@ export default function Dashboard() {
                               <option value="">No signature</option>
                             </select>
                           </div>
-                          {chosen ? (
-                            <div aria-label="Signature preview" className="bg-white border border-stone-200 px-3 py-2">
-                              {chosen.signatureLogo && (
-                                <img src={chosen.signatureLogo} alt="" className="h-8 w-auto object-contain mb-1" />
-                              )}
-                              {chosen.signature?.trim() ? (
-                                <pre className="font-dm text-xs text-stone-700 whitespace-pre-wrap leading-relaxed">{chosen.signature}</pre>
-                              ) : !chosen.signatureLogo ? (
-                                <p className="font-dm text-xs text-stone-600 italic">This signature has no sign-off text — only the sender name is used.</p>
-                              ) : null}
-                            </div>
-                          ) : (
+                          {chosen ? (() => {
+                            // Exactly what email.send renders (same shared helper),
+                            // using the data: URLs directly for the browser preview.
+                            const html = renderSignatureHtml(chosen, {
+                              name: (venueSettings as any)?.name,
+                              logoUrl: (venueSettings as any)?.logoUrl,
+                              primaryColor: (venueSettings as any)?.primaryColor,
+                              brandAccentColor: (venueSettings as any)?.brandAccentColor,
+                            });
+                            return html
+                              ? <div aria-label="Signature preview" className="bg-white border border-stone-200 px-3 py-2 overflow-x-auto" dangerouslySetInnerHTML={{ __html: html }} />
+                              : <p className="font-dm text-xs text-stone-600 italic">This signature is empty — only the sender name is used.</p>;
+                          })() : (
                             <p className="font-dm text-xs text-stone-600">Sent without a signature.</p>
                           )}
                         </div>
@@ -4619,27 +4625,54 @@ export default function Dashboard() {
                   </div>
                   {/* Attachments */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
                       <label className="font-bebas text-xs tracking-widest text-sage">ATTACHMENTS</label>
-                      <label className="font-bebas tracking-widest text-[11px] text-forest cursor-pointer hover:text-gold transition-colors flex items-center gap-1">
-                        <Paperclip className="w-3 h-3" /> ATTACH FILE
-                        <input
-                          type="file"
-                          multiple
-                          className="hidden"
-                          onChange={async e => {
-                            const files = Array.from(e.target.files ?? []);
-                            const loaded = await Promise.all(files.map(f => new Promise<{ filename: string; content: string; contentType: string }>(resolve => {
-                              const reader = new FileReader();
-                              reader.onload = () => resolve({ filename: f.name, content: reader.result as string, contentType: f.type || 'application/octet-stream' });
-                              reader.readAsDataURL(f);
-                            })));
-                            setEmailAttachments(prev => [...prev, ...loaded]);
-                            e.target.value = '';
+                      <div className="flex items-center gap-3">
+                        {/* One tap: drop this enquiry's proposal link into the
+                            email AND attach it as a PDF (rendered server-side). */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const link = (composeLinks as any)?.proposalLink as string | null | undefined;
+                            if (!link) { toast.error("No proposal for this enquiry yet — build one, then attach it."); return; }
+                            const token = link.split('/proposal/')[1]?.split(/[/?#]/)[0];
+                            if (!token) { toast.error("Couldn't read the proposal link — reopen this reply and try again."); return; }
+                            const who = `${selectedLead.firstName ?? ''} ${selectedLead.lastName ?? ''}`.trim();
+                            setProposalAttached({ token, filename: `Proposal${who ? ' - ' + who : ''}` });
+                            setEmailForm(f => f.body.includes(link) ? f : { ...f, body: `${f.body}${f.body.trim() ? '\n\n' : ''}View your proposal: ${link}` });
+                            toast.success('Proposal added — link in the email, PDF attached');
                           }}
-                        />
-                      </label>
+                          className="font-bebas tracking-widest text-[11px] text-forest hover:text-gold transition-colors flex items-center gap-1">
+                          <FileText className="w-3 h-3" /> ATTACH PROPOSAL
+                        </button>
+                        <label className="font-bebas tracking-widest text-[11px] text-forest cursor-pointer hover:text-gold transition-colors flex items-center gap-1">
+                          <Paperclip className="w-3 h-3" /> ATTACH FILE
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={async e => {
+                              const files = Array.from(e.target.files ?? []);
+                              const loaded = await Promise.all(files.map(f => new Promise<{ filename: string; content: string; contentType: string }>(resolve => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve({ filename: f.name, content: reader.result as string, contentType: f.type || 'application/octet-stream' });
+                                reader.readAsDataURL(f);
+                              })));
+                              setEmailAttachments(prev => [...prev, ...loaded]);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
+                    {proposalAttached && (
+                      <div className="flex items-center justify-between bg-forest/5 border border-forest/25 px-3 py-1.5 text-xs font-dm mb-1">
+                        <span className="truncate text-ink/75 flex items-center gap-1.5"><FileText className="w-3 h-3 text-forest flex-shrink-0" /> Proposal — link in the email + PDF attached</span>
+                        <button aria-label="Remove proposal" onClick={() => setProposalAttached(null)} className="text-sage hover:text-tomato ml-2 flex-shrink-0 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                     {emailAttachments.length > 0 && (
                       <div className="space-y-1">
                         {emailAttachments.map((att, i) => (
@@ -4667,6 +4700,7 @@ export default function Dashboard() {
                         leadId: selectedLead.id,
                         bookingId: (selectedLead as any)._fromBookingId,
                         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
+                        proposalAttach: proposalAttached ?? undefined,
                         inReplyTo: emailThread?.inReplyTo,
                         references: emailThread?.references,
                         signatureId: emailSigId || undefined,
@@ -6492,34 +6526,77 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">LOGO / PHOTO</p>
-                          <div className="flex items-start gap-3">
-                            {sig.signatureLogo && (
-                              <div className="relative flex-shrink-0">
-                                <img src={sig.signatureLogo} alt="Signature logo" className="h-14 w-auto object-contain border border-gold/20 bg-white p-1" />
-                                <button
-                                  type="button"
-                                  onClick={() => patch({ signatureLogo: "" })}
-                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[11px] flex items-center justify-center leading-none hover:bg-red-600"
-                                >✕</button>
-                              </div>
-                            )}
-                            <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
-                              <span className="font-bebas tracking-widest text-xs text-sage">{sig.signatureLogo ? "CHANGE IMAGE" : "UPLOAD LOGO / PHOTO"}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={e => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  const reader = new FileReader();
-                                  reader.onload = () => patch({ signatureLogo: reader.result as string });
-                                  reader.readAsDataURL(file);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
+                          <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">JOB TITLE (shown under the name)</p>
+                          <input
+                            value={sig.title ?? ""}
+                            onChange={e => patch({ title: e.target.value })}
+                            placeholder="e.g. Events Manager"
+                            className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">PHOTO OF THE PERSON</p>
+                            <div className="flex items-center gap-3">
+                              {sig.photo && (
+                                <div className="relative flex-shrink-0">
+                                  <img src={sig.photo} alt="Signature headshot" className="h-14 w-14 rounded-full object-cover border border-gold/20" />
+                                  <button
+                                    type="button"
+                                    onClick={() => patch({ photo: "" })}
+                                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[11px] flex items-center justify-center leading-none hover:bg-red-600"
+                                  >✕</button>
+                                </div>
+                              )}
+                              <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
+                                <span className="font-bebas tracking-widest text-xs text-sage">{sig.photo ? "CHANGE PHOTO" : "UPLOAD PHOTO"}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () => patch({ photo: reader.result as string });
+                                    reader.readAsDataURL(file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">LOGO (venue / brand)</p>
+                            <div className="flex items-center gap-3">
+                              {sig.signatureLogo && (
+                                <div className="relative flex-shrink-0">
+                                  <img src={sig.signatureLogo} alt="Signature logo" className="h-14 w-auto object-contain border border-gold/20 bg-white p-1" />
+                                  <button
+                                    type="button"
+                                    onClick={() => patch({ signatureLogo: "" })}
+                                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[11px] flex items-center justify-center leading-none hover:bg-red-600"
+                                  >✕</button>
+                                </div>
+                              )}
+                              <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
+                                <span className="font-bebas tracking-widest text-xs text-sage">{sig.signatureLogo ? "CHANGE LOGO" : "UPLOAD LOGO"}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () => patch({ signatureLogo: reader.result as string });
+                                    reader.readAsDataURL(file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            <p className="font-dm text-[11px] text-ink/45 mt-1">Leave blank to use your venue logo automatically.</p>
                           </div>
                         </div>
                         <div>
@@ -6542,7 +6619,7 @@ export default function Dashboard() {
                       ...f,
                       emailSignatures: [
                         ...(f.emailSignatures ?? []),
-                        { id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, label: "", fromName: "", replyTo: "", signature: "", signatureLogo: "" },
+                        { id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, label: "", fromName: "", replyTo: "", signature: "", signatureLogo: "", title: "", photo: "" },
                       ],
                     }))}
                     className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2 font-bebas tracking-widest text-xs text-sage"

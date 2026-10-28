@@ -391,18 +391,23 @@ export function buildHtml(data: {
 </html>`;
 }
 
-export async function handleProposalPdf(req: Request, res: Response) {
-  const { token } = req.params as { token: string };
-  if (!token) return res.status(400).json({ error: "Missing token" });
-
+/**
+ * Render a proposal's PDF to a Buffer, by its public token. Shared by the
+ * public download route and by email.send (which attaches it to a reply).
+ * When `ownerId` is given the proposal must belong to that owner — so a token
+ * passed from an authenticated sender can't pull another tenant's proposal.
+ * Throws "Proposal not found" / "Database unavailable" on the obvious cases.
+ */
+export async function renderProposalPdfBuffer(token: string, ownerId?: number): Promise<{ buffer: Buffer; title: string }> {
   let browser: any = null;
   try {
     const db = await getDb();
-    if (!db) return res.status(503).json({ error: "Database unavailable" });
+    if (!db) throw new Error("Database unavailable");
 
     // Fetch proposal
     const [proposal] = await db.select().from(proposals).where(eq(proposals.publicToken, token)).limit(1);
-    if (!proposal) return res.status(404).json({ error: "Proposal not found" });
+    if (!proposal) throw new Error("Proposal not found");
+    if (ownerId != null && proposal.ownerId !== ownerId) throw new Error("Proposal not found");
 
     // Fetch related data in parallel
     const [leadRows, venueRows, drinksRows, qSettingsRows, qItemRows] = await Promise.all([
@@ -459,15 +464,28 @@ export async function handleProposalPdf(req: Request, res: Response) {
     browser = null;
 
     const safeTitle = (proposal.title ?? "proposal").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.pdf"`);
-    res.setHeader("Content-Length", pdfBuffer.length);
-    res.end(pdfBuffer);
-  } catch (err) {
-    console.error("[ProposalPDF] Error:", err);
-    res.status(500).json({ error: "Failed to generate PDF" });
+    return { buffer: Buffer.from(pdfBuffer), title: safeTitle };
   } finally {
     // Never leak a Chromium process if setContent/page.pdf threw.
     if (browser) await browser.close().catch(() => {});
+  }
+}
+
+export async function handleProposalPdf(req: Request, res: Response) {
+  const { token } = req.params as { token: string };
+  if (!token) return res.status(400).json({ error: "Missing token" });
+
+  try {
+    const { buffer, title } = await renderProposalPdfBuffer(token);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${title}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  } catch (err) {
+    const msg = (err as Error)?.message ?? "";
+    if (/not found/i.test(msg)) return res.status(404).json({ error: "Proposal not found" });
+    if (/unavailable/i.test(msg)) return res.status(503).json({ error: "Database unavailable" });
+    console.error("[ProposalPDF] Error:", err);
+    res.status(500).json({ error: "Failed to generate PDF" });
   }
 }
