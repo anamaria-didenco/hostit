@@ -1727,6 +1727,33 @@ export default function RunsheetBuilder() {
     if (!effectiveBookingId) return;
     updateBillingTerms.mutate({ id: effectiveBookingId, ...patch } as any);
   };
+  // Guest count (pax) lives on the booking — the BEO PDF, the dashboard,
+  // Payments and proposals all read it there. The builder also saves it on the
+  // runsheet, but the BEO reads the BOOKING first, so a pax change made only on
+  // the runsheet never reached the PDF. Mirror a typed change onto the booking
+  // too. Driven from the input's onChange (not a state effect) so hydration and
+  // the lead-prefill, which call setGuestCount directly, never write back and
+  // can't clobber a value set elsewhere.
+  const syncGuestCount = trpc.bookings.update.useMutation({
+    onSuccess: () => {
+      utilsBilling.bookings.getById.invalidate({ id: effectiveBookingId! });
+      setPreviewNonce(n => n + 1); // BEO preview reflects the new pax immediately
+    },
+    onError: () => toast.error("Couldn't sync the guest count to the event"),
+  });
+  const guestCountSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleGuestCountChange = (v: string) => {
+    setGuestCount(v);
+    if (!effectiveBookingId) return;
+    if (guestCountSyncTimer.current) clearTimeout(guestCountSyncTimer.current);
+    guestCountSyncTimer.current = setTimeout(() => {
+      const n = Number(v);
+      // Only push a real number; an empty field must not null the booking's pax.
+      if (!v.trim() || !Number.isFinite(n) || n < 0) return;
+      if (moneyBooking && Number(moneyBooking.guestCount ?? NaN) === n) return;
+      syncGuestCount.mutate({ id: effectiveBookingId, guestCount: n } as any);
+    }, 800);
+  };
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
@@ -1987,6 +2014,21 @@ export default function RunsheetBuilder() {
       setHydrationTick(n => n + 1);
     }
   }, [existing]);
+
+  // Show the booking's current pax — the source of truth the BEO reads — once
+  // it loads, so an edit made elsewhere (e.g. the dashboard drawer) isn't
+  // masked by an older number saved on the runsheet. Applied once per booking
+  // (not continuously) so it never races the write-through above; after that,
+  // typed edits flow booking-ward through handleGuestCountChange.
+  const bookingPaxAppliedRef = useRef<number | null>(null);
+  useEffect(() => {
+    const bc = moneyBooking?.guestCount;
+    if (!effectiveBookingId || bc == null) return;
+    if (bookingPaxAppliedRef.current === effectiveBookingId) return;
+    if (hydratingRef.current || dirtyRef.current.has('doc')) return;
+    bookingPaxAppliedRef.current = effectiveBookingId;
+    setGuestCount(prev => (prev === String(bc) ? prev : String(bc)));
+  }, [moneyBooking?.guestCount, effectiveBookingId]);
 
   // Pre-fill from lead
   const { data: spacesForPrefill } = trpc.spaces.list.useQuery(undefined, { enabled: !!leadId });
@@ -3478,7 +3520,7 @@ export default function RunsheetBuilder() {
                 <Input
                   type="number"
                   value={guestCount}
-                  onChange={e => setGuestCount(e.target.value)}
+                  onChange={e => handleGuestCountChange(e.target.value)}
                   placeholder="0"
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print font-serif [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]"
                 />
