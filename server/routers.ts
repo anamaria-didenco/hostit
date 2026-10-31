@@ -280,6 +280,10 @@ export const appRouter = router({
           replyTo: z.string().optional(),
           signature: z.string().optional(),
           signatureLogo: z.string().optional(),
+          title: z.string().optional(),
+          // Headshot data URL. Bounded so a stray large upload can't bloat the
+          // settings row (a reasonable round photo is well under this).
+          photo: z.string().max(3_000_000).optional(),
         })).optional(),
         customCourses: z.string().optional(),
         shiftSections: z.string().optional(),
@@ -3700,6 +3704,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // profile's signature. The authenticated SMTP account is unchanged, so
         // deliverability isn't affected — only the visible sender/reply differ.
         signatureId: z.string().optional(),
+        // Attach this enquiry's proposal as a PDF, rendered server-side from its
+        // public token (same document the /proposal link shows). Owner-scoped in
+        // the handler. The clickable link is added to the body by the composer.
+        proposalAttach: z.object({
+          token: z.string().min(1).max(64),
+          filename: z.string().min(1).max(200),
+        }).optional(),
         // Threading for a reply to a client's email (the conversation's
         // "Reply" button): the Message-ID being answered, and its chain.
         inReplyTo: z.string().max(500).regex(/^<[^<>\s]+>$/).optional(),
@@ -3739,7 +3750,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // member's email shows their name/reply address, not the owner's.
         // Profiles come from the same helper the compose modal uses (incl. the
         // older single venue signature), so the preview matches what's sent.
-        const { signatureProfiles, effectiveFromName } = await import('../shared/emailSignatures');
+        const { signatureProfiles, effectiveFromName, renderSignatureHtml } = await import('../shared/emailSignatures');
         const sigProfiles = signatureProfiles(settings as any);
         const sigProfile = input.signatureId
           ? sigProfiles.find(p => p.id === input.signatureId)
@@ -3755,14 +3766,37 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fromEmail = settings.smtpFromEmail || settings.smtpUser;
 
         // Build HTML from the message body, appending the chosen profile's
-        // signature (logo + text) when one is selected. With no profile the
-        // body is sent exactly as written.
+        // branded Gmail-style signature (headshot + name/title + venue logo &
+        // name) when one is selected. With no profile the body is sent exactly
+        // as written.
         const bodyHtml = input.body.replace(/\n/g, '<br>');
-        const sigLogo = (sigProfile?.signatureLogo ?? '').toString();
-        const sigText = (sigProfile?.signature ?? '').toString();
-        const signatureHtml = (sigLogo || sigText.trim())
-          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${sigLogo ? `<img src="${sigLogo}" alt="" style="max-height:60px;width:auto;display:block;margin-bottom:8px">` : ''}${sigText.trim() ? `<span style="white-space:pre-wrap">${sigText}</span>` : ''}`
-          : '';
+        // The signature's photo and logo ride along as inline (cid:) attachments
+        // rather than data: URLs — Gmail and others routinely strip data: images
+        // from a received email's body, which would blank out the headshot. A
+        // cid reference to an inline part renders reliably. http(s) image URLs
+        // are used as-is; only data: URLs need embedding.
+        const sigInline: { filename: string; content: Buffer; contentType: string; cid: string; contentDisposition: 'inline' }[] = [];
+        const toImgSrc = (raw: string, cid: string, filename: string): string | null => {
+          const v = (raw ?? '').toString().trim();
+          if (!v) return null;
+          const m = /^data:([^;,]+);base64,(.*)$/s.exec(v);
+          if (m) {
+            sigInline.push({ filename, content: Buffer.from(m[2], 'base64'), contentType: m[1], cid, contentDisposition: 'inline' });
+            return `cid:${cid}`;
+          }
+          return /^https?:\/\//i.test(v) ? v : null;
+        };
+        let signatureHtml = '';
+        if (sigProfile) {
+          const photoSrc = toImgSrc((sigProfile.photo ?? '') as string, 'sigphoto@venueflow', 'signature-photo');
+          const logoSrc = toImgSrc(((sigProfile.signatureLogo || (settings as any).logoUrl) ?? '') as string, 'siglogo@venueflow', 'signature-logo');
+          signatureHtml = renderSignatureHtml(sigProfile, {
+            name: settings.name,
+            logoUrl: (settings as any).logoUrl ?? null,
+            primaryColor: (settings as any).primaryColor ?? null,
+            brandAccentColor: (settings as any).brandAccentColor ?? null,
+          }, { photo: photoSrc, logo: logoSrc });
+        }
         const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
 
         // Process attachments (base64 encoded)
@@ -3798,6 +3832,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           }
         }
 
+        // Attach this enquiry's proposal as a PDF, rendered server-side from its
+        // public token. Owner-scoped so a token can't pull another tenant's
+        // proposal. If it can't render, fail loudly rather than send an email
+        // that promises an attached proposal without one.
+        if (input.proposalAttach) {
+          const { renderProposalPdfBuffer } = await import('./proposalPdf');
+          try {
+            const { buffer } = await renderProposalPdfBuffer(input.proposalAttach.token, ctx.user.id);
+            const fn = input.proposalAttach.filename.toLowerCase().endsWith('.pdf')
+              ? input.proposalAttach.filename
+              : `${input.proposalAttach.filename}.pdf`;
+            attachments.push({ filename: fn, content: buffer, contentType: 'application/pdf' });
+          } catch (err) {
+            console.error('[email.send] proposal attach failed for token', input.proposalAttach.token, err);
+            throw new Error("Couldn't attach the proposal PDF — please try again.");
+          }
+        }
+
         // BCC = the venue's notification inbox so the owner keeps a copy of
         // every outgoing message. Reply-To defaults to the same, but a chosen
         // signature profile's reply address wins so replies reach the actual
@@ -3829,7 +3881,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           subject: input.subject,
           html: fullHtml,
           text: input.body,
-          attachments,
+          // Inline signature images (cid:) go alongside the real attachments,
+          // but are not logged as attachments below — they're part of the body.
+          attachments: sigInline.length ? [...attachments, ...sigInline] : attachments,
           ...threadHeaders,
         });
 

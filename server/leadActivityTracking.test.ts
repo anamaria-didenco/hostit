@@ -175,7 +175,9 @@ describe.skipIf(!hasDb)("enquiry reply & chase logging", () => {
     sent.length = 0;
     await caller().email.send({ to: "sig@client.test", subject: "Hello", body: "Thanks for your enquiry.", leadId: lead.id, signatureId: "sig-a" });
     expect(sent[0].from).toBe('"Venue Events Team" <events@venue.test>');
-    expect(sent[0].html).toContain("Kind regards,\nAna");
+    // The branded signature renders the sign-off with <br> line breaks (not a
+    // raw \n in a <pre>), and shows the profile's name as the heading.
+    expect(sent[0].html).toContain("Kind regards,<br>Ana");
     const row = await leadRow(lead.id);
     expect(row.status).toBe("contacted");
     expect(row.respondedAt).toBeTruthy();
