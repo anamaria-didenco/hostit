@@ -725,7 +725,7 @@ export default function StaffPortal() {
                 <span></span>
                 <span className="font-bebas tracking-widest text-xs text-ink/70">TOTAL RECEIVED</span>
                 <span className="font-bebas tracking-widest text-sm text-forest">
-                  ${payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${payments.reduce((sum: number, p: any) => sum + (p.type === "refund" ? -1 : 1) * Number(p.amount), 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span></span>
               </div>

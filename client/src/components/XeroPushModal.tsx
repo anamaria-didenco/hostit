@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { X, Plus, Trash2, RefreshCw, FileText } from "lucide-react";
@@ -301,7 +302,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       if (r.replaced && !r.replaced.voided) {
         toast.warning(`The corrected draft is in Xero, but ${r.replaced.number ?? "the old invoice"} couldn't be voided (${r.replaced.error}). Void it in Xero so the client isn't billed twice.`, { duration: 20000 });
       }
-      utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
+      // A pushed invoice shows on the Payments board and the Invoices-sent tab.
+      invalidateMoney(utils);
       onClose();
     },
     onError: (e) => {
@@ -321,7 +323,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     onSuccess: () => {
       toast.success("Invoice removed");
       setEditingId(null);
-      utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
+      invalidateMoney(utils);
     },
     onError: (e) => toast.error(e.message || "Could not delete that invoice"),
   });
@@ -335,8 +337,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   const sync = trpc.xero.syncStatuses.useMutation({
     onSuccess: (r) => {
       toast.success(r.updated > 0 ? `Updated ${r.updated} invoice status${r.updated === 1 ? "" : "es"} from Xero` : "Statuses already up to date");
-      utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
-      utils.payments.overview.invalidate();
+      // A status sync can import payments and flip deposits, so refresh all money views.
+      invalidateMoney(utils);
     },
     onError: (e) => toast.error(e.message || "Failed to check Xero"),
   });

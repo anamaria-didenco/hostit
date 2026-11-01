@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { safeHtml, textToHtml } from "@/lib/safeHtml";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1718,7 +1719,9 @@ export default function RunsheetBuilder() {
   const utilsBilling = trpc.useUtils();
   const updateBillingTerms = trpc.bookings.update.useMutation({
     onSuccess: () => {
-      utilsBilling.bookings.getById.invalidate({ id: effectiveBookingId! });
+      // Stream statuses and minimum spend drive the Payments board and money
+      // tiles, not just this event — refresh them all.
+      invalidateMoney(utilsBilling);
       setPreviewNonce(n => n + 1); // BEO preview reflects the change immediately
     },
     onError: () => toast.error("Couldn't save the billing terms"),
@@ -1736,7 +1739,7 @@ export default function RunsheetBuilder() {
   // can't clobber a value set elsewhere.
   const syncGuestCount = trpc.bookings.update.useMutation({
     onSuccess: () => {
-      utilsBilling.bookings.getById.invalidate({ id: effectiveBookingId! });
+      invalidateMoney(utilsBilling); // pax feeds food totals and the money tiles
       setPreviewNonce(n => n + 1); // BEO preview reflects the new pax immediately
     },
     onError: () => toast.error("Couldn't sync the guest count to the event"),

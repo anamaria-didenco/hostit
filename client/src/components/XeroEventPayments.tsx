@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { RefreshCw, AlertCircle, Check, Download } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { toLocalDateInput } from "@/lib/dateTime";
 
 /**
@@ -76,7 +77,7 @@ export default function XeroEventPayments({ q }: { q: string }) {
 
   const { data, isLoading, isFetching, refetch } = trpc.xero.eventPayments.useQuery(
     { from: range.from || undefined, to: range.to || undefined, ...(fresh ? { fresh: true } : {}) },
-    { refetchOnWindowFocus: false, staleTime: 30_000 },
+    { refetchOnWindowFocus: true, staleTime: 0 },
   );
   // Money recorded only in VenueFlow (not imported from Xero) — e.g. cash on the night.
   const { data: ledger } = trpc.payments.received.useQuery({ from: range.from || undefined, to: range.to || undefined });

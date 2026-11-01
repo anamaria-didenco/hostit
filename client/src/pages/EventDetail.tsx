@@ -2,6 +2,7 @@ import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { showCascadedToast } from "@/lib/cascadedToast";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
@@ -112,7 +113,10 @@ export default function EventDetail() {
   const offerFoodRescale = useFoodRescaleOffer();
   const updateBooking = trpc.bookings.update.useMutation({
     onSuccess: (data, vars) => {
-      utils.bookings.getById.invalidate({ id: bookingId });
+      // Total / deposit / stream-status edits move the money figures on every
+      // other screen (Dashboard tiles, Payments board, Reports), so refresh them
+      // all, not just this event.
+      invalidateMoney(utils);
       // A save over a clash flags it as double-booked; a move can clear one.
       utils.bookings.clashes.invalidate();
       setEditing(false);

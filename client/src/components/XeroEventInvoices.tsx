@@ -3,6 +3,7 @@ import { xeroErrorHelp, XERO_SETTINGS_URL } from "@/lib/xeroError";
 import { useLocation } from "wouter";
 import { RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { toLocalDateInput } from "@/lib/dateTime";
 
 /**
@@ -73,7 +74,7 @@ export default function XeroEventInvoices({ q }: { q: string }) {
   const [fresh, setFresh] = useState(false);
   const { data, isLoading, isFetching, refetch } = trpc.xero.eventInvoices.useQuery(
     fresh ? { fresh: true } : undefined,
-    { refetchOnWindowFocus: false, staleTime: 30_000 },
+    { refetchOnWindowFocus: true, staleTime: 0 },
   );
   const today = toLocalDateInput(new Date());
   const rows: Inv[] = (data?.rows ?? []) as Inv[];
