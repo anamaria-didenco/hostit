@@ -3240,7 +3240,9 @@ export default function Dashboard() {
   const allEnquiries = (allLeads ?? []).filter(Boolean).filter((l: any) => l && typeof l === 'object' && l.id != null);
   const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries
-    .filter((l: any) => l.status === "new")
+    // Exclude synthetic health-check pings (same as the server's stats), which
+    // otherwise inflate the badge with enquiries that aren't real.
+    .filter((l: any) => l.status === "new" && l.source !== "healthcheck")
     .slice()
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   // The sidebar badge counts NEW enquiries (status "new"), exactly the NEW tab
@@ -3317,7 +3319,13 @@ export default function Dashboard() {
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
     // Follow-up covers every open enquiry, "new" ones included (the tab's badge counts them).
     : followUpOnly ? applyDateFilter(allEnquiries)
-    : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
+    // The "New" tab is NOT date-filtered: its badge counts every new enquiry,
+    // so date-filtering the list (default "Upcoming") hid past-date ones and
+    // left the badge pointing at an empty list — "a new enquiry waiting" with
+    // nothing to show. Show all new enquiries so the count always matches, and
+    // you can action/clear the old ones. The date filter still applies to the
+    // Replied/All tabs, where you browse events by when they happen.
+    : leadsSubTab === "new" ? newEnquiries : applyDateFilter(repliedLeads);
   const followUpNowMs = Date.now();
   const sortedLeads = leadsToShow
     .filter((l: any) => !movedRows[l.id])
