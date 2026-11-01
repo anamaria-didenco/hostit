@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toLocalDateInput, fmtDate } from "@/lib/dateTime";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,13 +89,9 @@ export default function PaymentTracker() {
     await Promise.all([refetch(), refetchSummary()]);
     // Booking row's depositPaid flag is auto-synced server-side — refresh
     // any cached view of it so EventDetail/Dashboard pick up the change.
-    if (bookingId) await utils.bookings.getById.invalidate({ id: bookingId });
-    // A recorded/removed payment also moves the Payments board rows/totals
-    // and the Overview money tiles (Deposits Due, Revenue). Invalidate them
-    // here — called by both add and delete — so every view stays in step
-    // instead of going stale until a reload.
-    utils.payments.overview.invalidate();
-    utils.dashboard.invalidate();
+    // A recorded/removed payment moves money on every screen (board, tiles,
+    // Reports, Xero panels), so refresh all of them, not just this booking.
+    invalidateMoney(utils);
   };
 
   // Prefill what you're most likely recording: the deposit while it's due,

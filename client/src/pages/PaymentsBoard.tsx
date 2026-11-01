@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NBI_IMPORT_EVENT_TYPE } from "@shared/conversion";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { invalidateMoney } from "@/lib/invalidateMoney";
 import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
@@ -144,12 +145,9 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
       } else if (r.statusChanges > 0) {
         toast.success(`Updated ${r.statusChanges} invoice status${r.statusChanges === 1 ? "" : "es"} from Xero`);
       }
-      if (r.paymentsImported > 0 || r.statusChanges > 0) {
-        utils.payments.overview.invalidate();
-        // Imported deposit payments can flip depositPaid, which moves the
-        // Overview's Deposits Due tile.
-        utils.dashboard.invalidate();
-      }
+      // Imported payments and invoice statuses move money on every screen
+      // (Deposits Due, Invoices sent, month tiles), so refresh them all.
+      if (r.paymentsImported > 0 || r.statusChanges > 0) invalidateMoney(utils);
     },
     onError: (e) => setXeroProblem(e.message || "Xero didn't answer"),
   });
@@ -162,12 +160,8 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
 
   const update = trpc.bookings.update.useMutation({
     onSuccess: () => {
-      utils.payments.overview.invalidate();
-      utils.bookings.list.invalidate();
-      // Ticking a deposit paid / settling here also moves the Overview money
-      // tiles (Deposits Due, Revenue This Month) — keep them in step instead
-      // of stale until a reload.
-      utils.dashboard.invalidate();
+      // Ticking a deposit paid / settling moves the money on every screen.
+      invalidateMoney(utils);
     },
     onError: () => toast.error("Failed to update — try again"),
   });
@@ -315,9 +309,7 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
     setSettling(null);
     setConfirmSettle(false);
     setSettleIds(new Set());
-    utils.payments.overview.invalidate();
-    utils.bookings.list.invalidate();
-    utils.dashboard.invalidate();
+    invalidateMoney(utils);
     if (ok === ids.length) toast.success(`${ok} past event${ok === 1 ? "" : "s"} marked settled`);
     else toast.error(`${ok} of ${ids.length} marked settled — try the rest again`);
   };
