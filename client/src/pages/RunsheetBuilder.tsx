@@ -2015,21 +2015,6 @@ export default function RunsheetBuilder() {
     }
   }, [existing]);
 
-  // Show the booking's current pax — the source of truth the BEO reads — once
-  // it loads, so an edit made elsewhere (e.g. the dashboard drawer) isn't
-  // masked by an older number saved on the runsheet. Applied once per booking
-  // (not continuously) so it never races the write-through above; after that,
-  // typed edits flow booking-ward through handleGuestCountChange.
-  const bookingPaxAppliedRef = useRef<number | null>(null);
-  useEffect(() => {
-    const bc = moneyBooking?.guestCount;
-    if (!effectiveBookingId || bc == null) return;
-    if (bookingPaxAppliedRef.current === effectiveBookingId) return;
-    if (hydratingRef.current || dirtyRef.current.has('doc')) return;
-    bookingPaxAppliedRef.current = effectiveBookingId;
-    setGuestCount(prev => (prev === String(bc) ? prev : String(bc)));
-  }, [moneyBooking?.guestCount, effectiveBookingId]);
-
   // Pre-fill from lead
   const { data: spacesForPrefill } = trpc.spaces.list.useQuery(undefined, { enabled: !!leadId });
   useEffect(() => {

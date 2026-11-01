@@ -716,7 +716,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const venueArea = runsheet ? ((runsheet as any).venueArea ?? "") : "";
     const venueAreaLabel = VENUE_AREA_LABELS[venueArea] ?? "";
     const spaceName = (runsheet as any)?.spaceName ?? booking.spaceName ?? "";
-    const guestCount = booking.guestCount ?? runsheet?.guestCount ?? "";
+    // Prefer the runsheet's pax (the final covers the operator prepped the event
+    // with) over the booking's (which may still hold the original enquiry
+    // estimate) — same precedence as spaceName above, so the printed sheet
+    // matches the runsheet builder. The builder also writes a typed change back
+    // to the booking, so the dashboard stays aligned.
+    const guestCount = runsheet?.guestCount ?? booking.guestCount ?? "";
     const eventType = booking.eventType ?? (runsheet as any)?.eventType ?? "";
     // Normalise, then group, before rendering.
     //
