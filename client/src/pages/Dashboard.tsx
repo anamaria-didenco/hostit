@@ -1093,8 +1093,10 @@ export default function Dashboard() {
   // A calendar card takes its space's colour as its fill, so the colour you set
   // for a space is what you see on the calendar. Only a colour the venue has
   // actually chosen counts; spaces without one keep the status colour.
+  // An event can use several spaces; the card takes the colour of the first one
+  // in its list that has a colour.
   const spaceCardStyle = (name?: string | null): React.CSSProperties | undefined => {
-    const chosen = name ? spaceColorRef.current.get(name) : undefined;
+    const chosen = (name ?? "").split(",").map(s => s.trim()).map(n => spaceColorRef.current.get(n)).find(Boolean);
     return chosen ? { background: chosen, color: inkOnAccent(chosen), borderLeft: `3px solid ${chosen}` } : undefined;
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);

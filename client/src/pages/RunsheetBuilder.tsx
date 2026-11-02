@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { safeHtml, textToHtml } from "@/lib/safeHtml";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { SpacesMultiSelect } from "@/components/SpacesMultiSelect";
 import { invalidateMoney } from "@/lib/invalidateMoney";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -219,22 +220,8 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
       </div>
     );
   }
-  return (
-    <select
-      aria-label="Venue / space"
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full rounded-sm border border-gold/20 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
-    >
-      <option value="">— select a space —</option>
-      {spaces?.map((s: any) => (
-        <option key={s.id} value={s.name}>{s.name}{s.capacitySeated ? ` (${s.capacitySeated} seated)` : ''}</option>
-      ))}
-      {value && !matchesSaved && (
-        <option value={value}>{value} (legacy — pick a saved space)</option>
-      )}
-    </select>
-  );
+  // Several spaces can be picked for one event (a booking across two rooms).
+  return <SpacesMultiSelect value={value} onChange={onChange} className="no-print" />;
 }
 
 // One-tap covers presets for a food quantity. The whole point of RB-02 is that
