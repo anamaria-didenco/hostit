@@ -66,6 +66,7 @@ import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKEN
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
+import { inkOnAccent } from "@shared/brand";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
@@ -1088,6 +1089,13 @@ export default function Dashboard() {
   const spaceColor = (name?: string | null) => {
     if (!name) return null;
     return spaceColorRef.current.get(name) ?? autoSpaceColor(name);
+  };
+  // A calendar card takes its space's colour as its fill, so the colour you set
+  // for a space is what you see on the calendar. Only a colour the venue has
+  // actually chosen counts; spaces without one keep the status colour.
+  const spaceCardStyle = (name?: string | null): React.CSSProperties | undefined => {
+    const chosen = name ? spaceColorRef.current.get(name) : undefined;
+    return chosen ? { background: chosen, color: inkOnAccent(chosen), borderLeft: `3px solid ${chosen}` } : undefined;
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   // Lost/cancelled are dead ends, not work — the board hides them until asked
@@ -3595,7 +3603,7 @@ export default function Dashboard() {
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
-                                    style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
+                                    style={spaceCardStyle(b.spaceName)}
                                     className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                     <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{b.firstName} {b.lastName}</div>
@@ -3613,7 +3621,7 @@ export default function Dashboard() {
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
-                                    style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
+                                    style={spaceCardStyle(l.spaceName)}
                                     className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
                                     <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{l.firstName} {l.lastName}</div>
@@ -5077,7 +5085,7 @@ export default function Dashboard() {
                                           draggable
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
-                                          style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
+                                          style={spaceCardStyle(ev.spaceName)}
                                           className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : ev.status === 'finished' ? PAST_CHIP : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
