@@ -52,6 +52,31 @@ const TONE: Record<SignalTone, { fg: string; bg: string }> = {
   gray: { fg: "#6a6256", bg: "#f4efe6" },
 };
 
+/** How the list is ordered. "urgent" is the signal order (default). */
+type SortKey = "urgent" | "newest" | "oldest" | "event";
+const SORTS: { id: SortKey; label: string; note: string }[] = [
+  { id: "urgent", label: "Most urgent", note: "" },
+  { id: "newest", label: "Came in: newest first", note: "Newest enquiries first" },
+  { id: "oldest", label: "Came in: oldest first", note: "Oldest enquiries first" },
+  { id: "event", label: "Event date: soonest", note: "Soonest event first" },
+];
+
+const HEX = /^#[0-9a-f]{6}$/i;
+/** A status colour (#rrggbb) at a given alpha, for a light fill. Falls back to
+ *  transparent if the venue's swatch isn't a plain hex value. */
+function tint(hex: string, alpha: string): string {
+  return HEX.test(hex) ? `${hex}${alpha}` : "transparent";
+}
+
+/** When the enquiry came in, in venue time: "Mon 2 Nov, 9:14am". */
+function fmtCameIn(value: unknown): string {
+  const d = value ? new Date(value as any) : null;
+  if (!d || isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" });
+  return `${day}, ${time}`;
+}
+
 const ICON: Record<string, React.ComponentType<any>> = {
   "circle-check": CheckCircle2, "circle-minus": MinusCircle, "circle-dashed": CircleDashed,
   "corner-up-left": CornerUpLeft, clock: Clock, bell: Bell, hourglass: Hourglass,
@@ -122,6 +147,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [pickedTab, setTab] = React.useState<ListTab | null>(null);
   const [confirmClose, setConfirmClose] = React.useState(false);
   const [replyId, setReplyId] = React.useState<number | null>(null);
+  // Order the list by when enquiries came in, or by event date, so it's easy to
+  // see who to follow up on first. "urgent" keeps the signal-first order.
+  const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
   // A just-moved row keeps its place in the tab it was moved from, even though
@@ -186,8 +214,13 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       pinnedMoves.get(lead.id) === tab ? true
       : tab === "passed" ? signal.group === "progress" && isPassed(lead)
       : tab === "all" ? signal.group !== "closed" : signal.group === tab);
+    const cameIn = (l: any) => new Date(l.createdAt).getTime() || 0;
+    const eventAt = (l: any) => (l.eventDate ? new Date(l.eventDate).getTime() : Infinity);
+    if (sortBy === "newest") return picked.sort((a, b) => cameIn(b.lead) - cameIn(a.lead));
+    if (sortBy === "oldest") return picked.sort((a, b) => cameIn(a.lead) - cameIn(b.lead));
+    if (sortBy === "event") return picked.sort((a, b) => eventAt(a.lead) - eventAt(b.lead));
     return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
-  }, [enriched, tab, isPassed, pinnedMoves]);
+  }, [enriched, tab, isPassed, pinnedMoves, sortBy]);
 
   // Leaving the "Date passed" tab (or emptying it) cancels a pending confirm.
   React.useEffect(() => { setConfirmClose(false); }, [tab, counts.passed]);
@@ -243,7 +276,20 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             })}
           </div>
         </div>
-        {rows.length > 0 && <div className="font-sans text-[13px] text-muted-foreground -mt-1">{summary}</div>}
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
+            <div className="font-sans text-[13px] text-muted-foreground">
+              {sortBy === "urgent" ? summary : SORTS.find((s) => s.id === sortBy)?.note}
+            </div>
+            <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
+              Sort by
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="h-8 rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
+                {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
 
         {/* Close the lot in one go: they can't be won any more. */}
         {tab === "passed" && rows.length > 0 && onCloseAsLost && !props.isStaff && (
@@ -294,11 +340,13 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
             return (
               <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: "var(--card)", borderColor: replying ? "var(--primary)" : "var(--input)" }}>
+                style={{ background: tint(si.dot, "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
+                {/* The whole box is filled with the enquiry's status colour: a
+                    light tint, with a solid border in the same colour. */}
                 {/* Desktop: one dense signal-first row */}
                 <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
-                  className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:bg-white md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
+                  className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
                   {/* Fixed-width signal and action columns, so the name and date
                       columns line up from row to row whatever the chip says. */}
                   <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-xs font-bold whitespace-nowrap justify-self-start max-w-full overflow-hidden text-ellipsis"
@@ -315,6 +363,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                       </span>
                     </div>
                     {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
+                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
                   <div className="min-w-0">
                     <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
@@ -351,6 +400,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                       </span>
                     </div>
                     {sub && <div className="font-sans text-[13.5px] text-muted-foreground truncate mt-0.5">{sub}</div>}
+                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
                   <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
                     <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
