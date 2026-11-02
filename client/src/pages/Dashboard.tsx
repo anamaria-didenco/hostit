@@ -1362,8 +1362,11 @@ export default function Dashboard() {
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   // Remember the last Add-Enquiry entry mode (Smart Paste vs the form) per
   // browser, instead of always defaulting back to Smart Paste.
+  // Manual entry is the default: it always works. Smart paste needs an AI key on
+  // the server, which not every venue has set up, so it only opens by default
+  // for someone who picked it themselves (the choice is remembered).
   const [enquiryPasteMode, setEnquiryPasteMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('vfhq_enquiry_paste_mode') !== '0'; } catch { return true; }
+    try { return localStorage.getItem('vfhq_enquiry_paste_mode') === '1'; } catch { return false; }
   });
   const chooseEnquiryMode = (paste: boolean) => {
     setEnquiryPasteMode(paste);
@@ -1378,7 +1381,7 @@ export default function Dashboard() {
   // behaves identically (no stale status carried over from a previous open).
   const openAddEnquiry = React.useCallback(() => {
     setAddEnquiryForm(f => ({ ...f, status: 'new' }));
-    setEnquiryPasteMode(true);
+    // Keep whichever mode the user last chose (remembered), rather than forcing paste.
     setShowAddLead(true);
   }, []);
 
@@ -11349,7 +11352,7 @@ export default function Dashboard() {
       )}
 
       {/* Add Enquiry Modal */}
-      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); setAddEnquirySpaceError(false); } }}>
+      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setAddEnquirySpaceError(false); } }}>
         <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">

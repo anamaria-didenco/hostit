@@ -261,13 +261,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
         {/* View tabs */}
         <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-1 border-b border-border/60 -mb-px">
+          {/* One line of tabs that scrolls sideways on a phone, rather than
+              wrapping "Follow-up due" and cutting off "Date passed". */}
+          <div className="flex items-center gap-1 border-b border-border/60 -mb-px max-w-full overflow-x-auto">
             {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
               const on = tab === t.id;
               return (
                 <button key={t.id} onClick={() => { setTab(t.id); setReplyId(null); }}
                   aria-pressed={on}
-                  className={`relative px-3 py-2 font-sans text-sm font-semibold transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
                   {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. */}
                   <span className={`ml-1.5 text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
