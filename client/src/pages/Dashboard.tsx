@@ -67,6 +67,7 @@ import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLO
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { inkOnAccent } from "@shared/brand";
+import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
@@ -1090,6 +1091,20 @@ export default function Dashboard() {
     if (!name) return null;
     return spaceColorRef.current.get(name) ?? autoSpaceColor(name);
   };
+  // Calendar card colours, as the venue asked: confirmed is green, proposal sent
+  // is yellow, and an enquiry whose follow-up is overdue is dark red. Other
+  // statuses keep the venue's own colour.
+  const CAL_FIXED_FILL: Record<string, string> = {
+    booked: "bg-emerald-700 text-white",
+    confirmed: "bg-emerald-700 text-white",
+    proposal_sent: "bg-yellow-200 text-yellow-900",
+  };
+  const isOverdueLead = (lead: any) => {
+    const sig = enquirySignal(lead, { nowMs: Date.now() });
+    return sig.group === "followup" && sig.tone === "red";
+  };
+  const calCardClasses = (status: string, overdue = false) =>
+    overdue ? "bg-red-800 text-white" : (CAL_FIXED_FILL[status] ?? getStatusInfo(status).calClasses);
   // A calendar card takes its space's colour as its fill, so the colour you set
   // for a space is what you see on the calendar. Only a colour the venue has
   // actually chosen counts; spaces without one keep the status colour.
@@ -1766,13 +1781,20 @@ export default function Dashboard() {
     for (const s of (spaces ?? [])) if ((s as any)?.name && (s as any)?.color) m.set((s as any).name, (s as any).color);
     return m;
   }, [spaces]);
+  // Cancelled events stay in your records but come off the calendar (the date is
+  // freed). "Show cancelled" brings them back, e.g. to find one to restore.
+  const [showCancelledOnCal, setShowCancelledOnCal] = useState(false);
+  const dropCancelled = React.useCallback(
+    (rows: any) => (showCancelledOnCal || !Array.isArray(rows) ? rows : rows.filter((r: any) => r?.status !== 'cancelled')),
+    [showCancelledOnCal],
+  );
   const { data: monthBookings, isError: monthBookingsError, refetch: refetchMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, select: dropCancelled }
   );
   const { data: monthLeadEvents, refetch: refetchMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, select: dropCancelled }
   );
   // Walkthroughs staff have confirmed (requests have no time yet) — month view chips.
   const { data: monthWalkthroughs } = trpc.leads.walkthroughsByMonth.useQuery(
@@ -1784,19 +1806,19 @@ export default function Dashboard() {
   const adjPrevMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
   const { data: adjMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, select: dropCancelled }
   );
   const { data: adjMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, select: dropCancelled }
   );
   const { data: adjPrevMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id && calendarView === 'week' }
+    { enabled: !!user?.id && calendarView === 'week', select: dropCancelled }
   );
   const { data: adjPrevMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id && calendarView === 'week' }
+    { enabled: !!user?.id && calendarView === 'week', select: dropCancelled }
   );
   // The open event panel holds its own copy of the booking. Some fields
   // change on the server as a side effect — the double-booked flag (saving
@@ -3609,7 +3631,7 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
                                     style={spaceCardStyle(b.spaceName)}
-                                    className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : calCardClasses(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                     <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{b.firstName} {b.lastName}</div>
                                     <div className="hidden sm:block">
@@ -3627,7 +3649,7 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceCardStyle(l.spaceName)}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${calCardClasses(l.status, isOverdueLead(l))} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
                                     <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{l.firstName} {l.lastName}</div>
                                     <div className="hidden sm:block">
@@ -4802,6 +4824,12 @@ export default function Dashboard() {
                     className="vf-btn vf-btn-secondary">
                     <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
                   </button>
+                  <button onClick={() => setShowCancelledOnCal(v => !v)} aria-pressed={showCancelledOnCal}
+                    title="Cancelled events are hidden from the calendar. Show them to find one to restore."
+                    className="vf-btn vf-btn-secondary">
+                    <span className="hidden sm:inline">{showCancelledOnCal ? "HIDE CANCELLED" : "SHOW CANCELLED"}</span>
+                    <span className="sm:hidden">CXL</span>
+                  </button>
                   {/* Staff are read-only server-side, so hide create. */}
                   {!isStaff && (
                     <button onClick={() => setShowAddLead(true)} className="vf-btn vf-btn-primary">
@@ -4939,10 +4967,15 @@ export default function Dashboard() {
               >
                 {pipelineStages.map(s => (
                   <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: s.swatch }} />
+                    {/* Matches the card colours: confirmed green, proposal sent yellow. */}
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch }} />
                     <span>{s.label}</span>
                   </div>
                 ))}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#991b1b" }} />
+                  <span>Overdue</span>
+                </div>
                 {/* Spaces: the coloured stripe on each day and the left edge of each
                     event. Without this key the second colour system was a guess. */}
                 {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).length > 0 && (
@@ -4991,7 +5024,7 @@ export default function Dashboard() {
                   });
                   const weeks = [];
                   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-                  const statusCard = (status: string) => getStatusInfo(status).calClasses;
+                  const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
                   return weeks.map((week, wi) => (
                     <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
                       {week.map((cell, di) => {
@@ -5091,7 +5124,7 @@ export default function Dashboard() {
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
                                           style={spaceCardStyle(ev.spaceName)}
-                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : ev.status === 'finished' ? PAST_CHIP : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
+                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : ev.status === 'finished' ? PAST_CHIP : statusCard(ev.status, isLead && isOverdueLead(ev))} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[12px] tabular-nums opacity-70 leading-snug">{time}</span>}
@@ -5531,7 +5564,7 @@ export default function Dashboard() {
                   return d;
                 });
                 const todayStr = new Date().toDateString();
-                const statusCard = (status: string) => getStatusInfo(status).calClasses;
+                const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
                 const statusLabel = (s: string) => getStatusInfo(s).label.toUpperCase();
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []).filter(Boolean), ...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
