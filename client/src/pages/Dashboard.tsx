@@ -6638,6 +6638,7 @@ export default function Dashboard() {
                                 <input
                                   type="file"
                                   accept="image/*"
+                                  aria-label={sig.photo ? "Change signature photo" : "Upload signature photo"}
                                   className="hidden"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
@@ -6669,6 +6670,7 @@ export default function Dashboard() {
                                 <input
                                   type="file"
                                   accept="image/*"
+                                  aria-label={sig.signatureLogo ? "Change signature logo" : "Upload signature logo"}
                                   className="hidden"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
@@ -7671,7 +7673,7 @@ export default function Dashboard() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT SERVICE</label>
+                          <label htmlFor="nbi-service-id" className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT SERVICE</label>
                           <select
                             id="nbi-service-id"
                             defaultValue={(venueSettings as any)?.nbiServiceId ?? ''}
@@ -7691,7 +7693,7 @@ export default function Dashboard() {
                           </select>
                         </div>
                         <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SECTION / AREA</label>
+                          <label htmlFor="nbi-section-id" className="font-bebas text-xs tracking-widest text-sage block mb-1">SECTION / AREA</label>
                           <select
                             id="nbi-section-id"
                             defaultValue={(venueSettings as any)?.nbiSectionId ?? 'all'}
@@ -7738,6 +7740,7 @@ export default function Dashboard() {
                             <select
                               value={m.serviceId}
                               onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, serviceId: e.target.value } : x))}
+                              aria-label={`NBI service for ${m.spaceName || "this space"}`}
                               className="col-span-4 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
                             >
                               <option value="">— pick NBI service —</option>
@@ -7748,6 +7751,7 @@ export default function Dashboard() {
                             <select
                               value={m.sectionId}
                               onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, sectionId: e.target.value } : x))}
+                              aria-label={`NBI section for ${m.spaceName || "this space"}`}
                               className="col-span-3 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
                             >
                               <option value="all">Whole Area</option>
@@ -8003,7 +8007,7 @@ export default function Dashboard() {
                               toast.success("Logo uploaded — save to apply.");
                             } catch { toast.error("Logo upload failed."); }
                           }}
-                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                          aria-label="Upload venue logo" className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
                         <p className="font-dm text-xs text-ink/60 mt-1">PNG or JPG. It sits at the top of page 1. This is the same logo used on your contact form.</p>
                         {settingsForm.logoUrl && (
                           <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: "" }))}
@@ -8031,7 +8035,7 @@ export default function Dashboard() {
                     <h2 className="font-bebas tracking-widest text-base text-ink">ACCENT COLOUR</h2>
                     <p className="font-dm text-xs text-ink/60">Recolours the header rule, status pill, guest count, timeline dots and the balance bar. Text on the colour stays readable automatically.</p>
                     <div className="flex items-center gap-2">
-                      <input type="color" value={accent}
+                      <input type="color" value={accent} aria-label="Accent colour"
                         onChange={e => setSettingsForm((f: any) => ({ ...f, brandAccentColor: e.target.value }))}
                         className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                       <Input value={settingsForm.brandAccentColor ?? ""}
