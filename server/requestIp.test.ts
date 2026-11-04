@@ -46,3 +46,30 @@ describe("leads.submit accepts real-world input", () => {
     if (parsed.success) expect(parsed.data.email).toBe("pat.example@nz.ey.com");
   });
 });
+
+describe("public forms reject an unparseable event date cleanly", () => {
+  // Used to reach `new Date(...)`, become Invalid Date and surface as a 500
+  // "Invalid time value" — the visitor's enquiry was lost with no message.
+  const schemaFor = async (path: string) => {
+    const { appRouter } = await import("./routers");
+    return (appRouter._def.procedures as any)[path]._def.inputs[0] as import("zod").ZodTypeAny;
+  };
+  const base = { ownerId: 1, firstName: "Ana", email: "ana@example.com" };
+
+  it("leads.submit refuses garbage and impossible dates, accepts blank and real ones", async () => {
+    const schema = await schemaFor("leads.submit");
+    expect(schema.safeParse({ ...base, eventDate: "not-a-date" }).success).toBe(false);
+    expect(schema.safeParse({ ...base, eventDate: "2026-13-45" }).success).toBe(false);
+    expect(schema.safeParse({ ...base, eventDate: "" }).success).toBe(true);
+    expect(schema.safeParse({ ...base }).success).toBe(true);
+    expect(schema.safeParse({ ...base, eventDate: "2026-12-25" }).success).toBe(true);
+  });
+
+  it("expressBook.submit requires a real date", async () => {
+    const schema = await schemaFor("expressBook.submit");
+    const ok = { ...base, eventType: "Birthday", guestCount: 10 };
+    expect(schema.safeParse({ ...ok, eventDate: "nope" }).success).toBe(false);
+    expect(schema.safeParse({ ...ok, eventDate: "" }).success).toBe(false);
+    expect(schema.safeParse({ ...ok, eventDate: "2026-12-25" }).success).toBe(true);
+  });
+});
