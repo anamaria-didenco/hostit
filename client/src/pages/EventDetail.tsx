@@ -2,6 +2,7 @@ import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { SpacesMultiSelect } from "@/components/SpacesMultiSelect";
 import { invalidateMoney } from "@/lib/invalidateMoney";
 import { useFoodRescaleOffer } from "@/hooks/useFoodRescaleOffer";
 import { showCascadedToast } from "@/lib/cascadedToast";
@@ -336,18 +337,8 @@ export default function EventDetail() {
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SPACE / ROOM</label>
-                  <Select value={form.spaceName} onValueChange={v => setForm((p: any) => ({ ...p, spaceName: v }))}>
-                    <SelectTrigger className="font-dm text-sm"><SelectValue placeholder="Select space" /></SelectTrigger>
-                    <SelectContent>
-                      {(spaces ?? []).length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-ink/70 font-dm">
-                          No spaces configured. Add them in Settings → Venue → Spaces.
-                        </div>
-                      ) : (
-                        (spaces ?? []).map((s: any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)
-                      )}
-                    </SelectContent>
-                  </Select>
+                  {/* Several spaces can be picked (e.g. Restaurant + La Saletta), or Full venue. */}
+                  <SpacesMultiSelect value={form.spaceName ?? ""} onChange={v => setForm((p: any) => ({ ...p, spaceName: v }))} />
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TOTAL (NZD)</label>
