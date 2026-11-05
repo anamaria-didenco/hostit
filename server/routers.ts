@@ -78,6 +78,17 @@ function proposalExpiryInstant(value: string): Date {
   return new Date(value);
 }
 
+// A date string that must actually parse. Without this, "2026-13-45" (or any
+// typed-in garbage) reached `new Date(...)`, became Invalid Date and surfaced
+// as a 500 "Invalid time value" — on the public enquiry form that meant the
+// visitor's enquiry was lost instead of getting a clear message.
+const validDateString = z
+  .string()
+  .max(40)
+  .refine((v) => v === "" || !Number.isNaN(new Date(v).getTime()), {
+    message: "Please enter a valid date",
+  });
+
 // Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
 // ownerId), shared by leads.submit AND leads.startCapture — a bot hammering
 // startCapture without ever calling submit still burns the same budget,
@@ -587,7 +598,7 @@ export const appRouter = router({
         phone: z.string().optional(),
         company: z.string().optional(),
         eventType: z.string().optional(),
-        eventDate: z.string().optional(),
+        eventDate: validDateString.optional(),
         guestCount: z.number().optional(),
         budget: z.number().optional(),
         message: z.string().optional(),
@@ -741,7 +752,7 @@ export const appRouter = router({
         phone: z.string().max(40).optional(),
         company: z.string().max(200).optional(),
         eventType: z.string().max(100).optional(),
-        eventDate: z.string().max(40).optional(),
+        eventDate: validDateString.optional(),
         // The enquirer explicitly chose "no date yet" — kept as its own flag
         // so the board can say "Date TBC" instead of a blank.
         dateFlexible: z.boolean().optional(),
@@ -7023,7 +7034,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         email: z.string().email(),
         phone: z.string().optional(),
         eventType: z.string().min(1),
-        eventDate: z.string(),
+        eventDate: validDateString.refine((v) => v !== "", { message: "Please enter your event date" }),
         guestCount: z.number().int().positive(),
         spaceName: z.string().optional(),
         selectedPackageIds: z.array(z.number()).optional(),
@@ -8116,7 +8127,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(contracts).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id))).limit(1);
-        if (!rows[0]) throw new Error('Not found');
+        if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not found' });
         return rows[0];
       }),
     getByToken: publicProcedure
@@ -8129,7 +8140,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(contracts).where(eq(contracts.token, input.token)).limit(1);
-        if (!rows[0]) throw new Error('Not found');
+        if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not found' });
         return rows[0];
       }),
     create: protectedProcedure
@@ -9464,7 +9475,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [wc] = await db.select().from(weddingChecklists).where(eq(weddingChecklists.shareToken, input.token)).limit(1);
-        if (!wc) throw new Error('Link not found');
+        if (!wc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link not found' });
         const merged = { ...(wc.answers ?? {}), ...input.answers };
         await db.update(weddingChecklists).set({ answers: merged, updatedAt: new Date() }).where(eq(weddingChecklists.id, wc.id));
         return { success: true };
@@ -9482,7 +9493,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [wc] = await db.select().from(weddingChecklists).where(eq(weddingChecklists.shareToken, input.token)).limit(1);
-        if (!wc) throw new Error('Link not found');
+        if (!wc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link not found' });
         await db.update(weddingChecklists).set({ submittedAt: new Date(), updatedAt: new Date() }).where(eq(weddingChecklists.id, wc.id));
         return { success: true };
       }),
@@ -9782,7 +9793,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
-        if (!cl) throw new Error('Checklist not found');
+        if (!cl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Checklist not found' });
         const [{ total }] = await db.select({ total: count() }).from(dailyChecklistItems).where(eq(dailyChecklistItems.checklistId, cl.id));
         const [item] = await db.insert(dailyChecklistItems).values({
           checklistId: cl.id,
@@ -9806,7 +9817,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
-        if (!cl) throw new Error('Checklist not found');
+        if (!cl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Checklist not found' });
         await db.delete(dailyChecklistItems)
           .where(and(eq(dailyChecklistItems.id, input.itemId), eq(dailyChecklistItems.checklistId, cl.id)));
         return { success: true };
@@ -9822,7 +9833,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
-        if (!cl) throw new Error('Checklist not found');
+        if (!cl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Checklist not found' });
         await db.update(dailyChecklistItems)
           .set({ text: input.text.trim(), note: input.note?.trim() ?? null })
           .where(and(eq(dailyChecklistItems.id, input.itemId), eq(dailyChecklistItems.checklistId, cl.id)));
@@ -9844,7 +9855,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
-        if (!cl) throw new Error('Checklist not found');
+        if (!cl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Checklist not found' });
         // Bind the itemId to THIS checklist — otherwise a valid token could
         // toggle arbitrary items in any other tenant's checklist by guessing
         // item IDs.
@@ -9869,7 +9880,7 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
-        if (!cl) throw new Error('Checklist not found');
+        if (!cl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Checklist not found' });
         await db.update(dailyChecklistItems).set({ checked: 0, checkedAt: null, checkedBy: null })
           .where(eq(dailyChecklistItems.checklistId, cl.id));
         return { success: true };
