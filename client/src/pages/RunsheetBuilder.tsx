@@ -1687,7 +1687,7 @@ export default function RunsheetBuilder() {
   // Payments board statuses, which track whether the money has arrived — the
   // two were conflated, so marking drinks "Invoiced" made the BEO stop saying
   // the bar was meant to be settled on the night.
-  const { data: billingBooking } = trpc.bookings.getById.useQuery(
+  const { data: billingBooking, isFetching: billingBookingFetching } = trpc.bookings.getById.useQuery(
     { id: effectiveBookingId! },
     { enabled: !!effectiveBookingId },
   );
@@ -1732,11 +1732,17 @@ export default function RunsheetBuilder() {
     onError: () => toast.error("Couldn't sync the guest count to the event"),
   });
   const guestCountSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True from a keystroke until its debounced write to the event has been
+  // decided, so the "numbers don't match" notice below never flashes up while
+  // a change the user just typed is still on its way to the event.
+  const [guestSyncPending, setGuestSyncPending] = useState(false);
   const handleGuestCountChange = (v: string) => {
     setGuestCount(v);
     if (!effectiveBookingId) return;
+    setGuestSyncPending(true);
     if (guestCountSyncTimer.current) clearTimeout(guestCountSyncTimer.current);
     guestCountSyncTimer.current = setTimeout(() => {
+      setGuestSyncPending(false);
       const n = Number(v);
       // Only push a real number; an empty field must not null the booking's pax.
       if (!v.trim() || !Number.isFinite(n) || n < 0) return;
@@ -3502,6 +3508,34 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{guestCount || "—"}</div>
               </div>
             </div>
+            {/* The event (calendar, dashboard, Payments) and this sheet each hold a
+                guest count. They normally move together, but an older sheet can
+                disagree with its event and nothing said so — the calendar then
+                kept showing the old number. Say so, and fix it in one click. */}
+            {(() => {
+              const eventPax = moneyBooking?.guestCount;
+              const sheetPax = Number(guestCount);
+              if (!effectiveBookingId || guestSyncPending || syncGuestCount.isPending || billingBookingFetching) return null;
+              if (eventPax == null || !guestCount.toString().trim() || !Number.isFinite(sheetPax)) return null;
+              if (Number(eventPax) === sheetPax) return null;
+              return (
+                <div role="status" className="no-print mb-4 border border-amber-300 bg-amber-50 px-3 py-2 font-dm text-xs text-ink flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>
+                    <strong>Guest numbers don't match.</strong> This runsheet says {sheetPax}, but the event (calendar, dashboard, Payments) says {Number(eventPax)}.
+                  </span>
+                  <span className="flex gap-2">
+                    <button type="button" onClick={() => syncGuestCount.mutate({ id: effectiveBookingId, guestCount: sheetPax } as any)}
+                      className="font-bebas tracking-widest text-[11px] border border-forest/40 text-forest px-2 py-1 hover:bg-forest/5">
+                      USE {sheetPax} EVERYWHERE
+                    </button>
+                    <button type="button" onClick={() => setGuestCount(String(Number(eventPax)))}
+                      className="font-bebas tracking-widest text-[11px] border border-gold/40 text-ink px-2 py-1 hover:bg-gold/10">
+                      USE {Number(eventPax)} EVERYWHERE
+                    </button>
+                  </span>
+                </div>
+              );
+            })()}
             {/* Event time row — venue/space lives in the grid above; this is times only */}
             <div className="grid grid-cols-2 gap-4 mb-4 pt-3 border-t border-gold/20">
               <div>
