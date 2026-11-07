@@ -1105,46 +1105,35 @@ export default function Dashboard() {
   };
   const calCardClasses = (status: string, overdue = false) =>
     overdue ? "bg-red-800 text-white" : (CAL_FIXED_FILL[status] ?? getStatusInfo(status).calClasses);
-  // A calendar card takes its space's colour as its fill, so the colour you set
-  // for a space is what you see on the calendar. Only a colour the venue has
-  // actually chosen counts; spaces without one keep the status colour.
+  // A calendar card shows the colour you set for its space (tint + left bar), so
+  // what you choose in Settings is what you see on the calendar. Only a colour
+  // the venue has actually chosen counts; spaces without one keep the status colour.
   // An event can use several spaces; the card takes the colour of the first one
   // in its list that has a colour.
   const firstSpaceColor = (name?: string | null): string | undefined =>
     (name ?? "").split(",").map(s => s.trim()).map(n => spaceColorRef.current.get(n)).find(Boolean) || undefined;
+  // A card shows its space as a soft tint of the space colour with a solid bar
+  // down its left edge, and dark text. (It used to be filled solid, which with a
+  // status strip on top made every card two loud colours.) Spaces the venue has
+  // not coloured keep the plain status-colour card.
   const spaceCardStyle = (name?: string | null): React.CSSProperties | undefined => {
     const chosen = firstSpaceColor(name);
-    return chosen ? { background: chosen, color: inkOnAccent(chosen), borderLeft: `3px solid ${chosen}` } : undefined;
+    if (!chosen) return undefined;
+    const h = chosen.replace(/^#/, "");
+    const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h.slice(0, 6);
+    const ok = /^[0-9a-fA-F]{6}$/.test(full);
+    const [r, g, b] = ok ? [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16)) : [200, 200, 200];
+    return { background: `rgba(${r}, ${g}, ${b}, 0.16)`, color: "#1f2a24", borderLeft: `4px solid ${chosen}` };
   };
-  // The card body wears the space's colour, so the STATUS gets its own band in
-  // the status colour (green confirmed, yellow proposal sent, dark red overdue).
-  // Without it the status label sat on the space colour and a green space with a
-  // confirmed event looked like one blob. When the status colour is close to the
-  // space colour the band is pushed lighter or darker so the two always read as
-  // different colours. Undefined when the space has no colour: the whole card is
-  // then the status colour already.
+  // The STATUS is its own strip in the status colour (green confirmed, yellow
+  // proposal sent, dark red overdue, the venue's own colour otherwise). The body
+  // is a pale tint, so the strip can never blend into the space colour. Undefined
+  // when the space has no colour: the whole card is then the status colour.
   const statusBandStyle = (status: string, overdue: boolean, spaceName?: string | null): React.CSSProperties | undefined => {
-    const space = firstSpaceColor(spaceName);
-    if (!space) return undefined;
-    const rgb = (hex: string): [number, number, number] | null => {
-      const h = hex.replace(/^#/, "");
-      const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
-      return /^[0-9a-fA-F]{6}$/.test(full) ? [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16)) as [number, number, number] : null;
-    };
-    const mix = (hex: string, to: number, t: number) => {
-      const c = rgb(hex); if (!c) return hex;
-      return "#" + c.map(v => Math.round(v + (to - v) * t).toString(16).padStart(2, "0")).join("");
-    };
-    let fill = overdue ? "#991b1b"
+    if (!firstSpaceColor(spaceName)) return undefined;
+    const fill = overdue ? "#991b1b"
       : ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[status]
         ?? (status === "finished" ? "#9ca3af" : (getStatusInfo(status) as any).swatch ?? "#9ca3af");
-    const a = rgb(space), b = rgb(fill);
-    if (a && b && Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 110) {
-      // Push the status colour whichever way ends up furthest from the space.
-      const dist = (hex: string) => { const c = rgb(hex)!; return Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]); };
-      const darker = mix(fill, 0, 0.6), lighter = mix(fill, 255, 0.55);
-      fill = dist(darker) >= dist(lighter) ? darker : lighter;
-    }
     return { background: fill, color: inkOnAccent(fill) };
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
@@ -3672,7 +3661,7 @@ export default function Dashboard() {
                                       {(b.guestCount || b.spaceName) && (
                                         <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas tracking-widest text-[11px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
                                     </div>
                                     {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3691,7 +3680,7 @@ export default function Dashboard() {
                                       {l.guestCount && (
                                         <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
                                       )}
-                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas tracking-widest text-[11px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                     {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
