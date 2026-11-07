@@ -32,7 +32,7 @@ export const DEFAULT_STATUSES: StatusDef[] = [
   { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
   // A date hold (server/holds.ts): the date is kept for the client until an expiry.
-  { key: "tentative",     label: "On Hold",       colorId: "yellow"  },
+  { key: "tentative",     label: "On Hold",       colorId: "purple"  },
   { key: "booked",        label: "Confirmed",     colorId: "forest"  },
   { key: "finished",      label: "Finished",      colorId: "gray"    },
   { key: "lost",          label: "Lost",          colorId: "red"     },
@@ -90,9 +90,23 @@ export function parseCustomStatuses(raw: string | null | undefined): StatusDef[]
   if (!raw) return DEFAULT_STATUSES;
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) return keepHoldDistinct(parsed);
   } catch {}
   return DEFAULT_STATUSES;
+}
+
+// Proposal Sent and On Hold used to share the yellow family, so on the calendar,
+// the legend and the lists you couldn't tell a held date from a quote out with
+// the client. A venue's saved list that still has them in the same family gets
+// On Hold moved to purple (the new default). Any other colour a venue chose for
+// On Hold is left alone, and it can be changed again in Settings → Statuses.
+const YELLOW_FAMILY = new Set(["yellow", "amber"]);
+function keepHoldDistinct(list: StatusDef[]): StatusDef[] {
+  const proposal = list.find(s => s.key === "proposal_sent");
+  const hold = list.find(s => s.key === "tentative");
+  if (!proposal || !hold) return list;
+  if (!YELLOW_FAMILY.has(proposal.colorId) || !YELLOW_FAMILY.has(hold.colorId)) return list;
+  return list.map(s => (s.key === "tentative" ? { ...s, colorId: "purple" } : s));
 }
 
 function slugify(label: string): string {
