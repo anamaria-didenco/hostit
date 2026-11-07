@@ -5427,24 +5427,37 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .from(runsheets)
             .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
             .limit(1);
-          if (rs?.bookingId) {
+          // A sheet started from the enquiry is linked to the lead only. Once that
+          // enquiry is booked the calendar shows the BOOKING, so follow the lead
+          // to its booking — otherwise a pax / space / day change on the runsheet
+          // reached the enquiry but never the event the calendar shows.
+          let cascadeBookingId: number | null = rs?.bookingId ?? null;
+          if (!cascadeBookingId && rs?.leadId) {
+            const { bookings: bookingsTbl } = await import('../drizzle/schema');
+            const { desc } = await import('drizzle-orm');
+            const [viaLead] = await db.select({ id: bookingsTbl.id }).from(bookingsTbl)
+              .where(and(eq(bookingsTbl.leadId, rs.leadId), eq(bookingsTbl.ownerId, ctx.user.id)))
+              .orderBy(desc(bookingsTbl.id)).limit(1);
+            cascadeBookingId = viaLead?.id ?? null;
+          }
+          if (cascadeBookingId) {
             const { _movedToDay, _startTime, ...bookingFields } = sharedBooking;
             if (_movedToDay || _startTime) {
               // Moving the day in the runsheet moves the event, keeping its
               // start time; a new start time moves the time on that day.
               const { dayWithTimeFrom, withStartTime } = await import('@shared/eventDate');
               const [cur] = await db.select({ eventDate: bookings.eventDate }).from(bookings)
-                .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+                .where(and(eq(bookings.id, cascadeBookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
               let next = _movedToDay ? dayWithTimeFrom(_movedToDay, cur?.eventDate ?? null) : (cur?.eventDate ?? null);
               if (next && _startTime) next = withStartTime(next, _startTime);
               if (next) {
                 bookingFields.eventDate = next;
                 await db.update(runsheets).set({ eventDate: next })
-                  .where(and(eq(runsheets.bookingId, rs.bookingId), eq(runsheets.ownerId, ctx.user.id)));
+                  .where(and(eq(runsheets.bookingId, cascadeBookingId), eq(runsheets.ownerId, ctx.user.id)));
               }
             }
             await db.update(bookings).set({ ...bookingFields, updatedAt: new Date() })
-              .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id)));
+              .where(and(eq(bookings.id, cascadeBookingId), eq(bookings.ownerId, ctx.user.id)));
           }
           // The enquiry: the runsheet's own link, or its booking's.
           let leadId = rs?.leadId ?? null;
