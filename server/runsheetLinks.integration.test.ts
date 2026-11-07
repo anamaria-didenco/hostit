@@ -156,6 +156,25 @@ d("run sheets stay with their event (DB)", () => {
     expect(b.guestCount).toBe(52);
   });
 
+  it("a sheet linked only to the enquiry still updates the booking it became", async () => {
+    // Started from the enquiry (leadId only), then the enquiry was booked. The
+    // calendar shows the booking, so a pax / space change on the sheet has to
+    // reach it — it used to update the enquiry and stop there.
+    const x = await db();
+    const lead = await newLead();
+    const booking = await newBooking(lead.id);
+    const [rs] = await x.insert(runsheets).values({ ownerId: OWNER, leadId: lead.id, title: "Enquiry-linked", guestCount: 45, spaceName: "Main room" } as any).returning();
+    expect(rs.bookingId ?? null).toBeNull();
+
+    await caller.runsheets.update({ id: rs.id, guestCount: 60, spaceName: "Courtyard" } as any);
+
+    const [b] = await x.select().from(bookings).where(eq(bookings.id, booking.id));
+    expect(b.guestCount).toBe(60);
+    expect(b.spaceName).toBe("Courtyard");
+    const [l] = await x.select().from(leads).where(eq(leads.id, lead.id));
+    expect(l.guestCount).toBe(60);
+  });
+
   it("rescaleGuests updates only the lines at the old count, and bumps the version", async () => {
     const x = await db();
     const lead = await newLead();
