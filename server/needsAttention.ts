@@ -96,6 +96,16 @@ async function loadWindow(ownerId: number, tz: string, now: Date, days: number) 
 
 export type NeedsAttention = Awaited<ReturnType<typeof getNeedsAttention>>;
 
+/** Bookings whose deposit invoice is PAID in Xero. That is a paid deposit even
+ *  before the payment itself has been imported (the Payments board's rule), so
+ *  every "deposit due?" answer on this screen has to honour it — the tile, the
+ *  Needs-you-today list and the deposit pills used to disagree about it. */
+async function depositsPaidInXero(db: any, ownerId: number): Promise<Set<number>> {
+  const rows = await db.select({ bookingId: xeroInvoices.bookingId })
+    .from(xeroInvoices).where(and(eq(xeroInvoices.ownerId, ownerId), eq(xeroInvoices.stream, "deposit"), eq(xeroInvoices.status, "PAID")));
+  return new Set<number>(rows.map((r: { bookingId: number | null }) => r.bookingId).filter((v: number | null): v is number => v != null));
+}
+
 export async function getNeedsAttention(ownerId: number, now: Date = new Date()) {
   const { tz, replyEnabled, replyHours } = await venueTz(ownerId);
   const win = await loadWindow(ownerId, tz, now, Math.max(DEPOSIT_WINDOW_DAYS, RUNSHEET_WINDOW_DAYS));
@@ -112,6 +122,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
   if (!win) return empty;
   const { db, todayKey, inWindow, runsheetOf } = win;
   const cap = NEEDS_GROUP_CAP;
+  const xeroDepositPaid = await depositsPaidInXero(db, ownerId);
 
   // (a) Events today / tonight.
   const todays = inWindow.filter(x => x.diff === 0 && (x.b.status === "confirmed" || x.b.status === "finished"));
@@ -119,7 +130,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     bookingId: b.id, name: fullName(b), eventType: b.eventType ?? null, startTime: startTimeOf(b.eventDate, tz),
     spaceName: b.spaceName ?? null, guestCount: b.guestCount ?? null,
     hasRunSheet: runsheetOf(b) != null, runsheetId: runsheetOf(b),
-    deposit: b.depositRequired === false ? "none" : b.depositPaid ? "paid" : "due",
+    deposit: b.depositRequired === false ? "none" : (b.depositPaid || xeroDepositPaid.has(b.id)) ? "paid" : "due",
   }));
 
   // (b) Overdue tasks, most overdue first. Same rule as the Tasks "Overdue" filter.
@@ -189,7 +200,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
 
   // (d) Deposits due: confirmed events in the next 21 days, deposit required and not paid.
   const depositAll: DepositItem[] = inWindow
-    .filter(x => x.diff <= DEPOSIT_WINDOW_DAYS && isDepositDue(x.b))
+    .filter(x => x.diff <= DEPOSIT_WINDOW_DAYS && isDepositDue(x.b) && !xeroDepositPaid.has(x.b.id))
     .map(({ b, diff, dayKey }) => ({
       bookingId: b.id, name: fullName(b), eventDate: b.eventDate, dayKey, daysAway: diff,
       amount: Number(b.depositNzd ?? 0) || 0, requested: b.depositRequestedAt != null,
@@ -276,11 +287,12 @@ export async function getUpcomingEvents(ownerId: number, now: Date = new Date())
   const win = await loadWindow(ownerId, tz, now, UPCOMING_DAYS);
   if (!win) return { todayKey: zonedYmd(now, tz), events: [] as UpcomingEvent[] };
   const { db, todayKey, inWindow, runsheetOf } = win;
+  const xeroDepositPaid = await depositsPaidInXero(db, ownerId);
   const live = inWindow.filter(x => x.b.status !== "cancelled");
   const events: UpcomingEvent[] = live.map(({ b, dayKey, diff }) => ({
     _type: "booking" as const, id: b.id, dayKey, daysAway: diff, startTime: startTimeOf(b.eventDate, tz),
     name: fullName(b, ""), hasRunSheet: runsheetOf(b) != null,
-    deposit: b.status !== "confirmed" ? null : b.depositRequired === false ? "none" as const : b.depositPaid ? "paid" as const : "due" as const,
+    deposit: b.status !== "confirmed" ? null : b.depositRequired === false ? "none" as const : (b.depositPaid || xeroDepositPaid.has(b.id)) ? "paid" as const : "due" as const,
     row: b,
   }));
   // A confirmed enquiry with no event row yet still belongs on the day.
@@ -322,8 +334,6 @@ export async function countDepositsDue(ownerId: number, now: Date = new Date()):
     .from(bookings).where(and(eq(bookings.ownerId, ownerId), eq(bookings.status, "confirmed"), gte(bookings.eventDate, from)));
   // Same rule as the Payments board: a deposit invoice PAID in Xero is a paid
   // deposit, even before the payment itself has been imported.
-  const paidInXero = new Set((await db.select({ bookingId: xeroInvoices.bookingId })
-    .from(xeroInvoices).where(and(eq(xeroInvoices.ownerId, ownerId), eq(xeroInvoices.stream, "deposit"), eq(xeroInvoices.status, "PAID"))))
-    .map(r => r.bookingId));
+  const paidInXero = await depositsPaidInXero(db, ownerId);
   return rows.filter(r => isDepositDue(r) && !paidInXero.has(r.id) && daysBetweenYmd(todayKey, eventDayKey(r.b, tz)) >= 0).length;
 }

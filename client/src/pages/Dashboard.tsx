@@ -9735,6 +9735,7 @@ export default function Dashboard() {
                     isWeekend={day === 5 || day === 6}
                     returningCount={returningCount}
                     packages={packages}
+                    taxPercent={(venueSettings as any)?.taxPercent != null ? Number((venueSettings as any).taxPercent) : null}
                   />
                 );
               })()}

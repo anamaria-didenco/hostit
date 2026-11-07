@@ -27,6 +27,8 @@ export interface EnquiryDrawerExtrasProps {
   isWeekend?: boolean;
   returningCount?: number | null;
   packages: DrawerPackage[];
+  /** The venue's GST %, so the estimate can show what a proposal will total. */
+  taxPercent?: number | null;
 }
 
 const TONE_FG: Record<FitTone, string> = { green: "#3f7350", amber: "#8a5f18", red: "#c0392b", gray: "#6a6256" };
@@ -49,7 +51,7 @@ function SectionHead({ title, meta }: { title: string; meta?: string }) {
 }
 
 export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
-  const { lead, space, spaceLabel, hasClash, isWeekend, returningCount, packages } = props;
+  const { lead, space, spaceLabel, hasClash, isWeekend, returningCount, packages, taxPercent } = props;
 
   const fit = React.useMemo(
     () => enquiryFit(
@@ -67,6 +69,10 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
   const pkg = priced.find((p) => p.id === pkgId) ?? priced[0] ?? null;
   const guests = Number(lead.guestCount) || 0;
   const est = pkg && pkg.pricePerHead ? pkg.pricePerHead * guests : null;
+  // Package prices are ex-GST; a proposal adds the venue's GST on top. Show that
+  // total too, so the quote here matches what the proposal and booking will say.
+  const gst = Number(taxPercent);
+  const estInclGst = est != null && Number.isFinite(gst) && gst > 0 ? est * (1 + gst / 100) : null;
   const minSpend = isWeekend ? (space?.minSpendWeekend ?? space?.minSpend ?? null) : (space?.minSpend ?? null);
 
   const dateStr = lead.eventDate
@@ -146,6 +152,9 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
           {est != null && (
             <div className="mt-2.5 flex items-baseline gap-2.5 flex-wrap">
               <span className="font-serif text-[26px] font-semibold" style={{ color: "#211d18" }}>{money(est)}</span>
+              {estInclGst != null && (
+                <span className="font-sans text-[12.5px] text-muted-foreground">ex GST · {money(estInclGst)} incl. GST</span>
+              )}
               {minSpend != null && (
                 <span className="font-sans text-[12.5px]" style={{ color: est >= minSpend ? "#3f7350" : "#8a5f18" }}>
                   {est >= minSpend ? `clears the ${money(minSpend)} minimum` : `${money(minSpend - est)} under the ${money(minSpend)} minimum`}
