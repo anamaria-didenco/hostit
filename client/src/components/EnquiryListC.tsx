@@ -342,9 +342,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
             return (
               <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
+                style={{ background: tint(si.dot, lead.status === "new" ? "5c" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
                 {/* The whole box is filled with the enquiry's status colour: a
-                    light tint, with a solid border in the same colour. */}
+                    light tint, with a solid border in the same colour. A brand-new
+                    enquiry is the one that needs you, so its tint is the strongest. */}
                 {/* Desktop: one dense signal-first row */}
                 <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
