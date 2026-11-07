@@ -47,19 +47,26 @@ export type PaymentStatus = "unpaid" | "partial" | "deposit_paid" | "paid_in_ful
  * - `paid_in_full` only when the booking has a real total and it is covered —
  *   never for a booking with no price set (0 − paid = 0 outstanding would
  *   otherwise read as "paid in full").
- * - `deposit_paid` only when a deposit is actually required, configured (> 0)
- *   and the deposit-type payments cover it — not for a deposit-less booking.
+ * - `deposit_paid` only when a deposit is actually required and either the
+ *   deposit-type payments cover it (amount > 0) or the booking's own
+ *   "deposit paid" flag is set — never for a booking marked "no deposit".
  */
 export function derivePaymentStatus(args: {
   rows: PaymentLike[];
   total: number;
   depositNzd: number;
   depositRequired: boolean;
+  /** The booking's own "deposit paid" flag. Staff can tick it by hand, or the
+   *  deposit can arrive as a non-deposit-type payment; either way every other
+   *  screen shows "Deposit paid", so the status has to agree with the badge. */
+  depositFlagPaid?: boolean;
 }): PaymentStatus {
   const net = netPaid(args.rows);
-  if (net <= MONEY_EPSILON) return "unpaid";
   if (args.total > 0 && covers(net, args.total)) return "paid_in_full";
-  if (args.depositRequired && covers(depositPaidAmount(args.rows), args.depositNzd)) return "deposit_paid";
+  const depositOk = args.depositRequired
+    && (Boolean(args.depositFlagPaid) || covers(depositPaidAmount(args.rows), args.depositNzd));
+  if (depositOk) return "deposit_paid";
+  if (net <= MONEY_EPSILON) return "unpaid";
   return "partial";
 }
 

@@ -5863,6 +5863,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           total,
           depositNzd: Number(booking.depositNzd ?? 0),
           depositRequired: (booking as any).depositRequired !== false,
+          depositFlagPaid: Boolean((booking as any).depositPaid),
         });
         const { paidTowardBookingBill } = await import('./eventPayments');
         // What comes off the runsheet/BEO "balance to collect" (no deposit,
@@ -8730,7 +8731,7 @@ Return ONLY valid JSON.`;
             total, totalSource, totalPaid: net, outstanding, credit, depositNzd,
             depositPaid: Boolean((booking as any).depositPaid),
             depositRequired,
-            status: derivePaymentStatus({ rows: pmts, total, depositNzd, depositRequired }),
+            status: derivePaymentStatus({ rows: pmts, total, depositNzd, depositRequired, depositFlagPaid: Boolean((booking as any).depositPaid) }),
           };
           clientPayments = pmts
             .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime())
