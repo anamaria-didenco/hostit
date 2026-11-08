@@ -759,6 +759,108 @@ export function pickEventInvoices(
   return out;
 }
 
+/** A sales invoice in Xero that VenueFlow doesn't know about: raised straight in
+ *  Xero (no "(VenueFlow #id)" reference, not in our ledger). */
+export type UnlinkedXeroInvoice = {
+  invoiceId: string;
+  number: string | null;
+  reference: string | null;
+  contactName: string;
+  date: string | null;
+  status: string;           // DRAFT | SUBMITTED | AUTHORISED | PAID
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  currency: string;
+};
+
+/** Pure: sales invoices on a Xero /Invoices page that are NOT tracked by VenueFlow
+ *  (and so never sync or link to an event). Voided / deleted ones are left out. */
+export function pickUnlinkedInvoices(
+  raw: any[],
+  ledger: Map<string, number | null>,
+): UnlinkedXeroInvoice[] {
+  const out: UnlinkedXeroInvoice[] = [];
+  for (const inv of raw) {
+    if (inv?.Type && inv.Type !== "ACCREC") continue;
+    if (inv?.Status === "DELETED" || inv?.Status === "VOIDED") continue;
+    if (!inv?.InvoiceID || ledger.has(inv.InvoiceID)) continue;
+    const ref: string | null = inv?.Reference ?? null;
+    if (ref && VENUEFLOW_REF.test(ref)) continue; // already counted as an event invoice
+    out.push({
+      invoiceId: inv.InvoiceID,
+      number: inv.InvoiceNumber ?? null,
+      reference: ref,
+      contactName: inv?.Contact?.Name ?? "",
+      date: typeof inv?.DateString === "string" ? inv.DateString.slice(0, 10) : null,
+      status: inv?.Status ?? "UNKNOWN",
+      total: Number(inv?.Total ?? 0),
+      amountPaid: Number(inv?.AmountPaid ?? 0),
+      amountDue: Number(inv?.AmountDue ?? 0),
+      currency: inv?.CurrencyCode ?? "NZD",
+    });
+  }
+  return out;
+}
+
+const unlinkedCache = new Map<number, { at: number; rows: UnlinkedXeroInvoice[] }>();
+
+/** The org's last 12 months of sales invoices that VenueFlow isn't tracking, newest first. */
+export async function listUnlinkedXeroInvoices(ownerId: number, opts: { fresh?: boolean } = {}): Promise<UnlinkedXeroInvoice[]> {
+  const hit = unlinkedCache.get(ownerId);
+  if (!opts.fresh && hit && Date.now() - hit.at < EVENT_INVOICE_TTL_MS) return hit.rows;
+  return shareRead(`unlinked:${ownerId}`, async () => {
+    const { getDb } = await import("./db");
+    const { xeroInvoices } = await import("../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    const db = await getDb();
+    const ledger = new Map<string, number | null>();
+    if (db) {
+      const rows = await db.select({ xeroInvoiceId: xeroInvoices.xeroInvoiceId, bookingId: xeroInvoices.bookingId })
+        .from(xeroInvoices).where(eq(xeroInvoices.ownerId, ownerId));
+      for (const r of rows) if (r.xeroInvoiceId) ledger.set(r.xeroInvoiceId, r.bookingId);
+    }
+    const since = new Date(Date.now() - 366 * 86_400_000);
+    const where = encodeURIComponent(
+      `Type=="ACCREC" && (Date>=DateTime(${since.getUTCFullYear()},${since.getUTCMonth() + 1},${since.getUTCDate()}) || Status=="AUTHORISED" || Status=="DRAFT" || Status=="SUBMITTED")`,
+    );
+    const all: UnlinkedXeroInvoice[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const json = await xeroApi(ownerId, "GET", `/Invoices?where=${where}&order=Date%20DESC&page=${page}`);
+      const batch: any[] = json?.Invoices ?? [];
+      all.push(...pickUnlinkedInvoices(batch, ledger));
+      if (batch.length < 100) break;
+    }
+    unlinkedCache.set(ownerId, { at: Date.now(), rows: all });
+    return all;
+  });
+}
+
+/** One invoice, read live from Xero (for linking: confirm it exists, what it is, what's been paid). */
+export async function getXeroInvoiceDetail(ownerId: number, invoiceId: string): Promise<(UnlinkedXeroInvoice & { type: string }) | null> {
+  try {
+    const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
+    const inv = json?.Invoices?.[0];
+    if (!inv?.InvoiceID) return null;
+    return {
+      invoiceId: inv.InvoiceID,
+      number: inv.InvoiceNumber ?? null,
+      reference: inv.Reference ?? null,
+      contactName: inv?.Contact?.Name ?? "",
+      date: typeof inv?.DateString === "string" ? inv.DateString.slice(0, 10) : null,
+      status: inv?.Status ?? "UNKNOWN",
+      total: Number(inv?.Total ?? 0),
+      amountPaid: Number(inv?.AmountPaid ?? 0),
+      amountDue: Number(inv?.AmountDue ?? 0),
+      currency: inv?.CurrencyCode ?? "NZD",
+      type: inv?.Type ?? "ACCREC",
+    };
+  } catch (err: any) {
+    if (/^Xero API 404\b/.test(String(err?.message ?? ""))) return null;
+    throw err;
+  }
+}
+
 const eventInvoiceCache = new Map<number, { at: number; rows: XeroEventInvoice[] }>();
 const EVENT_INVOICE_TTL_MS = 120_000;
 // Two people (or two tabs) opening the screen at once share ONE read of Xero.
@@ -883,6 +985,14 @@ async function bankAccounts(ownerId: number) {
 }
 
 const eventPaymentCache = new Map<string, { at: number; rows: XeroEventPayment[] }>();
+
+/** Forget every cached read for a venue — after linking/unlinking an invoice the
+ *  Payments screens must show it straight away, not after the 2-minute cache. */
+export function clearXeroEventCaches(ownerId: number): void {
+  eventInvoiceCache.delete(ownerId);
+  unlinkedCache.delete(ownerId);
+  for (const k of Array.from(eventPaymentCache.keys())) if (k.startsWith(`${ownerId}|`)) eventPaymentCache.delete(k);
+}
 
 /** Payments on event invoices dated within [from, to] ("YYYY-MM-DD", inclusive), newest first. */
 export async function listXeroEventPayments(ownerId: number, range: { from?: string; to?: string }, opts: { fresh?: boolean } = {}): Promise<XeroEventPayment[]> {

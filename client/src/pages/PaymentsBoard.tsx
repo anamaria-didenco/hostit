@@ -9,6 +9,7 @@ import PaymentsReceived from "@/components/PaymentsReceived";
 import XeroEventInvoices from "@/components/XeroEventInvoices";
 import XeroEventPayments from "@/components/XeroEventPayments";
 import { NewInvoiceDialog } from "@/components/NewInvoiceDialog";
+import { LinkXeroInvoiceDialog, useUnlinkedXeroCount } from "@/components/LinkXeroInvoiceDialog";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import { fmtDate as fmtDateTz } from "@/lib/dateTime";
 import { currencyWhole } from "@/lib/money";
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
-  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, ChevronDown, X, Plus,
+  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, ChevronDown, X, Plus, Link2,
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
@@ -124,10 +125,13 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
   // what went to Xero; "Received" is the ledger of money that actually landed.
   const [view, setView] = useState<View>("events");
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  const [showLinkXero, setShowLinkXero] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
   const { data: xeroStatus } = trpc.xero.status.useQuery();
+  // Invoices raised straight in Xero that VenueFlow isn't following (so never synced).
+  const unlinkedCount = useUnlinkedXeroCount(!!xeroStatus?.connected);
 
   // Pull anything reconciled in Xero into VenueFlow. Runs quietly when the
   // board opens (the server throttles to once a minute per venue) and can be
@@ -364,6 +368,14 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
           </button>
         )}
+        {xeroStatus?.connected && (
+          <button
+            onClick={() => setShowLinkXero(true)}
+            title="Link invoices raised in Xero to their events, so their payments come in"
+            className="vf-btn vf-btn-secondary">
+            <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> LINK XERO INVOICE{unlinkedCount > 0 ? ` (${unlinkedCount})` : ""}
+          </button>
+        )}
         {view === "events" && (
           <select
             value={eventFilter}
@@ -433,6 +445,18 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
       })()}
 
       <div role="tabpanel" id="pay-tabpanel" aria-labelledby={`pay-tab-${view}`}>
+      {xeroStatus?.connected && unlinkedCount > 0 && (view === "invoices" || view === "received") && (
+        <div role="status" className="mb-3 border border-amber-300 bg-amber-50 px-3 py-2 font-dm text-sm text-ink flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            <strong>{unlinkedCount} invoice{unlinkedCount === 1 ? "" : "s"} in Xero {unlinkedCount === 1 ? "isn't" : "aren't"} linked to an event</strong>, so
+            {" "}{unlinkedCount === 1 ? "it doesn't" : "they don't"} show here and {unlinkedCount === 1 ? "its" : "their"} payments never come in.
+          </span>
+          <button onClick={() => setShowLinkXero(true)} className="vf-btn vf-btn-secondary">
+            <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> LINK THEM
+          </button>
+        </div>
+      )}
+
       {view === "received" ? (xeroStatus?.connected ? <XeroEventPayments q={q} /> : <PaymentsReceived q={q} />) : view === "deposits" ? (
         <DepositsSent rows={all} q={q} loading={isLoading}
           onOpen={r => navigate(`/event/${r.bookingId}`)} onRecord={r => navigate(recordUrl(r))} />
@@ -598,6 +622,8 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
         initialStream={xeroFor && xeroFor.depositRequired && !xeroFor.depositPaid ? "deposit"
           : xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
       />
+
+      {showLinkXero && <LinkXeroInvoiceDialog onClose={() => setShowLinkXero(false)} />}
 
       {showNewInvoice && (
         <NewInvoiceDialog
