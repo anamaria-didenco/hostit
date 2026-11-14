@@ -38,6 +38,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
+import { isOncePerEvent } from "@shared/nowNext";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -601,7 +602,8 @@ export default function RunsheetBuilder() {
   // blocker — just something worth a second look before this prints.
   const coversToCheck = React.useMemo(() => (
     guestCountNum > 1
-      ? fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && (it.qty == null || Number(it.qty) <= 1))
+      // A single grazing table (or "set amount" line) is meant to be one, so it isn't flagged.
+      ? fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && (it.qty == null || Number(it.qty) <= 1) && !isOncePerEvent(it.dishName))
       : []
   ), [fnbItems, guestCountNum]);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({

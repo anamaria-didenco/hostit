@@ -4,7 +4,7 @@ import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { groupDrinks } from "@shared/drinkGroups";
 import { isSharedMenu } from "@shared/eventMenus2026";
 import {
-  clockStepIndex, dishQuantity, isSevereDietary, type BillingStep,
+  allQuantitiesOne, clockStepIndex, dishQuantity, isSevereDietary, type BillingStep,
 } from "@shared/nowNext";
 
 /**
@@ -102,7 +102,7 @@ export default function NowNext({
 
   // ── Food: how many of each ──
   const food = fnb.filter(f => f.section === "foh" && (f.course ?? "") !== "Drinks");
-  const allQtyOne = food.length > 0 && food.every(f => !(Number(f.qty) > 1));
+  const allQtyOne = allQuantitiesOne(food);
   const byCourse: Record<string, Fnb[]> = {};
   for (const f of food) (byCourse[f.course || "Other"] ??= []).push(f);
   const courseOrder = [...COURSES.filter(c => byCourse[c]), ...Object.keys(byCourse).filter(c => !COURSES.includes(c))];
@@ -248,7 +248,7 @@ export default function NowNext({
                 <ul className="divide-y divide-stone-200">
                   {byCourse[course].map((f, i) => {
                     // Shared menus go down the table: no ×N, as on the BEO.
-                    const q = isSharedMenu(f.dishName, f.description) ? 0 : dishQuantity(f.qty, allQtyOne, runsheet?.guestCount);
+                    const q = isSharedMenu(f.dishName, f.description) ? 0 : dishQuantity(f.qty, allQtyOne, runsheet?.guestCount, f.dishName);
                     return (
                       <li key={i} className="grid grid-cols-[4.5rem_1fr] gap-3 px-4 py-3 items-baseline">
                         <span className="figure text-[30px] leading-none text-ink text-right">{q > 0 ? <><span className="text-[16px] text-stone">×</span>{q}</> : ""}</span>
