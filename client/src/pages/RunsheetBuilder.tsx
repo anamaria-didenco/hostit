@@ -3493,7 +3493,8 @@ export default function RunsheetBuilder() {
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventType || "—"}</div>
               </div>
-              <div>
+              {/* Full width on a phone: in a half-width column each space chip sat on its own row. */}
+              <div className="col-span-2 md:col-span-1">
                 <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">VENUE / SPACE</label>
                 <SpacePicker value={spaceName} onChange={setSpaceName} />
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>

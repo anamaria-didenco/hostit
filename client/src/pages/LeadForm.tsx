@@ -1447,7 +1447,9 @@ export default function LeadForm() {
           required={field?.required}
           aria-invalid={hasError}
           aria-describedby={field && hasError ? fieldErrorId(field) : undefined}
-          className={`${inputClass} min-h-[24px]`}
+          // Full width and the same height as the other fields: it used to render as a
+          // narrow, 24px-tall native box beside them — the first thing a client sees.
+          className={`${inputClass} w-full ${isEmbed ? "" : "min-h-[40px] px-3"}`}
         >
           <option value="">Select an event type…</option>
           {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}

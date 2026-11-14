@@ -4856,10 +4856,12 @@ export default function Dashboard() {
                     <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
                   </button>
                   <button onClick={() => setShowCancelledOnCal(v => !v)} aria-pressed={showCancelledOnCal}
+                    aria-label={showCancelledOnCal ? "Hide cancelled events" : "Show cancelled events"}
                     title="Cancelled events are hidden from the calendar. Show them to find one to restore."
                     className="vf-btn vf-btn-secondary">
                     <span className="hidden sm:inline">{showCancelledOnCal ? "HIDE CANCELLED" : "SHOW CANCELLED"}</span>
-                    <span className="sm:hidden">CXL</span>
+                    {/* An eye, not the cryptic "CXL", on a phone. */}
+                    <span className="sm:hidden" aria-hidden="true">{showCancelledOnCal ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</span>
                   </button>
                   {/* Staff are read-only server-side, so hide create. */}
                   {!isStaff && (
