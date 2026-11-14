@@ -241,6 +241,8 @@ export default function FloorPlanEditor({
   const [planName, setPlanName] = useState(initialName);
   const [bgImageUrl, setBgImageUrl] = useState(initialBgImageUrl ?? "");
   const [bgOpacity, setBgOpacity] = useState(0.3);
+  // Phones: the palette is tucked away until asked for (it is always visible from md up).
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [tool] = useState<"select">("select");
@@ -602,11 +604,11 @@ export default function FloorPlanEditor({
   const tableCount = canvasData.elements.filter(el => el.type.includes("table")).length;
 
   return (
-    <div className="flex h-full overflow-x-auto" style={{ minHeight: 0 }}>
+    <div className="flex flex-col md:flex-row h-full overflow-y-auto md:overflow-y-visible md:overflow-x-auto" style={{ minHeight: 0 }}>
 
       {/* ── Left palette ────────────────────────────────────────────────── */}
       {!readOnly && (
-        <div className="w-48 bg-ivory border-r border-border flex flex-col flex-shrink-0">
+        <div className={`${paletteOpen ? "flex" : "hidden"} md:flex w-full md:w-48 max-h-56 md:max-h-none overflow-y-auto md:overflow-visible bg-ivory border-b md:border-b-0 md:border-r border-border flex-col flex-shrink-0`}>
           {/* Tab switcher */}
           <div className="flex border-b border-border flex-shrink-0">
             <button
@@ -820,10 +822,15 @@ export default function FloorPlanEditor({
       )}
 
       {/* ── Main canvas area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-[360px] md:min-h-0">
         {/* Toolbar */}
         {!readOnly && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-white flex-shrink-0 flex-wrap gap-y-1">
+            {/* Phones only: show / hide the furniture palette */}
+            <button type="button" aria-expanded={paletteOpen} onClick={() => setPaletteOpen(o => !o)}
+              className={`md:hidden px-2 py-1.5 border text-xs font-bebas tracking-wider ${paletteOpen ? "border-gold bg-gold/10 text-ink" : "border-gold/30 text-ink/70"}`}>
+              {paletteOpen ? "HIDE FURNITURE" : "FURNITURE"}
+            </button>
             {/* Plan name */}
             <input
               aria-label="Floor plan name"
@@ -999,7 +1006,7 @@ export default function FloorPlanEditor({
 
       {/* ── Right properties panel ─────────────────────────────────────── */}
       {!readOnly && (
-        <div className="w-52 bg-white border-l border-border flex-shrink-0 flex flex-col overflow-y-auto">
+        <div className={`${selectedEl ? "flex" : "hidden"} md:flex w-full md:w-52 max-h-64 md:max-h-none bg-white border-t md:border-t-0 md:border-l border-border flex-shrink-0 flex-col overflow-y-auto`}>
           {selectedEl ? (
             <>
               <div className="px-3 py-2 border-b border-border bg-ivory">
