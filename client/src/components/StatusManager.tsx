@@ -211,7 +211,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
             const calPreview = getStatusCalClasses(s.colorId);
             const isEditing = editingKey === s.key;
             return (
-              <div key={s.key} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
+              <div key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
                 {/* Order arrows */}
                 <div className="flex flex-col gap-0.5 shrink-0">
                   <button aria-label="Move status up" onClick={() => moveUp(idx)} disabled={idx === 0}
@@ -260,8 +260,10 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                   </div>
                 ) : (
                   <>
-                    <span className="flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
-                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    {/* The internal key means nothing to a venue and, on a phone, pushed the
+                        edit / delete buttons off the end of the row. */}
+                    <span className="hidden sm:block flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
+                    <div className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button aria-label="Edit status" onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
