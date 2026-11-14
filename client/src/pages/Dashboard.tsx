@@ -4232,12 +4232,12 @@ export default function Dashboard() {
                   <div className="flex border border-gold/30 rounded-lg overflow-hidden">
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
                       title="List view"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <List className="w-3.5 h-3.5" /> LIST
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
                       title="Board view"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <Columns className="w-3.5 h-3.5" /> BOARD
                     </button>
                   </div>
