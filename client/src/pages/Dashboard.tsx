@@ -544,44 +544,33 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             so we render them as buttons rather than smuggling them into the
             <select> above. Without these, mobile users had no way to reach
             /daily-checklists at all. */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* One scrolling row of chips, not a stack of big buttons: the five of them
+            filled the first ~400px of every settings page on a phone, pushing the
+            setting you came for below the fold. */}
+        <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1" role="group" aria-label="Shortcuts">
           {/* Reports isn't in the phone's bottom bar — this is its way in. */}
-          <a
-            href="/dashboard?tab=reports"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
-          >
+          <a href="/dashboard?tab=reports"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 min-h-[40px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-full hover:bg-sage-tint/80 transition-colors">
             Reports
           </a>
-          <a
-            href="/staff-links"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
-          >
+          <a href="/staff-links"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 min-h-[40px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-full hover:bg-sage-tint/80 transition-colors">
             Staff Portal Links
           </a>
-          <a
-            href="/daily-checklists"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
-          >
+          <a href="/daily-checklists"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 min-h-[40px] font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-full hover:bg-sage-tint/80 transition-colors">
             Daily Checklists
-            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" aria-hidden="true" />
           </a>
-          <a
-            href="/eon-report.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-lg hover:bg-gray-100 transition-colors"
-          >
+          <a href="/eon-report.html" target="_blank" rel="noopener noreferrer"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 min-h-[40px] font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-full hover:bg-gray-100 transition-colors">
             EON Report
-            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" aria-hidden="true" />
           </a>
-          <a
-            href="/ordering-guide.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-lg hover:bg-gray-100 transition-colors"
-          >
+          <a href="/ordering-guide.html" target="_blank" rel="noopener noreferrer"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 min-h-[40px] font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-full hover:bg-gray-100 transition-colors">
             Ordering Guide
-            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" aria-hidden="true" />
           </a>
         </div>
       </div>
