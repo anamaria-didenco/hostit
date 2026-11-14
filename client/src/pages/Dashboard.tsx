@@ -3735,10 +3735,10 @@ export default function Dashboard() {
       <GlobalFinder open={finderOpen} onOpenChange={setFinderOpen} isStaff={isStaff} stages={pipelineStages}
         onOpenLead={id => { void openLeadFromUrlOrFinder(id); }} onOpenEvent={id => setLocation(`/event/${id}`)} />
       {/* ── TOP NAVIGATION BAR (mobile only — desktop uses the sidebar) ──────── */}
-      <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
+      <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-3" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
-        <button onClick={() => setTab("overview" as any)} className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0 focus:outline-none">
-          <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
+        <button onClick={() => setTab("overview" as any)} className="flex items-center pr-3 border-r border-border mr-2 flex-shrink-0 focus:outline-none">
+          <img src="/logo-full.png" alt="VenueFlow" className="h-6 w-auto" />
         </button>
         {/* Primary nav tabs — hidden on mobile (shown in bottom bar instead) */}
         <div className="hidden md:flex items-center">
@@ -3778,15 +3778,19 @@ export default function Dashboard() {
           </button>
         </div>
         {/* Mobile: current tab label */}
-        <div className="md:hidden flex-1 text-center">
-          <span className="font-inter text-sm font-semibold text-sage-dark">
+        {/* The name only shows where it fits whole (420px+); on narrower phones the
+            bottom tab bar and the page title already say where you are, and a
+            cut-off "Enquir…" helped no one. The empty box still pushes the
+            buttons to the right edge. */}
+        <div className="md:hidden flex-1 min-w-0 text-center">
+          <span className="hidden min-[420px]:block truncate font-inter text-sm font-semibold text-sage-dark">
             {tab === "overview" ? "Home" : tab === "enquiries" ? "Enquiries" : tab === "calendar" ? "Calendar" : tab === "payments" ? "Payments" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
           </span>
         </div>
         {/* Spacer (desktop only) */}
         <div className="hidden md:flex flex-1" />
         {/* Right: venue name + avatar */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
           {/* Alerts bell — one instance per viewport so browser alerts never double. Staff logins can't read alerts. */}
           <button onClick={() => setFinderOpen(true)} aria-label="Find an enquiry or event" title="Find"
             className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
@@ -3799,9 +3803,12 @@ export default function Dashboard() {
             </button>
           )}
           {!isStaff && !isDesktop && <NotificationBell variant="light" onOpenLink={openAlertLink} side="bottom" align="end" />}
-          <ThemeSwitcher />
+          {/* Hidden only on the very narrowest phones, where it would push Sign out off-screen. */}
+          <div className="hidden min-[340px]:block"><ThemeSwitcher /></div>
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
-          <div className="w-8 h-8 rounded-full bg-sage-green flex items-center justify-center font-inter text-white text-sm font-semibold">
+          {/* Initial badge: decoration only, so it is dropped on phones where the
+              six controls left no room and Sign out ended up off-screen. */}
+          <div className="hidden md:flex w-8 h-8 rounded-full bg-sage-green items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
           <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
