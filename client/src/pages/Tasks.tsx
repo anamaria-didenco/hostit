@@ -372,7 +372,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                         },
                       });
                     }}
-                    className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
+                    className="flex-shrink-0 -m-2 p-2.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                     title="Edit task"
                     aria-label="Edit task"
                   >
@@ -382,7 +382,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                 {!isStaff && (
                   <button
                     onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
-                    className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
+                    className="flex-shrink-0 -m-2 p-2.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                     title="Delete task"
                     aria-label="Delete task"
                   >
