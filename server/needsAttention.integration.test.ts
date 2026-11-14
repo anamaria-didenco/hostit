@@ -87,7 +87,10 @@ d("needs-attention query (DB)", () => {
     await db.insert(tasks).values({ ownerId: owner, title: "Undated", completed: false, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Enquiries.
-    await mkLead("Waiting", { createdAt: new Date(Date.now() - 32 * HOUR) });
+    // Long enough ago that its reply is overdue whatever time of day the suite runs:
+    // the due time counts business hours only, so "32 hours ago" landed overnight on
+    // a Monday morning and was not yet due — the test passed or failed with the clock.
+    await mkLead("Waiting", { createdAt: new Date(Date.now() - 10 * 24 * HOUR) });
     await mkLead("Fresh", { createdAt: new Date(Date.now() - 10 * 60_000) });
     await mkLead("Typed", { createdAt: new Date(Date.now() - 32 * HOUR), source: "manual" });
     await mkLead("Answered", { createdAt: new Date(Date.now() - 32 * HOUR), firstResponseAt: new Date() });
