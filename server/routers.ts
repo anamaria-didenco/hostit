@@ -6286,6 +6286,100 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)))
           .orderBy(desc(xeroInvoices.createdAt));
       }),
+    // Sales invoices raised straight in Xero (no "(VenueFlow #id)" reference, not
+    // tracked here). They never showed in Payments or synced; each comes back with
+    // the events whose client best matches the Xero contact, and a guess at which bill it is.
+    unlinkedInvoices: protectedProcedure
+      .input(z.object({ fresh: z.boolean().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { xeroConnections, bookings, leads } = await import('../drizzle/schema');
+        const { eq, and, ne } = await import('drizzle-orm');
+        const db = await getDb();
+        type Row = import('./xero').UnlinkedXeroInvoice & { suggestedBookingIds: number[]; suggestedStream: 'food' | 'drinks' | 'deposit' };
+        if (!db) return { connected: false as const, rows: [] as Row[], error: null as string | null };
+        const [conn] = await db.select({ tenantId: xeroConnections.tenantId })
+          .from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
+        if (!conn?.tenantId) return { connected: false as const, rows: [] as Row[], error: null as string | null };
+        try {
+          const { listUnlinkedXeroInvoices } = await import('./xero');
+          const { suggestBookingIds, suggestStream } = await import('./xeroLink');
+          const [rows, events] = await Promise.all([
+            listUnlinkedXeroInvoices(ctx.user.id, { fresh: input?.fresh }),
+            // The client's company is on the enquiry the event came from.
+            db.select({ id: bookings.id, firstName: bookings.firstName, lastName: bookings.lastName, company: leads.company, email: bookings.email })
+              .from(bookings).leftJoin(leads, eq(leads.id, bookings.leadId))
+              .where(and(eq(bookings.ownerId, ctx.user.id), ne(bookings.status, 'cancelled'))),
+          ]);
+          return {
+            connected: true as const,
+            rows: rows.map(r => ({ ...r, suggestedBookingIds: suggestBookingIds(r.contactName, events), suggestedStream: suggestStream(r.reference) })) as Row[],
+            error: null as string | null,
+          };
+        } catch (err: any) {
+          console.error('[xero.unlinkedInvoices] failed:', err?.message ?? err);
+          return { connected: true as const, rows: [] as Row[], error: String(err?.message ?? "Xero didn't answer") };
+        }
+      }),
+    // Link one of those invoices to an event + bill, then import its payments.
+    linkInvoice: protectedProcedure
+      .input(z.object({
+        xeroInvoiceId: z.string().min(1).max(64),
+        bookingId: z.number().int().positive(),
+        stream: z.enum(['food', 'drinks', 'deposit']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getXeroInvoiceDetail, clearXeroEventCaches } = await import('./xero');
+        const { syncXeroInvoicesForOwner } = await import('./xeroSync');
+        const { linkExistingInvoice, LinkError } = await import('./xeroLink');
+        try {
+          return await linkExistingInvoice(ctx.user.id, { ...input, linkedBy: (ctx.isTeamMember ? ctx.actorName : ctx.user?.name) ?? null }, {
+            getInvoice: getXeroInvoiceDetail,
+            sync: async (ownerId, bookingId) => {
+              const r = await syncXeroInvoicesForOwner(ownerId, bookingId);
+              return { paymentsImported: r.paymentsImported, amountImported: r.amountImported };
+            },
+            clearCaches: clearXeroEventCaches,
+          });
+        } catch (err: any) {
+          if (err instanceof LinkError) throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
+          throw err;
+        }
+      }),
+    // Invoices someone linked by hand (so they can be undone).
+    linkedInvoices: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { xeroInvoices, bookings } = await import('../drizzle/schema');
+      const { eq, and, like, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const { LINKED_MARK } = await import('./xeroLink');
+      const rows = await db.select({
+        id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, status: xeroInvoices.status, total: xeroInvoices.total,
+        stream: xeroInvoices.stream, bookingId: xeroInvoices.bookingId, linkedBy: xeroInvoices.sentBy,
+        firstName: bookings.firstName, lastName: bookings.lastName,
+      }).from(xeroInvoices)
+        .leftJoin(bookings, eq(bookings.id, xeroInvoices.bookingId))
+        .where(and(eq(xeroInvoices.ownerId, ctx.user.id), like(xeroInvoices.sentBy, `${LINKED_MARK}%`)))
+        .orderBy(desc(xeroInvoices.createdAt));
+      return rows.map(r => ({ ...r, total: Number(r.total ?? 0), bookingName: [r.firstName, r.lastName].filter(Boolean).join(' ') }));
+    }),
+    unlinkInvoice: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const { clearXeroEventCaches } = await import('./xero');
+        const { syncDepositPaidFlag } = await import('./db');
+        const { unlinkInvoice, LinkError } = await import('./xeroLink');
+        try {
+          return await unlinkInvoice(ctx.user.id, input.id, {
+            clearCaches: clearXeroEventCaches,
+            refreshDeposit: (bookingId, ownerId, allowDowngrade) => syncDepositPaidFlag(bookingId, ownerId, { allowDowngrade }) as Promise<void>,
+          });
+        } catch (err: any) {
+          if (err instanceof LinkError) throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
+          throw err;
+        }
+      }),
     // The real lines of one sent draft, read back from Xero for editing.
     invoiceLines: protectedProcedure
       .input(z.object({ id: z.number() }))
