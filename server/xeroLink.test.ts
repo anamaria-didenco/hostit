@@ -107,11 +107,18 @@ d("linking an invoice raised in Xero (DB)", () => {
     };
     await mk(OWNER, "Deposit");
     await mk(OWNER, "Balance");
+    await mk(OWNER, "PaidFood");
+    await mk(OWNER, "TwoFood");
+    await mk(OWNER, "Drinks");
     await mk(OTHER, "Theirs");
     xero.invoices = {
       "x-deposit": { invoiceId: "x-deposit", number: "INV-0900", reference: "", contactName: "Deposit T", date: "2026-10-01", status: "PAID", total: 575, amountPaid: 575, amountDue: 0, currency: "NZD", type: "ACCREC" },
       "x-food": { invoiceId: "x-food", number: "INV-0901", reference: "", contactName: "Balance T", date: "2026-10-02", status: "AUTHORISED", total: 2000, amountPaid: 0, amountDue: 2000, currency: "NZD", type: "ACCREC" },
       "x-void": { invoiceId: "x-void", number: "INV-0902", reference: "", contactName: "Balance T", date: "2026-10-02", status: "VOIDED", total: 100, amountPaid: 0, amountDue: 0, currency: "NZD", type: "ACCREC" },
+      "x-paidfood": { invoiceId: "x-paidfood", number: "INV-0910", reference: "", contactName: "PaidFood T", date: "2026-10-03", status: "PAID", total: 3000, amountPaid: 3000, amountDue: 0, currency: "NZD", type: "ACCREC" },
+      "x-two-a": { invoiceId: "x-two-a", number: "INV-0911", reference: "", contactName: "TwoFood T", date: "2026-10-03", status: "AUTHORISED", total: 1000, amountPaid: 0, amountDue: 1000, currency: "NZD", type: "ACCREC" },
+      "x-two-b": { invoiceId: "x-two-b", number: "INV-0912", reference: "", contactName: "TwoFood T", date: "2026-10-03", status: "PAID", total: 500, amountPaid: 500, amountDue: 0, currency: "NZD", type: "ACCREC" },
+      "x-drinks": { invoiceId: "x-drinks", number: "INV-0913", reference: "Bar Franco Beverage Tab", contactName: "Drinks T", date: "2026-10-03", status: "PAID", total: 800, amountPaid: 800, amountDue: 0, currency: "NZD", type: "ACCREC" },
       "x-bill": { invoiceId: "x-bill", number: "BILL-1", reference: "", contactName: "Supplier", date: "2026-10-02", status: "AUTHORISED", total: 100, amountPaid: 0, amountDue: 100, currency: "NZD", type: "ACCPAY" },
     };
     xero.payments = { "x-deposit": [{ paymentId: "pay-1", amount: 575, date: "2026-10-03", reference: "BANK" }] };
@@ -170,6 +177,55 @@ d("linking an invoice raised in Xero (DB)", () => {
     await expect(linkExistingInvoice(OWNER, { xeroInvoiceId: "nope", bookingId: ids.Balance, stream: "food" }, d)).rejects.toThrow(/doesn't have that invoice/);
     // Someone else's event is "not found", never linkable.
     await expect(linkExistingInvoice(OWNER, { xeroInvoiceId: "x-food", bookingId: ids.Theirs, stream: "food" }, d)).rejects.toThrow(LinkError);
+  });
+
+  describe("undoing a link restores the event's food / drinks state", () => {
+    const unlinkDeps = async () => {
+      const { syncDepositPaidFlag } = await import("./db");
+      return { clearCaches: (o: number) => { clears.push(o); }, refreshDeposit: (b: number, o: number, down: boolean) => syncDepositPaidFlag(b, o, { allowDowngrade: down }) as Promise<void> };
+    };
+    const tracked = async (xeroId: string) => {
+      const { getDb } = await import("./db");
+      const { xeroInvoices } = await import("../drizzle/schema");
+      const db = (await getDb())!;
+      const [r] = await db.select().from(xeroInvoices).where(and(eq(xeroInvoices.ownerId, OWNER), eq(xeroInvoices.xeroInvoiceId, xeroId)));
+      return r;
+    };
+    const streams = async (bookingId: number) => {
+      const { getDb } = await import("./db");
+      const { bookings } = await import("../drizzle/schema");
+      const db = (await getDb())!;
+      const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+      return { food: (b as any).foodStatus, drinks: (b as any).drinksStatus };
+    };
+
+    it("a paid food invoice linked by mistake leaves the event 'to invoice' again once unlinked", async () => {
+      const { linkExistingInvoice, unlinkInvoice } = await import("./xeroLink");
+      await linkExistingInvoice(OWNER, { xeroInvoiceId: "x-paidfood", bookingId: ids.PaidFood, stream: "food" }, await deps());
+      expect((await streams(ids.PaidFood)).food).toBe("paid"); // the link's sync marked it paid
+      await unlinkInvoice(OWNER, (await tracked("x-paidfood")).id, await unlinkDeps());
+      expect((await streams(ids.PaidFood)).food).toBe("to_invoice");
+    });
+
+    it("keeps the stream marked while another live invoice still backs it", async () => {
+      const { linkExistingInvoice, unlinkInvoice } = await import("./xeroLink");
+      const d = await deps();
+      await linkExistingInvoice(OWNER, { xeroInvoiceId: "x-two-a", bookingId: ids.TwoFood, stream: "food" }, d);
+      await linkExistingInvoice(OWNER, { xeroInvoiceId: "x-two-b", bookingId: ids.TwoFood, stream: "food" }, d);
+      expect((await streams(ids.TwoFood)).food).toBe("invoiced"); // A is still awaiting payment
+      await unlinkInvoice(OWNER, (await tracked("x-two-b")).id, await unlinkDeps());
+      expect((await streams(ids.TwoFood)).food).toBe("invoiced"); // A still backs it
+      await unlinkInvoice(OWNER, (await tracked("x-two-a")).id, await unlinkDeps());
+      expect((await streams(ids.TwoFood)).food).toBe("to_invoice");
+    });
+
+    it("a drinks invoice goes back to unset so the board infers it from the bar setup", async () => {
+      const { linkExistingInvoice, unlinkInvoice } = await import("./xeroLink");
+      await linkExistingInvoice(OWNER, { xeroInvoiceId: "x-drinks", bookingId: ids.Drinks, stream: "drinks" }, await deps());
+      expect((await streams(ids.Drinks)).drinks).toBe("paid");
+      await unlinkInvoice(OWNER, (await tracked("x-drinks")).id, await unlinkDeps());
+      expect((await streams(ids.Drinks)).drinks).toBeNull();
+    });
   });
 
   it("unlinking takes back the payments, un-ticks the deposit, and only works on hand-links", async () => {

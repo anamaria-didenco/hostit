@@ -7,7 +7,7 @@
  * deposit / balance never moved. Linking records the invoice against an event
  * and stream, then runs the normal sync so its payments arrive.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, notInArray, or, isNull } from "drizzle-orm";
 import { getDb } from "./db";
 import { bookings, payments, xeroInvoices } from "../drizzle/schema";
 import type { UnlinkedXeroInvoice } from "./xero";
@@ -159,6 +159,27 @@ export async function unlinkInvoice(
   // Taking back a DEPOSIT invoice's payments can make the deposit unpaid again;
   // taking back food/drinks must never untick a hand-ticked deposit.
   if (row.bookingId != null) await deps.refreshDeposit(row.bookingId, ownerId, row.stream === "deposit");
+  // Linking ran the sync, which stamped the event's food / drinks stream as
+  // "invoiced" or "paid". With the invoice gone that mark is false: an event the
+  // link put on "paid" would drop off the to-invoice list for good. If no other
+  // live invoice still backs the stream, put it back — food to "to invoice",
+  // drinks to unset (the board then infers it from the bar setup). A mark someone
+  // ticked by hand BEFORE linking can't be told apart, so it is reset too; it is
+  // one tap to set again, where a false "paid" would go unnoticed.
+  if (row.bookingId != null && (row.stream === "food" || row.stream === "drinks")) {
+    const [stillBacked] = await db.select({ id: xeroInvoices.id }).from(xeroInvoices).where(and(
+      eq(xeroInvoices.ownerId, ownerId),
+      eq(xeroInvoices.bookingId, row.bookingId),
+      eq(xeroInvoices.stream, row.stream),
+      or(isNull(xeroInvoices.status), notInArray(xeroInvoices.status, ["VOIDED", "DELETED"])),
+    )).limit(1);
+    if (!stillBacked) {
+      const col = row.stream === "food" ? bookings.foodStatus : bookings.drinksStatus;
+      await db.update(bookings)
+        .set((row.stream === "food" ? { foodStatus: "to_invoice" } : { drinksStatus: null }) as any)
+        .where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, ownerId), inArray(col, ["invoiced", "paid"])));
+    }
+  }
   deps.clearCaches(ownerId);
   return { removedPayments, bookingId: row.bookingId };
 }
