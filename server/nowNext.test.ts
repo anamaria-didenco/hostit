@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clockStepIndex, dishQuantity, eventBillingSteps, isSevereDietary, stepClock } from "../shared/nowNext";
+import { allQuantitiesOne, clockStepIndex, dishQuantity, eventBillingSteps, isOncePerEvent, isSevereDietary, stepClock } from "../shared/nowNext";
 
 describe("Now & Next: which step is now", () => {
   const times = ["17:00", "17:30", "18:30", "20:15", "23:00"];
@@ -27,6 +27,51 @@ describe("Now & Next: food quantities", () => {
   });
   it("falls back to the guest count when every row is ×1", () => {
     expect(dishQuantity(1, true, 35)).toBe(35);
+  });
+});
+
+describe("one grazing table is not linked to the guest count", () => {
+  const GUESTS = 120;
+  it("recognises once-per-event lines", () => {
+    expect(isOncePerEvent("Grazing table")).toBe(true);
+    expect(isOncePerEvent("Grazing Table, $1,800 set amount")).toBe(true);
+    expect(isOncePerEvent("Cheese platter, $400 set amount")).toBe(true);
+    expect(isOncePerEvent("Arancini")).toBe(false);
+    expect(isOncePerEvent(null)).toBe(false);
+  });
+
+  it("keeps a single grazing table at 1 even when it is the only food line (it used to print ×120)", () => {
+    const items = [{ qty: 1, dishName: "Grazing table" }];
+    const all = allQuantitiesOne(items);
+    expect(dishQuantity(1, all, GUESTS, "Grazing table")).toBe(1);
+  });
+
+  it("keeps the table at 1 while uncounted dishes beside it still fall back to the guest count", () => {
+    const items = [{ qty: 1, dishName: "Grazing table" }, { qty: 1, dishName: "Arancini" }, { qty: 1, dishName: "Porchetta" }];
+    const all = allQuantitiesOne(items);
+    expect(all).toBe(true); // the other dishes were never counted
+    expect(dishQuantity(1, all, GUESTS, "Grazing table")).toBe(1);
+    expect(dishQuantity(1, all, GUESTS, "Arancini")).toBe(GUESTS);
+  });
+
+  it("does not let a lone ×1 table stop other dishes being counted per guest", () => {
+    // Only the table is ×1 here; the canapés carry a real quantity.
+    const items = [{ qty: 1, dishName: "Grazing table" }, { qty: 60, dishName: "Arancini" }];
+    const all = allQuantitiesOne(items);
+    expect(all).toBe(false);
+    expect(dishQuantity(60, all, GUESTS, "Arancini")).toBe(60);
+    expect(dishQuantity(1, all, GUESTS, "Grazing table")).toBe(1);
+  });
+
+  it("leaves a quantity someone entered alone, and the old fallback for sheets with no table", () => {
+    expect(dishQuantity(120, false, GUESTS, "Grazing table")).toBe(120);
+    expect(dishQuantity(3, false, GUESTS, "Grazing table")).toBe(3);
+    // Unchanged: nothing counted and no table → guest count.
+    const plain = [{ qty: 1, dishName: "Arancini" }, { qty: 1, dishName: "Porchetta" }];
+    expect(allQuantitiesOne(plain)).toBe(true);
+    expect(dishQuantity(1, true, GUESTS, "Arancini")).toBe(GUESTS);
+    // No qty at all for a table still falls back (nothing was entered).
+    expect(dishQuantity(0, true, GUESTS, "Grazing table")).toBe(GUESTS);
   });
 });
 

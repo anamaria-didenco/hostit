@@ -51,7 +51,7 @@ import {
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance, type EventBalance } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import { isSharedMenu, SET_MENUS, setMenuCoursesText, setMenuSummary } from "@shared/eventMenus2026";
-import { eventBillingSteps } from "@shared/nowNext";
+import { eventBillingSteps, allQuantitiesOne, dishQuantity } from "@shared/nowNext";
 import { paidTowardBookingBill } from "./eventPayments";
 import { renderRunSheetHtml, type RunSheetData, type RunSheetDish, type RunSheetFloorRow } from "./beoRunSheet";
 
@@ -1354,18 +1354,18 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // each" in the heading corner was the only number on the page and nobody
     // saw it. When nothing on the sheet has a real quantity (all ×1), the
     // guest count is the portion count.
-    const allQtyOne = foodItems.length > 0 && foodItems.every((i: any) => !(Number(i.qty) > 1));
+    const allQtyOne = allQuantitiesOne(foodItems);
     // Shared food (Shared Franco, Tutto Franco, anything "to share") goes down
     // the middle of the table: no ×N per dish, just "to share" and the guest
     // count once in the Food heading. A pasted shared menu's dishes are all
     // shared; on a list of separate items only the shared ones lose their ×N,
     // so 40 canapés ordered on top still read ×40.
     const sharedFood = (f: any): boolean => (f.fromMenu ? sharedDetected : isSharedMenu(f.dishName, f.description));
+    // A single grazing table (or any "set amount" line) stays ×1 — it is not
+    // linked to the guest count; see dishQuantity.
     const dishQty = (f: any): number => {
       if (sharedFood(f)) return 0;
-      const n = Number(f.qty);
-      if (n > 0 && !allQtyOne) return n;
-      return Number(guestCount) || (n > 0 ? n : 0);
+      return dishQuantity(f.qty, allQtyOne, guestCount, f.dishName);
     };
     const foodCardHtml = (title: string, its: any[]) => {
       const allShared = its.length > 0 && its.every(sharedFood);

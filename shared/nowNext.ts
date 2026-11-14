@@ -60,12 +60,34 @@ export function clockStepIndex(times: Array<string | null | undefined>, nowMin: 
 // ── Food ───────────────────────────────────────────────────────────────────
 
 /**
+ * A line that is ONE thing for the whole event, never "one per guest": a grazing
+ * table, or any "set amount" item ("Grazing table, $1,800 set amount"). Its
+ * quantity of 1 is deliberate, so it must never be swapped for the guest count.
+ */
+export function isOncePerEvent(dishName: unknown): boolean {
+  const n = String(dishName ?? "");
+  return /\bgrazing\b/i.test(n) || /\bset amount\b/i.test(n);
+}
+
+/**
+ * True when nothing on the sheet has a real quantity (every row ×1) — the sheet
+ * was never counted, so the guest count stands in as the portion count. Lines
+ * that are once-per-event don't count either way: they are deliberately one.
+ */
+export function allQuantitiesOne(items: Array<{ qty?: unknown; dishName?: unknown }>): boolean {
+  const counted = items.filter(i => !isOncePerEvent(i.dishName));
+  return counted.length > 0 && counted.every(i => !(Number(i.qty) > 1));
+}
+
+/**
  * How many of a dish to make. Matches the BEO: the entered quantity, unless
  * nothing on the sheet has a real quantity (every row ×1), in which case the
- * guest count is the portion count.
+ * guest count is the portion count. A once-per-event line (one grazing table)
+ * keeps its quantity — it is not linked to the number of guests.
  */
-export function dishQuantity(qty: unknown, allQtyOne: boolean, guestCount: unknown): number {
+export function dishQuantity(qty: unknown, allQtyOne: boolean, guestCount: unknown, dishName?: unknown): number {
   const n = Number(qty);
+  if (n > 0 && isOncePerEvent(dishName)) return n;
   if (n > 0 && !allQtyOne) return n;
   return Number(guestCount) || (n > 0 ? n : 0);
 }
