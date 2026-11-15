@@ -2453,13 +2453,24 @@ export default function Dashboard() {
     setSelectedBooking({ ...item, _isLead: true });
   }
   const deleteBooking = trpc.bookings.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setSelectedBooking(null);
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.leads.eventsByMonth.invalidate();
       utils.dashboard.stats.invalidate();
-      toast.success('Event deleted');
+      const enquiry = data?.enquiry;
+      if (enquiry && enquiry.status !== 'lost') {
+        // The enquiry this event came from is still on the calendar for that date
+        // (as an enquiry). Without this the delete looks like it did nothing.
+        toast.success('Event deleted', {
+          description: 'Its enquiry is still in Enquiries, so it still shows on the calendar for that date.',
+          duration: 12000,
+          action: { label: 'Delete enquiry too', onClick: () => deleteLead.mutate({ id: enquiry.id }) },
+        });
+      } else {
+        toast.success('Event deleted');
+      }
     },
     onError: (err: any) => toast.error(err?.message || 'Failed to delete event'),
   });

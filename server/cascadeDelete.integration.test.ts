@@ -205,6 +205,29 @@ describe.skipIf(!HAS_DB)("cascading deletes + status integrity (DB)", () => {
     }
   });
 
+  it("tells the caller which enquiry is left behind when an event is deleted (it reappears on the calendar)", async () => {
+    const lead = await newLead({ status: "booked" });
+    const booking = await newBooking(lead.id);
+    const res = await caller.bookings.delete({ id: booking.id });
+    expect(res.enquiry).toEqual({ id: lead.id, status: "booked" });
+    expect(await countWhere(leads, leads.id, [lead.id])).toBe(1);
+
+    // ...and deleting that enquiry afterwards (the toast's "Delete enquiry too") clears it.
+    await caller.leads.delete({ id: lead.id });
+    expect(await countWhere(leads, leads.id, [lead.id])).toBe(0);
+  });
+
+  it("reports no left-over enquiry when another live event still covers it, or there is no enquiry", async () => {
+    const lead = await newLead({ status: "booked" });
+    const first = await newBooking(lead.id);
+    const second = await newBooking(lead.id);
+    expect((await caller.bookings.delete({ id: first.id })).enquiry).toBeNull();
+    expect((await caller.bookings.delete({ id: second.id })).enquiry).toEqual({ id: lead.id, status: "booked" });
+
+    const loose = await newBooking(null as any);
+    expect((await caller.bookings.delete({ id: loose.id })).enquiry).toBeNull();
+  });
+
   it("refuses to delete an accepted proposal but deletes a draft with its quote rows", async () => {
     const d = await db();
     const lead = await newLead({ status: "proposal_sent" });
