@@ -6550,7 +6550,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME (shown in inbox)</label>
-                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="Bar Franco Events"
+                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="Your Venue Events"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
@@ -6621,7 +6621,7 @@ export default function Dashboard() {
                             <input
                               value={sig.fromName ?? ""}
                               onChange={e => patch({ fromName: e.target.value })}
-                              placeholder="e.g. Ana-Maria at Bar Franco"
+                              placeholder="e.g. Alex at Your Venue"
                               className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
                             />
                           </div>
