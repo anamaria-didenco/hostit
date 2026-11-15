@@ -132,12 +132,19 @@ describe("weekly report recipients", () => {
   it("uses the venue's notification email first, splitting lists", () => {
     expect(reportRecipients("a@venue.nz; b@venue.nz")).toEqual(["a@venue.nz", "b@venue.nz"]);
   });
-  it("falls back to REPORT_EMAIL / the default only when none is set", () => {
+  it("falls back to REPORT_EMAIL, then the venue's own address, only when none is set", () => {
     const prev = process.env.REPORT_EMAIL;
     process.env.REPORT_EMAIL = "env@venue.nz";
-    expect(reportRecipients("")).toEqual(["env@venue.nz"]);
+    expect(reportRecipients("", "me@venue.nz")).toEqual(["env@venue.nz"]);
     delete process.env.REPORT_EMAIL;
-    expect(reportRecipients(null)).toEqual(["anamaria@barfranco.nz"]);
+    expect(reportRecipients(null, "me@venue.nz")).toEqual(["me@venue.nz"]);
+    if (prev !== undefined) process.env.REPORT_EMAIL = prev;
+  });
+  it("never falls back to another venue's address", () => {
+    const prev = process.env.REPORT_EMAIL;
+    delete process.env.REPORT_EMAIL;
+    expect(reportRecipients(null)).toEqual([]);
+    expect(reportRecipients("  ", "")).toEqual([]);
     if (prev !== undefined) process.env.REPORT_EMAIL = prev;
   });
 });

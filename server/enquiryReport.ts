@@ -8,7 +8,8 @@
  * scheduler (startEnquiryReportScheduler), and on demand via reports.sendNow.
  *
  * Recipient: the venue's notification email (Settings → Venue), else the
- * REPORT_EMAIL env var, else anamaria@barfranco.nz.
+ * REPORT_EMAIL env var, else the venue's own sending address. Never another
+ * venue's address: with none of those, the report is skipped.
  * Schedule overridable with REPORT_WEEKDAY (default "Mon") + REPORT_HOUR (8).
  * Never throws — failures are logged so they can't crash the server loop.
  */
@@ -32,9 +33,10 @@ function esc(s: any): string {
 function titleCase(s: string): string {
   return s.replace(/[_-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
-/** Exported for tests. Venue's notification inbox first; env/default only if unset. */
-export function reportRecipients(notificationEmail: string | null | undefined): string[] {
-  const raw = (notificationEmail ?? "").trim() || (process.env.REPORT_EMAIL || "anamaria@barfranco.nz").trim();
+/** Exported for tests. Venue's notification inbox first, then the REPORT_EMAIL env var,
+ *  then `ownAddress` (the venue's own SMTP address). Empty when none is known. */
+export function reportRecipients(notificationEmail: string | null | undefined, ownAddress?: string | null): string[] {
+  const raw = (notificationEmail ?? "").trim() || (process.env.REPORT_EMAIL ?? "").trim() || (ownAddress ?? "").trim();
   return raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
 }
 
@@ -227,7 +229,11 @@ export async function sendEnquiryReport(
     } as any);
     const fromName = vs.smtpFromName ?? vs.name ?? "VenueFlowHQ";
     const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
-    const recipients = reportRecipients(vs.notificationEmail);
+    const recipients = reportRecipients(vs.notificationEmail, vs.smtpFromEmail || vs.smtpUser);
+    if (recipients.length === 0) {
+      console.log(`[EnquiryReport:${opts.source}] owner ${ownerId} — no recipient configured, skip`);
+      return { sent: false, reason: "no_recipient" };
+    }
 
     await transporter.sendMail({
       from: `"${fromName}" <${fromEmail}>`,

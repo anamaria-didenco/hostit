@@ -6500,7 +6500,7 @@ export default function Dashboard() {
                 {/* Google Workspace recommended setup */}
                 <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-5">
                   <p className="font-dm text-sm font-semibold text-blue-900 mb-1">📧 Recommended: Google Workspace / Gmail</p>
-                  <p className="font-dm text-xs text-blue-800 mb-3">Since <strong>barfranco.nz</strong> uses Google Workspace, sending through Google's servers guarantees delivery to your inbox — no spam filtering.</p>
+                  <p className="font-dm text-xs text-blue-800 mb-3">If your email is on Google Workspace or Gmail, sending through Google's servers guarantees delivery to your inbox — no spam filtering.</p>
                   <ol className="font-dm text-xs text-blue-800 space-y-1.5 list-decimal list-inside">
                     <li>Go to <strong>myaccount.google.com</strong> → Security → 2-Step Verification (enable if not already on)</li>
                     <li>Search for <strong>"App passwords"</strong> on that page → Create one called "VenueFlow"</li>
@@ -6510,7 +6510,7 @@ export default function Dashboard() {
                   <div className="mt-3 bg-blue-100 rounded p-3 font-mono text-xs text-blue-900 space-y-1">
                     <div><span className="text-blue-600">SMTP Host:</span> smtp.gmail.com</div>
                     <div><span className="text-blue-600">Port:</span> 587</div>
-                    <div><span className="text-blue-600">Username:</span> anamaria@barfranco.nz</div>
+                    <div><span className="text-blue-600">Username:</span> {venueSettings?.smtpUser || "you@yourvenue.co.nz"}</div>
                     <div><span className="text-blue-600">Password:</span> [16-char App Password from Google]</div>
                   </div>
                 </div>
@@ -6540,7 +6540,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
-                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="anamaria@barfranco.nz"
+                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
@@ -6555,7 +6555,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
-                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="anamaria@barfranco.nz"
+                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div className="md:col-span-2 flex items-center gap-3">
@@ -6631,7 +6631,7 @@ export default function Dashboard() {
                               type="email"
                               value={sig.replyTo ?? ""}
                               onChange={e => patch({ replyTo: e.target.value })}
-                              placeholder="e.g. ana@barfranco.nz"
+                              placeholder="e.g. events@yourvenue.co.nz"
                               className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
                             />
                           </div>
@@ -6718,7 +6718,7 @@ export default function Dashboard() {
                             value={sig.signature ?? ""}
                             onChange={e => patch({ signature: e.target.value })}
                             rows={4}
-                            placeholder={`e.g.\n\nKind regards,\nAna Maria\nBar Franco Events\nph: 03 123 4567 | www.barfranco.nz`}
+                            placeholder={`e.g.\n\nKind regards,\nAlex Smith\nYour Venue Events\nph: 03 123 4567 | www.yourvenue.co.nz`}
                             className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none"
                           />
                         </div>

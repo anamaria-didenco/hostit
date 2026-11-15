@@ -6,9 +6,10 @@
  * venue's events manager a reminder to send that client their deposit
  * request, with the event details and a deep link to the booking.
  *
- * Recipient: the DEPOSIT_PROMPT_EMAIL env var if set, otherwise
- * anamaria@barfranco.nz (Bar Franco's events manager). Multiple addresses
- * may be comma/semicolon separated.
+ * Recipient: the DEPOSIT_PROMPT_EMAIL env var if set, otherwise the venue's own
+ * address (its notification email, else its SMTP sender). Never another
+ * venue's address — the email carries the client's name, phone and email.
+ * Multiple addresses may be comma/semicolon separated.
  *
  * Never throws — any failure is logged so it can't break the confirm flow.
  */
@@ -16,6 +17,14 @@ import { smtpTls } from "./smtpTls";
 import { getDb } from "./db";
 import { bookings, venueSettings, leads, contacts } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+
+/** Who the deposit reminder goes to: the DEPOSIT_PROMPT_EMAIL env var, else the venue's own
+ *  address (notification email, then SMTP sender). "" when none is known — never another venue's. */
+export function depositPromptRecipient(
+  vs: { notificationEmail?: string | null; smtpFromEmail?: string | null; smtpUser?: string | null },
+): string {
+  return (process.env.DEPOSIT_PROMPT_EMAIL || vs.notificationEmail || vs.smtpFromEmail || vs.smtpUser || "").trim();
+}
 
 function fmtCurrency(v: string | number | null | undefined): string | null {
   if (v === null || v === undefined || v === "") return null;
@@ -56,7 +65,11 @@ export async function sendDepositPromptEmail(
       return { sent: false, reason: "smtp_not_configured" };
     }
 
-    const to = (process.env.DEPOSIT_PROMPT_EMAIL || "anamaria@barfranco.nz").trim();
+    const to = depositPromptRecipient(vs);
+    if (!to) {
+      console.log(`[DepositPrompt:${opts.source}] booking ${bookingId} — no recipient configured, skip`);
+      return { sent: false, reason: "no_recipient" };
+    }
 
     // Enrich client phone/email from the linked contact / lead for convenience.
     let clientPhone = "";
