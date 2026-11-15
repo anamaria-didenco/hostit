@@ -50,8 +50,8 @@ export function AccountLoginsSection() {
 
   return (
     <div className="dante-card mb-6">
-      <div className="p-5 border-b border-gold/20 flex items-center justify-between">
-        <div>
+      <div className="p-5 border-b border-gold/20 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex-1 min-w-[14rem]">
           <h2 className="font-bebas tracking-widest text-base text-ink">ACCOUNT LOGINS</h2>
           <p className="font-dm text-xs text-ink/70 mt-1">
             Email + password logins for your team. <b>Staff</b> logins see upcoming events and runsheets only — no money, settings or deleting. <b>Full access</b> logins can do everything you can.
@@ -59,7 +59,7 @@ export function AccountLoginsSection() {
         </div>
         <button
           onClick={() => setShowForm(v => !v)}
-          className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1"
+          className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1 shrink-0 whitespace-nowrap"
         >
           <Plus className="w-3 h-3" /> {showForm ? 'CANCEL' : 'ADD LOGIN'}
         </button>

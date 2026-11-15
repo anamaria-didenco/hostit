@@ -8218,9 +8218,9 @@ export default function Dashboard() {
                 const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newStaffEmail.trim());
                 return (
                 <div className="max-w-3xl mx-auto">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
                     <h1 className="font-cormorant text-3xl font-semibold text-ink">BEO Email Recipients</h1>
-                    <span className="font-bebas tracking-widest text-xs text-ink/70">{list.length} saved</span>
+                    <span className="font-bebas tracking-widest text-xs text-ink/70 whitespace-nowrap">{list.length} saved</span>
                   </div>
                   <div className="dante-card p-5 mb-4">
                     <p className="font-dm text-sm text-ink/60">
@@ -8323,9 +8323,9 @@ export default function Dashboard() {
                 return (
                 <div className="max-w-3xl mx-auto">
                   <AccountLoginsSection />
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-6">
                     <h1 className="font-cormorant text-3xl font-semibold text-ink">Team Access Links</h1>
-                    <button onClick={() => setShowTeamForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                    <button onClick={() => setShowTeamForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1 shrink-0 whitespace-nowrap">
                       <Plus className="w-3 h-3" /> ADD MEMBER
                     </button>
                   </div>
