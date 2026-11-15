@@ -1,3 +1,4 @@
+import { withKeyedLock } from "./keyedLock";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -2794,7 +2795,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     ensureForLead: protectedProcedure
       // allowClash: the user has seen the date-clash warning and chosen to go ahead.
       .input(z.object({ leadId: z.number(), allowClash: z.boolean().optional() }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(({ input, ctx }) => withKeyedLock(`ensureForLead:${ctx.user.id}:${input.leadId}`, async () => {
+        // One at a time per enquiry: two calls arriving together (a click that reaches
+        // two handlers) both saw "no event yet" and each made one — a duplicate.
         const existing = await getBookings(ctx.user.id);
         const found = existing.find((b: any) => b.leadId === input.leadId && b.status !== 'cancelled')
           ?? existing.find((b: any) => b.leadId === input.leadId);
@@ -2859,7 +2862,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', leadId: input.leadId, bookingId: (created as any).id });
         }
         return created;
-      }),
+      })),
 
     /**
      * Bookings whose event ended ≥2 days ago and have no actualSpend recorded

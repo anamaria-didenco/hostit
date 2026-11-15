@@ -228,6 +228,17 @@ describe.skipIf(!HAS_DB)("cascading deletes + status integrity (DB)", () => {
     expect((await caller.bookings.delete({ id: loose.id })).enquiry).toBeNull();
   });
 
+  it("two simultaneous ensureForLead calls make one event, not two", async () => {
+    const lead = await newLead({ status: "booked", spaceName: "Bar", eventDate: new Date("2027-05-15T00:00:00Z") });
+    // Warm up (cold imports would let one call finish before the others start), so the
+    // calls below really do run side by side.
+    const warm = await newLead({ status: "booked", spaceName: "Bar", eventDate: new Date("2027-06-15T00:00:00Z") });
+    await caller.bookings.ensureForLead({ leadId: warm.id });
+    const results = await Promise.all(Array.from({ length: 6 }, () => caller.bookings.ensureForLead({ leadId: lead.id })));
+    expect(await countWhere(bookings, bookings.leadId, [lead.id])).toBe(1);
+    expect(new Set(results.map((r: any) => r.id)).size).toBe(1);
+  });
+
   it("refuses to delete an accepted proposal but deletes a draft with its quote rows", async () => {
     const d = await db();
     const lead = await newLead({ status: "proposal_sent" });
