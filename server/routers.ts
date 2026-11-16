@@ -1,3 +1,4 @@
+import { withKeyedLock } from "./keyedLock";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -2794,7 +2795,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     ensureForLead: protectedProcedure
       // allowClash: the user has seen the date-clash warning and chosen to go ahead.
       .input(z.object({ leadId: z.number(), allowClash: z.boolean().optional() }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(({ input, ctx }) => withKeyedLock(`ensureForLead:${ctx.user.id}:${input.leadId}`, async () => {
+        // One at a time per enquiry: two calls arriving together (a click that reaches
+        // two handlers) both saw "no event yet" and each made one — a duplicate.
         const existing = await getBookings(ctx.user.id);
         const found = existing.find((b: any) => b.leadId === input.leadId && b.status !== 'cancelled')
           ?? existing.find((b: any) => b.leadId === input.leadId);
@@ -2859,7 +2862,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', leadId: input.leadId, bookingId: (created as any).id });
         }
         return created;
-      }),
+      })),
 
     /**
      * Bookings whose event ended ≥2 days ago and have no actualSpend recorded
@@ -3309,9 +3312,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Takes its runsheets, checklists, floor plan, contracts etc. with it,
         // in one transaction; refused if it has payments or Xero invoices.
         const { deleteBookingCascade } = await import('./cascadeDelete');
+        const { getDb } = await import('./db');
+        const { bookings: bookingsT, leads: leadsT } = await import('../drizzle/schema');
+        const { and, eq, ne } = await import('drizzle-orm');
+        const db = await getDb();
+        const [before] = db
+          ? await db.select({ leadId: bookingsT.leadId }).from(bookingsT)
+              .where(and(eq(bookingsT.id, input.id), eq(bookingsT.ownerId, ctx.user.id))).limit(1)
+          : [];
         await deleteBookingCascade(ctx.user.id, input.id);
         await (await import('./doubleBookings')).reconcileClashFlags(ctx.user.id);
-        return { success: true };
+        // The calendar hides an enquiry only while an event made from it exists, so
+        // deleting the event brings its enquiry back onto the calendar. Say which one,
+        // so the screen can tell the user (and offer to delete it too).
+        let enquiry: { id: number; status: string | null } | null = null;
+        if (db && before?.leadId != null) {
+          const [lead] = await db.select({ id: leadsT.id, status: leadsT.status }).from(leadsT)
+            .where(and(eq(leadsT.id, before.leadId), eq(leadsT.ownerId, ctx.user.id))).limit(1);
+          const [other] = await db.select({ id: bookingsT.id }).from(bookingsT)
+            .where(and(eq(bookingsT.leadId, before.leadId), eq(bookingsT.ownerId, ctx.user.id), ne(bookingsT.status, 'cancelled'))).limit(1);
+          if (lead && !other) enquiry = { id: lead.id, status: lead.status ?? null };
+        }
+        return { success: true, enquiry };
       }),
 
     /**

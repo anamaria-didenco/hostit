@@ -2447,19 +2447,37 @@ export default function Dashboard() {
     if (isBookingType) { setSelectedBooking(item); return; }
     if (['booked', 'confirmed', 'finished'].includes(item.status)) {
       setSelectedBooking({ ...item, _isLead: true });
-      ensureBookingForLead.mutate({ leadId: item.id });
+      // A click that reaches two handlers must not ask for the event twice.
+      if (!ensureBookingForLead.isPending) ensureBookingForLead.mutate({ leadId: item.id });
       return;
     }
     setSelectedBooking({ ...item, _isLead: true });
   }
   const deleteBooking = trpc.bookings.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setSelectedBooking(null);
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.leads.eventsByMonth.invalidate();
       utils.dashboard.stats.invalidate();
-      toast.success('Event deleted');
+      const enquiry = data?.enquiry;
+      if (enquiry && enquiry.status !== 'lost') {
+        // The enquiry this event came from is still on the calendar for that date
+        // (as an enquiry). Without this the delete looks like it did nothing.
+        // A booked enquiry brings its event back when it's opened from the calendar,
+        // so for those the message stays until it's dismissed.
+        const bringsItBack = ['booked', 'confirmed', 'finished'].includes(enquiry.status ?? '');
+        toast.success('Event deleted', {
+          description: bringsItBack
+            ? 'Its enquiry is still marked Booked, so it stays on the calendar, and opening it brings the event back. Delete the enquiry too to remove it for good.'
+            : 'Its enquiry is still in Enquiries, so it still shows on the calendar for that date.',
+          duration: bringsItBack ? Infinity : 12000,
+          closeButton: bringsItBack,
+          action: { label: 'Delete enquiry too', onClick: () => deleteLead.mutate({ id: enquiry.id }) },
+        });
+      } else {
+        toast.success('Event deleted');
+      }
     },
     onError: (err: any) => toast.error(err?.message || 'Failed to delete event'),
   });

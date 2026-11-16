@@ -205,6 +205,40 @@ describe.skipIf(!HAS_DB)("cascading deletes + status integrity (DB)", () => {
     }
   });
 
+  it("tells the caller which enquiry is left behind when an event is deleted (it reappears on the calendar)", async () => {
+    const lead = await newLead({ status: "booked" });
+    const booking = await newBooking(lead.id);
+    const res = await caller.bookings.delete({ id: booking.id });
+    expect(res.enquiry).toEqual({ id: lead.id, status: "booked" });
+    expect(await countWhere(leads, leads.id, [lead.id])).toBe(1);
+
+    // ...and deleting that enquiry afterwards (the toast's "Delete enquiry too") clears it.
+    await caller.leads.delete({ id: lead.id });
+    expect(await countWhere(leads, leads.id, [lead.id])).toBe(0);
+  });
+
+  it("reports no left-over enquiry when another live event still covers it, or there is no enquiry", async () => {
+    const lead = await newLead({ status: "booked" });
+    const first = await newBooking(lead.id);
+    const second = await newBooking(lead.id);
+    expect((await caller.bookings.delete({ id: first.id })).enquiry).toBeNull();
+    expect((await caller.bookings.delete({ id: second.id })).enquiry).toEqual({ id: lead.id, status: "booked" });
+
+    const loose = await newBooking(null as any);
+    expect((await caller.bookings.delete({ id: loose.id })).enquiry).toBeNull();
+  });
+
+  it("two simultaneous ensureForLead calls make one event, not two", async () => {
+    const lead = await newLead({ status: "booked", spaceName: "Bar", eventDate: new Date("2027-05-15T00:00:00Z") });
+    // Warm up (cold imports would let one call finish before the others start), so the
+    // calls below really do run side by side.
+    const warm = await newLead({ status: "booked", spaceName: "Bar", eventDate: new Date("2027-06-15T00:00:00Z") });
+    await caller.bookings.ensureForLead({ leadId: warm.id });
+    const results = await Promise.all(Array.from({ length: 6 }, () => caller.bookings.ensureForLead({ leadId: lead.id })));
+    expect(await countWhere(bookings, bookings.leadId, [lead.id])).toBe(1);
+    expect(new Set(results.map((r: any) => r.id)).size).toBe(1);
+  });
+
   it("refuses to delete an accepted proposal but deletes a draft with its quote rows", async () => {
     const d = await db();
     const lead = await newLead({ status: "proposal_sent" });
