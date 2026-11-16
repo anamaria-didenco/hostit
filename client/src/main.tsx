@@ -7,6 +7,15 @@ import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
+import "./lib/installPrompt"; // starts listening for the browser's "install" offer straight away
+
+// Installable app: the service worker makes the site installable and shows an offline page.
+// Production only, and not when embedded in another site's iframe (the enquiry form embed).
+if ("serviceWorker" in navigator && import.meta.env.PROD && window.self === window.top) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(err => console.warn("[PWA] service worker not registered", err));
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

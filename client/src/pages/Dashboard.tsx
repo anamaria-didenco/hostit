@@ -2,6 +2,7 @@ import React, { Fragment, useState, useMemo, useRef, useEffect, useId } from "re
 import { ymdInTz } from "@shared/automatedTasks";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
+import InstallAppHint from "@/components/InstallAppHint";
 import { Button } from "@/components/ui/button";
 import { SectionHead } from "@/components/ui/section-head";
 import { Input } from "@/components/ui/input";
@@ -544,6 +545,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             so we render them as buttons rather than smuggling them into the
             <select> above. Without these, mobile users had no way to reach
             /daily-checklists at all. */}
+        <InstallAppHint />
         {/* One scrolling row of chips, not a stack of big buttons: the five of them
             filled the first ~400px of every settings page on a phone, pushing the
             setting you came for below the fold. */}
