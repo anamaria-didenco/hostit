@@ -11,6 +11,7 @@ import { useSyncExternalStore } from "react";
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 let deferred: InstallPromptEvent | null = null;
+let prompting = false;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach(l => l());
 
@@ -47,12 +48,19 @@ export function useInstallPrompt() {
   return {
     canPrompt: event !== null,
     prompt: async () => {
-      if (!deferred) return;
+      if (!deferred || prompting) return; // a double tap must not open it twice
+      prompting = true;
       const e = deferred;
-      await e.prompt();
-      await e.userChoice.catch(() => undefined);
-      deferred = null; // a prompt can only be used once
-      notify();
+      try {
+        await e.prompt();
+        await e.userChoice.catch(() => undefined);
+      } catch {
+        // The browser refused to show it; the offer is spent either way.
+      } finally {
+        prompting = false;
+        deferred = null; // a prompt can only be used once
+        notify();
+      }
     },
   };
 }

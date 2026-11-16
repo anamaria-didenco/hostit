@@ -8,8 +8,18 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
 import "./lib/installPrompt"; // starts listening for the browser's "install" offer straight away
+import { isPublicClientPath } from "@shared/pwaScope";
 
-// Installable app: the service worker makes the site installable and shows an offline page.
+// Installable app. The manifest is linked on staff screens only: a client opening a proposal or the
+// enquiry form must not be offered "install" (the app opens the staff dashboard).
+if (!isPublicClientPath(window.location.pathname)) {
+  const manifest = document.createElement("link");
+  manifest.rel = "manifest";
+  manifest.href = "/manifest.webmanifest";
+  document.head.appendChild(manifest);
+}
+
+// The service worker makes the site installable and shows an offline page.
 // Production only, and not when embedded in another site's iframe (the enquiry form embed).
 if ("serviceWorker" in navigator && import.meta.env.PROD && window.self === window.top) {
   window.addEventListener("load", () => {

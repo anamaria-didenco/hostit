@@ -42,7 +42,7 @@ export default function InstallAppHint() {
           </>
         ) : (
           <p className="mt-0.5 font-inter text-xs text-ink/70">
-            In Safari, tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>.
+            Tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>.
           </p>
         )}
       </div>
