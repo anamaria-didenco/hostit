@@ -72,7 +72,7 @@ import { monthGridTarget, monthGridDefaultDay, inShownMonth, monthCellLabel, fri
 import { statusBandFontSize } from "@shared/statusBandFit";
 import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
 import { enquirySignal } from "@shared/enquirySignal";
-import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
+import { parseTaskRules, describeTaskRule, newTaskRuleId, replaceTaskRule, taskRuleFormValues, taskRuleKey, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import LinkedTasks from "@/components/LinkedTasks";
@@ -3269,6 +3269,8 @@ export default function Dashboard() {
   // Automated task rules
   const [showAddTaskRule, setShowAddTaskRule] = useState(false);
   const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' });
+  // Set while the Add Rule pop-up is editing an existing rule (its run key and place).
+  const [editingTaskRule, setEditingTaskRule] = useState<{ key: string | null; index: number } | null>(null);
 
   // Team members
   const [showTeamForm, setShowTeamForm] = useState(false);
@@ -8896,7 +8898,7 @@ export default function Dashboard() {
                   <div className="bg-white border border-gray-200 rounded">
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h2 className="font-semibold text-gray-800">Task Rules</h2>
-                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
+                      <button onClick={() => { setEditingTaskRule(null); setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
                     </div>
                     {taskRules.length === 0 ? (
                       <div className="p-8 text-center">
@@ -8916,15 +8918,23 @@ export default function Dashboard() {
                       <tbody>
                         {taskRules.map((row, i) => {
                           const parsed = parseTaskRules([row])[0];
+                          // Keyed by the key the rule runs under: a rule saved before
+                          // ids keeps it as its id when edited, so its row (and the
+                          // Edit button focus returns to) stays the same.
+                          const ruleKey = taskRuleKey(row);
+                          const ruleBtn = "inline-flex items-center justify-center w-8 h-8 pointer-coarse:w-11 pointer-coarse:h-11 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest";
                           return (
-                          <tr key={row.id ?? i} className="border-b border-gray-50 hover:bg-gray-50">
+                          <tr key={ruleKey ?? i} className="border-b border-gray-50 hover:bg-gray-50">
                             <td className="p-3 text-sm text-gray-700">{row.name}</td>
                             <td className="p-3 text-sm text-gray-600">
-                              {parsed ? describeTaskRule(parsed, statusLabel) : <span className="text-red-700">Can't run — delete and re-add this rule</span>}
+                              {parsed ? describeTaskRule(parsed, statusLabel) : <span className="text-red-700">Can't run — edit or delete this rule</span>}
                             </td>
-                            <td className="p-3 text-sm text-gray-600 capitalize">{row.priority}</td>
-                            <td className="p-3 text-right">
-                              <button aria-label={`Delete rule ${row.name}`} onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4" /></button>
+                            <td className="p-3 text-sm text-gray-600 capitalize">{row.priority === 'normal' ? 'medium' : row.priority}</td>
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <button aria-label={`Edit rule: ${row.name}`} title="Edit rule"
+                                onClick={() => { setEditingTaskRule({ key: ruleKey, index: i }); setTaskRuleForm(taskRuleFormValues(row)); setShowAddTaskRule(true); }}
+                                className={`${ruleBtn} text-forest hover:bg-linen`}><Pencil className="w-4 h-4" aria-hidden="true" /></button>
+                              <button aria-label={`Delete rule ${row.name}`} title="Delete rule" onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className={`${ruleBtn} text-red-700 hover:bg-red-50`}><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                             </td>
                           </tr>
                           );
@@ -11345,7 +11355,7 @@ export default function Dashboard() {
         <DialogContent className="max-w-md rounded-none border border-gold/30">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
-              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add Task Rule</DialogTitle>
+              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">{editingTaskRule ? 'Edit Task Rule' : 'Add Task Rule'}</DialogTitle>
             </div>
           </DialogHeader>
           <form onSubmit={e => {
@@ -11353,16 +11363,20 @@ export default function Dashboard() {
             if (!taskRuleForm.name.trim()) return;
             if (taskRuleForm.trigger === 'on_status_change' && !taskRuleForm.status) { toast.error('Pick which status starts this rule.'); return; }
             const existing: any[] = (() => { try { const v = JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
-            const days = Math.max(0, parseInt(taskRuleForm.daysOffset || '0', 10) || 0);
-            const next = [...existing, {
-              id: newTaskRuleId(),
+            const days = Math.min(365, Math.max(0, parseInt(taskRuleForm.daysOffset || '0', 10) || 0));
+            const rule = {
               name: taskRuleForm.name.trim(),
               trigger: taskRuleForm.trigger,
               daysOffset: String(days),
               priority: taskRuleForm.priority,
               ...(taskRuleForm.trigger === 'on_status_change' ? { status: taskRuleForm.status } : {}),
-            }];
-            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); utils.tasks.invalidate(); setShowAddTaskRule(false); toast.success('Task rule added.'); } });
+            };
+            // Editing keeps the rule's id, so it doesn't make a second task for an
+            // enquiry or booking it already made one for.
+            const next = editingTaskRule ? replaceTaskRule(existing, editingTaskRule, rule) : [...existing, { id: newTaskRuleId(), ...rule }];
+            if (!next) { toast.error('That rule was changed or deleted meanwhile. Close this and try again.'); return; }
+            const edited = !!editingTaskRule;
+            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); utils.tasks.invalidate(); setShowAddTaskRule(false); setEditingTaskRule(null); toast.success(edited ? 'Task rule saved.' : 'Task rule added.'); } });
           }} className="space-y-3">
             <div>
               <label htmlFor="task-rule-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
@@ -11406,7 +11420,7 @@ export default function Dashboard() {
               </select>
             </div>
             <button type="submit" disabled={updateSettings.isPending} className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
-              {updateSettings.isPending ? 'SAVING...' : 'ADD RULE'}
+              {updateSettings.isPending ? 'SAVING...' : editingTaskRule ? 'SAVE RULE' : 'ADD RULE'}
             </button>
           </form>
         </DialogContent>

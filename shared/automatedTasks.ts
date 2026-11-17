@@ -100,6 +100,52 @@ export function parseTaskRules(raw: string | null | undefined | SavedTaskRule[])
   return out;
 }
 
+/** The key a saved rule runs under: its id, or for a rule saved before ids its legacy key. */
+export function taskRuleKey(r: SavedTaskRule): string | null {
+  if (r && r.id) return String(r.id);
+  return parseTaskRules([r])[0]?.key ?? null;
+}
+
+/** The Add / Edit rule form's fields ("medium" there is the tasks' "normal"). */
+export type TaskRuleFormValues = { name: string; trigger: string; daysOffset: string; priority: "low" | "medium" | "high"; status: string };
+
+/** A saved rule as the form's values, for editing it. */
+export function taskRuleFormValues(r: SavedTaskRule): TaskRuleFormValues {
+  let trigger = String(r?.trigger ?? "");
+  let status = r?.status ? String(r.status) : "";
+  if (trigger === "on_function_pack_sent") { trigger = "on_status_change"; status = FUNCTION_PACK_STATUS; }
+  if (!TASK_RULE_TRIGGERS.some(t => t.key === trigger)) trigger = "days_before_event";
+  const n = parseInt(String(r?.daysOffset ?? "0"), 10);
+  const p = normPriority(r?.priority);
+  return {
+    name: String(r?.name ?? ""),
+    trigger,
+    daysOffset: String(Number.isFinite(n) ? Math.min(Math.max(n, 0), 365) : 0),
+    priority: p === "normal" ? "medium" : p,
+    status: trigger === "on_status_change" ? status : "",
+  };
+}
+
+/**
+ * The saved rules with one replaced by its edited version. The edited rule
+ * keeps the key it has run under as its id (a rule saved before ids gets its
+ * legacy key), so it doesn't make a second task for an enquiry or booking it
+ * already made one for. The rule is found by that key, else (a rule that
+ * can't run, so has no key) by its place. Null when it's no longer there.
+ */
+export function replaceTaskRule(
+  rules: SavedTaskRule[],
+  target: { key: string | null; index: number },
+  edited: Omit<SavedTaskRule, "id">,
+): SavedTaskRule[] | null {
+  let i = target.key != null ? rules.findIndex(r => taskRuleKey(r) === target.key) : -1;
+  if (i < 0 && target.key == null && target.index >= 0 && target.index < rules.length && taskRuleKey(rules[target.index]) == null) i = target.index;
+  if (i < 0) return null;
+  const out = [...rules];
+  out[i] = { id: target.key ?? newTaskRuleId(), ...edited };
+  return out;
+}
+
 /** Rules to run when a lead moves into `status` (incl. the built-in one). */
 export function rulesForStatus(rules: TaskRule[], status: string): TaskRule[] {
   const own = rules.filter(r => r.trigger === "on_status_change" && r.status === status);
