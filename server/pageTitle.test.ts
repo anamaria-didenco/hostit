@@ -11,6 +11,14 @@ describe("pageTitle", () => {
   it("drops a part that repeats an earlier one", () => {
     expect(pageTitle(["Proposal", "The Harbour Room", "the harbour room"], null)).toBe("Proposal · The Harbour Room");
   });
+  it("drops a part an earlier one already says (a proposal titled after the venue)", () => {
+    expect(pageTitle(["Proposal", "Birthday at The Harbour Room", "The Harbour Room"], null)).toBe("Proposal · Birthday at The Harbour Room");
+    expect(pageTitle(["Proposal", "Corporate at the harbour room.", "The Harbour Room"], null)).toBe("Proposal · Corporate at the harbour room.");
+  });
+  it("only counts whole words as already said", () => {
+    expect(pageTitle(["Proposal", "Rosebud's 40th", "Rose"], null)).toBe("Proposal · Rosebud's 40th · Rose");
+    expect(pageTitle(["Proposal", "Birthday", "The Harbour Room"], null)).toBe("Proposal · Birthday · The Harbour Room");
+  });
   it("can leave the app name off (client-facing screens)", () => {
     expect(pageTitle(["Your event", "The Harbour Room"], null)).toBe("Your event · The Harbour Room");
   });

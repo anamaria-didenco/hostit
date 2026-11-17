@@ -8,18 +8,26 @@ export const APP_NAME = "VenueFlow";
 
 type Part = string | null | undefined | false;
 
+/** Whether `part` already appears in `text` as whole words, ignoring case. */
+function saysAlready(text: string, part: string): boolean {
+  const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text);
+}
+
 /**
- * Join the parts of a title with " · ", dropping empty parts and repeats, and
- * end with `suffix` (pass null for no suffix).
+ * Join the parts of a title with " · ", dropping empty parts and any part an
+ * earlier one already says, and end with `suffix` (pass null for no suffix).
  *   pageTitle(["Run sheet", "Grace Holloway"])                  → "Run sheet · Grace Holloway · VenueFlow"
  *   pageTitle(["Proposal", "Corporate", "The Harbour Room"], null) → "Proposal · Corporate · The Harbour Room"
+ *   pageTitle(["Proposal", "Birthday at The Harbour Room", "The Harbour Room"], null)
+ *                                                                → "Proposal · Birthday at The Harbour Room"
  */
 export function pageTitle(parts: Part[], suffix: string | null = APP_NAME): string {
   const out: string[] = [];
   for (const p of [...parts, suffix]) {
     if (typeof p !== "string") continue;
     const s = p.replace(/\s+/g, " ").trim();
-    if (s && !out.some(o => o.toLowerCase() === s.toLowerCase())) out.push(s);
+    if (s && !out.some(o => saysAlready(o, s))) out.push(s);
   }
   return out.join(" · ");
 }
