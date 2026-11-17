@@ -467,7 +467,7 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || busy) return;
     if (file.size > MAX_UPLOAD_BYTES) { toast.error("That file is too large — keep it under 5 MB."); return; }
     setBusy(true);
     const reader = new FileReader();
@@ -485,7 +485,11 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
         </div>
         <label className="px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer whitespace-nowrap" style={{ background: T.accent, color: T.onAccent, opacity: busy ? 0.6 : 1 }}>
           {busy ? "Uploading…" : "Upload"}
-          <input type="file" accept="image/*,application/pdf" aria-label="Upload a file" className="sr-only" onChange={onFile} disabled={busy} />
+          {/* While uploading it is aria-disabled and won't open the picker,
+              but stays enabled: a disabled input loses focus, so keyboard and
+              screen-reader users lost their place after every upload. */}
+          <input type="file" accept="image/*,application/pdf" aria-label="Upload a file" className="sr-only" onChange={onFile}
+            aria-disabled={busy} onClick={e => { if (busy) e.preventDefault(); }} />
         </label>
       </div>
       <div className="p-4">
