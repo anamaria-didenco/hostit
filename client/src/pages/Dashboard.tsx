@@ -1192,7 +1192,19 @@ export default function Dashboard() {
     const measure = () => {
       const area = enquiryContentRef.current;
       const wraps = window.matchMedia('(max-width: 1279.98px)').matches;
-      setBulkBarCover(area && wraps ? Math.max(0, Math.round(area.getBoundingClientRect().bottom - el.getBoundingClientRect().top)) : 0);
+      if (!area || !wraps) { setBulkBarCover(0); return; }
+      // Usually the list scrolls inside the area, which ends where the screen does.
+      // On a short screen the whole page may scroll instead, and the area then grows
+      // with its padding, so measuring the area would add to the last measure on
+      // every resize (a phone's address bar showing or hiding). There, measure up to
+      // the bottom of what scrolls.
+      let scroller: HTMLElement | null = null;
+      for (let a = area.parentElement; a; a = a.parentElement) {
+        const o = getComputedStyle(a).overflowY;
+        if ((o === 'auto' || o === 'scroll') && a.scrollHeight > a.clientHeight) { scroller = a; break; }
+      }
+      const bottom = scroller ? Math.min(scroller.getBoundingClientRect().bottom, window.innerHeight) : area.getBoundingClientRect().bottom;
+      setBulkBarCover(Math.max(0, Math.round(bottom - el.getBoundingClientRect().top)));
     };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
