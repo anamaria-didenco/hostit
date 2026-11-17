@@ -6,10 +6,14 @@
  */
 export type SignedOutAction = "keep-page" | "go-to-sign-in";
 
-export function signedOutAction(opts: { typedOnPage: boolean; publicPage: boolean }): SignedOutAction {
+export function signedOutAction(opts: { typedOnPage: boolean; publicPage: boolean; pageKept?: boolean }): SignedOutAction {
   // Keep a staff page that has typing on it: the person signs in again in a new
   // tab and then saves. Client-facing pages keep their old behaviour.
-  return opts.typedOnPage && !opts.publicPage ? "keep-page" : "go-to-sign-in";
+  // `pageKept`: the notice has already said "What you've typed is still here".
+  // The page then stays until they sign in again, even with no typing left on
+  // screen (a closed dialog or another settings section still holds it): a later
+  // failed request used to go to sign-in and throw that work away.
+  return (opts.typedOnPage || opts.pageKept) && !opts.publicPage ? "keep-page" : "go-to-sign-in";
 }
 
 

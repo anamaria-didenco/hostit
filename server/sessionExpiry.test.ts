@@ -13,6 +13,13 @@ describe("signedOutAction (the session ends while the app is open)", () => {
   it("leaves client-facing pages as they were", () => {
     expect(signedOutAction({ typedOnPage: true, publicPage: true })).toBe("go-to-sign-in");
   });
+
+  it("keeps a page it has already kept, even with no typing left on screen", () => {
+    // The notice said "What you've typed is still here"; then the Add enquiry dialog
+    // was closed (its values live on) and the next poll or Save went to sign-in.
+    expect(signedOutAction({ typedOnPage: false, publicPage: false, pageKept: true })).toBe("keep-page");
+    expect(signedOutAction({ typedOnPage: false, publicPage: false, pageKept: false })).toBe("go-to-sign-in");
+  });
 });
 
 describe("meWhileKept (a kept page isn't swapped for the sign-in card)", () => {

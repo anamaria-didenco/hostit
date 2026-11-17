@@ -14,7 +14,9 @@ import { getLoginUrl } from "@/const";
  * until dismissed; a later failed save brings it back) offers to sign in again
  * in a new tab; once a request that failed works again, it says "signed in
  * again". With nothing typed it still goes to sign-in, and the sign-in page
- * says why.
+ * says why. Once kept, the page stays kept until they sign in again (or sign
+ * out on purpose), even when the typing is no longer on screen: a closed dialog
+ * or another settings section still holds it.
  *
  * The notice is its own element on <body>, not a toast: it has to work over an
  * open dialog (a toast can't be clicked behind a modal's overlay), so it sits
@@ -106,7 +108,7 @@ function isUnauthorized(error: unknown): boolean {
 
 /** `backgroundRefresh`: a query that already has data refreshing (not a save, not a screen loading). */
 function handleUnauthorized(backgroundRefresh = false) {
-  if (signedOutAction({ typedOnPage: typedOnPage(), publicPage: isPublicClientPath(window.location.pathname) }) === "keep-page") {
+  if (signedOutAction({ typedOnPage: typedOnPage(), publicPage: isPublicClientPath(window.location.pathname), pageKept: noticeShown }) === "keep-page") {
     if (!noticeShown) {
       setKeeping(true);
       setNotice("signed-out");
