@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Printer, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { downloadBeoBatch } from "@/lib/beoUrl";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /** YYYY-MM-DD from LOCAL date parts (toISOString is UTC, a day behind in NZ mornings). */
 function ymd(d: Date): string {
@@ -33,7 +33,6 @@ export function PrintWeekModal({ open, onClose, initialDate }: { open: boolean; 
   const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? new Date()));
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
-  useEscapeKey(open && !busy, onClose);
 
   useEffect(() => {
     if (open) setWeekStart(mondayOf(initialDate ?? new Date()));
@@ -66,8 +65,8 @@ export function PrintWeekModal({ open, onClose, initialDate }: { open: boolean; 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="print-week-title" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
+    <DialogShell onClose={() => { if (!busy) onClose(); }} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
+      <DialogShellContent closeOnOutsideClick={false} aria-labelledby="print-week-title" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
         <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div>
             <div id="print-week-title" className="font-bebas tracking-widest text-cream text-base">PRINT THE WEEK</div>
@@ -137,7 +136,7 @@ export function PrintWeekModal({ open, onClose, initialDate }: { open: boolean; 
             <Printer className="w-4 h-4" /> {busy ? "PREPARING…" : `DOWNLOAD ${chosen.length || ""} RUN SHEET${chosen.length === 1 ? "" : "S"}`}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }

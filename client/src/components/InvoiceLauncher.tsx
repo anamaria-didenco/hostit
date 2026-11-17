@@ -4,6 +4,7 @@ import { FileText, X, Search, CalendarDays, Plus, ArrowRight } from "lucide-reac
 import { trpc } from "@/lib/trpc";
 import { currency } from "@/lib/money";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { compareEventDates } from "@shared/eventDate";
 
 /**
  * One tap to an invoice, from anywhere. Instead of hunting down the event on
@@ -20,7 +21,7 @@ export type LaunchStream = "deposit" | "food" | "drinks";
 export interface InvoiceTarget {
   bookingId: number;
   name: string;
-  eventDate: string | null;
+  eventDate: Date | string | null;
   depositPaid: boolean;
   depositNzd: number;
   initialStream: LaunchStream;
@@ -29,7 +30,8 @@ export interface InvoiceTarget {
 type OverviewRow = {
   bookingId: number;
   name: string;
-  eventDate: string | null;
+  // A Date in practice: superjson sends the booking's timestamp as one.
+  eventDate: Date | string | null;
   eventType: string | null;
   depositPaid: boolean;
   depositNzd: number;
@@ -40,7 +42,7 @@ type OverviewRow = {
   drinksStatus: string;
 };
 
-const fmtDate = (d: string | null) =>
+const fmtDate = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "No date";
 
 /** The stream the operator most likely wants for this event: an unpaid deposit
@@ -84,7 +86,8 @@ export default function InvoiceLauncher({
       // and only those with something still to bill.
       : rows
           .filter(r => (r.depositRequired && !r.depositPaid) || (r.outstanding != null && r.outstanding > 0) || !r.hasPrice)
-          .sort((a, b) => (a.eventDate ?? "9999").localeCompare(b.eventDate ?? "9999"));
+          // Dates arrive as Date objects; a text compare threw and crashed the app.
+          .sort((a, b) => compareEventDates(a.eventDate, b.eventDate));
     return base.slice(0, 8);
   }, [rows, q]);
 

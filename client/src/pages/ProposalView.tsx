@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { currency } from "@/lib/money";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
 import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
 import { isPackageLine } from "@shared/proposalPackages";
 import { venueBrand } from "@shared/brand";
+import { pageTitle } from "@shared/pageTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface LineItem {
   description: string;
@@ -124,6 +127,8 @@ export default function ProposalView() {
   const [clientMessage, setClientMessage] = useState("");
   // The menu picked, when the proposal offers a choice of menus.
   const [chosenMenu, setChosenMenu] = useState<string | null>(null);
+  // Accept was pressed before a menu was picked: say so by the menu choice.
+  const [menuNeeded, setMenuNeeded] = useState(false);
   const [responded, setResponded] = useState<"accepted" | "declined" | null>(null);
   // Only true when the server actually emailed the client a confirmation.
   const [confirmationEmailed, setConfirmationEmailed] = useState(false);
@@ -152,13 +157,17 @@ export default function ProposalView() {
       setShowDecline(false);
       setClientMessage("");
       // The answer banner sits at the top of the page; bring it into view.
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: scrollBehavior() });
       toast.success(result.status === "accepted" ? "Booking confirmed." : "Thanks — your reply has been sent.");
     },
     // The server's messages are written for the client (expired, already
     // answered, not ready yet), so show them as they are.
     onError: (e) => toast.error(e.message || "Something went wrong. Please try again."),
   });
+  // After Confirm / Decline the dialog and the buttons that opened it are
+  // gone: put focus on the answer banner, so it is read out and in view.
+  const [answerHeading, setAnswerHeading] = useState<HTMLDivElement | null>(null);
+  useEffect(() => { if (responded) answerHeading?.focus(); }, [responded, answerHeading]);
 
   const venue = data?.venue;
   // The venue's Brand Pack (accent colour, fonts, logo) leads; the theme only
@@ -178,6 +187,9 @@ export default function ProposalView() {
     link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
     document.head.appendChild(link);
   }, [venue, brand.fontLink]);
+  // "Proposal · Corporate · The Harbour Room": a client with several tabs open
+  // can tell this one apart.
+  useDocumentTitle(data?.proposal ? pageTitle(["Proposal", data.proposal.title, venue?.name], null) : null);
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: T.bg }}>
@@ -186,12 +198,12 @@ export default function ProposalView() {
   );
 
   if (!data?.proposal) return (
-    <div className="min-h-screen flex items-center justify-center text-center px-4" style={{ backgroundColor: T.bg }}>
+    <main className="min-h-screen flex items-center justify-center text-center px-4" style={{ backgroundColor: T.bg }}>
       <div>
-        <div className="text-4xl font-bold mb-4" style={{ color: T.ink, fontFamily: 'serif' }}>Proposal Not Found</div>
+        <h1 className="text-4xl font-bold mb-4" style={{ color: T.ink, fontFamily: 'serif' }}>Proposal Not Found</h1>
         <p style={{ color: T.stone }}>This proposal link may have expired or is invalid.</p>
       </div>
-    </div>
+    </main>
   );
 
   const { proposal } = data;
@@ -294,7 +306,7 @@ export default function ProposalView() {
           <div className="p-5 mb-6 flex items-center gap-4 rounded-sm" style={{ backgroundColor: '#f0fdf4', border: `2px solid #86efac` }}>
             <CheckCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#16a34a' }} />
             <div>
-              <div className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>You're booked in</div>
+              <div ref={setAnswerHeading} tabIndex={-1} className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>You're booked in</div>
               <p className="font-inter text-sm mt-0.5" style={{ color: '#166534' }}>
                 {responded
                   ? `Thank you for accepting. We've let the venue team know${confirmationEmailed ? " and emailed you a confirmation" : ""} — they'll be in touch about the next steps.`
@@ -307,7 +319,7 @@ export default function ProposalView() {
           <div className="p-5 mb-6 flex items-center gap-4 rounded-sm" style={{ backgroundColor: '#fef2f2', border: `2px solid #fca5a5` }}>
             <XCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#dc2626' }} />
             <div>
-              <div className="font-playfair text-xl font-bold" style={{ color: '#b91c1c' }}>Proposal Declined</div>
+              <div ref={setAnswerHeading} tabIndex={-1} className="font-playfair text-xl font-bold" style={{ color: '#b91c1c' }}>Proposal Declined</div>
               <p className="font-inter text-sm mt-0.5" style={{ color: '#991b1b' }}>You've declined this proposal and the venue team has been told. Thanks for letting us know.</p>
             </div>
           </div>
@@ -369,6 +381,7 @@ export default function ProposalView() {
                     <div className="font-bebas text-sm tracking-widest" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
                     <div className="font-inter text-xs" style={{ color: T.stone }}>Each price includes everything above and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
                   </div>
+                  {menuNeeded && !chosenOption && <p role="alert" className="font-inter text-sm font-semibold" style={{ color: T.accent }}>Please choose a menu first, then press Accept &amp; Book.</p>}
                   {menuOptions.map(o => {
                     const m = menuFor(o.line);
                     const picked = chosenMenu === o.line;
@@ -555,6 +568,7 @@ export default function ProposalView() {
           <div className="p-6 mb-6 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
             <div className="font-bebas text-sm tracking-widest mb-1" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
             <div className="font-inter text-xs mb-3" style={{ color: T.stone }}>Each price includes everything in your proposal and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
+            {menuNeeded && !chosenOption && <p role="alert" className="font-inter text-sm font-semibold mb-3" style={{ color: T.accent }}>Please choose a menu first, then press Accept &amp; Book.</p>}
             <div className="space-y-2">
               {menuOptions.map(o => {
                 const picked = chosenMenu === o.line;
@@ -575,15 +589,25 @@ export default function ProposalView() {
         {/* CTA */}
         {canRespond && (
           <div className="p-6 mb-8 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
-            <h3 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h3>
-            <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
+            <h2 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h2>
+            <p id="proposal-cta-note" className="font-inter text-sm mb-5" style={{ color: T.stone }}>
               Accept this proposal to confirm your booking.
               {menuOptions.length > 0
                 ? (chosenOption ? <> With the {chosenOption.name} menu, a deposit of {currency(chosenOption.deposit)} NZD secures your date.</> : <> Choose your menu above first.</>)
                 : Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => setShowAccept(true)}
+              <Button onClick={() => {
+                  // No menu picked yet: take the client to the choice instead of
+                  // opening a confirm step that can only say "go back and pick one".
+                  if (menuOptions.length > 0 && !chosenOption) {
+                    setMenuNeeded(true);
+                    document.querySelector<HTMLInputElement>('input[name="menu-choice"]')?.focus();
+                    return;
+                  }
+                  setShowAccept(true);
+                }}
+                aria-describedby="proposal-cta-note"
                 className="flex-1 min-w-0 font-bebas tracking-widest rounded-none h-12 text-base gap-2"
                 style={{ backgroundColor: T.header, color: T.headerText }}>
                 <CheckCircle className="w-5 h-5" /> ACCEPT & BOOK
@@ -614,13 +638,19 @@ export default function ProposalView() {
 
       {/* Accept Dialog */}
       <Dialog open={showAccept} onOpenChange={(o) => { setShowAccept(o); if (!o) setClientMessage(""); }}>
-        <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
+        <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}
+          // Start on CONFIRM BOOKING (its only button besides the X), not the
+          // optional message box, which is one Shift+Tab away.
+          onOpenAutoFocus={e => { const b = (e.currentTarget as HTMLElement).querySelector<HTMLButtonElement>('button:not([data-slot="dialog-close"]):not(:disabled)'); if (b) { e.preventDefault(); b.focus(); } }}>
           <DialogHeader>
-            <div className="-mx-6 -mt-6 p-5 mb-4" style={{ backgroundColor: T.header }}>
+            {/* 48px on the right keeps the title clear of the close chip (top right).
+                On phones the title is centred, so the left side matches it. */}
+            <div className="-mx-6 -mt-6 p-5 px-12 sm:pl-5 mb-4" style={{ backgroundColor: T.header }}>
               <DialogTitle className="font-bebas text-xl tracking-widest" style={{ color: T.headerText }}>CONFIRM YOUR BOOKING</DialogTitle>
             </div>
           </DialogHeader>
           <div className="space-y-4">
+            <DialogDescription asChild>
             <p className="font-inter text-sm" style={{ color: T.stone }}>
               By confirming, you're booking this event as set out in the proposal{chosenOption ? <>, with the <b>{chosenOption.name}</b> menu ({currency(chosenOption.total)} incl. GST)</> : ""}.
               {chosenOption
@@ -628,6 +658,7 @@ export default function ProposalView() {
                 : menuOptions.length === 0 && Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
               {" "}The venue team is told straight away and will be in touch about the next steps.
             </p>
+            </DialogDescription>
             <div>
               <label htmlFor="accept-message" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>MESSAGE TO VENUE (OPTIONAL)</label>
               <Textarea id="accept-message" value={clientMessage} onChange={e => setClientMessage(e.target.value)}
@@ -652,14 +683,16 @@ export default function ProposalView() {
       <Dialog open={showDecline} onOpenChange={(o) => { setShowDecline(o); if (!o) setClientMessage(""); }}>
         <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
           <DialogHeader>
-            <div className="-mx-6 -mt-6 p-5 mb-4" style={{ backgroundColor: T.accent }}>
+            <div className="-mx-6 -mt-6 p-5 px-12 sm:pl-5 mb-4" style={{ backgroundColor: T.accent }}>
               <DialogTitle className="font-bebas text-xl tracking-widest" style={{ color: T.accentText }}>DECLINE PROPOSAL</DialogTitle>
             </div>
           </DialogHeader>
           <div className="space-y-4">
+            <DialogDescription asChild>
             <p className="font-inter text-sm" style={{ color: T.stone }}>
               The venue team will be told. If you're happy to, let them know why — it's optional.
             </p>
+            </DialogDescription>
             <div>
               <label htmlFor="decline-reason" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>REASON (OPTIONAL)</label>
               <Textarea id="decline-reason" value={clientMessage} onChange={e => setClientMessage(e.target.value)}

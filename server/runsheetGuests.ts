@@ -14,7 +14,7 @@
  */
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { bookings, fnbItems, runsheets } from "../drizzle/schema";
-import { changedElsewhere } from "./runsheetVersion";
+import { builderSave, changedElsewhere } from "./runsheetVersion";
 import { getDb } from "./db";
 
 export type FoodRescale = { from: number; to: number; lines: number };
@@ -49,20 +49,44 @@ export async function eventRunsheetIds(db: any, ownerId: number, ev: { bookingId
   return rows.map((r: { id: number }) => r.id);
 }
 
+/** The open run sheet builder a guest change came from: its sheet, its editor
+ *  id and the version it last loaded (see server/runsheetVersion.ts). */
+export type RunsheetEditor = { runsheetId: number; editorId: string; expectedVersion?: number };
+
 /** After the event's guest count changed from `from` to `to`: set it on the
  *  event's run sheets (an open builder is told they changed elsewhere), and
- *  report the food lines still at the old count, if any. */
+ *  report the food lines still at the old count, if any.
+ *
+ *  `editor` is the builder the change was typed in. Its own sheet counts as
+ *  that builder's save, not a change elsewhere — otherwise typing a guest
+ *  count in the builder told the same builder "someone else changed this run
+ *  sheet" every time. It only counts as theirs while the sheet is still the
+ *  copy that builder has (the same check as a builder save): if someone else
+ *  saved in between, the builder is still warned. */
 export async function syncRunsheetGuests(
   db: any, ownerId: number, ev: { bookingId?: number | null; leadId?: number | null },
   from: number | null | undefined, to: number | null | undefined,
+  editor?: RunsheetEditor,
 ): Promise<FoodRescale | undefined> {
   if (to == null || from === to) return undefined;
   const conn = db ?? await getDb();
   if (!conn) return undefined;
   const ids = await eventRunsheetIds(conn, ownerId, ev);
   if (!ids.length) return undefined;
-  await conn.update(runsheets).set({ guestCount: to, updatedAt: new Date(), ...changedElsewhere() })
-    .where(and(eq(runsheets.ownerId, ownerId), inArray(runsheets.id, ids)));
+  let elsewhere = ids;
+  if (editor && ids.includes(editor.runsheetId)) {
+    const own = builderSave(editor.expectedVersion, editor.editorId);
+    if (own.guard) {
+      const mine = await conn.update(runsheets).set({ guestCount: to, updatedAt: new Date(), ...own.set })
+        .where(and(eq(runsheets.ownerId, ownerId), eq(runsheets.id, editor.runsheetId), own.guard))
+        .returning({ id: runsheets.id });
+      if (mine.length) elsewhere = ids.filter(id => id !== editor.runsheetId);
+    }
+  }
+  if (elsewhere.length) {
+    await conn.update(runsheets).set({ guestCount: to, updatedAt: new Date(), ...changedElsewhere() })
+      .where(and(eq(runsheets.ownerId, ownerId), inArray(runsheets.id, elsewhere)));
+  }
   if (from == null || from <= 0) return undefined;
   const [row] = await conn.select({ n: sql<number>`count(*)::int` }).from(fnbItems)
     .where(and(eq(fnbItems.ownerId, ownerId), inArray(fnbItems.runsheetId, ids), eq(fnbItems.qty, from)));

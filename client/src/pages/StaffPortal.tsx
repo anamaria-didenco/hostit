@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { safeHtml } from "@/lib/safeHtml";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
   Clock, Calendar, ChefHat, UtensilsCrossed,
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
-  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer, Wine,
+  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, Printer, Wine,
 } from "lucide-react";
 import { currency } from "@/lib/money";
 import NowNext from "@/components/NowNext";
+import StaffAttachments from "@/components/StaffAttachments";
 import { groupDrinks } from "@shared/drinkGroups";
 import { venueBrand } from "@shared/brand";
+import { staffLinkContentKey } from "@shared/staffLinkContent";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -62,20 +64,23 @@ export default function StaffPortal() {
     { enabled: !!token, retry: false, refetchInterval: 30000 }
   );
 
-  // Keep the embedded BEO document live: the query polls every 30s and, thanks
-  // to react-query structural sharing, `data` only changes identity when the
-  // content actually changed — so we reload the BEO iframe only on real edits.
+  // Keep the embedded BEO document live: the query polls every 30s, and the
+  // BEO iframe reloads only when what staff see has really changed. Keyed on
+  // the content, not on `data` itself: `data` got a new identity on every poll
+  // (see staffLinkContentKey), so the BEO reloaded and scrolled back to the
+  // top every 30 seconds while someone was reading it.
+  const contentKey = useMemo(() => staffLinkContentKey(data), [data]);
   const [beoNonce, setBeoNonce] = useState(0);
   // Nothing on screen told a screen-reader user that the manager just edited
   // the runsheet mid-shift — the content silently swapped underneath them.
-  // `data` only changes identity on a REAL content change (structural sharing),
-  // so advance the iframe nonce then, skip the very first load (nothing was
-  // edited yet), and give each announcement a distinct string (a timestamp) so
-  // aria-live re-reads it — an identical repeated string is not re-announced.
+  // On a real content change, advance the iframe nonce, skip the very first
+  // load (nothing was edited yet), and give each announcement a distinct
+  // string (a timestamp) so aria-live re-reads it — an identical repeated
+  // string is not re-announced.
   const hasLoadedOnce = useRef(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
   useEffect(() => {
-    if (!data) return;
+    if (!contentKey) return;
     setBeoNonce(n => n + 1);
     if (!hasLoadedOnce.current) {
       hasLoadedOnce.current = true;
@@ -83,7 +88,7 @@ export default function StaffPortal() {
     }
     const at = new Date().toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" });
     setLiveAnnouncement(`Runsheet updated at ${at}`);
-  }, [data]);
+  }, [contentKey]);
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
@@ -350,6 +355,12 @@ export default function StaffPortal() {
         {/* Booking-backed runsheets render the REAL BEO document (same HTML the
             PDF is built from) so the live link mirrors the BEO 1:1. Lead-only
             runsheets (no booking, so no BEO) fall back to the built-in layout. */}
+        {/* The BEO document doesn't list the PDFs attached in the Runsheet
+            Builder, so they sit above it. Before this, a booking's runsheet
+            (most events) never showed its attachments on this link at all. */}
+        {activePortalTab === 'runsheet' && (runsheet as any).bookingId && (
+          <StaffAttachments attachments={runsheet.attachments} />
+        )}
         {activePortalTab === 'runsheet' && (runsheet as any).bookingId ? (
           <iframe
             key={beoNonce}
@@ -735,38 +746,7 @@ export default function StaffPortal() {
         )}
 
         {/* ── Attachments (PDFs the operator attached for staff) ── */}
-        {/* Defense-in-depth: only render same-origin /uploads/*.pdf so a bad
-            DB row can't push phishing links onto this public page. */}
-        {(() => {
-          const safe = (Array.isArray(runsheet.attachments) ? runsheet.attachments : [])
-            .filter((a: any) => typeof a?.url === 'string' && /^\/uploads\/[A-Za-z0-9._-]+\.pdf$/.test(a.url));
-          if (safe.length === 0) return null;
-          return (
-            <div className="bg-white border border-gold/30 shadow-sm">
-              <div className="px-5 py-3 border-b border-gold/30">
-                <h2 className="font-bebas tracking-widest text-sm text-ink/60">ATTACHMENTS</h2>
-              </div>
-              <div className="divide-y divide-gold/20">
-                {safe.map((att: any) => (
-                  <a
-                    key={att.id}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 px-5 py-3 hover:bg-linen/50 transition-colors"
-                  >
-                    <FileText className="w-4 h-4 text-forest flex-shrink-0" />
-                    <span className="flex-1 font-dm text-sm text-ink truncate">{att.name}</span>
-                    {att.size != null && (
-                      <span className="font-dm text-[11px] text-ink/65">{(att.size / 1024).toFixed(0)} KB</span>
-                    )}
-                    <span className="font-bebas tracking-widest text-[11px] text-forest">OPEN</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
+        <StaffAttachments attachments={runsheet.attachments} />
 
         {/* ── Notes ── */}
         {runsheet.notes && (

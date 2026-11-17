@@ -170,11 +170,13 @@ function SequenceCard({ def, cfg, smtpConfigured }: { def: SequenceDef; cfg: Seq
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={saveWording} disabled={!dirty || save.isPending}
+        {/* Five of these editors share button names: each button is described
+            by its follow-up's title, so a list of buttons can tell them apart. */}
+        <button type="button" onClick={saveWording} disabled={!dirty || save.isPending} aria-describedby={`${uid}-title`}
           className="btn-forest px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary">
           {save.isPending ? "Saving…" : "Save changes"}
         </button>
-        <button type="button" aria-expanded={previewStep === 1} onClick={() => setPreviewStep(p => (p === 1 ? null : 1))}
+        <button type="button" aria-expanded={previewStep === 1} aria-describedby={`${uid}-title`} onClick={() => setPreviewStep(p => (p === 1 ? null : 1))}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border border-stone-300 rounded-md text-ink hover:bg-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <Eye className="w-4 h-4" aria-hidden="true" /> {previewStep === 1 ? "Hide preview" : "Preview"}
         </button>
@@ -184,7 +186,7 @@ function SequenceCard({ def, cfg, smtpConfigured }: { def: SequenceDef; cfg: Seq
             <Eye className="w-4 h-4" aria-hidden="true" /> {previewStep === 2 ? "Hide second" : "Preview second"}
           </button>
         )}
-        <button type="button" onClick={resetWording}
+        <button type="button" onClick={resetWording} aria-describedby={`${uid}-title`}
           className="flex items-center gap-1.5 px-3 py-2 text-sm text-stone-700 hover:text-ink rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> Reset wording
         </button>

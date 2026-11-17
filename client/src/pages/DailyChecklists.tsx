@@ -255,7 +255,7 @@ export default function DailyChecklists() {
                 onClick={() => { setShowAiPaste(true); setAiParsed(null); setAiPasteText(""); }}
                 className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40 transition-colors text-white font-bebas tracking-wider text-sm px-3 md:px-4 py-2.5 rounded min-h-[44px]"
                 title="Paste a to-do list and AI builds a checklist"
-                aria-label="AI Smart Paste — paste a to-do list and AI builds a checklist"
+                aria-label="AI paste: paste a to-do list and AI builds a checklist"
               >
                 <Sparkles className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden md:inline">AI PASTE</span>
@@ -363,24 +363,27 @@ export default function DailyChecklists() {
                 const pct = cl.itemCount > 0 ? Math.round((cl.checkedCount / cl.itemCount) * 100) : 0;
                 return (
                   <div key={cl.id} className="bg-white border border-[#c9a84c]/30 rounded overflow-hidden shadow-sm">
+                    {/* A click anywhere on the header opens it. For the keyboard the
+                        name is the disclosure button, with Copy/Open/Duplicate/
+                        Delete beside it rather than nested inside it. */}
                     <div
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isExpanded}
-                      aria-label={`${cl.name} — ${isExpanded ? "collapse" : "expand"} checklist`}
-                      className="p-4 cursor-pointer hover:bg-[#f9f5ef]/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
+                      className="p-4 cursor-pointer hover:bg-[#f9f5ef]/50 transition-colors"
                       onClick={() => setExpandedId(isExpanded ? null : cl.id)}
-                      onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setExpandedId(isExpanded ? null : cl.id); } }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-label={`${cl.name} — ${isExpanded ? "collapse" : "expand"} checklist`}
+                          className="flex items-center gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
+                        >
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 rounded flex-shrink-0 ${cat.color}`}>{cat.label}</span>
                           <div className="min-w-0">
                             <div className="font-bebas text-lg tracking-wider text-[#1a1209] truncate">{cl.name}</div>
                             {cl.assignedDate && <div className="font-dm text-xs text-[#2f5488] font-medium truncate">{new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>}
                             {cl.description && <div className="font-dm text-xs text-[#83745b] truncate">{cl.description}</div>}
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           {cl.itemCount > 0 && (
                             <div className="text-right">
@@ -428,11 +431,11 @@ export default function DailyChecklists() {
                                   {item.note && <div className="font-dm text-xs text-[#83745b] mt-0.5">{item.note}</div>}
                                   {item.photoUrl && <div className="mt-2"><img src={item.photoUrl} alt={`Reference photo for: ${item.text}`} className="w-24 h-16 object-cover rounded border border-[#c9a84c]/20" /></div>}
                                 </div>
-                                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity flex-shrink-0">
                                   <button aria-label={item.photoUrl ? "Replace photo" : "Add photo"} onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  {item.photoUrl && <button aria-label="Remove photo" onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#83745b] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
-                                  <button aria-label="Edit item" onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  <button aria-label="Delete item" onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#83745b] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  {item.photoUrl && <button aria-label={`Remove photo: ${item.text}`} onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#83745b] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
+                                  <button aria-label={`Edit item: ${item.text}`} onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  <button aria-label={`Delete item: ${item.text}`} onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#83745b] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
                                 </div>
                               </div>
                             )}
@@ -1001,11 +1004,11 @@ function SettingsPanel({
                   {editingIdx === i ? (
                     <button aria-label="Save section" onClick={() => saveEdit(i)} className="text-[#2f5488] hover:text-[#25426c]"><Check className="w-3.5 h-3.5" /></button>
                   ) : (
-                    <button aria-label="Edit section" onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-[#83745b] hover:text-[#1a1209] transition-opacity">
+                    <button aria-label="Edit section" onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-[#83745b] hover:text-[#1a1209] transition-opacity">
                       <Pencil className="w-3 h-3" />
                     </button>
                   )}
-                  <button aria-label="Delete section" onClick={() => deleteSection(i)} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                  <button aria-label="Delete section" onClick={() => deleteSection(i)} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                     <X className="w-3 h-3" />
                   </button>
                 </div>

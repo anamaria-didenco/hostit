@@ -247,7 +247,8 @@ export default function Reports() {
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: any, n: any) => [`${v} enquir${Number(v) === 1 ? "y" : "ies"}`, n]} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v: string) => <span style={{ color: "#211d18" }}>{v}</span>} />
+                    {/* The count beside each name: otherwise the figures were only in a hover tooltip. */}
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v: string) => <span style={{ color: "#211d18" }}>{v} ({sourcePie.find(d => d.name === v)?.value ?? 0})</span>} />
                   </PieChart>
                 </ResponsiveContainer>
                 </div>
@@ -407,6 +408,9 @@ export default function Reports() {
             <h2 className="font-cormorant text-xl font-semibold text-ink">Monthly Revenue</h2>
             <p className="font-dm text-xs text-sage mt-0.5 mb-4">{currentYear}, by event date. Cancelled events left out.</p>
             {revenueData && revenueData.some((r: any) => r.revenue > 0) ? (
+              // The bars' values were only in a hover tooltip: name the chart
+              // with each month's total, as the Enquiry Sources pie does.
+              <div role="img" aria-label={`Monthly revenue, ${currentYear}: ${revenueData.map((r: any) => `${r.label} ${currencyWhole(r.revenue)}`).join('; ')}`}>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={revenueData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
@@ -416,6 +420,7 @@ export default function Reports() {
                   <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-sage font-dm text-sm">No booking totals for {currentYear} yet</div>
             )}

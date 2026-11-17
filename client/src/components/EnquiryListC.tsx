@@ -10,6 +10,7 @@ import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
 import MovedNote from "@/components/MovedNote";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
  * The Option-C enquiries list: one signal-first list where every row leads with
@@ -152,6 +153,18 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
+  // Opening a quick reply brings it into view and, when it was opened from the
+  // keyboard, puts the cursor in the reply box. A click or tap leaves focus on
+  // Reply, as before.
+  const replyPanelRef = React.useRef<HTMLDivElement>(null);
+  const replyBoxRef = React.useRef<HTMLTextAreaElement>(null);
+  const focusReplyBox = React.useRef(false);
+  React.useEffect(() => {
+    if (replyId == null) return;
+    replyPanelRef.current?.scrollIntoView({ block: "nearest" });
+    if (focusReplyBox.current) replyBoxRef.current?.focus({ preventScroll: true });
+    focusReplyBox.current = false;
+  }, [replyId]);
   // A just-moved row keeps its place in the tab it was moved from, even though
   // its new status no longer matches it. We remember which tab each move was
   // pinned to; the pin drops when the parent clears the mark (undo, or a
@@ -230,6 +243,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   React.useEffect(() => {
     onRowsChange?.(rows.map((r) => r.lead.id));
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
+  // focus on that row (or the next one) instead of dropping it to the page.
+  // When the last one goes, the tab it was on ("Needs reply 0").
+  const rowsRef = React.useRef<HTMLDivElement>(null);
+  const tabRef = React.useRef<HTMLButtonElement>(null);
+  useFocusKeeper(rowsRef, tabRef);
 
   const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
@@ -267,7 +286,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background">
+    <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
         {/* View tabs */}
         <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -277,7 +296,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
               const on = tab === t.id;
               return (
-                <button key={t.id} onClick={() => { setTab(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
                   aria-pressed={on}
                   className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
@@ -327,7 +346,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         )}
 
         {/* Rows */}
-        <div className="flex flex-col gap-2">
+        <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
             <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
           ) : rows.map(({ lead, signal }) => {
@@ -347,18 +366,22 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
             const onAction = (e: React.MouseEvent) => {
               e.stopPropagation();
+              // detail 0 = Enter/Space (a click or tap has 1 or more).
+              focusReplyBox.current = e.detail === 0;
               if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
             };
 
             return (
               <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, lead.status === "new" ? "5c" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
+                style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
                 {/* The whole box is filled with the enquiry's status colour: a
                     light tint, with a solid border in the same colour. A brand-new
                     enquiry is the one that needs you, so its tint is the strongest. */}
-                {/* Desktop: one dense signal-first row */}
-                <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                {/* Desktop: one dense signal-first row. A click anywhere opens
+                    it; for the keyboard the name is the button, so Reply isn't
+                    nested inside another button (Enter on Reply used to open
+                    the drawer too). */}
+                <div onClick={() => onOpen(lead)}
                   className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
                   {/* Fixed-width signal and action columns, so the name and date
                       columns line up from row to row whatever the chip says. */}
@@ -368,7 +391,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2 min-w-0">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
+                        className="min-w-0 truncate text-left font-serif text-[16.5px] font-semibold">
                       <span className="font-serif text-[16.5px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
+                      </button>
                       {/* Status in plain ink: the dot carries the status colour; the
                           chip on the left already carries the urgency colour. */}
                       <span className="inline-flex items-center gap-1.5 font-sans text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
@@ -379,7 +405,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                     {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
                   </div>
                   <div className="min-w-0 hidden lg:block">
@@ -387,6 +413,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <button onClick={onAction}
                     className="inline-flex items-center justify-center gap-1.5 h-9 w-full px-3 rounded-[6px] font-sans text-[13px] font-bold whitespace-nowrap border-[1.5px] transition-colors hover:border-primary"
+                    aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                     style={action.primary
                       ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                       : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
@@ -397,7 +424,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 {/* Mobile: a stacked card — signal + budget, then name, sub, then date + action */}
                 <div className="md:hidden">
                   <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                    onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
                     className="px-3.5 pt-3 pb-2.5 cursor-pointer">
                     <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-[12px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
@@ -417,11 +444,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
                     <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                       {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
                     </div>
                     <button onClick={onAction}
                       className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[6px] font-sans text-[14px] font-bold whitespace-nowrap border-[1.5px] flex-shrink-0"
+                      aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                       style={action.primary
                         ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                         : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
@@ -441,7 +469,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
                 {/* Inline quick reply */}
                 {replying && (
-                  <div className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
+                  <div ref={replyPanelRef} className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
                     <div className="flex items-center gap-1.5 flex-wrap mb-2">
                       <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
                       {(QUICK_FOR[signal.group] ?? []).map((name) => {
@@ -457,7 +485,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                         );
                       })}
                     </div>
-                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
+                    <textarea ref={replyBoxRef} aria-label={`Reply to ${[lead.firstName, lead.lastName].filter(Boolean).join(" ")}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
                       className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
                       style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
                     <div className="mt-2 flex items-center justify-end gap-2">

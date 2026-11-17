@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -61,6 +61,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
   });
 
   const [showAdd, setShowAdd] = useState(false);
+  const fid = useId();
   const [newName, setNewName] = useState("");
   const [newCat, setNewCat] = useState("other");
   const [newType, setNewType] = useState<"income" | "expense">("expense");
@@ -163,6 +164,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
           <input
             className="w-full border border-gold/30 bg-white px-2 py-1.5 font-dm text-sm text-ink focus:outline-none focus:border-forest/50 placeholder:text-ink/65"
             placeholder="Item name (e.g. Bar tab, DJ, Canapés)"
+            aria-label="Item name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
@@ -172,6 +174,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
               className="border border-gold/30 bg-white px-2 py-1.5 font-dm text-xs text-ink focus:outline-none focus:border-forest/50"
               value={newCat}
               onChange={(e) => setNewCat(e.target.value)}
+              aria-label="Category"
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
@@ -181,6 +184,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
               className="border border-gold/30 bg-white px-2 py-1.5 font-dm text-xs text-ink focus:outline-none focus:border-forest/50"
               value={newType}
               onChange={(e) => setNewType(e.target.value as "income" | "expense")}
+              aria-label="Expense or income"
             >
               <option value="expense">Expense</option>
               <option value="income">Income</option>
@@ -188,8 +192,9 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <div className="font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ESTIMATED ($)</div>
+              <label htmlFor={`${fid}-est`} className="block font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ESTIMATED ($)</label>
               <input
+                id={`${fid}-est`}
                 type="number"
                 min="0"
                 className="w-full border border-gold/30 bg-white px-2 py-1.5 font-dm text-sm text-ink focus:outline-none focus:border-forest/50"
@@ -199,8 +204,9 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
               />
             </div>
             <div>
-              <div className="font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ACTUAL ($)</div>
+              <label htmlFor={`${fid}-actual`} className="block font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ACTUAL ($)</label>
               <input
+                id={`${fid}-actual`}
                 type="number"
                 min="0"
                 className="w-full border border-gold/30 bg-white px-2 py-1.5 font-dm text-sm text-ink focus:outline-none focus:border-forest/50"
@@ -271,6 +277,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
                       onChange={(e) => setEditingActual((prev) => ({ ...prev, [item.id]: e.target.value }))}
                       onBlur={() => commitActual(item.id)}
                       onKeyDown={(e) => e.key === "Enter" && commitActual(item.id)}
+                      aria-label={`Actual amount: ${item.name}`}
                       autoFocus
                     />
                   ) : (
@@ -285,6 +292,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges, hideH
                 </div>
                 <button
                   onClick={() => deleteItem.mutate({ id: item.id })}
+                  aria-label={`Delete ${item.name}`}
                   className="text-ink/20 hover:text-red-400 transition-colors flex-shrink-0"
                 >
                   <Trash2 className="w-3 h-3" />

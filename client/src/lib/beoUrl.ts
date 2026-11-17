@@ -54,7 +54,6 @@ export async function downloadBeo(bookingId: number | string, opts?: { copy?: 'c
         ? 'You\'ve been signed out. Sign in again, then download the BEO.'
         : `Couldn't make the ${label}. Try again, or open the printable page.`), {
         id,
-        duration: 12_000,
         action: { label: 'Open printable page', onClick: openPrintable },
       });
       return;
@@ -74,7 +73,6 @@ export async function downloadBeo(bookingId: number | string, opts?: { copy?: 'c
       ? `The ${label} took too long to make. Try again in a minute.`
       : `Couldn't download the ${label}. Check your connection and try again.`, {
       id,
-      duration: 12_000,
       action: { label: 'Open printable page', onClick: openPrintable },
     });
   }
@@ -96,7 +94,7 @@ export async function downloadBeoBatch(bookingIds: number[], label: string): Pro
       const reason = (await res.text().catch(() => '')).trim();
       toast.error(res.status === 401
         ? 'You\'ve been signed out. Sign in again, then print the week.'
-        : (reason && reason.length < 160 ? reason : 'Couldn\'t make the run sheets. Try again in a minute.'), { id, duration: 12_000 });
+        : (reason && reason.length < 160 ? reason : 'Couldn\'t make the run sheets. Try again in a minute.'), { id });
       return false;
     }
     const failed = Number(res.headers.get('x-beo-failed') || 0);
@@ -120,7 +118,7 @@ export async function downloadBeoBatch(bookingIds: number[], label: string): Pro
   } catch (e: any) {
     toast.error(e?.name === 'TimeoutError'
       ? 'The run sheets took too long to make. Try fewer events at a time.'
-      : 'Couldn\'t download the run sheets. Check your connection and try again.', { id, duration: 12_000 });
+      : 'Couldn\'t download the run sheets. Check your connection and try again.', { id });
     return false;
   }
 }

@@ -541,19 +541,19 @@ export default function ProposalBuilder() {
   const depositError = percentError(depositPercent, "Deposit");
   const moneyError = taxError ?? depositError;
   // A cleared title used to save (by autosave, or Save Changes on a saved proposal).
+  // It is said at the field (role=alert), not only in a passing toast.
   const titleMissing = !title.trim() ? "Give the proposal a title." : null;
-  useEffect(() => {
-    markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError);
-    markInvalid(document.getElementById("pb-title"), "pb-title-error", !!titleMissing && !locked);
-  });
+  const showTitleError = !!titleMissing && !locked;
+  useEffect(() => { markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError); });
 
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
   const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
     const formError = locked ? null : titleMissing ?? moneyError;
     if (formError) {
       if (!opts.auto) {
-        // The error is also shown at the field, so the toast needn't stay until closed.
-        toast.error(formError, { id: "proposal-form-invalid", duration: 4000 });
+        // The error is also shown at the field, so the toast needn't stay until closed
+        // (and an empty title has no toast: its role=alert message says it).
+        if (!titleMissing) toast.error(formError, { id: "proposal-form-invalid", duration: 4000 });
         (titleMissing ? document.getElementById("pb-title") : taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
       }
       return null;
@@ -717,14 +717,14 @@ export default function ProposalBuilder() {
             </Button>
           )}
           {!locked && (
-            <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
+            <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
+              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent aria-disabled:pointer-events-none aria-disabled:opacity-50">
               {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
             </Button>
           )}
           {canSend && (
-            <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
-              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
+            <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
+              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1 aria-disabled:pointer-events-none aria-disabled:opacity-50">
               <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : status === "draft" ? "Send to Client" : "Resend"}
             </Button>
           )}
@@ -772,12 +772,13 @@ export default function ProposalBuilder() {
               <div>
                 <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
                 <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
+                  aria-required="true" aria-invalid={showTitleError || undefined} aria-describedby={showTitleError ? "pb-title-error" : undefined}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
-                {titleMissing && !locked && <p id="pb-title-error" className="font-dm text-xs text-red-700 mt-1">{titleMissing}</p>}
+                {showTitleError && <p id="pb-title-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{titleMissing}</p>}
               </div>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
-                <Textarea aria-label="Intro message shown to the client" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
+                <label htmlFor="pb-intro" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
+                <Textarea id="pb-intro" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
                   rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
@@ -926,9 +927,11 @@ export default function ProposalBuilder() {
               </Button>
             </div>
 
-            {/* Header */}
-            <div className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 mb-2">
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
+            {/* Header. On a phone each line stacks: the description on its own
+                row, then qty, price, total and remove (side by side the
+                description box was crushed to 28px). */}
+            <div className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-x-2 gap-y-1 mb-2">
+              <div className="col-span-4 sm:col-span-1 font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
@@ -953,9 +956,10 @@ export default function ProposalBuilder() {
             )}
             <div className="space-y-2 mb-4">
               {lineItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
-                  <div className="min-w-0">
+                <div key={i} className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
+                  <div className="min-w-0 col-span-4 sm:col-span-1">
                     <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
+                      aria-label={`Description, line item ${i + 1}`}
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
                   <div>
@@ -1023,7 +1027,7 @@ export default function ProposalBuilder() {
               <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input aria-label="Deposit percentage" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit required (percentage)" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
@@ -1331,12 +1335,14 @@ export default function ProposalBuilder() {
                       value={newCustomDrink.name}
                       onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
                       placeholder="Drink name"
+                      aria-label="Drink name"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newCustomDrink.description}
                       onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
+                      aria-label="Drink description"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
@@ -1345,6 +1351,7 @@ export default function ProposalBuilder() {
                         value={newCustomDrink.price}
                         onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
                         placeholder="Price"
+                        aria-label="Drink price"
                         className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
                       <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
@@ -1575,9 +1582,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
+                    <label htmlFor="pb-logo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
                   </div>
                   <Input
+                    id="pb-logo-url"
                     value={appearanceLogoUrl}
                     onChange={e => setAppearanceLogoUrl(e.target.value)}
                     placeholder="https://example.com/logo.png"
@@ -1594,9 +1602,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
+                    <label htmlFor="pb-venue-photo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
                   </div>
                   <Input
+                    id="pb-venue-photo-url"
                     value={appearanceVenuePhotoUrl}
                     onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
                     placeholder="https://example.com/venue.jpg"
@@ -1672,14 +1681,14 @@ export default function ProposalBuilder() {
           {/* Actions */}
           <div className="space-y-2">
             {!locked && (
-              <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
+              <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
               </Button>
             )}
             {canSend && (
-              <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
-                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2">
+              <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
+                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2 aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 <Send className="w-4 h-4" />
                 {sendProposal.isPending ? "SENDING..." : status === "draft" ? "SAVE & SEND TO CLIENT" : "SAVE & RESEND TO CLIENT"}
               </Button>

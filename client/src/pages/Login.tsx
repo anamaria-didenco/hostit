@@ -1,17 +1,30 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  // Bumped on each submit: a new alert element is announced even when the
+  // message is the same as last time (e.g. a second empty submit).
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [, navigate] = useLocation();
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setAttempt(n => n + 1);
+    // Checked here rather than by disabling Sign in, so an empty submit says
+    // what's missing instead of a faded button that does nothing.
+    if (!password) {
+      setError("Enter your password.");
+      passwordRef.current?.focus();
+      return;
+    }
     setLoading(true);
+    let failed = false;
     try {
       // Email is optional — if blank, server falls back to the single-admin
       // ADMIN_PASSWORD flow. If provided, it looks up the user's per-account
@@ -26,15 +39,20 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) {
+        failed = true;
         setError(data.error ?? "Login failed.");
       } else {
         navigate("/dashboard");
       }
     } catch {
+      failed = true;
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
+    // Sign in is disabled while the request runs, so a click left focus on
+    // <body>: put it back in the password field, where the retry starts.
+    if (failed) passwordRef.current?.focus();
   }
 
   return (
@@ -49,7 +67,7 @@ export default function Login() {
           <p className="text-[#6a6256] text-sm mt-1">Enter your details to continue</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-[#fffdf9] rounded-lg border-[1.5px] border-[#e6dccb] p-6 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="bg-[#fffdf9] rounded-lg border-[1.5px] border-[#e6dccb] p-6 space-y-4">
           <div>
             <label htmlFor="email" className="block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#6a6256] mb-1.5">
               Email <span className="text-[#7e7466] font-medium normal-case tracking-normal">(leave blank for owner)</span>
@@ -58,7 +76,7 @@ export default function Login() {
               id="email"
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => { setEmail(e.target.value); setError(""); }}
               placeholder="you@venue.co.nz"
               autoComplete="username"
               className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
@@ -68,26 +86,30 @@ export default function Login() {
             <label htmlFor="password" className="block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#6a6256] mb-1.5">
               Password
             </label>
+            {/* No autofocus: it started team members (who sign in with an
+                email) in the second field, with Email reachable only backwards. */}
             <input
               id="password"
+              ref={passwordRef}
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={e => { setPassword(e.target.value); setError(""); }}
               placeholder="Enter your password"
               required
-              autoFocus
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
               autoComplete="current-password"
               className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
+            <p key={attempt} id="login-error" role="alert" className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
           )}
 
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={loading}
             className="w-full bg-[#2f5488] text-white font-sans font-bold py-2.5 rounded-[6px] text-sm hover:bg-[#25426c] hover:-translate-y-px transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Signing in…" : "Sign in"}

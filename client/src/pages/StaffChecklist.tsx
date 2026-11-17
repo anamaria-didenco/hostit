@@ -65,12 +65,12 @@ export default function StaffChecklist() {
 
   if (!instance) {
     return (
-      <div className="min-h-screen bg-linen flex items-center justify-center px-4">
+      <main className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</p>
+          <h1 className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</h1>
           <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid or expired.</p>
         </div>
-      </div>
+      </main>
     );
   }
 

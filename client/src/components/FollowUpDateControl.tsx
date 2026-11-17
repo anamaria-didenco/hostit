@@ -103,7 +103,7 @@ export function FollowUpDateControl({
             <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-70" aria-hidden="true" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={4} className="z-[10001] w-64 bg-white border border-stone-200 shadow-lg p-3">
+        <PopoverContent align="start" sideOffset={4} aria-label="Follow up" className="z-[10001] w-64 bg-white border border-stone-200 shadow-lg p-3">
           <p className="font-bebas tracking-widest text-[11px] text-sage mb-2">FOLLOW UP</p>
           <div className="grid grid-cols-3 gap-1.5 mb-3">
             {QUICK_PICKS.map(q => {

@@ -3,6 +3,7 @@ import { safeHtml } from "@/lib/safeHtml";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { groupDrinks } from "@shared/drinkGroups";
 import { isSharedMenu } from "@shared/eventMenus2026";
+import StaffAttachments from "@/components/StaffAttachments";
 import {
   allQuantitiesOne, clockStepIndex, dishQuantity, isSevereDietary, type BillingStep,
 } from "@shared/nowNext";
@@ -193,8 +194,10 @@ export default function NowNext({
                 <button type="button" onClick={() => savePos(steps.length - 1)} className="font-dm text-[16px] font-semibold text-forest underline underline-offset-4">Back to the last step</button>
               </div>
             ) : step && (
-              <section aria-labelledby="vf-nn-now" className="bg-white border-2 border-forest p-5 space-y-2">
-                <div className={label} id="vf-nn-now">Now · step {current + 1} of {steps.length}</div>
+              // Its own label id: "vf-nn-now" is the tab panel's id, and reusing it
+              // named this card after the whole screen for a screen reader.
+              <section aria-labelledby="vf-nn-now-label" className="bg-white border-2 border-forest p-5 space-y-2">
+                <div className={label} id="vf-nn-now-label">Now · step {current + 1} of {steps.length}</div>
                 <div className="flex items-baseline gap-3 flex-wrap">
                   <span className="figure text-[44px] leading-none text-ink">{time12(step.time)}</span>
                   {step.duration ? <span className="font-dm text-[16px] font-semibold text-stone">{step.duration} min</span> : null}
@@ -233,6 +236,10 @@ export default function NowNext({
                 </ol>
               </section>
             )}
+
+            {/* Menus, maps and other PDFs from the Runsheet Builder: one tap to
+                open, on the screen staff already have up. */}
+            <StaffAttachments attachments={runsheet?.attachments} variant="phone" />
           </>
         )}
 
@@ -357,6 +364,7 @@ export default function NowNext({
                 <p>Onsite contact: <b>{contactName}</b>{contactPhone && <> · <a className="text-forest font-semibold underline underline-offset-4" href={`tel:${contactPhone.replace(/\s+/g, "")}`}>{contactPhone}</a></>}</p>
               )}
             </section>
+            <StaffAttachments attachments={runsheet?.attachments} variant="phone" />
             {runsheet?.notes && (
               <section aria-label="Notes" className="bg-white border border-gold px-4 py-3">
                 <h2 className={`${label} mb-1`}>Notes</h2>

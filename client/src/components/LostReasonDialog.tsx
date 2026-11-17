@@ -1,7 +1,7 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { LOST_REASONS, type LostReasonKey } from "@shared/lostReasons";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /**
  * Asked whenever an enquiry is moved to Lost: one tap on a reason, an optional
@@ -9,7 +9,7 @@ import { LOST_REASONS, type LostReasonKey } from "@shared/lostReasons";
  * Sits above the event drawer (z 9999) and its popovers.
  */
 export default function LostReasonDialog({
-  count, name, onConfirm, onCancel, pending,
+  count, name, onConfirm, onCancel, pending, returnFocus,
 }: {
   /** How many enquiries are being marked lost (bulk), default 1. */
   count?: number;
@@ -18,30 +18,23 @@ export default function LostReasonDialog({
   onConfirm: (reason: LostReasonKey | null, note: string | null) => void;
   onCancel: () => void;
   pending?: boolean;
+  /** Where focus goes on close when the control that opened it has gone (e.g. the drawer's Status menu). */
+  returnFocus?: () => HTMLElement | null;
 }) {
   const [reason, setReason] = React.useState<LostReasonKey | null>(null);
   const [note, setNote] = React.useState("");
   const firstRef = React.useRef<HTMLButtonElement>(null);
   const noteRef = React.useRef<HTMLTextAreaElement>(null);
 
-  React.useEffect(() => { firstRef.current?.focus(); }, []);
   React.useEffect(() => { if (reason === "other") noteRef.current?.focus(); }, [reason]);
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onCancel(); }
-    };
-    // Capture phase, so the drawer underneath doesn't also close on Escape.
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onCancel]);
 
   const many = (count ?? 1) > 1;
   const title = many ? `Why were these ${count} lost?` : "Why was this enquiry lost?";
 
-  return createPortal(
-    <div className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="lost-reason-title"
+  // Escape closes only this, not the drawer underneath (Radix marks the key handled).
+  return (
+    <DialogShell onClose={onCancel} className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+      <DialogShellContent aria-labelledby="lost-reason-title" initialFocus={firstRef} returnFocus={returnFocus}
         className="bg-cream border-2 border-forest w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="bg-forest-dark px-5 py-3.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -89,8 +82,7 @@ export default function LostReasonDialog({
             </button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogShellContent>
+    </DialogShell>
   );
 }

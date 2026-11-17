@@ -38,10 +38,12 @@ function SectionHead({
   return (
     <div
       data-slot="section-head"
-      className={cn("flex items-center gap-3", className)}
+      // Wraps rather than overlapping: on a narrow card (a phone, or 400% zoom)
+      // the meta drops under the title and a long title wraps onto two lines.
+      className={cn("flex flex-wrap items-center gap-x-3 gap-y-1", className)}
       {...props}
     >
-      <div className={cn("flex items-center gap-1.5 shrink-0", t.text)}>
+      <div className={cn("flex items-center gap-1.5 min-w-0", t.text)}>
         {icon}
         <Heading
           className={cn(
