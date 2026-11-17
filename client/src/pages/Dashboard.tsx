@@ -7652,7 +7652,7 @@ export default function Dashboard() {
                         // 15 identical "Toggle field visibility" buttons with no state.
                         const { name: fieldName, labelBox } = formFieldNames(all)[i];
                         return (
-                        <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
+                        <div key={field.id} data-form-field={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
                           {/* Visible toggle */}
                           <div className="col-span-1">
                             <button type="button" role="switch" aria-checked={field.visible} aria-label={`Show ${fieldName} on form`}
@@ -7700,7 +7700,13 @@ export default function Dashboard() {
                             {!field.isDefault && (
                               <button type="button"
                                 aria-label={`Delete ${fieldName}`}
-                                onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
+                                onClick={e => {
+                                  // Focus goes to the next field, else the one before, else adding a field (it fell to the page).
+                                  const card = e.currentTarget.closest('.dante-card');
+                                  const next = all[i + 1] ?? all[i - 1];
+                                  setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev);
+                                  requestAnimationFrame(() => card?.querySelector<HTMLElement>(next ? `[data-form-field="${CSS.escape(next.id)}"] button` : 'input[aria-label="New field label"]')?.focus());
+                                }}
                                 className="text-ink/65 hover:text-red-500 transition-colors p-[5px]">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
