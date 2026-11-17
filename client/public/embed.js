@@ -189,9 +189,13 @@
     var accent = script.getAttribute("data-accent");
     var accentCss = accent ? "#" + accent.replace(/^#/, "") : "#2f5488";
 
+    var panelId = (frameId + "-panel").replace(/\s+/g, "-");
     var bubble = document.createElement("button");
     bubble.type = "button";
     bubble.setAttribute("aria-label", "Open enquiry form");
+    bubble.setAttribute("aria-haspopup", "dialog");
+    bubble.setAttribute("aria-expanded", "false");
+    bubble.setAttribute("aria-controls", panelId);
     bubble.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483000;" +
       "display:flex;align-items:center;justify-content:center;width:56px;height:56px;" +
       "border-radius:50%;border:none;background:" + accentCss + ";color:#fff;cursor:pointer;" +
@@ -201,7 +205,12 @@
     var backdrop = document.createElement("div");
     backdrop.style.cssText = "position:fixed;inset:0;z-index:2147482998;background:rgba(22,20,15,.38);display:none;";
 
+    // The panel is a dialog: named, and modal when it is the full-width
+    // bottom sheet with a backdrop (the corner panel leaves the page usable).
     var panel = document.createElement("div");
+    panel.id = panelId;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Event enquiry form");
     panel.style.cssText = "position:fixed;z-index:2147482999;display:none;" +
       "border-radius:12px;overflow:hidden;box-shadow:0 18px 44px -20px rgba(0,0,0,.45);";
 
@@ -245,18 +254,35 @@
       }
       var narrow = window.matchMedia(NARROW_QUERY).matches;
       backdrop.style.display = narrow ? "block" : "none";
+      if (narrow) panel.setAttribute("aria-modal", "true"); else panel.removeAttribute("aria-modal");
       panel.style.display = "block";
       bubble.style.display = "none";
+      bubble.setAttribute("aria-expanded", "true");
       isOpen = true;
+      // The bubble that had focus is now hidden: take focus into the form
+      // instead of dropping it to the top of the host page.
+      iframe.focus();
     }
     function close() {
+      var active = document.activeElement;
+      var focusWasInside = !active || active === document.body || panel.contains(active);
       panel.style.display = "none";
       backdrop.style.display = "none";
       bubble.style.display = "flex";
+      bubble.setAttribute("aria-expanded", "false");
       isOpen = false;
+      if (focusWasInside) bubble.focus();
     }
+    // Still loading when it opened: focus it again once the form is there.
+    iframe.addEventListener("load", function () {
+      if (isOpen && (document.activeElement === document.body || document.activeElement === iframe)) iframe.focus();
+    });
     bubble.addEventListener("click", function () { isOpen ? close() : open(); });
     backdrop.addEventListener("click", close);
+    // Escape on the host page closes it (inside the form, the form asks us to).
+    document.addEventListener("keydown", function (e) {
+      if (isOpen && !e.defaultPrevented && (e.key === "Escape" || e.key === "Esc")) close();
+    });
     // Re-decide corner-panel vs. bottom-sheet only while closed — resizing
     // mid-conversation out from under someone would be jarring.
     window.addEventListener("resize", function () { if (!isOpen) layoutPanel(); });

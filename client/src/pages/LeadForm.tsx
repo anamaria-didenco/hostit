@@ -629,6 +629,16 @@ export default function LeadForm() {
   const isFloatingPlacement = isEmbed && sp.get("placement") === "floating";
   const isSheet = isFloatingPlacement && sp.get("sheet") === "1";
   const closeFloatingWidget = () => postToParent({ type: "vf-close-widget" });
+  // Keys pressed in here never reach the host page, so Escape in the floating
+  // panel asks embed.js to close it (and give focus back to the bubble). A
+  // date or time pop-up open inside the form handles its own Escape first.
+  useEffect(() => {
+    if (!isFloatingPlacement) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) closeFloatingWidget(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFloatingPlacement]);
   // embed.js reads its OWN parent page's origin (the iframe can't — that's
   // the whole reason it's passed in) and appends it here so postMessage can
   // target that exact origin instead of "*". Validated, not trusted as-is:
