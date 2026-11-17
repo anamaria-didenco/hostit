@@ -17,6 +17,8 @@ import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } fr
 import { toLocalDateInput } from "@/lib/dateTime";
 import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNameFromLine, withoutDuplicatePackageLines } from "@shared/proposalPackages";
 import { isProposalLocked, proposalMoney } from "@shared/proposalTotals";
+import { percentError } from "@shared/settingsValidation";
+import { markInvalid } from "@/lib/fieldErrorAria";
 
 // Unsaved work is kept on this device until it's saved, so a reload, a closed
 // tab or a Back press doesn't lose a long proposal. Storage can be blocked
@@ -534,8 +536,21 @@ export default function ProposalBuilder() {
     onError: (e) => toast.error(e.message || "Couldn't send the proposal"),
   });
 
+  // GST or a deposit outside 0-100% (a typed 250) used to save and price the proposal.
+  const taxError = percentError(taxPercent, "GST");
+  const depositError = percentError(depositPercent, "Deposit");
+  const moneyError = taxError ?? depositError;
+  useEffect(() => { markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError); });
+
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
   const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
+    if (!locked && moneyError) {
+      if (!opts.auto) {
+        toast.error(moneyError);
+        (taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
+      }
+      return null;
+    }
     if (!leadId) { toast.error("No enquiry selected"); return null; }
     if (locked) return null;
     const formAtSave = formSnapshot;
@@ -616,6 +631,7 @@ export default function ProposalBuilder() {
   const saveState: { label: string; hint: string; cls: string } | null =
     locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-gray-500" }
     : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-gray-500" }
+    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-red-700" }
     : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-red-700" }
     : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-amber-700" }
     : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-sage-dark" }
@@ -968,12 +984,14 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">GST</span>
-                  <Input aria-label="GST percentage" type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                  <Input id="pb-gst" aria-label="GST percentage" type="number" min={0} max={100} value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                    aria-invalid={taxError ? true : undefined} aria-describedby={taxError ? "pb-gst-error" : undefined}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
                 <span>{menuOptions.length ? "" : currency(taxAmount)}</span>
               </div>
+              {taxError && <p id="pb-gst-error" className="font-dm text-xs text-red-700 -mt-1">{taxError}</p>}
               {menuOptions.length ? (
                 <div className="border-t-2 border-border pt-2 space-y-2">
                   <div className="font-bebas text-xs tracking-widest text-muted-foreground">CLIENT CHOOSES ONE MENU</div>
@@ -993,7 +1011,7 @@ export default function ProposalBuilder() {
                 <span className="text-primary">{currency(total)}</span>
               </div>
               )}
-              <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
+              <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
                   <Input aria-label="Deposit percentage" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
@@ -1002,6 +1020,7 @@ export default function ProposalBuilder() {
                 </div>
                 <span className="font-alfa text-lg text-ink">{menuOptions.length ? <span className="font-dm text-xs text-muted-foreground">per menu, above</span> : currency(deposit)}</span>
               </div>
+              {depositError && <p id="pb-deposit-error" className="font-dm text-xs text-red-700 -mt-1">{depositError}</p>}
             </div>
           </div>
 
