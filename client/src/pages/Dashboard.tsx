@@ -92,6 +92,7 @@ import GlobalFinder from "@/components/GlobalFinder";
 import EventSearchResults from "@/components/EventSearchResults";
 import MovedNote from "@/components/MovedNote";
 import { leadMatchesSearch } from "@/lib/leadSearch";
+import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
@@ -1241,13 +1242,15 @@ export default function Dashboard() {
 
   // Keyboard shortcuts when on Calendar tab (desktop): ←/→ prev/next, T today, M/W/D/L view switch.
   // Also closes the jump-to-date popover on Escape.
+  // Single keys only act on the calendar itself: never from a field, button or
+  // link, never behind a dialog, drawer or pop-up, and not at all once turned
+  // off (the switch sits under the tip in the jump-to-date pop-up).
+  const [calShortcutsOn, setCalShortcutsOn] = useState(readCalendarShortcutsOn);
   useEffect(() => {
     if (tab !== 'calendar') return;
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape' && showJumpDate) { e.preventDefault(); setShowJumpDate(false); return; }
+      if (!singleKeyShortcutAllowed(e, calShortcutsOn)) return;
       if (showJumpDate || showAddLead || selectedBooking) return;
       switch (e.key) {
         case 'ArrowLeft': e.preventDefault(); navCalendar(-1); break;
@@ -4966,6 +4969,13 @@ export default function Dashboard() {
                         <p className="hidden md:block font-dm text-[12px] text-sage/60 mt-3 leading-snug">
                           Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
                         </p>
+                        {/* Off for speech input and anyone who sets keys off by accident; kept per browser. */}
+                        <label className="hidden md:flex items-center gap-2 mt-2 font-dm text-[12px] text-ink/80 cursor-pointer">
+                          <input type="checkbox" checked={calShortcutsOn}
+                            onChange={e => { setCalShortcutsOn(e.target.checked); writeCalendarShortcutsOn(e.target.checked); }}
+                            className="accent-forest w-3.5 h-3.5" />
+                          Single-key shortcuts on
+                        </label>
                       </PopoverContent>
                     </Popover>
                   </div>
