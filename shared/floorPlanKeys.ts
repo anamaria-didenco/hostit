@@ -33,7 +33,8 @@ const NUDGE: Record<string, [number, number]> = {
 export function planKeyAction(k: PlanKey, focusOnPlan: boolean, selected: string | null): PlanKeyAction | null {
   if (!focusOnPlan || !selected) return null;
   const d = NUDGE[k.key];
-  if (d) return { kind: "nudge", id: selected, dx: d[0], dy: d[1], big: !!k.shift };
+  // Alt+Left (Back) and Ctrl/Cmd+arrows belong to the browser.
+  if (d) return k.modifier ? null : { kind: "nudge", id: selected, dx: d[0], dy: d[1], big: !!k.shift };
   if (k.key === "Delete" || k.key === "Backspace") return { kind: "delete", id: selected };
   if ((k.key === "r" || k.key === "R") && !k.modifier) return { kind: "rotate", id: selected };
   return null;

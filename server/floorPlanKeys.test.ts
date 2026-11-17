@@ -33,4 +33,14 @@ describe("floor plan keys", () => {
     expect(planKeyAction({ key: "r", modifier: true }, true, "t1")).toBeNull();
     for (const key of ["Enter", " ", "Tab", "Escape", "d", "x"]) expect(planKeyAction({ key }, true, "t1")).toBeNull();
   });
+
+  // Alt+Left is the browser's Back (Cmd+Left on a Mac), and Ctrl/Cmd+arrows
+  // are the browser's or system's own: they used to nudge the item instead.
+  it("leave the arrows with Ctrl/Cmd/Alt to the browser (Shift still moves five)", () => {
+    for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+      expect(planKeyAction({ key, modifier: true }, true, "t1")).toBeNull();
+      expect(planKeyAction({ key, shift: true, modifier: true }, true, "t1")).toBeNull();
+    }
+    expect(planKeyAction({ key: "ArrowLeft", shift: true }, true, "t1")).toEqual({ kind: "nudge", id: "t1", dx: -1, dy: 0, big: true });
+  });
 });
