@@ -1182,8 +1182,25 @@ export default function Dashboard() {
   // when its confirm was closed while "Deleting…"), or CLEAR. When focus was
   // on it, put it on More actions, where the selection started, not <body>.
   const bulkBarHadFocus = useRef(false);
+  // Below xl the bar wraps (about 230px tall on a phone) and sat over the
+  // list's last rows with no way to scroll them clear: while it's up, the
+  // list stops where the bar starts.
+  const enquiryContentRef = useRef<HTMLDivElement>(null);
+  const [bulkBarCover, setBulkBarCover] = useState(0);
   const bulkBarRef = React.useCallback((el: HTMLDivElement | null) => {
-    if (el) return () => { if (el.contains(document.activeElement)) bulkBarHadFocus.current = true; };
+    if (!el) return;
+    const measure = () => {
+      const area = enquiryContentRef.current;
+      const wraps = window.matchMedia('(max-width: 1279.98px)').matches;
+      setBulkBarCover(area && wraps ? Math.max(0, Math.round(area.getBoundingClientRect().bottom - el.getBoundingClientRect().top)) : 0);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect(); window.removeEventListener('resize', measure); setBulkBarCover(0);
+      if (el.contains(document.activeElement)) bulkBarHadFocus.current = true;
+    };
   }, []);
   React.useLayoutEffect(() => {
     if (!bulkBarHadFocus.current) return;
@@ -4407,7 +4424,7 @@ export default function Dashboard() {
               </div>
 
               {/* ── CONTENT AREA ──────────────────────────────────────────────── */}
-              <div className="flex flex-1 overflow-hidden">
+              <div ref={enquiryContentRef} className="flex flex-1 overflow-hidden" style={bulkBarCover ? { paddingBottom: bulkBarCover } : undefined}>
 
                 {/* ── WIN BACK ──────────────────────────────────────── */}
                 {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
