@@ -823,21 +823,21 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
-              <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
+              <label htmlFor="contract-title" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
+              <Input id="contract-title" aria-required="true" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
-              <Input value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
+              <label htmlFor="contract-client-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
+              <Input id="contract-client-name" value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
-              <Input type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
+              <label htmlFor="contract-client-email" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
+              <Input id="contract-client-email" type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
             </div>
           </div>
           <div>
-            <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
-            <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
+            <label htmlFor="contract-body" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
+            <Textarea id="contract-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
           </div>
           <div className="flex gap-2">
             <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'CREATE CONTRACT'}</button>
@@ -957,29 +957,29 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
+              <label htmlFor="budget-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <Input id="budget-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
-              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
+              <select id="budget-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
+              <select id="budget-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
-              <Input type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+              <label htmlFor="budget-estimated" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
+              <Input id="budget-estimated" type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
-              <Input type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+              <label htmlFor="budget-actual" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
+              <Input id="budget-actual" type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
@@ -1063,22 +1063,22 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
+              <label htmlFor="equipment-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <Input id="equipment-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="equipment-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
+              <select id="equipment-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
-              <Input type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
+              <label htmlFor="equipment-quantity" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
+              <Input id="equipment-quantity" type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
             </div>
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
-              <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
+              <label htmlFor="equipment-notes" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
+              <Input id="equipment-notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
