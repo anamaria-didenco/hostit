@@ -12,6 +12,9 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   // Which field the error is about, so it can be marked invalid and focused.
   const [errorField, setErrorField] = useState<"email" | "password" | null>(null);
+  // Bumped on each submit: a new alert element is announced even when the
+  // message is the same as last time.
+  const [attempt, setAttempt] = useState(0);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [, navigate] = useLocation();
@@ -23,10 +26,17 @@ export default function Signup() {
     if (field === "password") passwordRef.current?.focus();
   }
 
+  // Typing is fixing it: the message and the field's invalid mark go.
+  function clearError() {
+    setError("");
+    setErrorField(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setErrorField(null);
+    setAttempt(n => n + 1);
     // Checked here rather than by disabling Create account, so the reason is
     // shown instead of a faded button that does nothing.
     if (!email.trim()) {
@@ -84,7 +94,7 @@ export default function Signup() {
               id="name"
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => { setName(e.target.value); clearError(); }}
               placeholder="Jordan"
               autoComplete="name"
               className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
@@ -99,7 +109,7 @@ export default function Signup() {
               ref={emailRef}
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => { setEmail(e.target.value); clearError(); }}
               placeholder="you@venue.co.nz"
               required
               aria-invalid={errorField === "email" ? true : undefined}
@@ -117,7 +127,7 @@ export default function Signup() {
               ref={passwordRef}
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={e => { setPassword(e.target.value); clearError(); }}
               placeholder="At least 8 characters"
               required
               minLength={8}
@@ -131,7 +141,7 @@ export default function Signup() {
           </div>
 
           {error && (
-            <p id="signup-error" role="alert" className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
+            <p key={attempt} id="signup-error" role="alert" className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
           )}
 
           <button

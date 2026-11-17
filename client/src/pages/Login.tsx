@@ -5,6 +5,9 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  // Bumped on each submit: a new alert element is announced even when the
+  // message is the same as last time (e.g. a second empty submit).
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [, navigate] = useLocation();
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -12,6 +15,7 @@ export default function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setAttempt(n => n + 1);
     // Checked here rather than by disabling Sign in, so an empty submit says
     // what's missing instead of a faded button that does nothing.
     if (!password) {
@@ -72,7 +76,7 @@ export default function Login() {
               id="email"
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => { setEmail(e.target.value); setError(""); }}
               placeholder="you@venue.co.nz"
               autoComplete="username"
               className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
@@ -89,7 +93,7 @@ export default function Login() {
               ref={passwordRef}
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={e => { setPassword(e.target.value); setError(""); }}
               placeholder="Enter your password"
               required
               aria-invalid={error ? true : undefined}
@@ -100,7 +104,7 @@ export default function Login() {
           </div>
 
           {error && (
-            <p id="login-error" role="alert" className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
+            <p key={attempt} id="login-error" role="alert" className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
           )}
 
           <button
