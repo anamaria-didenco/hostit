@@ -907,9 +907,10 @@ export default function LeadForm() {
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
   // (no per-keystroke bookkeeping needed).
   const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
-  // Why the last submit failed, shown above the embed's SUBMIT button: a toast
-  // in the embed would sit right on top of that button (the iframe is only as
-  // tall as the form), so the full page alone uses a toast for it.
+  // Why the last submit failed, shown (and announced) just above SUBMIT. A
+  // toast sat right on top of that button: in the embed (the iframe is only as
+  // tall as the form), and on a phone, where SUBMIT is at the bottom of the
+  // screen when it's tapped.
   const [submitError, setSubmitError] = useState("");
   // The id of the lead row this submission created/updated — captured from
   // submit()'s response so the post-submit walkthrough step has something to
@@ -1050,8 +1051,7 @@ export default function LeadForm() {
       setTurnstileReset(n => n + 1);
       const reason = e?.message?.trim() || "Something went wrong submitting the form.";
       const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
-      if (isEmbed) setSubmitError(`${reason}${fallback}`);
-      else toast.error(`${reason}${fallback}`);
+      setSubmitError(`${reason}${fallback}`);
     },
   });
 
@@ -2122,6 +2122,7 @@ export default function LeadForm() {
             </div>
 
             {renderTurnstile()}
+            {submitError && <p role="alert" className="text-red-700 text-sm">{submitError}</p>}
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-lg h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
