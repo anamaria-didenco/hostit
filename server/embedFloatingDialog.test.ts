@@ -21,7 +21,7 @@ class FakeEl {
   title = "";
   src = "";
   id = "";
-  contentWindow: object | undefined;
+  contentWindow: { focusCalls: number; focus(): void } | undefined;
   style: any;
   constructor(tag: string, private doc: FakeDoc) {
     this.tagName = tag.toUpperCase();
@@ -33,7 +33,9 @@ class FakeEl {
       },
     });
     this.style = style;
-    if (this.tagName === "IFRAME") this.contentWindow = {};
+    // The frame's own window: on a venue's site it is another origin, and
+    // only focusing it (not the <iframe> element) gives the form focus.
+    if (this.tagName === "IFRAME") this.contentWindow = { focusCalls: 0, focus() { this.focusCalls++; } };
   }
   setAttribute(k: string, v: string) { this.attrs[k] = String(v); }
   getAttribute(k: string) { return k in this.attrs ? this.attrs[k] : null; }
@@ -110,6 +112,28 @@ describe("embed.js floating widget as a dialog", () => {
     expect(panel.style.display).toBe("block");
     expect(bubble.getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(iframe);
+  });
+
+  it("focuses the form's own window too, on open and again once it has loaded", () => {
+    // Cross-origin, iframe.focus() leaves the form page unfocused (Tab goes
+    // back to the host page); contentWindow.focus() is what puts focus in it.
+    const { bubble, iframe } = load();
+    bubble.focus();
+    bubble.dispatch("click");
+    expect(iframe.contentWindow!.focusCalls).toBe(1);
+    // The <iframe> already has focus by the time the form finishes loading.
+    iframe.dispatch("load");
+    expect(iframe.contentWindow!.focusCalls).toBe(2);
+  });
+
+  it("does not pull focus back into the form when it reloads while closed", () => {
+    const { document, bubble, iframe } = load();
+    bubble.dispatch("click");
+    document.keydown("Escape");
+    const before = iframe.contentWindow!.focusCalls;
+    iframe.dispatch("load");
+    expect(iframe.contentWindow!.focusCalls).toBe(before);
+    expect(document.activeElement).toBe(bubble);
   });
 
   it("Escape closes it and puts focus back on the bubble", () => {

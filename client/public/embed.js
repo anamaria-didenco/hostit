@@ -261,7 +261,15 @@
       isOpen = true;
       // The bubble that had focus is now hidden: take focus into the form
       // instead of dropping it to the top of the host page.
+      focusForm();
+    }
+    // iframe.focus() alone leaves the form's own page without focus when it
+    // is on another origin (always, on a venue's site), and the next Tab
+    // goes back out to the host page. Focusing the frame's window is allowed
+    // across origins and puts the next Tab on the form's first control.
+    function focusForm() {
       iframe.focus();
+      try { if (iframe.contentWindow) iframe.contentWindow.focus(); } catch (e) { /* not reachable */ }
     }
     function close() {
       var active = document.activeElement;
@@ -275,7 +283,7 @@
     }
     // Still loading when it opened: focus it again once the form is there.
     iframe.addEventListener("load", function () {
-      if (isOpen && (document.activeElement === document.body || document.activeElement === iframe)) iframe.focus();
+      if (isOpen && (document.activeElement === document.body || document.activeElement === iframe)) focusForm();
     });
     bubble.addEventListener("click", function () { isOpen ? close() : open(); });
     backdrop.addEventListener("click", close);
