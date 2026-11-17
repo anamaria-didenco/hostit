@@ -408,7 +408,7 @@ export default function DailyChecklistLive() {
                     aria-label="Edit item"
                     title="Edit item"
                   >
-                    <Pencil className="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                    <Pencil className="w-3.5 h-3.5 text-stone-500 [button:hover>&]:text-[#2f5488]" aria-hidden="true" />
                   </button>
                   {isConfirmDelete ? (
                     <button
