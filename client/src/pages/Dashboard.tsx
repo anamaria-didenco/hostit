@@ -1309,7 +1309,7 @@ export default function Dashboard() {
   // Open the send-to-Xero modal for a booking, from any entry point. Carries
   // the stream to start on so the modal opens on the right invoice type.
   const openInvoiceFor = React.useCallback((b: {
-    bookingId: number; name: string; eventDate: string | null; depositPaid: boolean; depositNzd: number;
+    bookingId: number; name: string; eventDate: Date | string | null; depositPaid: boolean; depositNzd: number;
     initialStream?: "deposit" | "food" | "drinks";
   }) => {
     setInvoiceLauncherOpen(false);
