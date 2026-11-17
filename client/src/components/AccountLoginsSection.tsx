@@ -68,8 +68,9 @@ export function AccountLoginsSection() {
       {showForm && (
         <div className="p-5 border-b border-gold/20 bg-linen/40 space-y-3">
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
+            <label htmlFor="account-login-name" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
             <input
+              id="account-login-name"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Sarah Jones"
@@ -77,8 +78,9 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL *</label>
+            <label htmlFor="account-login-email" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL *</label>
             <input
+              id="account-login-email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -88,8 +90,9 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
+            <label htmlFor="account-login-password" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
             <input
+              id="account-login-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -179,6 +182,7 @@ export function AccountLoginsSection() {
                     value={resetPassword}
                     onChange={e => setResetPassword(e.target.value)}
                     placeholder="New password (min 8 chars)"
+                    aria-label={`New password for ${login.name || login.email}`}
                     autoComplete="new-password"
                     className="flex-1 border border-gold/30 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                     autoFocus
