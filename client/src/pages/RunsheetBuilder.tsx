@@ -142,6 +142,11 @@ function SortableSection({ id, label, reorderable = true, children }: { id: stri
   );
 }
 
+// Smooth scrolling unless the person has asked their device for reduced
+// motion (an explicit `behavior: 'smooth'` ignores the CSS rule for it).
+const scrollBehavior = (): ScrollBehavior =>
+  (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
 // ── Pop-ups ────────────────────────────────────────────────────────────
 // Every pop-up on this page sits on Radix Dialog, so focus moves into it and
 // stays there, Escape closes it, and the page behind is hidden from screen
@@ -537,6 +542,17 @@ export default function RunsheetBuilder() {
     if (typeof v === 'number') versionRef.current = Math.max(versionRef.current ?? 0, v);
   };
   const isConflict = (e: unknown) => (e as { data?: { code?: string } } | undefined)?.data?.code === 'CONFLICT';
+
+  // The tab's title says which run sheet this is (several are often open at
+  // once); the page's own title comes back on the way out.
+  useEffect(() => {
+    const before = document.title;
+    return () => { document.title = before; };
+  }, []);
+  useEffect(() => {
+    const name = title.trim();
+    document.title = name ? `Run sheet · ${name} · VenueFlow` : 'Run sheet · VenueFlow';
+  }, [title]);
   // Sent with a change this page makes to the event that also reaches this
   // sheet (the guest count), so the server counts it as this page's own save
   // instead of telling this page "someone else changed this run sheet".
@@ -891,7 +907,7 @@ export default function RunsheetBuilder() {
   const scrollToSection = (id: string) => {
     setActiveSection(id);
     const el = document.getElementById(`rb-${id}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
   };
   // Track which section is in view so the rail highlights correctly while
   // the user scrolls the document.
@@ -4052,7 +4068,7 @@ export default function RunsheetBuilder() {
               <span className="text-[#5e2018]/70"> — brief the floor before service.</span>
             </div>
             <button
-              onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+              onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); }}
               className="flex-none font-dm text-xs font-semibold text-[#a13226] border border-[#eccfca] hover:bg-[#f7ddd8] rounded-sm px-2.5 min-h-[44px] transition-colors"
             >
               Manage
@@ -4820,7 +4836,7 @@ export default function RunsheetBuilder() {
                     than telling you to go and find it further down the page. */}
                 <button
                   type="button"
-                  onClick={() => { setProposalSectionOpen(true); setTimeout(() => document.getElementById('rb-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
+                  onClick={() => { setProposalSectionOpen(true); setTimeout(() => document.getElementById('rb-proposal')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }), 50); }}
                   className="flex-none font-dm text-xs font-semibold text-forest border border-forest/40 rounded-sm px-3 min-h-[40px] -my-2 hover:bg-forest/5"
                 >
                   Link a proposal
