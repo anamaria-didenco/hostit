@@ -39,7 +39,7 @@ import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import { isOncePerEvent } from "@shared/nowNext";
-import { DEFAULT_VENUE_TZ, eventDayKey } from "@shared/eventDate";
+import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -598,14 +598,14 @@ export default function RunsheetBuilder() {
     if (Number.isNaN(h) || Number.isNaN(m)) return -1;
     return h * 60 + m;
   };
-  // Whether the runsheet is for "today" (so the NOW indicator is meaningful)
+  // Whether the runsheet is for "today" (so the NOW indicator is meaningful).
+  // eventDate is a calendar day ("2026-11-29"): read as a Date it is UTC
+  // midnight, which west of UTC is the day before.
   const isToday = (() => {
     if (!eventDate) return false;
     const today = new Date();
-    const evt = new Date(eventDate);
-    return evt.getFullYear() === today.getFullYear()
-      && evt.getMonth() === today.getMonth()
-      && evt.getDate() === today.getDate();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return eventDayKey(eventDate) === todayKey;
   })();
 
   // Keep sheetId in sync with the URL — navigate() changes the URL but doesn't
@@ -2946,7 +2946,7 @@ export default function RunsheetBuilder() {
                       {rs.eventDate && (
                         <span className="font-dm text-xs text-ink/75 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {new Date(rs.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          {formatEventDate(rs.eventDate, { weekday: "short", day: "numeric", month: "short", year: "numeric" }, DEFAULT_VENUE_TZ)}
                         </span>
                       )}
                       {rs.eventType && (
@@ -3271,7 +3271,7 @@ export default function RunsheetBuilder() {
         {eventDate && (
           <span className="hidden sm:inline-flex items-center gap-1.5 font-dm text-xs text-ink/75">
             <Calendar className="w-3.5 h-3.5" />
-            {new Date(eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+            {formatEventDate(eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         )}
         {guestCount && (
@@ -7669,9 +7669,7 @@ export default function RunsheetBuilder() {
             // Briefing Email). Falls back to the built-in defaults so
             // nothing breaks for venues that never customised it.
             const eventTitleStr = title || 'the event';
-            const eventDateStr = eventDate
-              ? new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })
-              : '';
+            const eventDateStr = formatEventDate(eventDate, { weekday: 'long', day: 'numeric', month: 'long' });
             const venueNameStr = (venueSettings as any)?.name || '';
             const fill = (s: string) => s
               .replace(/\{eventTitle\}/g, eventTitleStr)
