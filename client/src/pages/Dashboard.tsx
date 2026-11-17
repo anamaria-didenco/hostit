@@ -65,7 +65,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
-import { allShownSelected, keepShown } from "@shared/bulkSelection";
+import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { inkOnAccent } from "@shared/brand";
 import { enquirySignal } from "@shared/enquirySignal";
@@ -1204,8 +1204,10 @@ export default function Dashboard() {
   }, [bulkSelectMode]);
   // A selection is only ever of rows on screen (enquiryOrder is what the list
   // shows): a tab, search or filter change drops the ones it takes away, so a
-  // bulk Delete or Set status can't reach an enquiry that isn't shown.
-  React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, enquiryOrder)); }, [enquiryOrder]);
+  // bulk Delete or Set status can't reach an enquiry that isn't shown. Win
+  // back and the Board replace the list, so nothing stays selected there.
+  const selectable = selectableIds(enquiryOrder, leadViewMode, leadsSubTab);
+  React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, selectable)); }, [selectable]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Overview calendar: start at this week (default) or show the whole month.

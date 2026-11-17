@@ -27,3 +27,13 @@ export function keepShown(selected: Set<number>, shownIds: readonly number[]): S
   if (!gone) return selected;
   return new Set(Array.from(selected).filter(id => shown.has(id)));
 }
+
+/**
+ * The rows a selection may hold: the list's rows, or none while the Board or
+ * Win back is showing instead of the list (the list isn't mounted then, so its
+ * last rows would otherwise stay selectable behind those views).
+ */
+const NONE: readonly number[] = [];
+export function selectableIds(shownIds: readonly number[], view: string, subTab: string): readonly number[] {
+  return view === "kanban" || subTab === "winback" ? NONE : shownIds;
+}

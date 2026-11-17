@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allShownSelected, keepShown } from "@shared/bulkSelection";
+import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
 
 // Enquiries > More actions > Select multiple. SELECT ALL used to select the
 // page's older filtered list, not the rows on screen: with the All tab showing
@@ -41,5 +41,26 @@ describe("keeping a selection to the rows shown", () => {
     expect(keepShown(sel, [1, 2, 3, 4])).toBe(sel);
     const none = new Set<number>();
     expect(keepShown(none, [1, 2])).toBe(none);
+  });
+});
+
+describe("what a selection may hold while the list isn't shown", () => {
+  // Select all on the All tab, then WIN BACK or BOARD: the floating toolbar
+  // used to stay with every enquiry still selected, so SET STATUS or DELETE
+  // there changed enquiries that weren't on screen.
+  it("is nothing on the Board or in Win back", () => {
+    expect(selectableIds([1, 2, 3], "kanban", "all")).toEqual([]);
+    expect(selectableIds([1, 2, 3], "table", "winback")).toEqual([]);
+    expect(selectableIds([1, 2, 3], "list", "winback")).toEqual([]);
+    expect(keepShown(new Set([1, 2, 3]), selectableIds([1, 2, 3], "table", "winback")).size).toBe(0);
+  });
+
+  it("is the list's rows in the list view", () => {
+    expect(selectableIds([1, 2, 3], "table", "all")).toEqual([1, 2, 3]);
+    expect(selectableIds([4], "list", "new")).toEqual([4]);
+  });
+
+  it("keeps the same empty list while the list is hidden, so nothing re-runs", () => {
+    expect(selectableIds([1], "kanban", "all")).toBe(selectableIds([2], "table", "winback"));
   });
 });
