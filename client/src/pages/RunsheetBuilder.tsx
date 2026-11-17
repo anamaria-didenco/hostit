@@ -146,12 +146,13 @@ function SortableSection({ id, label, reorderable = true, children }: { id: stri
 // Every pop-up on this page sits on Radix Dialog, so focus moves into it and
 // stays there, Escape closes it, and the page behind is hidden from screen
 // readers. Each is named by its own visible heading (wrap it in
-// <RsDialogTitle asChild>) and keeps its own look: `overlayClassName` is the
+// <RsDialogTitle asChild>, and any subtitle in <RsDialogDescription asChild>)
+// and keeps its own look: `overlayClassName` is the
 // backdrop, `className` the panel. Radix only returns focus to its own
 // trigger buttons, which these pop-ups don't use, so focus goes back here to
 // whatever had it when the pop-up opened — or `returnFocus` when that has
 // gone (a menu item, say).
-function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = false, closeOnEscape = true, focusDialog = false, returnFocus, role, describedBy, children }: {
+function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = false, closeOnEscape = true, focusDialog = false, returnFocus, role, described = false, children }: {
   onClose: () => void;
   overlayClassName: string;
   className: string;
@@ -163,7 +164,8 @@ function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = 
   focusDialog?: boolean;
   returnFocus?: React.RefObject<HTMLElement | null>;
   role?: "dialog" | "alertdialog";
-  describedBy?: string;
+  /** Has an <RsDialogDescription> (its subtitle or message). */
+  described?: boolean;
   children: React.ReactNode;
 }) {
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
@@ -174,8 +176,9 @@ function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = 
         <DialogPrimitive.Overlay className={overlayClassName}>
           <DialogPrimitive.Content
             ref={panelRef}
-            role={role}
-            aria-describedby={describedBy}
+            role={role ?? "dialog"}
+            aria-modal="true"
+            {...(described ? {} : { "aria-describedby": undefined })}
             className={className}
             onOpenAutoFocus={focusDialog ? e => { e.preventDefault(); panelRef.current?.focus(); } : undefined}
             onCloseAutoFocus={e => {
@@ -194,6 +197,7 @@ function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = 
   );
 }
 const RsDialogTitle = DialogPrimitive.Title;
+const RsDialogDescription = DialogPrimitive.Description;
 
 const CATEGORIES = [
   { value: "setup", label: "Setup", color: "bg-blue-100 text-blue-700" },
@@ -6724,7 +6728,7 @@ export default function RunsheetBuilder() {
 
       {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
       {beoPreviewOpen && effectiveBookingId && (
-        <RsDialog onClose={() => setBeoPreviewOpen(false)} returnFocus={exportMenuButtonRef} describedBy="rs-beo-preview-desc"
+        <RsDialog onClose={() => setBeoPreviewOpen(false)} returnFocus={exportMenuButtonRef} described
           overlayClassName="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print" className="flex-1 min-h-0 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 bg-forest text-cream shadow-lg shrink-0">
@@ -6732,7 +6736,7 @@ export default function RunsheetBuilder() {
               <Eye className="w-5 h-5 text-gold shrink-0" />
               <div>
                 <RsDialogTitle asChild><div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div></RsDialogTitle>
-                <div id="rs-beo-preview-desc" className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div>
+                <RsDialogDescription asChild><div className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div></RsDialogDescription>
               </div>
             </div>
             <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/85 hover:text-gold p-1.5 transition-colors" title="Close" aria-label="Close">
@@ -6818,13 +6822,13 @@ export default function RunsheetBuilder() {
 
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (
-        <RsDialog onClose={() => setShowPasteImport(false)} describedBy="rs-paste-import-desc"
+        <RsDialog onClose={() => setShowPasteImport(false)} described
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest shrink-0">
               <div>
                 <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div></RsDialogTitle>
-                <div id="rs-paste-import-desc" className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div></RsDialogDescription>
               </div>
               <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors" aria-label="Close">
                 <span className="text-2xl leading-none" aria-hidden>&times;</span>
@@ -7035,16 +7039,16 @@ export default function RunsheetBuilder() {
           saving stopped with nothing on screen to say so. It opens while
           someone may be typing, so focus goes to the dialog, not a button. */}
       {conflict && (
-        <RsDialog onClose={() => {}} role="alertdialog" describedBy="rs-conflict-body" closeOnEscape={false} focusDialog
+        <RsDialog onClose={() => {}} role="alertdialog" described closeOnEscape={false} focusDialog
           overlayClassName="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gold/50 bg-forest">
               <AlertTriangle className="w-4 h-4 text-cream" />
               <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span></RsDialogTitle>
             </div>
-            <div id="rs-conflict-body" className="p-5 space-y-3 font-dm text-sm text-ink">
+            <RsDialogDescription asChild><div className="p-5 space-y-3 font-dm text-sm text-ink">
               <p>It was saved somewhere else while you had it open — by someone else, or in another tab. Saving stopped here so neither of you loses work.</p>
               <p className="text-ink/80"><strong>Load the latest</strong> to see their changes; anything you changed in the last few seconds that hasn't saved will be lost. <strong>Keep mine</strong> saves this page over theirs.</p>
-            </div>
+            </div></RsDialogDescription>
             <div className="flex flex-col-reverse sm:flex-row gap-2 px-5 py-4 border-t border-gold/20">
               <Button variant="outline" onClick={keepMyVersion} disabled={resolvingConflict} className="flex-1 rounded-sm border-gold/40 font-bebas tracking-widest text-xs min-h-[44px]">
                 {resolvingConflict ? 'SAVING…' : 'KEEP MINE'}
@@ -7058,7 +7062,7 @@ export default function RunsheetBuilder() {
 
       {/* ── DIETARY OPTIONS MANAGER MODAL ────────────────────────────────── */}
       {showDietaryManager && (
-        <RsDialog onClose={() => setShowDietaryManager(false)} describedBy="rs-dietary-manager-desc"
+        <RsDialog onClose={() => setShowDietaryManager(false)} described
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
@@ -7070,7 +7074,7 @@ export default function RunsheetBuilder() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-              <p id="rs-dietary-manager-desc" className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p>
+              <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p></RsDialogDescription>
               <div className="space-y-2">
                 {editingDietaries.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -7113,7 +7117,7 @@ export default function RunsheetBuilder() {
 
       {/* ── SETUP TEMPLATES MANAGER MODAL ─────────────────────────────────── */}
       {showSetupManager && (
-        <RsDialog onClose={() => setShowSetupManager(false)} describedBy="rs-setup-manager-desc"
+        <RsDialog onClose={() => setShowSetupManager(false)} described
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
@@ -7125,7 +7129,7 @@ export default function RunsheetBuilder() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
-              <p id="rs-setup-manager-desc" className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p>
+              <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p></RsDialogDescription>
               <div className="space-y-2">
                 {editingSetups.map((t, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 border border-gold/50 bg-linen/50">
@@ -7179,13 +7183,13 @@ export default function RunsheetBuilder() {
 
       {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
       {showCatalogSelector && (
-        <RsDialog onClose={() => setShowCatalogSelector(false)} describedBy="rs-catalogue-desc"
+        <RsDialog onClose={() => setShowCatalogSelector(false)} described
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
               <div>
                 <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div></RsDialogTitle>
-                <div id="rs-catalogue-desc" className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div></RsDialogDescription>
                 {gstInclusive && (
                   <div className="font-dm text-gold text-xs mt-1">This runsheet is set to &ldquo;prices include GST&rdquo; — catalogue prices don&rsquo;t, so check the Costs tab.</div>
                 )}
@@ -7358,7 +7362,7 @@ export default function RunsheetBuilder() {
 
       {/* ── AI F&B PASTE MODAL ──────────────────────────────────────────── */}
       {showFnbPaste && (
-        <RsDialog onClose={() => setShowFnbPaste(false)} describedBy="rs-fnb-paste-desc"
+        <RsDialog onClose={() => setShowFnbPaste(false)} described
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
@@ -7366,7 +7370,7 @@ export default function RunsheetBuilder() {
                 <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
                   <Sparkles className="w-5 h-5" aria-hidden /> AI F&B PASTE
                 </div></RsDialogTitle>
-                <div id="rs-fnb-paste-desc" className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div></RsDialogDescription>
               </div>
               <button aria-label="Close" onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -7637,12 +7641,12 @@ export default function RunsheetBuilder() {
         };
 
         return (
-          <RsDialog onClose={() => { if (!sendingStaffEmail) setEmailingLink(null); }} closeOnOutsideClick={!sendingStaffEmail} closeOnEscape={!sendingStaffEmail} describedBy="rs-staff-email-desc"
+          <RsDialog onClose={() => { if (!sendingStaffEmail) setEmailingLink(null); }} closeOnOutsideClick={!sendingStaffEmail} closeOnEscape={!sendingStaffEmail} described
             overlayClassName="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl">
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between flex-wrap gap-y-2">
                 <div>
                   <RsDialogTitle asChild><h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2></RsDialogTitle>
-                  <p id="rs-staff-email-desc" className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
+                  <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p></RsDialogDescription>
                 </div>
                 <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/75 hover:text-ink p-1 disabled:opacity-30" title="Close" aria-label="Close">
                   <X className="w-4 h-4" />
