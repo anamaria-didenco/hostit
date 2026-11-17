@@ -27,28 +27,38 @@ export function initialSlotIndex(slots: string[], value: string | null | undefin
 
 const tidy = (s: string) => s.toLowerCase().replace(/[\s:.]/g, "");
 
-/** What a typed query can match for one slot: "18:30" → "630pm", "1830", "630". */
-function slotKeys(hhmm: string): string[] {
+/** The slot's label as it would be typed: "18:30" → "630pm" (and "6pm" on the hour). */
+function labelKeys(hhmm: string): string[] {
   const [h, m] = hhmm.split(":").map(Number);
   const h12 = h % 12 === 0 ? 12 : h % 12;
   const ap = h >= 12 ? "pm" : "am";
-  const mm = String(m).padStart(2, "0");
-  const keys = [`${h12}${mm}${ap}`, `${String(h).padStart(2, "0")}${mm}`, `${h}${mm}`, `${h12}${mm}`];
+  const keys = [`${h12}${String(m).padStart(2, "0")}${ap}`];
   if (m === 0) keys.push(`${h12}${ap}`);
   return keys;
+}
+
+/** The slot as a 24-hour time: "18:30" → "1830"; "07:00" → "0700", "700". */
+function clockKeys(hhmm: string): string[] {
+  const [h, m] = hhmm.split(":").map(Number);
+  const mm = String(m).padStart(2, "0");
+  return [`${String(h).padStart(2, "0")}${mm}`, `${h}${mm}`];
 }
 
 /**
  * The slot a typed query points at, searching forward from `from` (wrapping
  * round), or -1. Starting from the focused slot means "7" from 6:00 pm lands
- * on 7:00 pm, and "7a" on 7:00 am.
+ * on 7:00 pm, and "7a" on 7:00 am. The labels on screen are tried first, as
+ * in any list ("1" goes to the next time shown starting with 1, not to 6:30 pm
+ * as "1830"), then 24-hour times ("19", "1930").
  */
 export function matchSlot(slots: string[], query: string, from = 0): number {
   const q = tidy(query);
   if (!q) return -1;
-  for (let k = 0; k < slots.length; k++) {
-    const i = (Math.max(0, from) + k) % slots.length;
-    if (slotKeys(slots[i]).some(key => key.startsWith(q))) return i;
+  for (const keysOf of [labelKeys, clockKeys]) {
+    for (let k = 0; k < slots.length; k++) {
+      const i = (Math.max(0, from) + k) % slots.length;
+      if (keysOf(slots[i]).some(key => key.startsWith(q))) return i;
+    }
   }
   return -1;
 }

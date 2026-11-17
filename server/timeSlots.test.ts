@@ -33,6 +33,16 @@ describe("enquiry form time list", () => {
     expect(matchSlot(slots, "12p", from)).toBe(at("12:00"));
   });
 
+  it("matches the times shown before 24-hour ones", () => {
+    // A lone "1" from 6:30 pm is the next label starting with 1, not 18:30.
+    expect(matchSlot(slots, "1", at("18:30"))).toBe(at("22:00"));
+    expect(matchSlot(slots, "1p", at("18:30"))).toBe(at("13:00"));
+    // Nothing shown starts with "19" or "18", so those are 24-hour times.
+    expect(matchSlot(slots, "19", at("18:30"))).toBe(at("19:00"));
+    expect(matchSlot(slots, "1830", 0)).toBe(at("18:30"));
+    expect(matchSlot(slots, "0730", at("18:00"))).toBe(at("07:30"));
+  });
+
   it("returns -1 for nothing typed or no match", () => {
     expect(matchSlot(slots, "", 0)).toBe(-1);
     expect(matchSlot(slots, "x", 0)).toBe(-1);
