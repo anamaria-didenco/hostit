@@ -122,6 +122,19 @@ d("linked, assigned and follow-up tasks (DB)", () => {
       expect(after.assignedTo).toBeNull();
     });
 
+    it("saves a task whose stored priority is an old word, reading it as normal", async () => {
+      const db = (await getDb())!;
+      await caller.tasks.create({ title: "Old priority task" });
+      const [t] = await caller.tasks.list({ filter: "all" });
+      await db.update(tasks).set({ priority: "medium" }).where(eq(tasks.id, t.id));
+      await caller.tasks.update({ id: t.id, title: "Old priority task (edited)", priority: "medium" });
+      let [after] = await caller.tasks.list({ filter: "all" });
+      expect(after).toMatchObject({ title: "Old priority task (edited)", priority: "normal" });
+      await caller.tasks.update({ id: t.id, priority: "high" });
+      [after] = await caller.tasks.list({ filter: "all" });
+      expect(after.priority).toBe("high");
+    });
+
     it("lists only the tasks about one enquiry / event", async () => {
       await caller.tasks.create({ title: "About lead", linkedLeadId: leadId });
       await caller.tasks.create({ title: "About booking", linkedBookingId: bookingId });

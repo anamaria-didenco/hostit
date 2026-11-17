@@ -21,6 +21,7 @@ import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
+import { normaliseTaskPriority } from "@shared/taskFields";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -7477,7 +7478,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         title: z.string().optional(),
         description: z.string().optional(),
         dueDate: z.number().nullable().optional(),
-        priority: z.enum(['low', 'normal', 'high']).optional(),
+        // low / normal / high. Older tasks can hold another word ("medium");
+        // it's read as normal rather than refused, so the task stays editable.
+        priority: z.string().max(20).transform(normaliseTaskPriority).optional(),
         linkedLeadId: z.number().nullable().optional(),
         linkedBookingId: z.number().nullable().optional(),
         assignedTo: z.string().max(255).nullable().optional(),

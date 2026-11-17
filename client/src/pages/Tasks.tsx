@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AssigneeSelect, TaskLinkPicker, useCompleteTask, type TaskLink } from "@/components/taskParts";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
+import { normaliseTaskPriority } from "@shared/taskFields";
 
 const FILTERS = [
   { key: "all", label: "All Active" },
@@ -348,9 +349,9 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                     <span className={`font-dm text-sm text-ink ${task.completed ? "line-through text-ink/65" : ""}`}>
                       {task.title}
                     </span>
-                    {task.priority !== "normal" && (
-                      <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 border ${PRIORITY_COLORS[task.priority]}`}>
-                        {task.priority.toUpperCase()}
+                    {normaliseTaskPriority(task.priority) !== "normal" && (
+                      <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 border ${PRIORITY_COLORS[normaliseTaskPriority(task.priority)]}`}>
+                        {normaliseTaskPriority(task.priority).toUpperCase()}
                       </span>
                     )}
                   </div>
@@ -398,7 +399,9 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                           title: task.title,
                           description: task.description ?? "",
                           dueDate: dueDateInput(task.dueDate),
-                          priority: (task.priority ?? "normal") as TaskFormValues["priority"],
+                          // An older task can hold another word ("medium"):
+                          // it opened with an empty Priority box and couldn't be saved.
+                          priority: normaliseTaskPriority(task.priority),
                           assignedTo: task.assignedTo ?? "",
                           link: linkOf(task),
                         },

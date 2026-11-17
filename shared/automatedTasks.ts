@@ -8,6 +8,7 @@
  * from their contents, so "fire once per lead/booking" still holds for them.
  */
 import { zonedDayBoundUtc } from "./tz";
+import { normaliseTaskPriority } from "./taskFields";
 
 export const TASK_RULE_TRIGGERS = [
   { key: "on_enquiry_received", label: "When a new enquiry arrives" },
@@ -69,12 +70,8 @@ export function newTaskRuleId(): string {
   return `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function normPriority(p: unknown): TaskRule["priority"] {
-  const v = String(p ?? "").toLowerCase();
-  if (v === "low") return "low";
-  if (v === "high") return "high";
-  return "normal"; // "medium" in the settings UI = the tasks table's "normal"
-}
+// "medium" in the settings UI = the tasks table's "normal".
+const normPriority = (p: unknown): TaskRule["priority"] => normaliseTaskPriority(p);
 
 /** Parse + normalise saved rules. Unknown triggers are dropped. */
 export function parseTaskRules(raw: string | null | undefined | SavedTaskRule[]): TaskRule[] {
