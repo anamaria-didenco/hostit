@@ -67,7 +67,10 @@ import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLO
 import { leadNeedsReply } from "@shared/needsReply";
 import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
-import { inkOnAccent } from "@shared/brand";
+import { contrastRatio, readableOn } from "@shared/contrast";
+import { monthGridTarget, monthGridDefaultDay, inShownMonth, monthCellLabel, friendlyDay, statusWords } from "@shared/monthGrid";
+import { statusBandFontSize } from "@shared/statusBandFit";
+import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
@@ -256,11 +259,11 @@ function KanbanSettingsDialog({
               <span className="flex-1 font-inter text-sm font-medium text-gray-800">{stage.label}</span>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button onClick={() => moveUp(i)} disabled={i === 0}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-20 transition-colors">
                   <MoveUp className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => moveDown(i)} disabled={i === order.length - 1}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-20 transition-colors">
                   <MoveDown className="w-3.5 h-3.5" />
                 </button>
                 <button
@@ -280,7 +283,7 @@ function KanbanSettingsDialog({
           </button>
           <button
             onClick={() => { onSave({ visible: allStages.map(s => s.key), order: allStages.map(s => s.key) }); onClose(); }}
-            className="font-inter text-xs text-gray-400 hover:text-gray-600 px-3 py-2">
+            className="font-inter text-xs text-gray-600 hover:text-gray-900 px-3 py-2">
             Reset
           </button>
         </div>
@@ -321,7 +324,7 @@ function ApiTokensSection() {
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded bg-[#f3eee2] flex items-center justify-center flex-shrink-0">
-            <span className="font-bebas text-[#c97b29] text-sm tracking-wider">AI</span>
+            <span className="font-bebas text-[#8a5f18] text-sm tracking-wider">AI</span>
           </div>
           <div>
             <div className="font-cormorant font-semibold text-base text-ink">Claude / MCP Connector</div>
@@ -401,9 +404,9 @@ function WaitlistPanel() {
         <span className="font-bebas tracking-widest text-xs text-forest bg-forest/10 px-3 py-1.5 rounded">{entries.length} {entries.length === 1 ? 'ENTRY' : 'ENTRIES'}</span>
       </div>
       {waitlistData.isLoading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>
+        <div className="text-center py-16 text-gray-600 text-sm">Loading…</div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 text-sm">No waitlist entries yet.</div>
+        <div className="text-center py-16 text-gray-600 text-sm">No waitlist entries yet.</div>
       ) : (
         <div className="bg-white border border-border rounded overflow-hidden">
           <table className="w-full text-sm">
@@ -425,7 +428,7 @@ function WaitlistPanel() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{e.venueName ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{e.message ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
                     {new Date(e.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
                 </tr>
@@ -843,7 +846,8 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
     <div className={`border rounded-md p-2.5 bg-white ${invalid ? "border-amber-500 ring-1 ring-amber-500/30" : "border-gold/30"}`}>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5">
         {spaces.map((s: any) => (
-          <label key={s.id} className="flex items-center gap-1.5 cursor-pointer text-xs font-dm text-ink/80 hover:text-ink">
+          // The whole label is the tap target: 44px tall on a phone, 24px with a mouse.
+          <label key={s.id} className="flex items-center gap-1.5 min-h-[44px] md:min-h-[24px] cursor-pointer text-xs font-dm text-ink/80 hover:text-ink">
             <input type="checkbox" checked={selected.includes(s.name)} onChange={() => toggle(s.name)} className="accent-forest w-3.5 h-3.5" />
             {s.name}
           </label>
@@ -1126,7 +1130,9 @@ export default function Dashboard() {
     const fill = overdue ? "#991b1b"
       : ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[status]
         ?? (status === "finished" ? "#9ca3af" : (getStatusInfo(status) as any).swatch ?? "#9ca3af");
-    return { background: fill, color: inkOnAccent(fill) };
+    // Dark or white text, whichever reads better (the old brightness cut-off
+    // put white on the sky-blue Contacted band: 2.1:1).
+    return { background: fill, color: readableOn(fill) };
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   // Lost/cancelled are dead ends, not work — the board hides them until asked
@@ -1278,7 +1284,57 @@ export default function Dashboard() {
   // root; dropping flex-1/overflow is what lets them flow at natural height
   // (a flex item with overflow-auto has min-height 0, so it would otherwise
   // collapse once the pane is no longer a fixed height).
-  const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto';
+  const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto vf-pane-scroll';
+  // Month grid keyboard: the grid is one Tab stop. The arrow keys move between
+  // days (Page Up/Down a month, Home/End the ends of the week) and only the day
+  // with focus has its events and add buttons in the Tab order. Enter goes into
+  // the day, Escape back out to it.
+  const [monthFocusDay, setMonthFocusDay] = useState<string | null>(null);
+  const monthGridRef = useRef<HTMLDivElement>(null);
+  const monthGridPendingFocus = useRef<string | null>(null);
+  const focusMonthDay = (ymd: string) => {
+    setMonthFocusDay(ymd);
+    // A next-month day drawn greyed in the last row doesn't count as on
+    // screen: it has no add buttons, and Page Down would skip that month.
+    const el = inShownMonth(ymd, calDate.getFullYear(), calDate.getMonth())
+      ? monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`) : null;
+    if (el) { el.focus(); return; }
+    // Off this month: show that month, then focus the day once it's drawn.
+    monthGridPendingFocus.current = ymd;
+    const [y, m] = ymd.split('-').map(Number);
+    setCalDate(new Date(y, m - 1, 1));
+  };
+  useEffect(() => {
+    const ymd = monthGridPendingFocus.current;
+    if (!ymd) return;
+    const el = monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`);
+    if (el) { monthGridPendingFocus.current = null; el.focus(); }
+  });
+  const onMonthGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const cell = target.closest<HTMLElement>('[role="gridcell"][data-day]');
+    if (!cell) return;
+    if (target === cell && (e.key === 'Enter' || e.key === ' ' || e.key === 'F2')) {
+      const first = cell.querySelector<HTMLElement>('button, a[href]');
+      if (first) { e.preventDefault(); first.focus(); }
+      return;
+    }
+    if (target !== cell && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cell.focus(); return; }
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    let next: string | null = null;
+    if (e.key === 'Home' || e.key === 'End') {
+      const days = Array.from(cell.parentElement?.querySelectorAll<HTMLElement>('[data-day]') ?? [])
+        .filter(d => inShownMonth(d.dataset.day!, calDate.getFullYear(), calDate.getMonth()));
+      next = (e.key === 'Home' ? days[0] : days[days.length - 1])?.dataset.day ?? null;
+    } else {
+      next = monthGridTarget(cell.dataset.day!, e.key);
+    }
+    if (!next) return;
+    // stopPropagation keeps the Calendar's own ←/→ (previous/next month)
+    // shortcut from firing as well.
+    e.preventDefault(); e.stopPropagation();
+    focusMonthDay(next);
+  };
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
@@ -3621,10 +3677,10 @@ export default function Dashboard() {
   const overviewRolling = isCurrentCalMonth && !overviewShowPast;
   const monthCalendarCard = (
                   <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
                     <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
                     <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
-                    <div className="flex-1 min-w-0 relative">
+                    <div className="flex-1 min-w-[6rem] relative">
                       <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
                         <PopoverTrigger asChild>
                           <button
@@ -3751,7 +3807,7 @@ export default function Dashboard() {
                               >
                                 <div className="flex items-center justify-between mb-0.5">
                                   <span aria-hidden={muted ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                    isToday ? 'vf-today w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}{day === 1 && isOverflow && overviewRolling ? <span className="hidden sm:inline"> {adjNextMonthDate.toLocaleDateString('en-NZ', { month: 'short' })}</span> : null}</span>
                                   {!muted && (
                                     <span className="flex items-center">
@@ -3760,7 +3816,7 @@ export default function Dashboard() {
                                     )}
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
                                       aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
@@ -3783,7 +3839,8 @@ export default function Dashboard() {
                                       {(b.guestCount || b.spaceName) && (
                                         <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      {/* The status wraps only at spaces: on a narrow chip its text shrinks (11px down to 7px) and the side padding drops to 2px, just enough for the longest word to fit (shared/statusBandFit.ts). A word that still can't fit (wider letter spacing set by the user, a very long custom status) breaks rather than being hidden under the next day. */}
+                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(b.status, false, b.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(b.status).label, '2 * var(--bp)') }}>{getStatusInfo(b.status).label.toUpperCase()}</span></div>
                                     </div>
                                     {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3802,7 +3859,7 @@ export default function Dashboard() {
                                       {l.guestCount && (
                                         <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
                                       )}
-                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(l.status).label, '2 * var(--bp)') }}>{getStatusInfo(l.status).label.toUpperCase()}</span></div>
                                     </div>
                                     {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3881,7 +3938,7 @@ export default function Dashboard() {
             >
               {item.label}
               {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-700 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -4046,7 +4103,7 @@ export default function Dashboard() {
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.id === "enquiries" && unreadCount > 0 && (
-                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px]" style={{ background: "rgba(255,255,255,0.18)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
                 )}
               </button>
             );
@@ -4386,10 +4443,10 @@ export default function Dashboard() {
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
-            <div className="flex h-full overflow-hidden">
+            <div className="vf-pane flex h-full overflow-hidden">
 
               {/* ── MAIN ENQUIRIES COLUMN ──────────────────────────────────── */}
-              <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+              <div className="vf-pane flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
@@ -4749,7 +4806,7 @@ export default function Dashboard() {
                         }}
                         aria-disabled={bulkUpdateStatus.isPending || undefined}
                         className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
-                        style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
+                        style={{ borderColor: s.swatch ?? '#d4c5a9', color: contrastRatio(s.swatch ?? '#d4c5a9', '#211d18') >= 4.5 ? (s.swatch ?? '#d4c5a9') : '#fffdf9' }}>
                         {s.label}
                       </button>
                     ))}
@@ -5023,7 +5080,7 @@ export default function Dashboard() {
 
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
-            <div className={`flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
+            <div className={`vf-pane flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
               {/* Every other tab has a page-level <h1> (Overview, Pipeline,
                   Contacts, Tasks, Settings, …) — Calendar was the one
                   exception, which matters most here since a restricted staff
@@ -5033,9 +5090,9 @@ export default function Dashboard() {
               {/* Same page header as Overview, Enquiries, Payments and Tasks:
                   the title on the left, the page's actions on the right. The
                   navigation toolbar sits underneath. */}
-              <div className="flex items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
                 <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Calendar</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button onClick={toggleCalendarNeeds}
                     aria-pressed={showCalendarNeeds}
                     title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
@@ -5079,7 +5136,7 @@ export default function Dashboard() {
               {/* Calendar Toolbar */}
               <div className="border-b border-gold/15 bg-cream flex-shrink-0">
                 {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
-                <div className="flex items-center gap-2 px-3 md:px-6 py-3">
+                <div className="flex flex-wrap items-center gap-2 px-3 md:px-6 py-3">
                   {/* Desktop-only prev/next/today on row 1 */}
                   <button onClick={() => navCalendar(-1)} aria-label="Previous" title="Previous (←)"
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
@@ -5090,7 +5147,9 @@ export default function Dashboard() {
                   <button onClick={() => setTab('enquiries')} className="vf-btn vf-btn-secondary hidden! sm:inline-flex!" title="Go to enquiries list">
                     <List className="w-3.5 h-3.5" /> ENQUIRIES
                   </button>
-                  <div className="flex-1 min-w-0 relative">
+                  {/* Never narrower than "Nov 2026": below that the buttons wrap
+                      to a second line instead (it used to shrink to nothing). */}
+                  <div className="flex-1 min-w-[6rem] relative">
                     <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
                       <PopoverTrigger asChild>
                         <button
@@ -5198,15 +5257,23 @@ export default function Dashboard() {
                 tabIndex={0}
                 className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest"
               >
-                {pipelineStages.map(s => (
-                  <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
-                    {/* Matches the card colours: confirmed green, proposal sent yellow. */}
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch }} />
-                    <span>{s.label}</span>
-                  </div>
-                ))}
+                {pipelineStages.map(s => {
+                  // Matches the card colours: confirmed green, proposal sent yellow.
+                  // The icon is the same one the month chips show for the status.
+                  const fill = ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch;
+                  return (
+                    <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: fill, color: readableOn(fill) }}>
+                        <CalendarStatusIcon status={s.key} className="w-3 h-3" />
+                      </div>
+                      <span>{s.label}</span>
+                    </div>
+                  );
+                })}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#991b1b" }} />
+                  <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: "#991b1b", color: "#fff" }}>
+                    <CalendarStatusIcon status="" overdue className="w-3 h-3" />
+                  </div>
                   <span>Overdue</span>
                 </div>
                 {/* Spaces: the coloured stripe on each day and the left edge of each
@@ -5217,7 +5284,7 @@ export default function Dashboard() {
                     <span className="font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground flex-shrink-0">Spaces</span>
                     {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).map((sp: any) => (
                       <div key={`space-${sp.id}`} className="flex items-center gap-1.5 flex-shrink-0">
-                        <div className="w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
+                        <div className="vf-swatch w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
                         <span>{sp.name}</span>
                       </div>
                     ))}
@@ -5226,15 +5293,16 @@ export default function Dashboard() {
               </div>
 
               {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
-              <div className={`flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
+              <div className={`vf-pane-scroll flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
 
               {/* Month View — desktop grid */}
               {calendarView === "month" && (
-              <div className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
+              <div ref={monthGridRef} role="grid" aria-label={new Date(year, month, 1).toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })} onKeyDown={onMonthGridKeyDown}
+                className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
-                <div className="grid grid-cols-7 border-b border-border">
-                  {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                    <div key={d} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
+                <div role="row" className="grid grid-cols-7 border-b border-border">
+                  {["MON","TUE","WED","THU","FRI","SAT","SUN"].map((d, i) => (
+                    <div key={d} role="columnheader" aria-label={["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][i]} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
                       d === 'SAT' || d === 'SUN' ? 'text-muted-foreground bg-[#f4efe6]/50' : 'text-primary'
                     }`}>{d}</div>
                   ))}
@@ -5258,10 +5326,16 @@ export default function Dashboard() {
                   const weeks = [];
                   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
                   const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
+                  // The one day in the Tab order (see onMonthGridKeyDown).
+                  const shownDays = cells.filter(Boolean).map(c => {
+                    const y = c!.isOverflow ? nextYear : year, m = c!.isOverflow ? nextMonth : month;
+                    return `${y}-${String(m + 1).padStart(2, '0')}-${String(c!.day).padStart(2, '0')}`;
+                  });
+                  const activeDay = monthFocusDay && shownDays.includes(monthFocusDay) ? monthFocusDay : monthGridDefaultDay(year, month, ymdLocalD(new Date()));
                   return weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
+                    <div key={wi} role="row" className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
                       {week.map((cell, di) => {
-                        if (!cell) return <div key={di} className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
+                        if (!cell) return <div key={di} role="gridcell" className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
                         const { day, isOverflow } = cell;
                         const cellYear = isOverflow ? nextYear : year;
                         const cellMonth = isOverflow ? nextMonth : month;
@@ -5274,10 +5348,28 @@ export default function Dashboard() {
                           ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
                           : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const isActive = dateStr === activeDay;
+                        // Controls inside a day are only in the Tab order on the focused day.
+                        const innerTab = isActive ? 0 : -1;
+                        const cellLabel = monthCellLabel({
+                          ymd: dateStr, isToday, title: dayTitles.get(dateStr),
+                          events: [
+                            ...dayBookings.map((b: any) => ({ name: [b.firstName, b.lastName].filter(Boolean).join(' '), status: statusWords(getStatusInfo(b.status).label) })),
+                            ...dayLeads.map((l: any) => ({ name: [l.firstName, l.lastName].filter(Boolean).join(' '), status: statusWords(getStatusInfo(l.status).label) })),
+                          ],
+                        });
                         return (
                           <div key={di}
+                            role="gridcell"
+                            data-day={dateStr}
+                            tabIndex={isActive ? 0 : -1}
+                            aria-label={cellLabel}
                             aria-current={isToday ? "date" : undefined}
-                            className={`group border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                            onFocus={() => setMonthFocusDay(dateStr)}
+                            // A click on the day's background doesn't take focus (only
+                            // its buttons do), so mouse use is exactly as before.
+                            onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, a')) e.preventDefault(); }}
+                            className={`group focus-visible:!outline-offset-[-2px] border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
@@ -5288,13 +5380,13 @@ export default function Dashboard() {
                             } : undefined}>
                             <div className="flex items-center justify-between">
                             <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
+                              isToday ? 'vf-today bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {editDayTitle && !isOverflow && !dayTitles.get(dateStr) && (
-                              <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
+                              <DayTitleAddButton tabIndex={innerTab} dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
                             )}
                             </div>
-                            <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
+                            <DayTitleText tabIndex={innerTab} title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
                                 to the event count. So a day with 1 bar event and 1 restaurant
@@ -5350,9 +5442,12 @@ export default function Dashboard() {
                                     // A held date draws as a dashed, hatched "HOLD" chip, never a solid booking.
                                     const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
+                                    const overdue = isLead && isOverdueLead(ev);
+                                    const band = statusBandStyle(ev.status, overdue, ev.spaceName);
                                     return (
                                       <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
                                         <button
+                                          tabIndex={innerTab}
                                           draggable
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
@@ -5361,14 +5456,22 @@ export default function Dashboard() {
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[12px] tabular-nums opacity-70 leading-snug">{time}</span>}
-                                          {/* Status in words too, not only the chip colour. */}
-                                          {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
+                                          {/* Status in words too, not only the chip colour. (Screen
+                                              readers get the full status in the sr-only text below.) */}
+                                          {!isHold && monthChipTag(ev) && <span aria-hidden="true" className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
                                           {!isLead && <DoubleBookedTag flaggedAt={ev.clashFlaggedAt} compact />}
                                           {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
                                           <span className="truncate font-semibold text-[12px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          {/* Status end-cap in the status colour, distinct from the space colour the chip wears. */}
-                                          {statusBandStyle(ev.status, isLead && isOverdueLead(ev), ev.spaceName) && (
-                                            <span aria-hidden="true" title={getStatusInfo(ev.status).label} style={statusBandStyle(ev.status, isLead && isOverdueLead(ev), ev.spaceName)} className="ml-auto shrink-0 self-stretch -my-0.5 -mr-1.5 w-4 rounded-r border-l-2 border-white" />
+                                          <span className="sr-only">{`, ${statusWords(getStatusInfo(ev.status).label)}${overdue ? ', follow-up overdue' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
+                                          {/* Status end-cap: the status colour (distinct from the space
+                                              colour the chip wears) and the status's icon, so it isn't
+                                              colour alone. Without a space colour the whole chip is the
+                                              status colour and the cap is just the icon. */}
+                                          {(band || !isHold) && (
+                                            <span aria-hidden="true" title={getStatusInfo(ev.status).label} style={band}
+                                              className={`ml-auto shrink-0 self-stretch -my-0.5 -mr-1.5 w-4 grid place-items-center ${band ? 'vf-swatch rounded-r border-l-2 border-white' : ''}`}>
+                                              {!isHold && <CalendarStatusIcon status={ev.status} overdue={overdue} className="w-2.5 h-2.5" />}
+                                            </span>
                                           )}
                                         </button>
                                         {/* The hover-only 14px "×" delete that used to sit on every chip is gone:
@@ -5379,6 +5482,7 @@ export default function Dashboard() {
                                   })}
                                   {extra > 0 && (
                                     <button
+                                      tabIndex={innerTab}
                                       onClick={() => { setCalDate(new Date(cellYear, cellMonth, day)); setCalendarView('day'); }}
                                       className="w-full text-left font-dm font-semibold text-[12px] text-primary hover:underline px-1.5 h-6 flex items-center transition-colors"
                                       title={`View all ${dayEvents.length} events on this day`}>
@@ -5392,6 +5496,7 @@ export default function Dashboard() {
                                 dashed chip, so they read as appointments, not events. */}
                             {!isOverflow && (monthWalkthroughs ?? []).filter((w: any) => w.walkthroughAt && new Date(w.walkthroughAt).getDate() === day).map((w: any) => (
                               <button key={`wt-${w.id}`}
+                                tabIndex={innerTab}
                                 onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
                                 className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
                                 title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
@@ -5405,9 +5510,10 @@ export default function Dashboard() {
                                 than the paste-an-email modal. */}
                             {!isOverflow && (
                               <button
+                                tabIndex={innerTab}
                                 onClick={() => setQuickCreateDate(dateStr)}
-                                aria-label={`Add enquiry on ${dateStr}`}
-                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
+                                aria-label={`Add enquiry on ${friendlyDay(dateStr)}`}
+                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                                 title="Add enquiry on this day">
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -5517,7 +5623,7 @@ export default function Dashboard() {
               <div className={`${calFill} p-6`}>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All enquiries — {MONTHS[month]} {year}</h2>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => setShowWeeklyModal(true)}
                       className="h-8 px-3 text-xs font-bebas tracking-widest rounded-lg border border-forest/40 bg-forest/5 text-forest hover:bg-forest/10 flex items-center gap-1.5 transition-colors"
@@ -5655,7 +5761,7 @@ export default function Dashboard() {
                 {(monthBookings ?? []).filter(Boolean).length === 0 && (monthLeadEvents ?? []).filter(Boolean).length === 0 ? (
                   <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                     <Calendar className="w-10 h-10 text-sage-green/30 mx-auto mb-3" />
-                    <p className="font-inter text-sm text-gray-400">No events this month</p>
+                    <p className="font-inter text-sm text-gray-600">No events this month</p>
                     <button onClick={openAddEnquiry} className="mt-3 font-inter text-xs font-semibold px-4 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Add enquiry</button>
                   </div>
                 ) : (
@@ -5674,7 +5780,7 @@ export default function Dashboard() {
                         return (
                           <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                             <SlidersHorizontal className="w-8 h-8 text-sage-green/30 mx-auto mb-3" />
-                            <p className="font-inter text-sm text-gray-400">No events match your current filters</p>
+                            <p className="font-inter text-sm text-gray-600">No events match your current filters</p>
                             <button
                               onClick={() => setEventTablePrefs({ ...DEFAULT_EVENT_TABLE_PREFS, hideStatuses: [] })}
                               className="mt-3 font-inter text-xs font-semibold px-4 py-2 border border-sage-green text-sage-dark rounded-lg hover:bg-sage-green/10 transition-colors"
@@ -5726,7 +5832,7 @@ export default function Dashboard() {
                             return (
                               <div key={item.id}
                                 className="rounded-xl px-4 py-3 transition-all hover:brightness-95 flex flex-col gap-1.5 lg:grid lg:items-center lg:gap-3"
-                                style={{ backgroundColor: (si.swatch ?? '#d4c5a9') + 'CC', borderLeft: `4px solid ${si.swatch ?? '#d4c5a9'}`, gridTemplateColumns: GRID }}>
+                                style={{ backgroundColor: (si.swatch ?? '#d4c5a9') + '26', borderLeft: `4px solid ${si.swatch ?? '#d4c5a9'}`, gridTemplateColumns: GRID }}>
                                 {/* Name */}
                                 <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0">{item.firstName} {item.lastName}</div>
                                 {/* Event type */}
@@ -5750,7 +5856,7 @@ export default function Dashboard() {
                                     : <span className="font-bebas text-[11px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
                                   {item._type === 'booking' && <DoubleBookedTag flaggedAt={item.clashFlaggedAt} />}
                                   {item._type === 'booking' && item.depositRequired !== false && (
-                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
+                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-800'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
                                   )}
                                 </div>
                                 {/* Actions */}
@@ -6719,10 +6825,10 @@ export default function Dashboard() {
                     <li>Fill in the fields below using the values in the grey box, paste the App Password in the password field</li>
                   </ol>
                   <div className="mt-3 bg-blue-100 rounded p-3 font-mono text-xs text-blue-900 space-y-1">
-                    <div><span className="text-blue-600">SMTP Host:</span> smtp.gmail.com</div>
-                    <div><span className="text-blue-600">Port:</span> 587</div>
-                    <div><span className="text-blue-600">Username:</span> {venueSettings?.smtpUser || "you@yourvenue.co.nz"}</div>
-                    <div><span className="text-blue-600">Password:</span> [16-char App Password from Google]</div>
+                    <div><span className="text-blue-700">SMTP Host:</span> smtp.gmail.com</div>
+                    <div><span className="text-blue-700">Port:</span> 587</div>
+                    <div><span className="text-blue-700">Username:</span> {venueSettings?.smtpUser || "you@yourvenue.co.nz"}</div>
+                    <div><span className="text-blue-700">Password:</span> [16-char App Password from Google]</div>
                   </div>
                 </div>
 
@@ -7391,7 +7497,7 @@ export default function Dashboard() {
                       <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
                       <div className="text-sm text-white mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-600 font-bebas tracking-widest">HEADER PREVIEW</div>
                   </div>
                 </div>
 
@@ -7503,7 +7609,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-600 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
                   </div>
                 </div>
 
@@ -8716,7 +8822,7 @@ export default function Dashboard() {
                     <h2 className="font-semibold text-gray-800">Template Emails</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
-                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
+                  <div className="p-3 text-xs text-gray-600 border-b border-gray-100">Name</div>
                   {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
                     <div key={i} className="flex items-center justify-between flex-wrap gap-y-2 p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{name}</span>
@@ -8736,7 +8842,7 @@ export default function Dashboard() {
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Date Added</th>
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Size</th>
                     </tr></thead>
-                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
+                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-600">No attachments yet</td></tr></tbody>
                   </table>
                 </div>
                 {/* Reporting Settings */}
@@ -8747,7 +8853,7 @@ export default function Dashboard() {
                     <option>Grand Total</option>
                     <option>Subtotal</option>
                   </select>
-                  <p className="text-xs text-gray-400 mt-2">Choose whether to calculate revenue projections based on the grand total or subtotal.</p>
+                  <p className="text-xs text-gray-600 mt-2">Choose whether to calculate revenue projections based on the grand total or subtotal.</p>
                 </div>
                 {/* Event Types */}
                 <div className="bg-white border border-gray-200 rounded">
@@ -8837,7 +8943,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                         <div>
                           <h2 className="font-semibold text-gray-800 text-sm">Furniture Inventory</h2>
-                          <p className="font-dm text-xs text-gray-400 mt-0.5">Define your actual tables and chairs — colours, sizes, quantities. These appear in the floor plan builder so you place real items.</p>
+                          <p className="font-dm text-xs text-gray-600 mt-0.5">Define your actual tables and chairs — colours, sizes, quantities. These appear in the floor plan builder so you place real items.</p>
                         </div>
                         {!showInvForm && !editingInvId && (
                           <button
@@ -8881,7 +8987,7 @@ export default function Dashboard() {
                                 <input type="color" value={invForm.color} onChange={e => setInvForm(f => ({ ...f, color: e.target.value }))}
                                   className="w-10 h-8 border border-gray-200 rounded cursor-pointer flex-shrink-0" />
                                 <div style={{ width: 32, height: 32, backgroundColor: invForm.color, borderRadius: invForm.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
-                                <span className="font-dm text-xs text-gray-400">{invForm.color}</span>
+                                <span className="font-dm text-xs text-gray-600">{invForm.color}</span>
                               </div>
                             </div>
                             <div>
@@ -8910,18 +9016,18 @@ export default function Dashboard() {
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div className="col-span-2">
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">IMAGE <span className="normal-case font-dm text-gray-300">(PNG — optional)</span></label>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">IMAGE <span className="normal-case font-dm text-gray-500">(PNG — optional)</span></label>
                               <div className="flex items-center gap-3">
                                 {invForm.imageUrl ? (
                                   <div className="relative flex-shrink-0">
                                     <img src={invForm.imageUrl} alt="" className="w-12 h-12 object-contain border border-gray-200 rounded bg-gray-50" />
                                     <button type="button" aria-label="Remove image" onClick={() => setInvForm(f => ({ ...f, imageUrl: '' }))}
-                                      className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500">
+                                      className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-600 hover:text-red-500">
                                       <X className="w-2.5 h-2.5" />
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-300 text-[12px] flex-shrink-0">none</div>
+                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-500 text-[12px] flex-shrink-0">none</div>
                                 )}
                                 <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
                                   <Upload className="w-3 h-3" /> UPLOAD PNG
@@ -8943,7 +9049,7 @@ export default function Dashboard() {
                                   }} />
                                 </label>
                               </div>
-                              <p className="font-dm text-[12px] text-gray-300 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
+                              <p className="font-dm text-[12px] text-gray-600 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -8958,7 +9064,7 @@ export default function Dashboard() {
 
                       {/* Inventory list */}
                       {!furnitureInventory || furnitureInventory.length === 0 ? (
-                        <div className="p-8 text-center text-gray-400">
+                        <div className="p-8 text-center text-gray-600">
                           <p className="font-dm text-sm">No furniture items yet.</p>
                           <p className="font-dm text-xs mt-1">Add your tables and chairs to use them when building floor plans.</p>
                         </div>
@@ -8967,11 +9073,11 @@ export default function Dashboard() {
                           <table className="w-full min-w-[600px]">
                           <thead>
                             <tr className="border-b border-gray-50">
-                              <th className="text-left p-3 pl-5 text-xs font-medium text-gray-400 font-bebas tracking-widest">ITEM</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SHAPE</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SIZE</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SEATS</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">QTY</th>
+                              <th className="text-left p-3 pl-5 text-xs font-medium text-gray-600 font-bebas tracking-widest">ITEM</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SHAPE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SIZE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SEATS</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">QTY</th>
                               <th className="p-3"></th>
                             </tr>
                           </thead>
@@ -8985,7 +9091,7 @@ export default function Dashboard() {
                                       : <div style={{ width: 28, height: 28, backgroundColor: item.color, borderRadius: item.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />}
                                     <div>
                                       <p className="font-dm text-sm text-gray-800 font-medium">{item.name}</p>
-                                      {item.notes && <p className="font-dm text-xs text-gray-400 italic">{item.notes}</p>}
+                                      {item.notes && <p className="font-dm text-xs text-gray-600 italic">{item.notes}</p>}
                                     </div>
                                   </div>
                                 </td>
@@ -8996,7 +9102,7 @@ export default function Dashboard() {
                                 <td className="p-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     <button aria-label="Edit item" onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '', imageUrl: item.imageUrl ?? '' }); }}
-                                      className="text-gray-400 hover:text-gray-700 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                      className="text-gray-600 hover:text-gray-900 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Delete item" onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
                                       className="text-red-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
@@ -9016,7 +9122,7 @@ export default function Dashboard() {
                           <Grid className="w-8 h-8 text-gray-400" />
                         </div>
                         <h3 className="font-cormorant text-xl font-semibold text-gray-700 mb-2">No Floor Plans Yet</h3>
-                        <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">Create interactive floor plans for your event spaces. Drag and drop tables, chairs, and other elements to design your layouts.</p>
+                        <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">Create interactive floor plans for your event spaces. Drag and drop tables, chairs, and other elements to design your layouts.</p>
                         <button
                           onClick={() => setEditingFloorPlan({ id: null, name: 'New Floor Plan', canvasData: null })}
                           className="btn-forest text-cream text-xs font-bebas tracking-widest px-6 py-2"
@@ -11343,7 +11449,7 @@ export default function Dashboard() {
               </div>
             </div>
             <fieldset>
-              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></legend>
+              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-700">*</span></legend>
               {spaces && spaces.length > 0 ? (
                 <SpaceMultiSelect value={quickCreateForm.spaceName}
                   onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
@@ -11437,7 +11543,7 @@ export default function Dashboard() {
             <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <div className="font-bebas tracking-widest text-cream text-base">EMAIL STAFF BRIEFING — WEEKLY</div>
-                <p className="font-dm text-cream/60 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
+                <p className="font-dm text-cream/80 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
               </div>
               <button aria-label="Close" onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                 className="text-cream/60 hover:text-cream transition-colors ml-4 flex-shrink-0">
@@ -11819,7 +11925,7 @@ export default function Dashboard() {
               <fieldset>
                 <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">
                   SPACE {addEnquiryNeedsSpace
-                    ? <span className="text-red-500">*</span>
+                    ? <span className="text-red-700">*</span>
                     : <span className="font-dm normal-case tracking-normal text-xs text-stone-600">(optional — you can pick one later)</span>}
                 </legend>
                 {spaces && spaces.length > 0 ? (

@@ -64,7 +64,7 @@ export default function ClientPortal() {
   const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments, paymentInstructions, venue, contracts, details, eventPackUrl, uploads } = data as any;
   const T = {
     accent: brand.accent, onAccent: brand.onAccent, serif: brand.serif, sans: brand.sans,
-    bg: "#f6f3ee", card: "#ffffff", ink: "#1f2430", stone: "#6b7280", border: "#e7e2d8",
+    bg: "#f6f3ee", card: "#ffffff", ink: "#1f2430", stone: "#4b5563", border: "#e7e2d8",
     soft: brand.onAccent === "#fff" ? "rgba(0,0,0,0.04)" : "rgba(0,0,0,0.03)",
   };
   const eventName = booking ? `${booking.firstName}${booking.lastName ? ' ' + booking.lastName : ''}'s ${booking.eventType ?? 'Event'}` : lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}'s ${lead.eventType ?? 'Event'}` : "Your Event";
@@ -397,7 +397,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
     dietaries: diet.filter(x => x.name.trim()).map(x => ({ name: x.name.trim(), count: Math.max(0, Math.round(Number(x.count) || 0)), notes: x.notes?.trim() || undefined })),
     notes: notes.trim() || undefined,
   });
-  const FIELD = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none";
+  const FIELD = "w-full border !border-[var(--field-border)] rounded-lg px-3 py-2 text-sm focus:outline-none";
 
   return (
     <div className="rounded-xl shadow-sm overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>

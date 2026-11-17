@@ -159,7 +159,7 @@ export default function EmbedDocs() {
         {/* Live preview */}
         <section className="mb-10">
           <h2 className="text-lg font-bold mb-3">Live preview</h2>
-          <div className="grid md:grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 gap-3">
                 {hexInput("Accent", accent, setAccent, "2f5488")}
@@ -185,7 +185,8 @@ export default function EmbedDocs() {
                 </div>
               </div>
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-1">
+                {/* Copy is a 24px-tall target (it was 30x16). */}
+                <div className="flex items-center justify-between mb-1 [&>button]:min-h-6 [&>button]:min-w-11">
                   <span className="text-xs font-semibold text-gray-600">Your embed code</span>
                   <button onClick={() => { navigator.clipboard?.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
                     className="text-xs font-semibold text-[#2f5488] hover:underline">{copied ? "Copied!" : "Copy"}</button>
@@ -252,7 +253,7 @@ export default function EmbedDocs() {
           </ul>
         </section>
 
-        <footer className="text-xs text-gray-400 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
+        <footer className="text-xs text-gray-600 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
       </div>
     </div>
   );

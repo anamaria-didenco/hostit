@@ -276,7 +276,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background">
+    <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
         {/* View tabs */}
         <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -363,7 +363,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
             return (
               <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, lead.status === "new" ? "5c" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
+                style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
                 {/* The whole box is filled with the enquiry's status colour: a
                     light tint, with a solid border in the same colour. A brand-new
                     enquiry is the one that needs you, so its tint is the strongest. */}
@@ -395,7 +395,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                     {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
                   </div>
                   <div className="min-w-0 hidden lg:block">
@@ -433,7 +433,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
                     <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                       {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
                     </div>
                     <button onClick={onAction}
