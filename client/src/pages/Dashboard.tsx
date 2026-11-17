@@ -25,7 +25,6 @@ import { showCascadedToast } from "@/lib/cascadedToast";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime, fmtTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
 import { SinceLastVisit } from "@/components/SinceLastVisit";
 import { SpaceAvailability } from "@/components/SpaceAvailability";
@@ -1177,6 +1176,7 @@ export default function Dashboard() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const bulkDeleteCancelRef = useRef<HTMLButtonElement>(null);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Overview calendar: start at this week (default) or show the whole month.
@@ -2832,8 +2832,7 @@ export default function Dashboard() {
 
   // Escape-to-close for the custom modal/drawer overlays. Each mirrors the
   // setter the modal's own close button calls; the hook only binds while open.
-  useEscapeKey(showBulkDeleteConfirm, () => setShowBulkDeleteConfirm(false));
-  // (The weekly briefing modal closes on Escape through its Radix shell.)
+  // (The weekly briefing and bulk delete modals close on Escape through their Radix shells.)
   const closeWeeklyModal = () => {
     setShowWeeklyModal(false);
     setWeeklyEventsData(null);
@@ -4310,7 +4309,7 @@ export default function Dashboard() {
                       </button>
                     ) : (
                       <div className="relative" ref={actionsMenuRef}>
-                        <button onClick={() => setActionsMenuOpen(o => !o)}
+                        <button id="leads-more-actions" onClick={() => setActionsMenuOpen(o => !o)}
                           title="More actions" aria-label="More actions"
                           className={`h-8 w-8 flex items-center justify-center border rounded-lg transition-colors ${actionsMenuOpen ? 'border-gold text-ink bg-gold/5' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
                           <MoreHorizontal className="w-4 h-4" />
@@ -11215,28 +11214,32 @@ export default function Dashboard() {
           onConfirm={confirmSpace} onCancel={cancelSpace} returnFocus={() => document.getElementById('drawer-status')} />
       )}
 
+      {/* Opens on Cancel, the safe choice. After the delete, the toolbar that
+          opened it has gone: focus goes to More actions, where it started. */}
       {showBulkDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
+        <DialogShell onClose={() => setShowBulkDeleteConfirm(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <DialogShellContent closeOnOutsideClick={false} aria-labelledby="bulk-delete-title" initialFocus={bulkDeleteCancelRef}
+            returnFocus={() => document.getElementById('leads-more-actions')} className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 id="bulk-delete-title" className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
             <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected records and all their activity history. This cannot be undone.</p>
             <div className="flex gap-3 justify-end">
               <button
+                ref={bulkDeleteCancelRef}
                 onClick={() => setShowBulkDeleteConfirm(false)}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg"
               >
                 Cancel
               </button>
               <button
-                onClick={() => bulkDelete.mutate({ ids: Array.from(selectedLeadIds) })}
-                disabled={bulkDelete.isPending}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg disabled:opacity-50 transition-colors"
+                onClick={() => { if (!bulkDelete.isPending) bulkDelete.mutate({ ids: Array.from(selectedLeadIds) }); }}
+                aria-disabled={bulkDelete.isPending || undefined}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg aria-disabled:opacity-50 aria-disabled:pointer-events-none transition-colors"
               >
                 {bulkDelete.isPending ? 'Deleting…' : `Delete ${selectedLeadIds.size}`}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogShellContent>
+        </DialogShell>
       )}
 
       {/* CSV Import Modal */}
