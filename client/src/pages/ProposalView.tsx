@@ -127,6 +127,8 @@ export default function ProposalView() {
   const [clientMessage, setClientMessage] = useState("");
   // The menu picked, when the proposal offers a choice of menus.
   const [chosenMenu, setChosenMenu] = useState<string | null>(null);
+  // Accept was pressed before a menu was picked: say so by the menu choice.
+  const [menuNeeded, setMenuNeeded] = useState(false);
   const [responded, setResponded] = useState<"accepted" | "declined" | null>(null);
   // Only true when the server actually emailed the client a confirmation.
   const [confirmationEmailed, setConfirmationEmailed] = useState(false);
@@ -375,6 +377,7 @@ export default function ProposalView() {
                     <div className="font-bebas text-sm tracking-widest" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
                     <div className="font-inter text-xs" style={{ color: T.stone }}>Each price includes everything above and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
                   </div>
+                  {menuNeeded && !chosenOption && <p role="alert" className="font-inter text-sm font-semibold" style={{ color: T.accent }}>Please choose a menu first, then press Accept &amp; Book.</p>}
                   {menuOptions.map(o => {
                     const m = menuFor(o.line);
                     const picked = chosenMenu === o.line;
@@ -561,6 +564,7 @@ export default function ProposalView() {
           <div className="p-6 mb-6 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
             <div className="font-bebas text-sm tracking-widest mb-1" style={{ color: T.header }}>CHOOSE YOUR MENU</div>
             <div className="font-inter text-xs mb-3" style={{ color: T.stone }}>Each price includes everything in your proposal and GST.{canRespond ? " Pick one, then confirm below." : ""}</div>
+            {menuNeeded && !chosenOption && <p role="alert" className="font-inter text-sm font-semibold mb-3" style={{ color: T.accent }}>Please choose a menu first, then press Accept &amp; Book.</p>}
             <div className="space-y-2">
               {menuOptions.map(o => {
                 const picked = chosenMenu === o.line;
@@ -593,6 +597,7 @@ export default function ProposalView() {
                   // No menu picked yet: take the client to the choice instead of
                   // opening a confirm step that can only say "go back and pick one".
                   if (menuOptions.length > 0 && !chosenOption) {
+                    setMenuNeeded(true);
                     document.querySelector<HTMLInputElement>('input[name="menu-choice"]')?.focus();
                     return;
                   }
