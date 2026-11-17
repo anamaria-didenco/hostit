@@ -623,8 +623,9 @@ export default function ProposalView() {
           // optional message box, which is one Shift+Tab away.
           onOpenAutoFocus={e => { const b = (e.currentTarget as HTMLElement).querySelector<HTMLButtonElement>('button:not([data-slot="dialog-close"]):not(:disabled)'); if (b) { e.preventDefault(); b.focus(); } }}>
           <DialogHeader>
-            {/* pr-12 keeps the title clear of the close chip (top right) on phones. */}
-            <div className="-mx-6 -mt-6 p-5 pr-12 mb-4" style={{ backgroundColor: T.header }}>
+            {/* 48px on the right keeps the title clear of the close chip (top right).
+                On phones the title is centred, so the left side matches it. */}
+            <div className="-mx-6 -mt-6 p-5 px-12 sm:pl-5 mb-4" style={{ backgroundColor: T.header }}>
               <DialogTitle className="font-bebas text-xl tracking-widest" style={{ color: T.headerText }}>CONFIRM YOUR BOOKING</DialogTitle>
             </div>
           </DialogHeader>
@@ -660,7 +661,7 @@ export default function ProposalView() {
       <Dialog open={showDecline} onOpenChange={(o) => { setShowDecline(o); if (!o) setClientMessage(""); }}>
         <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
           <DialogHeader>
-            <div className="-mx-6 -mt-6 p-5 pr-12 mb-4" style={{ backgroundColor: T.accent }}>
+            <div className="-mx-6 -mt-6 p-5 px-12 sm:pl-5 mb-4" style={{ backgroundColor: T.accent }}>
               <DialogTitle className="font-bebas text-xl tracking-widest" style={{ color: T.accentText }}>DECLINE PROPOSAL</DialogTitle>
             </div>
           </DialogHeader>
