@@ -3703,7 +3703,7 @@ export default function Dashboard() {
                                     )}
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
                                       aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
@@ -5322,7 +5322,7 @@ export default function Dashboard() {
                                 tabIndex={innerTab}
                                 onClick={() => setQuickCreateDate(dateStr)}
                                 aria-label={`Add enquiry on ${friendlyDay(dateStr)}`}
-                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100"
+                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                                 title="Add enquiry on this day">
                                 <Plus className="w-4 h-4" />
                               </button>

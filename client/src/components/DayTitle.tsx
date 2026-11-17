@@ -43,7 +43,7 @@ export function DayTitleAddButton({ dateLabel, onClick, tabIndex }: { dateLabel:
       onClick={e => { e.stopPropagation(); onClick(); }}
       // Desktop only: phone cells are too narrow for a second icon, so on a
       // phone the title is added from the day view instead.
-      className="hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+      className="hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
       aria-label={`Add a title for ${dateLabel}`}
       title="Add a title for this day (not an event)">
       <Tag className="w-3 h-3 text-[#7a5a12]" />
