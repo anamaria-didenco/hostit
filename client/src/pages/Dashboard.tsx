@@ -3830,6 +3830,65 @@ export default function Dashboard() {
         </div>
       </nav>
 
+      {/* The tab bar comes straight after the top bar in the page, so Tab
+          reaches it in a few presses instead of after the whole page (CSS
+          still pins it to the bottom of the screen). */}
+      {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
+      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 box-content safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
+        {(isStaff ? [
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+        ] : [
+          { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
+          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          // The calendar is what a manager checks on shift — phones had no
+          // way to reach it. Daily Checklists moved to More (with Reports).
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          // Payments was only reachable via More on a phone.
+          { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+          { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
+        ]).map(item => {
+          // Active = primary blue (~7.5:1 on white); idle = warm muted-foreground
+          // #6a6256 (~5:1, clears the 4.5:1 small-text minimum) — one language
+          // with the sidebar and top tabs. A short top bar marks the active tab,
+          // mirroring the top strip's underline.
+          const isActive = tab === item.id;
+          const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
+            isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          }`;
+          const indicator = isActive ? (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" aria-hidden="true" />
+          ) : null;
+          if ((item as any).href) {
+            return (
+              <a key={item.id} href={(item as any).href} className={baseClass}>
+                {indicator}
+                {item.icon}
+                <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
+              </a>
+            );
+          }
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id as any)}
+              aria-current={tab === item.id ? "page" : undefined}
+              className={baseClass}
+            >
+              {indicator}
+              {item.icon}
+              <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
+              {item.id === "enquiries" && unreadCount > 0 && (
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* ── DESKTOP SIDEBAR (deep-blue editorial) ───────────────────────────── */}
       <aside aria-label="Main sidebar" className="vf-sidebar hidden md:flex w-[236px] flex-shrink-0 flex-col h-full text-[#eef2f8]" style={{ background: '#2f5488' }}>
         {/* Logo */}
@@ -11667,62 +11726,6 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
-      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 box-content safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
-        {(isStaff ? [
-          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
-          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
-        ] : [
-          { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
-          // The calendar is what a manager checks on shift — phones had no
-          // way to reach it. Daily Checklists moved to More (with Reports).
-          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
-          // Payments was only reachable via More on a phone.
-          { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
-          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
-          { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
-        ]).map(item => {
-          // Active = primary blue (~7.5:1 on white); idle = warm muted-foreground
-          // #6a6256 (~5:1, clears the 4.5:1 small-text minimum) — one language
-          // with the sidebar and top tabs. A short top bar marks the active tab,
-          // mirroring the top strip's underline.
-          const isActive = tab === item.id;
-          const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-            isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-          }`;
-          const indicator = isActive ? (
-            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" aria-hidden="true" />
-          ) : null;
-          if ((item as any).href) {
-            return (
-              <a key={item.id} href={(item as any).href} className={baseClass}>
-                {indicator}
-                {item.icon}
-                <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              </a>
-            );
-          }
-          return (
-            <button
-              key={item.id}
-              onClick={() => setTab(item.id as any)}
-              aria-current={tab === item.id ? "page" : undefined}
-              className={baseClass}
-            >
-              {indicator}
-              {item.icon}
-              <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
     </div>
   );
 }
