@@ -2296,6 +2296,10 @@ export default function Dashboard() {
   // Moving an enquiry with no space to Booked / Confirmed / Tentative asks for
   // the space right there (ConfirmSpaceDialog), then carries on with the change.
   const [spacePrompt, setSpacePrompt] = useState<null | { vars: UpdateStatusVars; name?: string; prior?: string }>(null);
+  // Read by the drawer's Status menu as it closes: when picking a status opened
+  // one of these, the menu must not pull focus back to itself (behind the pop-up).
+  const statusPromptOpenRef = useRef(false);
+  statusPromptOpenRef.current = !!(lostPrompt || spacePrompt);
   const updateStatus = {
     ...updateStatusMut,
     mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
@@ -9680,7 +9684,7 @@ export default function Dashboard() {
                   <SelectTrigger id="drawer-status" className="h-8 text-xs rounded-sm border-gold/30 flex-1">
                     <SelectValue placeholder="Set status" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent onCloseAutoFocus={e => { if (statusPromptOpenRef.current) e.preventDefault(); }}>
                     {selectedBooking._isLead
                       ? pipelineStages.map(s => (
                           <SelectItem key={s.key} value={s.key} className="text-xs">{s.label}</SelectItem>
@@ -11191,12 +11195,13 @@ export default function Dashboard() {
 
       {/* Bulk Delete Confirmation */}
       {lostPrompt && (
-        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost}
+          returnFocus={() => document.getElementById('drawer-status')} />
       )}
       {spacePrompt && (
         <ConfirmSpaceDialog name={spacePrompt.name} spaces={spaces as any}
           statusLabel={pipelineStages.find(s => s.key === spacePrompt.vars.status)?.label ?? spacePrompt.vars.status}
-          onConfirm={confirmSpace} onCancel={cancelSpace} />
+          onConfirm={confirmSpace} onCancel={cancelSpace} returnFocus={() => document.getElementById('drawer-status')} />
       )}
 
       {showBulkDeleteConfirm && (
