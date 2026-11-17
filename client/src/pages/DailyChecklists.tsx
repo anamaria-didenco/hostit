@@ -419,7 +419,7 @@ export default function DailyChecklists() {
                                 <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} aria-label="Task text" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
                                 <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" aria-label="Task note (optional)" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-xs text-[#83745b] focus:outline-none focus:border-[#2f5488]" />
                                 <div className="flex gap-2">
-                                  <button onClick={() => { if (editItemText.trim()) updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() || undefined }); }} disabled={!editItemText.trim() || updateItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-1.5 bg-[#2f5488] text-white rounded disabled:opacity-50">SAVE</button>
+                                  <button onClick={() => { if (editItemText.trim()) updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() }); }} disabled={!editItemText.trim() || updateItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-1.5 bg-[#2f5488] text-white rounded disabled:opacity-50">SAVE</button>
                                   <button onClick={() => setEditingItem(null)} className="font-bebas tracking-widest text-xs px-4 py-1.5 border border-[#c9a84c]/30 text-[#83745b] rounded">CANCEL</button>
                                 </div>
                               </div>
