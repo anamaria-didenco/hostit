@@ -4597,10 +4597,13 @@ export default function Dashboard() {
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
-                  <div className="flex items-center gap-1.5">
+                  {/* aria-disabled, not disabled, while it saves: focus stays on the
+                      button, so it can move to More actions when the bar goes. */}
+                  <div className={`flex items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
                     {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => {
+                          if (bulkUpdateStatus.isPending) return;
                           if (['booked','confirmed','tentative'].includes(s.key)) {
                             const ids = Array.from(selectedLeadIds);
                             const missing = (allLeads ?? []).filter((l: any) => ids.includes(l.id) && !l.spaceName?.trim()).length;
@@ -4611,7 +4614,7 @@ export default function Dashboard() {
                           }
                           bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any });
                         }}
-                        disabled={bulkUpdateStatus.isPending}
+                        aria-disabled={bulkUpdateStatus.isPending || undefined}
                         className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
                         style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
                         {s.label}
@@ -11236,7 +11239,7 @@ export default function Dashboard() {
       {/* Bulk Delete Confirmation */}
       {lostPrompt && (
         <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost}
-          returnFocus={() => document.getElementById('drawer-status')} />
+          returnFocus={() => document.getElementById(lostPrompt.bulkIds ? 'leads-more-actions' : 'drawer-status')} />
       )}
       {spacePrompt && (
         <ConfirmSpaceDialog name={spacePrompt.name} spaces={spaces as any}
