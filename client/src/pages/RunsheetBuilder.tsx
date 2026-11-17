@@ -147,6 +147,14 @@ function SortableSection({ id, label, reorderable = true, children }: { id: stri
 const scrollBehavior = (): ScrollBehavior =>
   (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
+// The last control Tab reaches in a pop-up (the same test Radix uses).
+function lastTabbable(panel: HTMLElement): HTMLElement | undefined {
+  const all = Array.from(panel.querySelectorAll<HTMLElement>('*')).filter(el =>
+    el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && !el.hidden
+    && !(el instanceof HTMLInputElement && el.type === 'hidden'));
+  return all.reverse().find(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+}
+
 // ── Pop-ups ────────────────────────────────────────────────────────────
 // Every pop-up on this page sits on Radix Dialog, so focus moves into it and
 // stays there, Escape closes it, and the page behind is hidden from screen
@@ -190,6 +198,14 @@ function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = 
               e.preventDefault();
               const back = opener && opener !== document.body && opener.isConnected ? opener : returnFocus?.current;
               back?.focus();
+            }}
+            onKeyDown={e => {
+              // Radix wraps Shift+Tab only from the first control. From the
+              // panel itself (where focusDialog puts focus) it went nowhere.
+              if (e.key === 'Tab' && e.shiftKey && e.target === e.currentTarget) {
+                const last = lastTabbable(e.currentTarget);
+                if (last) { e.preventDefault(); last.focus(); }
+              }
             }}
             onEscapeKeyDown={closeOnEscape ? undefined : e => e.preventDefault()}
             onPointerDownOutside={closeOnOutsideClick ? undefined : e => e.preventDefault()}
