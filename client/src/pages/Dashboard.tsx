@@ -99,6 +99,7 @@ import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared
 import { LockOpen } from "lucide-react";
 import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidation";
 import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
+import { closeMenuOnEscape, onArrowChoose } from "@/lib/rovingKeys";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1003,7 +1004,9 @@ export default function Dashboard() {
       }
     };
     document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    const onKey = (e: KeyboardEvent) => closeMenuOnEscape(e, actionsMenuRef.current, () => setActionsMenuOpen(false));
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, [actionsMenuOpen]);
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
   // Enquiries whose status was just changed inline: kept in the list, marked
@@ -1174,7 +1177,9 @@ export default function Dashboard() {
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const onKey = (e: KeyboardEvent) => closeMenuOnEscape(e, eventStatusFilterRef.current, () => setEventStatusFilterOpen(false));
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("keydown", onKey); };
   }, [eventStatusFilterOpen]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
@@ -4267,15 +4272,15 @@ export default function Dashboard() {
 
                   {/* View toggle: one responsive List (table on desktop, cards
                       on mobile) ↔ Board (kanban). */}
-                  <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                  <div role="group" aria-label="Enquiries view" className="flex border border-gold/30 rounded-lg overflow-hidden">
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
-                      title="List view"
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      title="List view" aria-pressed={leadViewMode !== "kanban"}
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <List className="w-3.5 h-3.5" /> LIST
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
-                      title="Board view"
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      title="Board view" aria-pressed={leadViewMode === "kanban"}
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <Columns className="w-3.5 h-3.5" /> BOARD
                     </button>
                   </div>
@@ -4314,12 +4319,12 @@ export default function Dashboard() {
                     ) : (
                       <div className="relative" ref={actionsMenuRef}>
                         <button onClick={() => setActionsMenuOpen(o => !o)}
-                          title="More actions" aria-label="More actions"
+                          title="More actions" aria-label="More actions" aria-expanded={actionsMenuOpen} aria-controls="enquiry-more-actions"
                           className={`h-8 w-8 flex items-center justify-center border rounded-lg transition-colors ${actionsMenuOpen ? 'border-gold text-ink bg-gold/5' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                         {actionsMenuOpen && (
-                          <div className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
+                          <div id="enquiry-more-actions" className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
                             <button onClick={() => { setShowCsvImport(true); setActionsMenuOpen(false); }}
                               className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
@@ -4984,12 +4989,12 @@ export default function Dashboard() {
                     </Popover>
                   </div>
                   {/* Desktop-only view switcher on row 1 */}
-                  <div className="hidden md:flex border border-gold/30">
+                  <div role="group" aria-label="Calendar view" className="hidden md:flex border border-gold/30">
                     {(["month","week","day","list"] as const).map(v => (
                       <button key={v}
-                        onClick={() => setCalendarView(v)}
+                        onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                         className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
-                          calendarView === v ? 'bg-forest-dark text-cream' : 'text-ink/60 hover:bg-linen'
+                          calendarView === v ? 'bg-forest-dark text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]' : 'text-ink/60 hover:bg-linen'
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
@@ -5005,12 +5010,12 @@ export default function Dashboard() {
                     className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronRight className="w-5 h-5" /></button>
                 </div>
                 {/* Row 3 (mobile only): View switcher full-width */}
-                <div className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
+                <div role="group" aria-label="Calendar view" className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
-                      onClick={() => setCalendarView(v)}
+                      onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                       className={`font-bebas tracking-widest text-xs py-2 border border-gold/30 -ml-px first:ml-0 transition-colors ${
-                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark' : 'text-ink/70 hover:bg-linen'
+                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]' : 'text-ink/70 hover:bg-linen'
                       }`}>{v.toUpperCase()}</button>
                   ))}
                 </div>
@@ -5385,11 +5390,12 @@ export default function Dashboard() {
                         <ChevronDown className="w-3 h-3 opacity-60" />
                       </button>
                       {eventStatusFilterOpen && (
-                        <div className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                        <div id="calendar-list-status-filter" role="group" aria-label="Hide statuses" className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
                             <span className="font-bebas tracking-widest text-[11px] text-ink/65">HIDE STATUSES</span>
                             {eventTablePrefs.hideStatuses.length > 0 && (
                               <button
+                      aria-pressed={eventTablePrefs.upcomingOnly}
                                 onClick={() => setEventTablePrefs({ hideStatuses: [] })}
                                 className="text-[12px] font-dm text-forest hover:underline">
                                 SHOW ALL
@@ -5400,6 +5406,7 @@ export default function Dashboard() {
                             <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer select-none">
                               <input
                                 type="checkbox"
+                        aria-expanded={eventStatusFilterOpen} aria-controls="calendar-list-status-filter"
                                 checked={eventTablePrefs.hideStatuses.includes(s.key)}
                                 onChange={() => setEventTablePrefs({
                                   hideStatuses: eventTablePrefs.hideStatuses.includes(s.key)
@@ -5454,6 +5461,7 @@ export default function Dashboard() {
                             r.company ?? '',
                             r.space ?? '',
                             (r.notes ?? r.message ?? '').replace(/[\r\n,]/g, ' '),
+                      aria-label={eventSortDir === 'asc' ? 'Sorted ascending: sort descending' : 'Sorted descending: sort ascending'}
                             r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-NZ') : '',
                             attribution?.label ?? '',
                             clickId,
@@ -6016,7 +6024,7 @@ export default function Dashboard() {
                   { id: 'profile', label: 'Profile & Branding' },
                   { id: 'spaces', label: 'Spaces' },
                 ] as const).map(s => (
-                  <button key={s.id} onClick={() => setVenueSettingsSection(s.id)}
+                  <button key={s.id} onClick={() => setVenueSettingsSection(s.id)} aria-pressed={venueSettingsSection === s.id}
                     className={`font-bebas tracking-widest text-sm px-4 md:px-5 py-2.5 border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
                       venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                     }`}>
@@ -7006,11 +7014,11 @@ export default function Dashboard() {
 
                       {/* Snippet tab */}
                       <div className="flex gap-1 mb-3">
-                        <button type="button" onClick={() => setEmbedSnippetTab("script")}
+                        <button type="button" onClick={() => setEmbedSnippetTab("script")} aria-pressed={embedSnippetTab === "script"}
                           className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "script" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
                           One line (recommended)
                         </button>
-                        <button type="button" onClick={() => setEmbedSnippetTab("iframe")}
+                        <button type="button" onClick={() => setEmbedSnippetTab("iframe")} aria-pressed={embedSnippetTab === "iframe"}
                           className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "iframe" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
                           Advanced (iframe)
                         </button>
@@ -8981,7 +8989,7 @@ export default function Dashboard() {
                 {/* Type tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
                   {(['food','drink'] as const).map(t => (
-                    <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }}
+                    <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }} aria-pressed={catalogActiveType === t}
                       className={`font-bebas tracking-widest text-sm px-6 py-2.5 border-b-2 transition-colors ${
                         catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                       }`}>
@@ -11501,7 +11509,7 @@ export default function Dashboard() {
 
           {/* Mode switch — makes the two ways to add explicit, instead of
               hiding "manual" behind a button inside the paste panel. */}
-          <div role="tablist" aria-label="How to add this enquiry" className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
+          <div role="tablist" aria-label="How to add this enquiry" onKeyDown={onArrowChoose} className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
             <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => chooseEnquiryMode(true)}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               SMART PASTE
@@ -11514,7 +11522,7 @@ export default function Dashboard() {
 
           {/* ── Smart Paste panel ── */}
           {enquiryPasteMode ? (
-            <div className="space-y-3">
+            <div className="space-y-3" role="tabpanel" id={`${addEnquiryFormId}-panel-paste`} aria-labelledby={`${addEnquiryFormId}-tab-paste`}>
               <div className="bg-forest/5 border border-forest/20 p-3 sm:p-4">
                 {/* The tab above and the dialog subtitle already say this on a
                     phone, so the in-panel title only shows from sm up; it stays
@@ -11531,10 +11539,12 @@ export default function Dashboard() {
                   value={enquiryPasteText}
                   onPaste={e => {
                     const text = e.clipboardData.getData('text');
+              id={`${addEnquiryFormId}-tab-paste`} aria-controls={enquiryPasteMode ? `${addEnquiryFormId}-panel-paste` : undefined} tabIndex={enquiryPasteMode ? 0 : -1}
                     e.preventDefault();
                     setEnquiryPasteText(text);
                   }}
                   onChange={e => setEnquiryPasteText(e.target.value)}
+              id={`${addEnquiryFormId}-tab-manual`} aria-controls={!enquiryPasteMode ? `${addEnquiryFormId}-panel-manual` : undefined} tabIndex={!enquiryPasteMode ? 0 : -1}
                   placeholder={"Paste a client email, message or booking request here...\n\nExamples:\n• \"Hi, I'm looking to book a wedding for 80 guests on 14 September...\"\n• A forwarded email from a client\n• A booking brief or inquiry form response"}
                   className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/65"
                   style={{ minHeight: 140 }}
@@ -11559,7 +11569,7 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <form onSubmit={e => {
+            <form role="tabpanel" id={`${addEnquiryFormId}-panel-manual`} aria-labelledby={`${addEnquiryFormId}-tab-manual`} onSubmit={e => {
               e.preventDefault();
               // A space is only needed once it's a live event (the server
               // enforces the same rule); an enquiry can be logged without one.

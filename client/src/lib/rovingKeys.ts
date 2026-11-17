@@ -22,3 +22,15 @@ export function onArrowChoose(e: KeyboardEvent<HTMLElement>) {
   const chosen = el.getAttribute("aria-checked") === "true" || el.getAttribute("aria-selected") === "true";
   if (!chosen) el.click();
 }
+
+/**
+ * For a hand-made pop-up (a toolbar's "More actions" or filter panel): Escape
+ * closes it and puts focus back on its trigger, the first button in `root`.
+ * Marks the key as handled so a drawer or page handler doesn't act on it too.
+ */
+export function closeMenuOnEscape(e: globalThis.KeyboardEvent, root: HTMLElement | null, close: () => void) {
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  e.preventDefault();
+  close();
+  root?.querySelector<HTMLElement>("button")?.focus();
+}
