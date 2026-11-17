@@ -6,10 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -907,6 +907,10 @@ export default function LeadForm() {
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
   // (no per-keystroke bookkeeping needed).
   const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
+  // Why the last submit failed, shown above the embed's SUBMIT button: a toast
+  // in the embed would sit right on top of that button (the iframe is only as
+  // tall as the form), so the full page alone uses a toast for it.
+  const [submitError, setSubmitError] = useState("");
   // The id of the lead row this submission created/updated — captured from
   // submit()'s response so the post-submit walkthrough step has something to
   // attach the chosen slot to. Distinct from capturedLeadId (set earlier, by
@@ -1046,7 +1050,8 @@ export default function LeadForm() {
       setTurnstileReset(n => n + 1);
       const reason = e?.message?.trim() || "Something went wrong submitting the form.";
       const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
-      toast.error(`${reason}${fallback}`, { duration: 12000 });
+      if (isEmbed) setSubmitError(`${reason}${fallback}`);
+      else toast.error(`${reason}${fallback}`);
     },
   });
 
@@ -1074,9 +1079,12 @@ export default function LeadForm() {
     }
     if (invalid.length > 0) {
       setTouchedInvalid(new Set(invalid.map(f => f.id)));
-      // One toast, replaced on each try and cleared once the form is valid
-      // (error toasts now stay until dismissed, and the errors are at the fields).
-      toast.error(fieldErrorMessage(invalid[0]), { id: "lead-form-invalid" });
+      setSubmitError("");
+      // The errors are at the fields (and stay there), so the toast is only a
+      // pointer to them: one at a time, timed like other toasts rather than
+      // left up with a message that goes stale as the fields are fixed. None in
+      // the embed, where it would cover the SUBMIT button.
+      if (!isEmbed) toast.error(fieldErrorMessage(invalid[0]), { id: "lead-form-invalid", duration: 4000 });
       // Land keyboard/screen-reader focus right on the first problem field —
       // the toast alone is easy to miss, especially for a screen reader user
       // who isn't looking at the corner of the screen it appears in.
@@ -1084,6 +1092,7 @@ export default function LeadForm() {
       return;
     }
     setTouchedInvalid(new Set());
+    setSubmitError("");
     toast.dismiss("lead-form-invalid");
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
@@ -1744,6 +1753,7 @@ export default function LeadForm() {
               </div>
             )}
             {renderTurnstile()}
+            {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
             <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
               className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
@@ -1899,6 +1909,7 @@ export default function LeadForm() {
 
                   {renderHoneypot()}
                   {renderTurnstile()}
+                  {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
