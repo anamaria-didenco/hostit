@@ -42,6 +42,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* Cream as a real theme colour, so text-cream/70, border-cream/30 etc. on the
+     navy headers compile. Without it those classes produced no CSS and the
+     subtitles and close icons fell back to dark ink on navy (about 2:1). */
+  --color-cream: #fffdf9;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1267,6 +1271,16 @@
   outline-offset: 2px !important;
 }
 .vf-sidebar :focus-visible { outline-color: #a9c8f2 !important; }
+/* The same light ring inside the navy and ink headers of dialogs, drawers and
+   toolbars, where the blue ring measured 1.4:1. A control on a light panel
+   inside one of them keeps the blue ring. */
+:is(.bg-forest, .bg-forest-dark, .bg-sage-green, .bg-sage-dark, .bg-ink, .bg-\[\#2f5488\], .bg-\[\#1f3a63\]) :focus-visible {
+  outline-color: #a9c8f2 !important;
+}
+:is(.bg-forest, .bg-forest-dark, .bg-sage-green, .bg-sage-dark, .bg-ink, .bg-\[\#2f5488\], .bg-\[\#1f3a63\]) :is(.bg-white, .bg-cream, .bg-card, .bg-background, .bg-popover, .bg-linen) :focus-visible {
+  outline-color: var(--ring) !important;
+}
+
 
 /* Skip-to-content link — visually hidden until focused. */
 .skip-link {

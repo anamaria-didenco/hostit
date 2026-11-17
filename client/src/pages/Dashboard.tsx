@@ -68,6 +68,7 @@ import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLO
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { inkOnAccent } from "@shared/brand";
+import { contrastRatio } from "@shared/contrast";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
@@ -4569,7 +4570,7 @@ export default function Dashboard() {
                         }}
                         disabled={bulkUpdateStatus.isPending}
                         className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
-                        style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
+                        style={{ borderColor: s.swatch ?? '#d4c5a9', color: contrastRatio(s.swatch ?? '#d4c5a9', '#211d18') >= 4.5 ? (s.swatch ?? '#d4c5a9') : '#fffdf9' }}>
                         {s.label}
                       </button>
                     ))}
@@ -11241,7 +11242,7 @@ export default function Dashboard() {
             <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <div className="font-bebas tracking-widest text-cream text-base">EMAIL STAFF BRIEFING — WEEKLY</div>
-                <p className="font-dm text-cream/60 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
+                <p className="font-dm text-cream/80 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
               </div>
               <button aria-label="Close" onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                 className="text-cream/60 hover:text-cream transition-colors ml-4 flex-shrink-0">
