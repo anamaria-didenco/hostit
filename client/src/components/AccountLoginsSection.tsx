@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { onArrowChoose } from "@/lib/rovingKeys";
 import { Plus, KeyRound, Trash2 } from "lucide-react";
 
 /**
@@ -101,12 +102,13 @@ export function AccountLoginsSection() {
           </div>
           <div>
             <span className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">ACCESS LEVEL</span>
-            <div className="flex gap-1.5" role="radiogroup" aria-label="Access level">
-              <button type="button" role="radio" aria-checked={isStaff} onClick={() => setIsStaff(true)}
+            {/* One Tab stop; the arrow keys switch between the two, as radio buttons do. */}
+            <div className="flex gap-1.5" role="radiogroup" aria-label="Access level" onKeyDown={onArrowChoose}>
+              <button type="button" role="radio" aria-checked={isStaff} tabIndex={isStaff ? 0 : -1} onClick={() => setIsStaff(true)}
                 className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
                 STAFF · EVENTS &amp; RUNSHEETS
               </button>
-              <button type="button" role="radio" aria-checked={!isStaff} onClick={() => setIsStaff(false)}
+              <button type="button" role="radio" aria-checked={!isStaff} tabIndex={!isStaff ? 0 : -1} onClick={() => setIsStaff(false)}
                 className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${!isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
                 FULL ACCESS
               </button>

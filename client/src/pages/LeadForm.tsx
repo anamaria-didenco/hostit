@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -546,11 +547,12 @@ function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, acce
       </div>
 
       <div id={`wt-time-${leadId}`} className={`${label} mt-3`}>Time of day</div>
-      <div role="radiogroup" aria-labelledby={`wt-time-${leadId}`} className="flex flex-wrap gap-1.5">
-        {WALKTHROUGH_TIME_OPTIONS.map(o => {
+      <div role="radiogroup" aria-labelledby={`wt-time-${leadId}`} onKeyDown={onArrowChoose} className="flex flex-wrap gap-1.5">
+        {WALKTHROUGH_TIME_OPTIONS.map((o, idx) => {
           const sel = timeOfDay === o.key;
           return (
             <button key={o.key} type="button" role="radio" aria-checked={sel}
+              tabIndex={rovingTabIndex(sel, idx, WALKTHROUGH_TIME_OPTIONS.some(t => t.key === timeOfDay))}
               onClick={() => setTimeOfDay(o.key)}
               className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${sel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'}`}
               style={sel ? { backgroundColor: accentColor, borderColor: accentColor, color: accentTextColor } : undefined}>
@@ -1406,11 +1408,14 @@ export default function LeadForm() {
     const budgetGuide = field.id === 'budgetRange' ? guidance.budget : null;
     return (
       <>
-        <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} className="flex gap-2 flex-wrap items-center">
-          {options.map(o => {
+        {/* One Tab stop per group; arrow keys move and choose, as radio buttons do.
+            Clicking (or Space on) the chosen pill still clears it, as before. */}
+        <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} onKeyDown={onArrowChoose} className="flex gap-2 flex-wrap items-center">
+          {options.map((o, idx) => {
             const isSel = selected === o.value;
             return (
               <button key={o.value} type="button" role="radio" aria-checked={isSel}
+                tabIndex={rovingTabIndex(isSel, idx, options.some(x => x.value === selected))}
                 onClick={() => setForm(p => ({ ...p, [field.id]: isSel ? '' : o.value }))}
                 className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                 style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
@@ -1459,16 +1464,17 @@ export default function LeadForm() {
             field list at once. */}
         {extra && (
           <div className="mt-2.5">
-            <label className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">{extra.label}</label>
+            <label id={`${formId}-event-detail-label`} className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">{extra.label}</label>
             {extra.text ? (
               <Input type="text" value={form.eventDetail ?? ''} onChange={e => setForm(p => ({ ...p, eventDetail: e.target.value }))}
                 placeholder="Engagement, farewell, product launch…" className={inputClass} />
             ) : (
-              <div className="flex gap-2 flex-wrap">
-                {extra.opts!.map(o => {
+              <div role="radiogroup" aria-labelledby={`${formId}-event-detail-label`} onKeyDown={onArrowChoose} className="flex gap-2 flex-wrap">
+                {extra.opts!.map((o, idx) => {
                   const isSel = form.eventDetail === o;
                   return (
                     <button key={o} type="button" role="radio" aria-checked={isSel}
+                      tabIndex={rovingTabIndex(isSel, idx, extra.opts!.includes(form.eventDetail ?? ''))}
                       onClick={() => setForm(p => ({ ...p, eventDetail: isSel ? '' : o }))}
                       className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                       style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
@@ -1502,11 +1508,12 @@ export default function LeadForm() {
     const selected = form.source ?? '';
     return (
       <>
-        <div role="radiogroup" aria-labelledby={`${formId}-source-label`} id={`${formId}-source`} tabIndex={-1} className="flex flex-wrap gap-2">
-          {SOURCE_OPTIONS.map(s => {
+        <div role="radiogroup" aria-labelledby={`${formId}-source-label`} id={`${formId}-source`} tabIndex={-1} onKeyDown={onArrowChoose} className="flex flex-wrap gap-2">
+          {SOURCE_OPTIONS.map((s, idx) => {
             const isSel = selected === s;
             return (
               <button key={s} type="button" role="radio" aria-checked={isSel}
+                tabIndex={rovingTabIndex(isSel, idx, (SOURCE_OPTIONS as readonly string[]).includes(selected))}
                 onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
                 className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                 style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
