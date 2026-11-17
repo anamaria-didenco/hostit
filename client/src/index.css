@@ -323,6 +323,9 @@
      indicator, so the last row of a list isn't permanently hidden behind it. */
   .pb-mobile-nav { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }
   @media (min-width: 768px) { .pb-mobile-nav { padding-bottom: 0; } }
+  /* ...and stops Tab scrolling the focused control in underneath that bar
+     (phones, and laptops zoomed to 200-400%). */
+  @media (max-width: 767px) { .pb-mobile-nav { scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); } }
 
   /* ── iOS focus zoom ─────────────────────────────────────────────────────
      Safari zooms the whole page in when a form control smaller than 16px takes
@@ -1261,6 +1264,14 @@
    here, which is exactly the "looks like a blank box" issue this fixes. */
 .vf-time-input::-webkit-calendar-picker-indicator {
   display: none;
+}
+
+/* Upload buttons are a <label> around a visually-hidden (sr-only, not
+   display:none) file input, so Tab reaches the input and Space/Enter opens the
+   file picker. The 1px input can't show a ring, so its label shows it. */
+label:has(input[type="file"]:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* Honour the OS "reduce motion" preference (vestibular safety). */

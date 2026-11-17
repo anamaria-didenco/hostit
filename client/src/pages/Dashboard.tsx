@@ -92,6 +92,7 @@ import GlobalFinder from "@/components/GlobalFinder";
 import EventSearchResults from "@/components/EventSearchResults";
 import MovedNote from "@/components/MovedNote";
 import { leadMatchesSearch } from "@/lib/leadSearch";
+import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
@@ -1316,13 +1317,15 @@ export default function Dashboard() {
 
   // Keyboard shortcuts when on Calendar tab (desktop): ←/→ prev/next, T today, M/W/D/L view switch.
   // Also closes the jump-to-date popover on Escape.
+  // Single keys only act on the calendar itself: never from a field, button or
+  // link, never behind a dialog, drawer or pop-up, and not at all once turned
+  // off (the switch sits under the tip in the jump-to-date pop-up).
+  const [calShortcutsOn, setCalShortcutsOn] = useState(readCalendarShortcutsOn);
   useEffect(() => {
     if (tab !== 'calendar') return;
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape' && showJumpDate) { e.preventDefault(); setShowJumpDate(false); return; }
+      if (!singleKeyShortcutAllowed(e, calShortcutsOn)) return;
       if (showJumpDate || showAddLead || selectedBooking) return;
       switch (e.key) {
         case 'ArrowLeft': e.preventDefault(); navCalendar(-1); break;
@@ -1396,6 +1399,27 @@ export default function Dashboard() {
   // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const showEmailModalRef = useRef(false);
+  // Phone: the drawer's close (X) sits right on top of the top bar's Sign out,
+  // so the second tap of a double tap on X signed the user out. Sign out
+  // ignores taps for a moment after a drawer closes.
+  const drawerClosedAt = useRef(0);
+  useEffect(() => {
+    if (!selectedBooking) return;
+    return () => { drawerClosedAt.current = Date.now(); };
+  }, [selectedBooking?.id]);
+  // The panel's header is sticky: keep Tab / Shift+Tab from scrolling the
+  // focused control in underneath it.
+  const drawerHeaderRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const panel = drawerRef.current, header = drawerHeaderRef.current;
+    if (!panel || !header) return;
+    const fit = () => { panel.style.scrollPaddingTop = `${header.offsetHeight + 8}px`; };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, [selectedBooking?.id]);
   useEffect(() => {
     if (!selectedBooking) return;
     const focused = document.activeElement as HTMLElement | null;
@@ -3909,11 +3933,70 @@ export default function Dashboard() {
           <div className="hidden md:flex w-8 h-8 rounded-full bg-sage-green items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
-          <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
+          <button onClick={() => { if (Date.now() - drawerClosedAt.current > 800) void handleSignOut(); }} aria-label="Sign out" title="Sign out"
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
             <LogOut className="w-4 h-4 text-gray-500" aria-hidden="true" />
           </button>
         </div>
+      </nav>
+
+      {/* The tab bar comes straight after the top bar in the page, so Tab
+          reaches it in a few presses instead of after the whole page (CSS
+          still pins it to the bottom of the screen). */}
+      {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
+      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 box-content safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
+        {(isStaff ? [
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+        ] : [
+          { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
+          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          // The calendar is what a manager checks on shift — phones had no
+          // way to reach it. Daily Checklists moved to More (with Reports).
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          // Payments was only reachable via More on a phone.
+          { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+          { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
+        ]).map(item => {
+          // Active = primary blue (~7.5:1 on white); idle = warm muted-foreground
+          // #6a6256 (~5:1, clears the 4.5:1 small-text minimum) — one language
+          // with the sidebar and top tabs. A short top bar marks the active tab,
+          // mirroring the top strip's underline.
+          const isActive = tab === item.id;
+          const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
+            isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          }`;
+          const indicator = isActive ? (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" aria-hidden="true" />
+          ) : null;
+          if ((item as any).href) {
+            return (
+              <a key={item.id} href={(item as any).href} className={baseClass}>
+                {indicator}
+                {item.icon}
+                <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
+              </a>
+            );
+          }
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id as any)}
+              aria-current={tab === item.id ? "page" : undefined}
+              className={baseClass}
+            >
+              {indicator}
+              {item.icon}
+              <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
+              {item.id === "enquiries" && unreadCount > 0 && (
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* ── DESKTOP SIDEBAR (deep-blue editorial) ───────────────────────────── */}
@@ -4861,7 +4944,7 @@ export default function Dashboard() {
                           <input
                             type="file"
                             multiple
-                            className="hidden"
+                            className="sr-only"
                             onChange={async e => {
                               const files = Array.from(e.target.files ?? []);
                               const loaded = await Promise.all(files.map(f => new Promise<{ filename: string; content: string; contentType: string }>(resolve => {
@@ -4874,6 +4957,10 @@ export default function Dashboard() {
                             }}
                           />
                         </label>
+                        {/* The hidden picker can't say what was chosen: announce it. */}
+                        <span className="sr-only" aria-live="polite">
+                          {emailAttachments.length > 0 ? `Attached: ${emailAttachments.map(a => a.filename).join(', ')}` : ''}
+                        </span>
                       </div>
                     </div>
                     {proposalAttached && (
@@ -5059,6 +5146,13 @@ export default function Dashboard() {
                         <p className="hidden md:block font-dm text-[12px] text-sage/60 mt-3 leading-snug">
                           Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
                         </p>
+                        {/* Off for speech input and anyone who sets keys off by accident; kept per browser. */}
+                        <label className="hidden md:flex items-center gap-2 mt-2 font-dm text-[12px] text-ink/80 cursor-pointer">
+                          <input type="checkbox" checked={calShortcutsOn}
+                            onChange={e => { setCalShortcutsOn(e.target.checked); writeCalendarShortcutsOn(e.target.checked); }}
+                            className="accent-forest w-3.5 h-3.5" />
+                          Single-key shortcuts on
+                        </label>
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -6363,7 +6457,7 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <label className="cursor-pointer block">
-                          <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                          <input type="file" accept="image/*" className="sr-only" onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
                             try {
                               const dataUrl = await compressToDataUrl(file, 1600, 800, 0.80);
@@ -6782,7 +6876,7 @@ export default function Dashboard() {
                                   type="file"
                                   accept="image/*"
                                   aria-label={sig.photo ? "Change signature photo" : "Upload signature photo"}
-                                  className="hidden"
+                                  className="sr-only"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
@@ -6814,7 +6908,7 @@ export default function Dashboard() {
                                   type="file"
                                   accept="image/*"
                                   aria-label={sig.signatureLogo ? "Change signature logo" : "Upload signature logo"}
-                                  className="hidden"
+                                  className="sr-only"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
@@ -7376,7 +7470,7 @@ export default function Dashboard() {
                       <label className="flex items-center gap-3 border border-dashed border-gold/30 p-3 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors rounded">
                         <Upload className="w-4 h-4 text-ink/65 flex-shrink-0" />
                         <span className="font-dm text-xs text-ink/60">Upload a background image (JPG, PNG)</span>
-                        <input type="file" accept="image/*" className="hidden"
+                        <input type="file" accept="image/*" className="sr-only"
                           onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
                             try {
@@ -7597,7 +7691,7 @@ export default function Dashboard() {
                                 const newImgs = imgs.filter((_, j) => j !== i);
                                 setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
                               }}
-                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity">
                               <X className="w-3 h-3" />
                             </button>
                           </div>
@@ -7606,7 +7700,7 @@ export default function Dashboard() {
                           <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors flex-shrink-0" style={{ width: `${tileW}px`, height: `${ph}px` }}>
                             <Upload className="w-5 h-5 text-ink/65 mb-1" />
                             <span className="font-dm text-xs text-ink/60">Upload photo</span>
-                            <input type="file" accept="image/*" className="hidden"
+                            <input type="file" accept="image/*" className="sr-only"
                               onChange={async e => {
                                 const file = e.target.files?.[0]; if (!file) return;
                                 try {
@@ -8831,7 +8925,7 @@ export default function Dashboard() {
                                 )}
                                 <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
                                   <Upload className="w-3 h-3" /> UPLOAD PNG
-                                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => {
+                                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={e => {
                                     const file = e.target.files?.[0]; if (!file) return;
                                     const img = new Image();
                                     const url = URL.createObjectURL(file);
@@ -9076,7 +9170,7 @@ export default function Dashboard() {
                             onClick={() => setCatalogActiveCategoryId(cat.id)}>
                             <span className={`font-dm text-sm truncate ${ catalogActiveCategoryId === cat.id ? 'text-forest font-semibold' : 'text-ink/70' }`}>{cat.name}</span>
                             <button aria-label="Delete category" onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
-                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         ))}
@@ -9112,7 +9206,7 @@ export default function Dashboard() {
                               className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border ${showCatalogAiPanel ? 'bg-forest text-cream border-forest' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>✨ AI ADD</button>
                             <label className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border cursor-pointer ${catalogPdfLoading ? 'bg-forest/40 text-cream border-forest cursor-wait' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>
                               {catalogPdfLoading ? 'READING…' : '📄 UPLOAD PDF'}
-                              <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={catalogPdfLoading}
+                              <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={catalogPdfLoading}
                                 onChange={async e => {
                                   const file = e.target.files?.[0];
                                   e.target.value = "";
@@ -9479,16 +9573,16 @@ export default function Dashboard() {
                                         allergens: item.allergens ?? undefined,
                                       })}
                                       title="Duplicate item"
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-sage hover:text-ink transition-opacity">
                                       <Copy className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Edit item" onClick={() => {
                                       setEditingCatalogItemId(item.id);
                                       setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
                                       setShowCatalogItemForm(true);
-                                    }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
+                                    }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
                                       <Edit2 className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Delete item" onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                                       <Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
@@ -9579,7 +9673,7 @@ export default function Dashboard() {
           >
             {/* Header — sticky, so the name, the when/who summary and the close
                 button stay in view however far down the panel you scroll. */}
-            <div className="sticky top-0 z-10 flex-shrink-0 bg-forest-dark px-4 md:px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
+            <div ref={drawerHeaderRef} className="sticky top-0 z-10 flex-shrink-0 bg-forest-dark px-4 md:px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
               <div className="min-w-0">
                 {/* text-cream/NN opacity modifiers don't compile in this theme
                     (they fall back to dark ink on navy) — use opacity-* instead. */}
@@ -10764,7 +10858,7 @@ export default function Dashboard() {
                               <div className="font-cormorant font-semibold text-sm text-ink">{currency(Number(p.amount))}</div>
                               <div className="font-dm text-[12px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
-                            <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                            <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -11758,62 +11852,6 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
-      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 box-content safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
-        {(isStaff ? [
-          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
-          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
-        ] : [
-          { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
-          // The calendar is what a manager checks on shift — phones had no
-          // way to reach it. Daily Checklists moved to More (with Reports).
-          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
-          // Payments was only reachable via More on a phone.
-          { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
-          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
-          { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
-        ]).map(item => {
-          // Active = primary blue (~7.5:1 on white); idle = warm muted-foreground
-          // #6a6256 (~5:1, clears the 4.5:1 small-text minimum) — one language
-          // with the sidebar and top tabs. A short top bar marks the active tab,
-          // mirroring the top strip's underline.
-          const isActive = tab === item.id;
-          const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-            isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-          }`;
-          const indicator = isActive ? (
-            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" aria-hidden="true" />
-          ) : null;
-          if ((item as any).href) {
-            return (
-              <a key={item.id} href={(item as any).href} className={baseClass}>
-                {indicator}
-                {item.icon}
-                <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              </a>
-            );
-          }
-          return (
-            <button
-              key={item.id}
-              onClick={() => setTab(item.id as any)}
-              aria-current={tab === item.id ? "page" : undefined}
-              className={baseClass}
-            >
-              {indicator}
-              {item.icon}
-              <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
     </div>
   );
 }

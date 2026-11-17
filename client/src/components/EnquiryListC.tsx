@@ -153,6 +153,18 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
+  // Opening a quick reply brings it into view and, when it was opened from the
+  // keyboard, puts the cursor in the reply box. A click or tap leaves focus on
+  // Reply, as before.
+  const replyPanelRef = React.useRef<HTMLDivElement>(null);
+  const replyBoxRef = React.useRef<HTMLTextAreaElement>(null);
+  const focusReplyBox = React.useRef(false);
+  React.useEffect(() => {
+    if (replyId == null) return;
+    replyPanelRef.current?.scrollIntoView({ block: "nearest" });
+    if (focusReplyBox.current) replyBoxRef.current?.focus({ preventScroll: true });
+    focusReplyBox.current = false;
+  }, [replyId]);
   // A just-moved row keeps its place in the tab it was moved from, even though
   // its new status no longer matches it. We remember which tab each move was
   // pinned to; the pin drops when the parent clears the mark (undo, or a
@@ -344,6 +356,8 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
             const onAction = (e: React.MouseEvent) => {
               e.stopPropagation();
+              // detail 0 = Enter/Space (a click or tap has 1 or more).
+              focusReplyBox.current = e.detail === 0;
               if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
             };
 
@@ -353,9 +367,11 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 {/* The whole box is filled with the enquiry's status colour: a
                     light tint, with a solid border in the same colour. A brand-new
                     enquiry is the one that needs you, so its tint is the strongest. */}
-                {/* Desktop: one dense signal-first row */}
-                <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                {/* Desktop: one dense signal-first row. A click anywhere opens
+                    it; for the keyboard the name is the button, so Reply isn't
+                    nested inside another button (Enter on Reply used to open
+                    the drawer too). */}
+                <div onClick={() => onOpen(lead)}
                   className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
                   {/* Fixed-width signal and action columns, so the name and date
                       columns line up from row to row whatever the chip says. */}
@@ -365,7 +381,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2 min-w-0">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
+                        className="min-w-0 truncate text-left font-serif text-[16.5px] font-semibold">
                       <span className="font-serif text-[16.5px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
+                      </button>
                       {/* Status in plain ink: the dot carries the status colour; the
                           chip on the left already carries the urgency colour. */}
                       <span className="inline-flex items-center gap-1.5 font-sans text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
@@ -394,7 +413,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 {/* Mobile: a stacked card — signal + budget, then name, sub, then date + action */}
                 <div className="md:hidden">
                   <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                    onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
                     className="px-3.5 pt-3 pb-2.5 cursor-pointer">
                     <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-[12px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
@@ -438,7 +457,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
                 {/* Inline quick reply */}
                 {replying && (
-                  <div className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
+                  <div ref={replyPanelRef} className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
                     <div className="flex items-center gap-1.5 flex-wrap mb-2">
                       <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
                       {(QUICK_FOR[signal.group] ?? []).map((name) => {
@@ -454,7 +473,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                         );
                       })}
                     </div>
-                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
+                    <textarea ref={replyBoxRef} aria-label={`Reply to ${[lead.firstName, lead.lastName].filter(Boolean).join(" ")}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
                       className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
                       style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
                     <div className="mt-2 flex items-center justify-end gap-2">

@@ -465,7 +465,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
 function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: string; uploads: any[]; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const up = trpc.portal.uploadFile.useMutation({
-    onSuccess: () => { toast.success("Uploaded — thanks!"); onChanged(); },
+    onSuccess: (_d, vars) => { toast.success(`Uploaded ${vars.filename} — thanks!`); onChanged(); },
     onError: (e) => toast.error(e.message || "Upload failed."),
     onSettled: () => setBusy(false),
   });
@@ -474,7 +474,7 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || busy) return;
     if (file.size > MAX_UPLOAD_BYTES) { toast.error("That file is too large — keep it under 5 MB."); return; }
     setBusy(true);
     const reader = new FileReader();
@@ -492,7 +492,11 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
         </div>
         <label className="px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer whitespace-nowrap" style={{ background: T.accent, color: T.onAccent, opacity: busy ? 0.6 : 1 }}>
           {busy ? "Uploading…" : "Upload"}
-          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={onFile} disabled={busy} />
+          {/* While uploading it is aria-disabled and won't open the picker,
+              but stays enabled: a disabled input loses focus, so keyboard and
+              screen-reader users lost their place after every upload. */}
+          <input type="file" accept="image/*,application/pdf" aria-label="Upload a file" className="sr-only" onChange={onFile}
+            aria-disabled={busy} onClick={e => { if (busy) e.preventDefault(); }} />
         </label>
       </div>
       <div className="p-4">
@@ -517,7 +521,7 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
                     <div className="px-2 py-1.5 text-xs truncate" style={{ color: T.ink }}>{u.filename}</div>
                   </a>
                   <button onClick={() => rm.mutate({ token, uploadId: u.id })} aria-label={`Remove ${u.filename}`}
-                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/55 text-white text-sm leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">×</button>
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/55 text-white text-sm leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">×</button>
                 </li>
               );
             })}
