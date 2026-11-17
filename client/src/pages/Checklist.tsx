@@ -82,12 +82,11 @@ export default function Checklist() {
       {/* Nav */}
       <nav className="bg-ink text-cream px-4 md:px-6 py-3 flex items-center justify-between flex-wrap gap-y-2 gap-2 print:hidden">
         <div className="flex items-center gap-2 md:gap-4 min-w-0">
-          <Link href="/dashboard">
-            <button className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-cream/60 hover:text-cream min-h-[44px]">
-              <ChevronLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">BACK TO DASHBOARD</span>
-              <span className="sm:hidden">BACK</span>
-            </button>
+          {/* One link styled as a button (a link round a button was two Tab stops). */}
+          <Link href="/dashboard" className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-cream/60 hover:text-cream min-h-[44px]">
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">BACK TO DASHBOARD</span>
+            <span className="sm:hidden">BACK</span>
           </Link>
           <div className="w-px h-4 bg-cream/20 hidden sm:block" />
           <span className="font-bebas text-xs md:text-sm tracking-widest text-cream truncate">EVENT CHECKLIST</span>
@@ -168,11 +167,9 @@ export default function Checklist() {
                   The same list as the run sheet and the staff checklist link.
                 </p>
               </div>
-              <Link href={runsheetHref}>
-                <button className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-forest hover:text-ink transition-colors print:hidden min-h-[44px] flex-shrink-0">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>RUN SHEET</span>
-                </button>
+              <Link href={runsheetHref} className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-forest hover:text-ink transition-colors print:hidden min-h-[44px] flex-shrink-0">
+                <Clock className="w-3.5 h-3.5" />
+                <span>RUN SHEET</span>
               </Link>
             </div>
 
