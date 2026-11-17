@@ -2300,7 +2300,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     create: protectedProcedure
       .input(z.object({
         leadId: z.number(),
-        title: z.string().min(1),
+        // The same rule as update: a title of only spaces is no title.
+        title: z.string().trim().min(1),
         introMessage: z.string().optional(),
         eventDate: z.string().optional(),
         eventEndDate: z.string().optional(),

@@ -61,6 +61,8 @@ describe("proposal GST and deposit stay within 0-100% (DB)", async () => {
     expect(err).toMatchObject({ code: "BAD_REQUEST" });
     expect(userFacingMessage(err)).toBe("Title is required.");
     await expect(owner.proposals.update({ id: p!.id, title: "   " })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    // Create has the same rule (it took a title of only spaces).
+    await expect(owner.proposals.create({ leadId: lead.id, title: "   " })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await owner.proposals.update({ id: p!.id, title: "Birthday Dinner" });
     const [row] = await db!.select({ title: proposals.title }).from(proposals).where(inArray(proposals.id, [p!.id]));
     expect(row.title).toBe("Birthday Dinner");
