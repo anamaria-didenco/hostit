@@ -169,3 +169,35 @@ export async function getOrCreateRunsheetChecklist(
     return instance;
   });
 }
+
+/**
+ * One change to a run sheet's checklist, applied to the list as it is now:
+ * the row is locked, read, changed by `change` and written back in one
+ * transaction, so a tick made on the staff link at the same moment isn't
+ * lost (the run sheet sends the change, not its whole copy of the list).
+ * `change` returns the new items and/or name, or null when it can't apply
+ * (the item was deleted meanwhile). Owner-scoped; NOT_FOUND when the run
+ * sheet has no checklist.
+ */
+export async function changeRunsheetChecklist(
+  ownerId: number,
+  runsheetId: number,
+  change: (instance: ChecklistInstance) => { items?: ChecklistItem[]; name?: string } | null,
+): Promise<ChecklistInstance> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+  return db.transaction(async (tx) => {
+    const [instance] = await tx.select().from(checklistInstances)
+      .where(and(eq(checklistInstances.runsheetId, runsheetId), eq(checklistInstances.ownerId, ownerId)))
+      .orderBy(asc(checklistInstances.id)).limit(1).for("update");
+    if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "This run sheet has no checklist yet." });
+    const next = change(instance);
+    if (!next) throw new TRPCError({ code: "CONFLICT", message: "That item has been removed from the checklist. The list has been refreshed." });
+    const [saved] = await tx.update(checklistInstances).set({
+      ...(next.items ? { items: next.items } : {}),
+      ...(next.name !== undefined ? { name: next.name } : {}),
+      updatedAt: new Date(),
+    }).where(eq(checklistInstances.id, instance.id)).returning();
+    return saved;
+  });
+}

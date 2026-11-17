@@ -22,6 +22,7 @@ import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
 import { normaliseTaskPriority } from "@shared/taskFields";
+import { EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -5059,15 +5060,57 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1);
-        if (!instance) throw new Error('Checklist not found');
-        const items = ((instance.items as any[]) ?? []).map(item =>
-          item.id === input.itemId
-            ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
-            : item
-        );
-        await db.update(checklistInstances).set({ items, updatedAt: new Date() }).where(eq(checklistInstances.id, instance.id));
-        return { success: true, items };
+        // Locked read-change-write, like the run sheet's item edits, so a
+        // tick and an edit made at the same moment don't undo each other.
+        return db.transaction(async (tx) => {
+          const [instance] = await tx.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1).for('update');
+          if (!instance) throw new Error('Checklist not found');
+          const items = ((instance.items as any[]) ?? []).map(item =>
+            item.id === input.itemId
+              ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
+              : item
+          );
+          await tx.update(checklistInstances).set({ items, updatedAt: new Date() }).where(eq(checklistInstances.id, instance.id));
+          return { success: true, items };
+        });
+      }),
+
+    // The run sheet's checklist, one change at a time (see changeRunsheetChecklist):
+    // edit one item's words / category / notes, put the items in a new order,
+    // or rename the list. Each returns the list as saved, staff ticks included.
+    editItemForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        itemId: z.string().max(100),
+        text: z.string().trim().min(1, 'An item needs some words').max(500).optional(),
+        category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
+        notes: z.string().max(2000).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { editEventChecklistItem } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => {
+          const items = editEventChecklistItem((inst.items ?? []) as any[], input.itemId, { text: input.text, category: input.category, notes: input.notes });
+          return items ? { items } : null;
+        });
+        return { items: saved.items, name: saved.name };
+      }),
+    reorderItemsForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), ids: z.array(z.string().max(100)).max(500) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { reorderEventChecklist } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => ({
+          items: reorderEventChecklist((inst.items ?? []) as any[], input.ids),
+        }));
+        return { items: saved.items, name: saved.name };
+      }),
+    renameForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), name: z.string().trim().min(1, 'Give the checklist a name').max(255) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, () => ({ name: input.name }));
+        return { items: saved.items, name: saved.name };
       }),
 
     saveItemsForRunsheet: protectedProcedure
