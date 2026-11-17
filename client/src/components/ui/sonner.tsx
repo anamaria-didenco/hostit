@@ -6,7 +6,9 @@ import { toast, useSonner, Toaster as Sonner, type ToasterProps } from "sonner";
 // An error has to be read (and often acted on) before it goes, so error toasts
 // stay until the close button dismisses them (WCAG 2.2.1). Patched once here
 // rather than at each of the few hundred toast.error() calls; other toasts keep
-// their timing, and so does an error whose call gives its own duration.
+// their timing. An error whose call gives its own duration keeps it: only do
+// that for a pointer to errors that stay on the page anyway (the enquiry form's
+// "Please fill in …", whose message also stays at the field).
 const showError = toast.error;
 toast.error = ((message, data) => showError(message, { ...data, duration: data?.duration ?? Infinity })) as typeof toast.error;
 

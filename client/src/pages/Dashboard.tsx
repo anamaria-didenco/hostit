@@ -9709,7 +9709,7 @@ export default function Dashboard() {
                     // change itself; a real event needs it filled in first.)
                     if (!selectedBooking._isLead && ['booked', 'confirmed', 'tentative'].includes(newStatus) && !selectedBooking.spaceName?.trim()) {
                       setDrawerAddFields(prev => new Set(prev).add('space'));
-                      toast.error('Pick a space first. The Space field is now showing under Details.', { duration: 5000 });
+                      toast.error('Pick a space first. The Space field is now showing under Details.');
                       return;
                     }
                     if (selectedBooking._isLead) {
