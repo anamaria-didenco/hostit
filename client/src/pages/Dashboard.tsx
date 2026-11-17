@@ -8,7 +8,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogShell, DialogShellContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogShell, DialogShellContent, DialogTitle, openerOfClosingDialog } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
@@ -1323,7 +1323,10 @@ export default function Dashboard() {
   const showEmailModalRef = useRef(false);
   useEffect(() => {
     if (!selectedBooking) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focused = document.activeElement as HTMLElement | null;
+    // Opened from a pop-up as it closes (a lead picked in the Ctrl+K finder):
+    // give focus back to what opened that pop-up.
+    const previouslyFocused = openerOfClosingDialog(focused) ?? focused;
     const appRoot = document.getElementById("root");
     appRoot?.setAttribute("inert", "");
 

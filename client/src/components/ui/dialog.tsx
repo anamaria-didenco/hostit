@@ -31,6 +31,18 @@ function activeHTMLElement(): HTMLElement | null {
   return a instanceof HTMLElement && a !== document.body ? a : null;
 }
 
+// What opened the dialog that closed last. A panel opened from inside a
+// dialog as it closes (a lead picked in the Ctrl+K finder) gives focus back
+// to that, not to the field that has gone.
+let lastClosedOpener: HTMLElement | null = null;
+
+/** `el` is in a dialog that is closing or gone: what opened that dialog, if it is still on the page. */
+export function openerOfClosingDialog(el: Element | null): HTMLElement | null {
+  const box = el?.closest('[data-slot="dialog-content"]');
+  if (!box || (box.isConnected && box.getAttribute("data-state") === "open")) return null;
+  return lastClosedOpener?.isConnected ? lastClosedOpener : null;
+}
+
 /**
  * onCloseAutoFocus: refocus the opener (or `fallback` when the opener has gone,
  * e.g. a menu item) unless focus has already gone somewhere on purpose.
@@ -63,7 +75,9 @@ function Dialog({
   // Controlled (open={state}): remember the opener as it opens, before the
   // content mounts and moves focus inside. Layout effect, so it runs first.
   React.useLayoutEffect(() => {
-    if (open) openerRef.current = activeHTMLElement();
+    if (!open) return;
+    openerRef.current = activeHTMLElement();
+    return () => { lastClosedOpener = openerRef.current; };
   }, [open]);
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
