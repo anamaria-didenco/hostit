@@ -1708,7 +1708,7 @@ export default function Dashboard() {
     onError: () => toast.error('Failed to remove payment'),
   });
   const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' });
-  const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched } = trpc.venue.get.useQuery(
+  const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched, isError: venueSettingsError, isFetching: venueSettingsFetching } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
@@ -9522,6 +9522,8 @@ export default function Dashboard() {
                   <StatusManager
                     venueSettings={venueSettings as any}
                     onSaved={() => refetchSettings()}
+                    loadFailed={venueSettingsError && !venueSettingsFetching}
+                    onRetry={() => refetchSettings()}
                   />
                 </div>
               </div>

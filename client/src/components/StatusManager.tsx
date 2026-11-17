@@ -111,13 +111,24 @@ interface Props {
   /** The venue's settings row from venue.get: undefined while it loads, null when the venue has none yet. */
   venueSettings: { customStatuses?: string | null } | null | undefined;
   onSaved: (statuses: StatusDef[]) => void;
+  /** venue.get failed (and isn't retrying): say so and offer to try again, instead of "Loading" for ever. */
+  loadFailed?: boolean;
+  onRetry?: () => void;
 }
 
-export default function StatusManager({ venueSettings, onSaved }: Props) {
+export default function StatusManager({ venueSettings, onSaved, loadFailed, onRetry }: Props) {
   // Never start the editor before the saved list has arrived: every change saves the
   // whole list, so an editor seeded with the defaults (opening this screen from a link
   // or a reload) wrote them over the venue's real statuses.
   const seed = statusEditorSeed(venueSettings);
+  if (!seed && loadFailed) {
+    return (
+      <div role="alert" className="text-sm text-ink">
+        Your statuses couldn't be loaded, so they can't be changed right now.{" "}
+        {onRetry && <button type="button" onClick={onRetry} className="font-semibold text-forest underline">Try again</button>}
+      </div>
+    );
+  }
   if (!seed) return <p className="text-sm text-gray-500" role="status">Loading statuses…</p>;
   return <StatusEditor initialStatuses={seed} onSaved={onSaved} />;
 }
@@ -245,7 +256,7 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-dm text-base font-semibold text-ink mb-1">Enquiry Statuses</h2>
+        <p className="font-dm text-base font-semibold text-ink mb-1">Enquiry Statuses</p>
         <p className="text-sm text-gray-500 mb-4">
           Customise the name and colour of each status. Changes apply immediately across the calendar, pipeline, and reports.
         </p>
