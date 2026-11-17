@@ -693,14 +693,14 @@ export default function ProposalBuilder() {
             </Button>
           )}
           {!locked && (
-            <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
+            <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
+              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent aria-disabled:pointer-events-none aria-disabled:opacity-50">
               {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
             </Button>
           )}
           {canSend && (
-            <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
-              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
+            <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
+              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1 aria-disabled:pointer-events-none aria-disabled:opacity-50">
               <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : status === "draft" ? "Send to Client" : "Resend"}
             </Button>
           )}
@@ -1644,14 +1644,14 @@ export default function ProposalBuilder() {
           {/* Actions */}
           <div className="space-y-2">
             {!locked && (
-              <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
+              <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
               </Button>
             )}
             {canSend && (
-              <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
-                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2">
+              <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
+                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2 aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 <Send className="w-4 h-4" />
                 {sendProposal.isPending ? "SENDING..." : status === "draft" ? "SAVE & SEND TO CLIENT" : "SAVE & RESEND TO CLIENT"}
               </Button>
