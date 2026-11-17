@@ -1302,8 +1302,13 @@
   /* Colour keys (legend swatches, status end-caps) keep their colour, with an
      outline so they're visible on any canvas. */
   .vf-swatch { forced-color-adjust: none; outline: 1px solid CanvasText; }
-  /* Selected or current items. */
+  /* Selected or current items. forced-color-adjust: none (no text backplate)
+     is inherited, so everything inside (a count, an "On" label) is given the
+     highlight text colour too, or it would keep its own colour on Highlight. */
   :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) { forced-color-adjust: none; background-color: Highlight !important; color: HighlightText !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today):focus-visible { outline-color: CanvasText !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) :not(.vf-swatch) { color: HighlightText !important; background-color: transparent !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) .vf-swatch { outline-color: HighlightText; }
 }
 
 /* Short screens: a laptop zoomed to 200-400%, or a phone on its side. The
