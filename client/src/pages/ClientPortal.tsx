@@ -1,9 +1,11 @@
 import { useParams } from "wouter";
 import { safeHtml } from "@/lib/safeHtml";
 import { trpc } from "@/lib/trpc";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { venueBrand } from "@shared/brand";
+import { pageTitle } from "@shared/pageTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
   unpaid: { label: "Awaiting Payment", cls: "bg-red-100 text-red-700" },
@@ -37,6 +39,7 @@ export default function ClientPortal() {
     link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
     document.head.appendChild(link);
   }, [data?.venue, brand.fontLink]);
+  useDocumentTitle(data ? pageTitle(["Your event", (data as any).venue?.name], null) : null);
 
   if (isLoading) {
     return (
@@ -51,13 +54,13 @@ export default function ClientPortal() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#f6f3ee] flex items-center justify-center">
+      <main className="min-h-screen bg-[#f6f3ee] flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-6">
-          <div className="text-6xl mb-4">🔒</div>
+          <div className="text-6xl mb-4" aria-hidden="true">🔒</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Link Not Found</h1>
           <p className="text-gray-600">This portal link may have expired or been removed. Please contact your venue coordinator.</p>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -111,14 +114,14 @@ export default function ClientPortal() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Event Summary */}
         <Card>
           <div className="px-6 py-4" style={{ background: T.accent, color: T.onAccent }}>
             <h2 className="text-xl font-bold" style={{ fontFamily: T.serif, color: T.onAccent }}>{eventName}</h2>
             <div className="flex flex-wrap gap-4 mt-2 text-sm" style={{ opacity: 0.9 }}>
-              {eventDate && <span>📅 {fmtDay(eventDate)}</span>}
-              {guestCount && <span>👥 {guestCount} guests</span>}
+              {eventDate && <span><span aria-hidden="true">📅 </span>{fmtDay(eventDate)}</span>}
+              {guestCount && <span><span aria-hidden="true">👥 </span>{guestCount} guests</span>}
             </div>
           </div>
           <div className="px-6 py-4 grid grid-cols-2 gap-4 text-sm">
@@ -218,6 +221,7 @@ export default function ClientPortal() {
             {paymentSummary.total > 0 && (
               <div className="px-6 pb-4">
                 <div role="progressbar" aria-valuenow={Math.round(Math.min(100, (paymentSummary.totalPaid / paymentSummary.total) * 100))} aria-valuemin={0} aria-valuemax={100}
+                  aria-label="Paid to date" aria-valuetext={`${nzd(paymentSummary.totalPaid)} of ${nzd(paymentSummary.total)} paid`}
                   className="h-2 rounded-full overflow-hidden" style={{ background: T.soft }}>
                   <div className="h-full bg-green-500 transition-all" style={{ width: `${Math.min(100, (paymentSummary.totalPaid / paymentSummary.total) * 100)}%` }} />
                 </div>
@@ -297,7 +301,7 @@ export default function ClientPortal() {
           ) : null}
           Powered by <span className="font-semibold" style={{ color: T.accent }}>VenueFlowHQ</span>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -376,6 +380,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
   const [guests, setGuests] = useState(details?.finalGuestCount != null ? String(details.finalGuestCount) : "");
   const [diet, setDiet] = useState<Dietary[]>(details?.dietaries?.length ? details.dietaries : []);
   const [notes, setNotes] = useState(details?.notes ?? "");
+  const fid = useId();
 
   // After "Send to venue" the form is replaced by the sent note: focus it
   // (once it shows), rather than letting focus drop to the top of the page.
@@ -426,29 +431,29 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
         <div className="px-6 py-4 space-y-4">
           <p className="text-sm" style={{ color: T.stone }}>Let us know your final numbers and any dietary requirements for {eventName}. You can update this any time before the event.</p>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Final guest count</label>
-            <input type="number" inputMode="numeric" min={0} value={guests} onChange={e => setGuests(e.target.value)} placeholder="e.g. 80" className={FIELD} style={{ borderColor: T.border, maxWidth: 160 }} />
+            <label htmlFor={`${fid}-guests`} className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Final guest count</label>
+            <input id={`${fid}-guests`} type="number" inputMode="numeric" min={0} value={guests} onChange={e => setGuests(e.target.value)} placeholder="e.g. 80" className={FIELD} style={{ borderColor: T.border, maxWidth: 160 }} />
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: T.stone }}>Dietary requirements</label>
-              <button type="button" onClick={addDiet} className="text-xs font-semibold" style={{ color: T.accent }}>+ Add</button>
+              <span id={`${fid}-diet`} className="text-xs font-semibold uppercase tracking-wide" style={{ color: T.stone }}>Dietary requirements</span>
+              <button type="button" onClick={addDiet} aria-label="Add dietary requirement" className="text-xs font-semibold" style={{ color: T.accent }}>+ Add</button>
             </div>
             {diet.length === 0 && <p className="text-xs" style={{ color: T.stone }}>Add any allergies or dietary needs (e.g. 2× vegetarian, 1× gluten-free).</p>}
-            <div className="space-y-2">
+            <div className="space-y-2" role="group" aria-labelledby={`${fid}-diet`}>
               {diet.map((d, i) => (
                 <div key={i} className="flex gap-2 items-start">
-                  <input value={d.name} onChange={e => setD(i, { name: e.target.value })} placeholder="e.g. Vegetarian" className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
-                  <input type="number" min={0} value={d.count} onChange={e => setD(i, { count: Number(e.target.value) })} aria-label="How many" className={`${FIELD} text-center`} style={{ borderColor: T.border, width: 64 }} />
-                  <input value={d.notes ?? ""} onChange={e => setD(i, { notes: e.target.value })} placeholder="Notes" className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
-                  <button type="button" onClick={() => rmDiet(i)} aria-label="Remove" className="px-2 py-2 text-lg leading-none" style={{ color: T.stone }}>×</button>
+                  <input value={d.name} onChange={e => setD(i, { name: e.target.value })} placeholder="e.g. Vegetarian" aria-label={`Dietary requirement ${i + 1}`} className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
+                  <input type="number" min={0} value={d.count} onChange={e => setD(i, { count: Number(e.target.value) })} aria-label={`How many guests: requirement ${i + 1}`} className={`${FIELD} text-center`} style={{ borderColor: T.border, width: 64 }} />
+                  <input value={d.notes ?? ""} onChange={e => setD(i, { notes: e.target.value })} placeholder="Notes" aria-label={`Notes for requirement ${i + 1}`} className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
+                  <button type="button" onClick={() => rmDiet(i)} aria-label={`Remove dietary requirement ${i + 1}`} className="px-2 py-2 text-lg leading-none" style={{ color: T.stone }}>×</button>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Anything else?</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Timings, accessibility, special requests…" className={FIELD} style={{ borderColor: T.border }} />
+            <label htmlFor={`${fid}-notes`} className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Anything else?</label>
+            <textarea id={`${fid}-notes`} value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Timings, accessibility, special requests…" className={FIELD} style={{ borderColor: T.border }} />
           </div>
           <div className="flex items-center gap-3">
             <button onClick={save} disabled={submit.isPending} className="px-5 py-2.5 rounded-lg font-semibold text-sm disabled:opacity-50" style={{ background: T.accent, color: T.onAccent }}>
@@ -576,8 +581,8 @@ function ContractCard({ contract, portalToken, T }: { contract: PortalContract; 
         <form className="px-6 pb-6 space-y-4" onSubmit={(e) => { e.preventDefault(); if (!name.trim() || !agreed) return; sign.mutate({ token: portalToken, contractId: contract.id, signerName: name.trim(), agreed: true }); }}>
           {contract.expiresAt && <p className="text-xs" style={{ color: T.stone }}>Please sign by {new Date(contract.expiresAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}.</p>}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Your full name</label>
-            <input type="text" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Type your full name"
+            <label htmlFor={`sign-name-${contract.id}`} className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: T.stone }}>Your full name</label>
+            <input id={`sign-name-${contract.id}`} type="text" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Type your full name"
               className="w-full rounded-lg px-3 py-2 italic text-lg focus:outline-none" style={{ border: `1px solid ${T.border}`, fontFamily: T.serif }} />
           </div>
           <label className="flex items-start gap-3 cursor-pointer text-sm" style={{ color: T.ink }}>

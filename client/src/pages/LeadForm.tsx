@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -235,10 +236,12 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
   return (
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
       <PopoverTrigger asChild>
+        {/* The visible label names the button, which hid the chosen date from
+            screen readers: the value is its description instead. */}
         <button type="button" id={id} disabled={disabled}
-          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
+          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={[`${id}-value`, ariaDescribedby].filter(Boolean).join(' ')}
           className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed")}>
-          <span className={value ? '' : 'text-muted-foreground'}>{value ? formatDateNZ(value) : 'Select a date'}</span>
+          <span id={`${id}-value`} className={value ? '' : 'text-muted-foreground'}>{value ? formatDateNZ(value) : 'Select a date'}</span>
           <CalendarIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         </button>
       </PopoverTrigger>
@@ -312,27 +315,51 @@ function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, in
   ariaInvalid?: boolean; ariaDescribedby?: string; inputClass: string; accentColor: string; accentTextColor: string;
 }) {
   const [open, setOpen] = useState(false);
-  const times: string[] = [];
-  for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += 30) times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  const times = halfHourSlots();
+  // The list is one Tab stop (a listbox): it opens on the chosen time, or
+  // 6:00 pm rather than midnight, and arrow keys or typing a time ("7p",
+  // "730") move through it. Reaching 6:00 pm used to take ~38 key presses.
+  const [active, setActive] = useState(() => initialSlotIndex(times, value));
+  const listRef = useRef<HTMLDivElement>(null);
+  const typed = useRef({ text: "", at: 0 });
+  const focusSlot = (i: number) => {
+    setActive(i);
+    listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]')[i]?.focus();
+  };
+  const onListKey = (e: React.KeyboardEvent) => {
+    const moved = moveSlot(active, e.key, times.length);
+    if (moved !== null) { e.preventDefault(); focusSlot(moved); return; }
+    if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey || e.key === ' ') return;
+    const now = Date.now();
+    const text = (now - typed.current.at < 800 ? typed.current.text : "") + e.key;
+    typed.current = { text, at: now };
+    // A fresh single key looks past the current slot, so "6" steps 6:00 → 6:30.
+    const hit = matchSlot(times, text, text.length === 1 ? active + 1 : active);
+    if (hit !== -1) { e.preventDefault(); focusSlot(hit); }
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={o => { if (o) setActive(initialSlotIndex(times, value)); setOpen(o); }}>
       <PopoverTrigger asChild>
         <button type="button" id={id}
-          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
+          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={[`${id}-value`, ariaDescribedby].filter(Boolean).join(' ')}
           className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left")}>
-          <span className={value ? '' : 'text-muted-foreground'}>{value ? formatTime12h(value) : 'Select a time'}</span>
+          <span id={`${id}-value`} className={value ? '' : 'text-muted-foreground'}>{value ? formatTime12h(value) : 'Select a time'}</span>
           <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-36 p-1 max-h-64 overflow-y-auto">
-        {times.map(t => (
-          <button key={t} type="button" onClick={() => { onChange(t); setOpen(false); }}
+      <PopoverContent align="start" className="w-36 p-1 max-h-64 overflow-y-auto" aria-label="Choose a time"
+        onOpenAutoFocus={e => { e.preventDefault(); requestAnimationFrame(() => focusSlot(initialSlotIndex(times, value))); }}>
+        <div ref={listRef} role="listbox" aria-label="Times" onKeyDown={onListKey}>
+        {times.map((t, i) => (
+          <button key={t} type="button" role="option" aria-selected={value === t} tabIndex={i === active ? 0 : -1}
+            onClick={() => { onChange(t); setOpen(false); }}
             className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100"
             style={value === t ? { backgroundColor: accentColor, color: accentTextColor } : undefined}>
             {formatTime12h(t)}
           </button>
         ))}
+        </div>
         {/* The list only offers half-hour steps — an exact time (e.g. 7:15)
             still needs a way in. A directly-clicked native time input opens
             fine even in a cross-origin embed; it's only a *programmatic*
@@ -836,8 +863,8 @@ export default function LeadForm() {
   // it should never be left as the generic app title.
   useEffect(() => {
     const name = venue?.name ?? "VenueFlowHQ Venue";
-    document.title = isEmbed ? `Enquiry form — ${name}` : `Enquire — ${name}`;
-  }, [isEmbed, venue?.name]);
+    document.title = venue === null ? "Venue not found" : isEmbed ? `Enquiry form — ${name}` : `Enquire — ${name}`;
+  }, [isEmbed, venue, venue?.name]);
 
   // Half-filled forms survive a reload — someone who taps away to check their
   // calendar and comes back shouldn't have to retype everything. Scoped per
@@ -892,6 +919,11 @@ export default function LeadForm() {
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
   // (no per-keystroke bookkeeping needed).
   const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
+  // Why the last submit failed, shown (and announced) just above SUBMIT. A
+  // toast sat right on top of that button: in the embed (the iframe is only as
+  // tall as the form), and on a phone, where SUBMIT is at the bottom of the
+  // screen when it's tapped.
+  const [submitError, setSubmitError] = useState("");
   // The id of the lead row this submission created/updated — captured from
   // submit()'s response so the post-submit walkthrough step has something to
   // attach the chosen slot to. Distinct from capturedLeadId (set earlier, by
@@ -1047,7 +1079,7 @@ export default function LeadForm() {
       setTurnstileReset(n => n + 1);
       const reason = e?.message?.trim() || "Something went wrong submitting the form.";
       const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
-      toast.error(`${reason}${fallback}`, { duration: 12000 });
+      setSubmitError(`${reason}${fallback}`);
     },
   });
 
@@ -1075,7 +1107,12 @@ export default function LeadForm() {
     }
     if (invalid.length > 0) {
       setTouchedInvalid(new Set(invalid.map(f => f.id)));
-      toast.error(fieldErrorMessage(invalid[0]));
+      setSubmitError("");
+      // The errors are at the fields (and stay there), so the toast is only a
+      // pointer to them: one at a time, timed like other toasts rather than
+      // left up with a message that goes stale as the fields are fixed. None in
+      // the embed, where it would cover the SUBMIT button.
+      if (!isEmbed) toast.error(fieldErrorMessage(invalid[0]), { id: "lead-form-invalid", duration: 4000 });
       // Land keyboard/screen-reader focus right on the first problem field —
       // the toast alone is easy to miss, especially for a screen reader user
       // who isn't looking at the corner of the screen it appears in.
@@ -1083,6 +1120,8 @@ export default function LeadForm() {
       return;
     }
     setTouchedInvalid(new Set());
+    setSubmitError("");
+    toast.dismiss("lead-form-invalid");
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
       .map(([k, v]) => `${k}: ${v}`);
@@ -1149,8 +1188,13 @@ export default function LeadForm() {
   // says so again) without any separate per-keystroke clearing logic.
   const fieldErrorId = (f: FormFieldDef) => `${fieldElId(f)}-error`;
   const fieldHasError = (f: FormFieldDef, isCustom = false) => touchedInvalid.has(f.id) && !isFieldFilled(f, isCustom);
-  const fieldErrorMessage = (f: FormFieldDef) =>
-    f.id === 'guestCount' ? "Please tell us how many guests you're expecting." : `Please fill in "${f.label}".`;
+  // Something typed but not valid gets its own wording: "Please fill in
+  // Email" for an address that is filled in (just malformed) misled people.
+  const fieldErrorMessage = (f: FormFieldDef) => {
+    if (f.id === 'email' && (form.email ?? '').trim()) return "Enter a valid email address, like name@example.com.";
+    if (f.id === 'guestCount' && (form.guestCount ?? '').trim()) return "Enter 1 or more guests.";
+    return f.id === 'guestCount' ? "Please tell us how many guests you're expecting." : `Please fill in "${f.label}".`;
+  };
   function FieldError({ field, isCustom }: { field: FormFieldDef; isCustom?: boolean }) {
     if (!fieldHasError(field, isCustom)) return null;
     return <p id={fieldErrorId(field)} role="alert" className="text-red-700 text-xs mt-1">{fieldErrorMessage(field)}</p>;
@@ -1167,6 +1211,16 @@ export default function LeadForm() {
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
       <div className="text-xl italic animate-pulse text-gray-600">Loading…</div>
     </div>
+  );
+  // A wrong or retired link used to show a normal-looking form that only
+  // failed at submit, with a passing "Venue not found" toast.
+  if (venue === null) return (
+    <main className={isEmbed ? "py-12 px-4 text-center" : "min-h-screen flex items-center justify-center bg-[#f8f5f0] px-4 text-center"}>
+      <div className="max-w-md">
+        <h1 className="text-2xl font-semibold text-gray-800 mb-2">Venue not found</h1>
+        <p className="text-sm text-gray-600">This enquiry link doesn&rsquo;t match a venue. It may have changed: check the link with the venue, or contact them directly.</p>
+      </div>
+    </main>
   );
 
   const venueName    = venue?.name ?? "VenueFlowHQ Venue";
@@ -1409,6 +1463,7 @@ export default function LeadForm() {
         maxLength={!isCustom ? MAX_LENGTH[field.id] : undefined}
         aria-invalid={hasError}
         aria-describedby={describedBy}
+        min={field.id === 'guestCount' ? 1 : undefined}
         placeholder={field.id === 'phone' ? '+64 21 000 0000' : ''}
         className={inputClass}
       />
@@ -1585,11 +1640,8 @@ export default function LeadForm() {
     // leaves behind a real, contactable lead (startCapture, below).
     const detailsValid = detailFields.every(f => isFieldFilled(f));
     // Step 2 ("Your Event"): everything else — event fields, any custom
-    // fields, source and message. Submits directly; there's no Summary step.
-    const eventStepValid = eventFields.every(f => isFieldFilled(f))
-      && customFields.every(f => isFieldFilled(f, true))
-      && (!sourceField || isFieldFilled(sourceField))
-      && (!messageField || isFieldFilled(messageField));
+    // fields, source and message. Submits directly; there's no Summary step,
+    // and doSubmit marks anything missing at its field.
     const steps = ['Your Details', 'Your Event'];
     const eventTypeField = eventFields.find(f => f.id === 'eventType');
     const eventDateField = eventFields.find(f => f.id === 'eventDate');
@@ -1729,7 +1781,8 @@ export default function LeadForm() {
               </div>
             )}
             {renderTurnstile()}
-            <button type="button" disabled={!(detailsValid && eventStepValid) || submitLead.isPending} onClick={doSubmit}
+            {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
+            <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
               className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
@@ -1776,7 +1829,15 @@ export default function LeadForm() {
                       </div>
                     ))}
                   </div>
-                  <button type="button" disabled={!detailsValid} onClick={() => {
+                  <button type="button" onClick={() => {
+                    // Not disabled while incomplete (a faded button said nothing):
+                    // mark what's missing at each field and go to the first one.
+                    if (!detailsValid) {
+                      const missing = detailFields.filter(f => !isFieldFilled(f));
+                      setTouchedInvalid(new Set(missing.map(f => f.id)));
+                      requestAnimationFrame(() => { document.getElementById(fieldElId(missing[0]))?.focus(); });
+                      return;
+                    }
                     // Autosave a contactable lead the moment we have a name
                     // + email — once per visit, so going Back then Next
                     // again doesn't create a second partial row (nor while
@@ -1878,10 +1939,11 @@ export default function LeadForm() {
 
                   {renderHoneypot()}
                   {renderTurnstile()}
+                  {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
-                    <button type="button" disabled={!eventStepValid || submitLead.isPending} onClick={doSubmit}
+                    <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
                       className="vf-submit flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                       style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                       {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
@@ -1970,7 +2032,9 @@ export default function LeadForm() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5 relative">
+          // noValidate: the form's own inline errors (at the field, announced,
+          // focus moved) replace the browser's passing bubble.
+          <form onSubmit={handleSubmit} noValidate className="space-y-5 relative">
             {renderHoneypot()}
 
             {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
@@ -1999,7 +2063,7 @@ export default function LeadForm() {
                 if (gridFields.length === 0 && pillFields.length === 0 && !spaceField) return null;
                 return (
                   <div>
-                    <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">EVENT DETAILS</label>
+                    <div role="heading" aria-level={2} className="font-bold text-xs tracking-widest block mb-3 text-gray-600">EVENT DETAILS</div>
                     {/* Where first: availability and prices follow the space. */}
                     {spaceField && (
                       <div className="mb-4">
@@ -2039,7 +2103,7 @@ export default function LeadForm() {
                   ("+64 21 000 0000") got clipped. */}
               {detailFields.length > 0 && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">YOUR DETAILS</label>
+                  <div role="heading" aria-level={2} className="font-bold text-xs tracking-widest block mb-3 text-gray-600">YOUR DETAILS</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'sm:col-span-2' : ''}>
@@ -2088,6 +2152,7 @@ export default function LeadForm() {
             </div>
 
             {renderTurnstile()}
+            {submitError && <p role="alert" className="text-red-700 text-sm">{submitError}</p>}
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-lg h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>

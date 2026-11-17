@@ -52,7 +52,7 @@ export function SpaceAvailability({ initialDate, label = "CHECK A DATE" }: { ini
         <button
           type="button"
           title="Check which spaces are free on a date"
-          aria-label="Check availability by space"
+          aria-label={`${label.charAt(0)}${label.slice(1).toLowerCase()}: availability by space`}
           className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors"
         >
           <CalendarCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{label}</span>

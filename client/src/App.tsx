@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import RouteChange from "./components/RouteChange";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import Home from "./pages/Home";
@@ -80,6 +81,7 @@ function App() {
         <TooltipProvider>
           <ConfirmProvider>
             <Toaster />
+            <RouteChange />
             <Router />
           </ConfirmProvider>
         </TooltipProvider>

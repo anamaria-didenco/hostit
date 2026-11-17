@@ -215,10 +215,10 @@ async function startServer() {
   registerOAuthRoutes(app);
 
   // Tiny in-memory rate limiter (per IP) for the public login endpoint to slow
-  // down brute-force attempts against ADMIN_PASSWORD. 10 attempts / 5 min window.
-  const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-  const LOGIN_WINDOW_MS = 5 * 60 * 1000;
-  const LOGIN_MAX = 10;
+  // down brute-force attempts against ADMIN_PASSWORD. 10 failed attempts / 5 min
+  // window; a successful sign-in doesn't count against anyone.
+  const { createLoginLimiter } = await import("./loginRateLimit");
+  const loginLimiter = createLoginLimiter(10, 5 * 60 * 1000);
   function getClientIp(req: express.Request): string {
     // Cloudflare fronts Render in production, so req.ip (one trusted hop) is
     // Cloudflare's egress address — shared by many visitors. The login limiter
@@ -227,16 +227,6 @@ async function startServer() {
     const cf = req.headers["cf-connecting-ip"]?.toString().trim();
     if (cf) return cf;
     return req.ip || "unknown";
-  }
-  function checkLoginRate(ip: string): boolean {
-    const now = Date.now();
-    const entry = loginAttempts.get(ip);
-    if (!entry || entry.resetAt < now) {
-      loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-      return true;
-    }
-    entry.count += 1;
-    return entry.count <= LOGIN_MAX;
   }
 
   // Local password login. Two modes:
@@ -249,7 +239,7 @@ async function startServer() {
   app.post("/api/auth/local-login", async (req, res) => {
     try {
       const ip = getClientIp(req);
-      if (!checkLoginRate(ip)) {
+      if (!loginLimiter.attempt(ip)) {
         res.status(429).json({ error: "Too many login attempts. Please wait a few minutes and try again." });
         return;
       }
@@ -310,6 +300,7 @@ async function startServer() {
             });
         const cookieOptions = getSessionCookieOptions(req);
         res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        loginLimiter.succeeded(ip);
         res.json({ success: true });
         return;
       }
@@ -352,6 +343,7 @@ async function startServer() {
       const token = await sdk.createSessionToken(openId, { name: "Admin" });
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      loginLimiter.succeeded(ip);
       res.json({ success: true });
     } catch (e: any) {
       console.error("[LocalLogin] Error:", e);

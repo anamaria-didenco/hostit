@@ -28,6 +28,8 @@ import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
 import { DoubleBookedTag } from "@/components/DateHold";
+import { pageTitle } from "@shared/pageTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import LeadProposals from "@/components/LeadProposals";
 import LinkedTasks from "@/components/LinkedTasks";
 import RecordPaymentButton from "@/components/RecordPaymentDialog";
@@ -161,6 +163,7 @@ export default function EventDetail() {
     setBaseline(f);
     filledForId.current = booking.id;
   }, [booking, editing]);
+  useDocumentTitle(booking ? pageTitle(["Event", `${booking.firstName ?? ""} ${booking.lastName ?? ""}`, booking.eventType]) : null);
 
   if (loading || isLoading) {
     return (
@@ -173,25 +176,25 @@ export default function EventDetail() {
   // A failed load isn't "not found" — offer a retry instead.
   if (!booking && isError) {
     return (
-      <div className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4 px-4 text-center">
-        <div className="font-cormorant text-2xl text-ink">Couldn't load this event</div>
+      <main className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4 px-4 text-center">
+        <h1 className="font-cormorant text-2xl text-ink">Couldn't load this event</h1>
         <p className="font-dm text-sm text-ink/70">Check your connection and try again.</p>
         <div className="flex items-center gap-3">
           <button onClick={() => refetch()} disabled={isFetching} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 disabled:opacity-50">
             {isFetching ? "TRYING..." : "TRY AGAIN"}
           </button>
-          <Link href="/dashboard"><button className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-4 py-2">BACK TO DASHBOARD</button></Link>
+          <Link href="/dashboard" className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-4 py-2">BACK TO DASHBOARD</Link>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!booking) {
     return (
-      <div className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4">
-        <div className="font-cormorant text-2xl text-ink">Event not found</div>
-        <Link href="/dashboard"><button className="btn-forest font-bebas tracking-widest text-xs px-4 py-2">BACK TO DASHBOARD</button></Link>
-      </div>
+      <main className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4">
+        <h1 className="font-cormorant text-2xl text-ink">Event not found</h1>
+        <Link href="/dashboard" className="btn-forest font-bebas tracking-widest text-xs px-4 py-2">BACK TO DASHBOARD</Link>
+      </main>
     );
   }
 
@@ -299,41 +302,41 @@ export default function EventDetail() {
             {editing ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">FIRST NAME</label>
-                  <Input value={form.firstName} onChange={e => setForm((p: any) => ({ ...p, firstName: e.target.value }))} className="font-dm text-sm" />
+                  <label htmlFor="ev-first-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">FIRST NAME</label>
+                  <Input id="ev-first-name" value={form.firstName} onChange={e => setForm((p: any) => ({ ...p, firstName: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">LAST NAME</label>
-                  <Input value={form.lastName} onChange={e => setForm((p: any) => ({ ...p, lastName: e.target.value }))} className="font-dm text-sm" />
+                  <label htmlFor="ev-last-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">LAST NAME</label>
+                  <Input id="ev-last-name" value={form.lastName} onChange={e => setForm((p: any) => ({ ...p, lastName: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EMAIL</label>
-                  <Input type="email" value={form.email} onChange={e => setForm((p: any) => ({ ...p, email: e.target.value }))} className="font-dm text-sm" />
+                  <label htmlFor="ev-email" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EMAIL</label>
+                  <Input id="ev-email" type="email" value={form.email} onChange={e => setForm((p: any) => ({ ...p, email: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT TYPE</label>
+                  <label htmlFor="ev-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT TYPE</label>
                   <Select value={form.eventType} onValueChange={v => setForm((p: any) => ({ ...p, eventType: v }))}>
-                    <SelectTrigger className="font-dm text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectTrigger id="ev-type" className="font-dm text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT STARTS</label>
-                  <div className="flex gap-2">
+                  <div id="ev-starts" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT STARTS</div>
+                  <div className="flex gap-2" role="group" aria-labelledby="ev-starts">
                     <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event start date" />
                     <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event start time" />
                   </div>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT ENDS</label>
-                  <div className="flex gap-2">
+                  <div id="ev-ends" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT ENDS</div>
+                  <div className="flex gap-2" role="group" aria-labelledby="ev-ends">
                     <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event end date" />
                     <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event end time" />
                   </div>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">GUEST COUNT</label>
-                  <Input type="number" value={form.guestCount} onChange={e => setForm((p: any) => ({ ...p, guestCount: e.target.value }))} className="font-dm text-sm" />
+                  <label htmlFor="ev-guests" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">GUEST COUNT</label>
+                  <Input id="ev-guests" type="number" value={form.guestCount} onChange={e => setForm((p: any) => ({ ...p, guestCount: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SPACE / ROOM</label>
@@ -341,17 +344,17 @@ export default function EventDetail() {
                   <SpacesMultiSelect value={form.spaceName ?? ""} onChange={v => setForm((p: any) => ({ ...p, spaceName: v }))} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TOTAL (NZD)</label>
-                  <Input type="number" value={form.totalNzd} onChange={e => setForm((p: any) => ({ ...p, totalNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
+                  <label htmlFor="ev-total" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TOTAL (NZD)</label>
+                  <Input id="ev-total" type="number" value={form.totalNzd} onChange={e => setForm((p: any) => ({ ...p, totalNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DEPOSIT (NZD)</label>
-                  <Input type="number" value={form.depositNzd} onChange={e => setForm((p: any) => ({ ...p, depositNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
+                  <label htmlFor="ev-deposit" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DEPOSIT (NZD)</label>
+                  <Input id="ev-deposit" type="number" value={form.depositNzd} onChange={e => setForm((p: any) => ({ ...p, depositNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">STATUS</label>
+                  <label htmlFor="ev-status" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">STATUS</label>
                   <Select value={form.status} onValueChange={v => setForm((p: any) => ({ ...p, status: v }))}>
-                    <SelectTrigger className="font-dm text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="ev-status" className="font-dm text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="confirmed">Confirmed</SelectItem>
                       <SelectItem value="tentative">Tentative</SelectItem>
@@ -367,8 +370,8 @@ export default function EventDetail() {
                   <label htmlFor="depositPaid" className="font-bebas text-xs tracking-widest text-ink/70">DEPOSIT PAID</label>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">INTERNAL NOTES</label>
-                  <Textarea value={form.notes} onChange={e => setForm((p: any) => ({ ...p, notes: e.target.value }))} rows={3} className="font-dm text-sm" />
+                  <label htmlFor="ev-notes" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">INTERNAL NOTES</label>
+                  <Textarea id="ev-notes" value={form.notes} onChange={e => setForm((p: any) => ({ ...p, notes: e.target.value }))} rows={3} className="font-dm text-sm" />
                 </div>
               </div>
             ) : (
@@ -435,7 +438,7 @@ export default function EventDetail() {
 
           {/* Financials */}
           <div className="dante-card p-6">
-            <div className="gold-rule max-w-xs mb-4"><span>FINANCIALS</span></div>
+            <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>FINANCIALS</span></div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">TOTAL</div>
@@ -476,10 +479,8 @@ export default function EventDetail() {
                   {booking.depositPaid ? "✓ DEPOSIT PAID" : "⚠ DEPOSIT PENDING"}
                 </span>
               )}
-              <Link href={`/payments?bookingId=${bookingId}`}>
-                <button className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-3 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
-                  <DollarSign className="w-3 h-3" /> MANAGE PAYMENTS
-                </button>
+              <Link href={`/payments?bookingId=${bookingId}`} className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-3 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
+                <DollarSign className="w-3 h-3" /> MANAGE PAYMENTS
               </Link>
             </div>
             <BookingInvoices bookingId={bookingId} />
@@ -491,14 +492,14 @@ export default function EventDetail() {
 
           {/* Event spend & profitability tracking */}
           <div className="dante-card p-6">
-            <div className="gold-rule max-w-xs mb-4"><span>BUDGET &amp; SPEND</span></div>
+            <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>BUDGET &amp; SPEND</span></div>
             <EventSpendSection bookingId={bookingId} />
           </div>
 
           {/* Payment history */}
           {(payments ?? []).length > 0 && (
             <div className="dante-card p-6">
-              <div className="gold-rule max-w-xs mb-4"><span>PAYMENT HISTORY</span></div>
+              <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>PAYMENT HISTORY</span></div>
               <div className="space-y-2">
                 {(payments ?? []).map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between py-2 border-b border-gold/10 last:border-0">
@@ -528,31 +529,31 @@ export default function EventDetail() {
         {/* Right — Quick Actions */}
         <div className="space-y-4">
           <div className="dante-card p-5">
-            <div className="gold-rule max-w-full mb-4"><span>QUICK ACTIONS</span></div>
-            <div className="space-y-2">
-              <Link href={existingRunsheet ? `/runsheet?id=${existingRunsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`}>
-                <button className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                  <Clock className="w-4 h-4 text-gold" />
-                  {existingRunsheet ? 'EDIT RUNSHEET' : 'CREATE RUNSHEET'}
-                </button>
+            <div role="heading" aria-level={2} className="gold-rule max-w-full mb-4"><span>QUICK ACTIONS</span></div>
+            {/* No space-y: the actions were links wrapping buttons, which
+                ignored it, so they have always sat flush; kept that way. */}
+            <div>
+              {/* One link each, styled as a button (a link wrapped round a button
+                  was two Tab stops and read "link, button" for every action). */}
+              <Link href={existingRunsheet ? `/runsheet?id=${existingRunsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                <Clock className="w-4 h-4 text-gold" />
+                {existingRunsheet ? 'EDIT RUNSHEET' : 'CREATE RUNSHEET'}
               </Link>
-              <Link href={`/floor-plan?bookingId=${bookingId}`}>
-                <button className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                  <LayoutGrid className="w-4 h-4" />
-                  FLOOR PLAN
-                </button>
+              <Link href={`/floor-plan?bookingId=${bookingId}`}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                <LayoutGrid className="w-4 h-4" />
+                FLOOR PLAN
               </Link>
-              <Link href={`/checklist?bookingId=${bookingId}`}>
-                <button className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                  <ClipboardList className="w-4 h-4" />
-                  CHECKLIST
-                </button>
+              <Link href={`/checklist?bookingId=${bookingId}`}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                <ClipboardList className="w-4 h-4" />
+                CHECKLIST
               </Link>
-              <Link href={`/payments?bookingId=${bookingId}`}>
-                <button className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                  <DollarSign className="w-4 h-4" />
-                  PAYMENTS
-                </button>
+              <Link href={`/payments?bookingId=${bookingId}`}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                <DollarSign className="w-4 h-4" />
+                PAYMENTS
               </Link>
               {booking.leadId && (
                 <button
@@ -569,7 +570,7 @@ export default function EventDetail() {
 
           {/* Generate Documents */}
           <div className="dante-card p-5">
-            <div className="gold-rule max-w-full mb-4"><span>DOCUMENTS</span></div>
+            <div role="heading" aria-level={2} className="gold-rule max-w-full mb-4"><span>DOCUMENTS</span></div>
             <div className="space-y-2">
               <button
                 onClick={() => {
@@ -710,8 +711,8 @@ function CommsTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
-              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="comms-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
+              <select id="comms-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="note">Note</option>
                 <option value="email">Email</option>
                 <option value="call">Call</option>
@@ -720,25 +721,25 @@ function CommsTab({ bookingId }: { bookingId: number }) {
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DIRECTION</label>
-              <select value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="comms-direction" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DIRECTION</label>
+              <select id="comms-direction" value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="internal">Internal</option>
                 <option value="inbound">Inbound</option>
                 <option value="outbound">Outbound</option>
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SUBJECT</label>
-              <Input value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Optional subject" className="text-sm" />
+              <label htmlFor="comms-subject" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SUBJECT</label>
+              <Input id="comms-subject" value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Optional subject" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTACT NAME</label>
-              <Input value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Optional" className="text-sm" />
+              <label htmlFor="comms-contact" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTACT NAME</label>
+              <Input id="comms-contact" value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Optional" className="text-sm" />
             </div>
           </div>
           <div>
-            <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES / BODY *</label>
-            <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
+            <label htmlFor="comms-body" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES / BODY *</label>
+            <Textarea id="comms-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
           </div>
           <div className="flex gap-2">
             <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'SAVE'}</button>
@@ -822,21 +823,21 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
-              <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
+              <label htmlFor="contract-title" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
+              <Input id="contract-title" aria-required="true" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
-              <Input value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
+              <label htmlFor="contract-client-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
+              <Input id="contract-client-name" value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
-              <Input type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
+              <label htmlFor="contract-client-email" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
+              <Input id="contract-client-email" type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
             </div>
           </div>
           <div>
-            <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
-            <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
+            <label htmlFor="contract-body" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
+            <Textarea id="contract-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
           </div>
           <div className="flex gap-2">
             <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'CREATE CONTRACT'}</button>
@@ -956,29 +957,29 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
+              <label htmlFor="budget-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <Input id="budget-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
-              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
+              <select id="budget-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
+              <select id="budget-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
-              <Input type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+              <label htmlFor="budget-estimated" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
+              <Input id="budget-estimated" type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
-              <Input type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+              <label htmlFor="budget-actual" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
+              <Input id="budget-actual" type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
@@ -1062,22 +1063,22 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
+              <label htmlFor="equipment-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <Input id="equipment-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="equipment-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
+              <select id="equipment-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
-              <Input type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
+              <label htmlFor="equipment-quantity" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
+              <Input id="equipment-quantity" type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
             </div>
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
-              <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
+              <label htmlFor="equipment-notes" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
+              <Input id="equipment-notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">

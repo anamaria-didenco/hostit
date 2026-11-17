@@ -73,6 +73,8 @@ export default function ProposalBuilder() {
   const { data: spaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user });
 
   const [title, setTitle] = useState("Event Proposal");
+  // Shown at the field: an empty title was only a passing toast ("Title is required.").
+  const [titleError, setTitleError] = useState("");
   const [introMessage, setIntroMessage] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [guestCount, setGuestCount] = useState("");
@@ -538,6 +540,11 @@ export default function ProposalBuilder() {
   const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
     if (!leadId) { toast.error("No enquiry selected"); return null; }
     if (locked) return null;
+    if (!opts.auto && !title.trim()) {
+      setTitleError("Give the proposal a title.");
+      document.getElementById("pb-title")?.focus();
+      return null;
+    }
     const formAtSave = formSnapshot;
     const drinksAtSave = drinksSnapshot;
     const keyAtSave = localKey;
@@ -747,12 +754,14 @@ export default function ProposalBuilder() {
             <div className="space-y-3">
               <div>
                 <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
-                <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
+                <Input id="pb-title" value={title} onChange={e => { setTitle(e.target.value); setTitleError(""); }}
+                  aria-required="true" aria-invalid={titleError ? true : undefined} aria-describedby={titleError ? "pb-title-error" : undefined}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
+                {titleError && <p id="pb-title-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{titleError}</p>}
               </div>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
-                <Textarea aria-label="Intro message shown to the client" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
+                <label htmlFor="pb-intro" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
+                <Textarea id="pb-intro" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
                   rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
@@ -933,6 +942,7 @@ export default function ProposalBuilder() {
                 <div key={i} className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
                   <div className="min-w-0 col-span-4 sm:col-span-1">
                     <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
+                      aria-label={`Description, line item ${i + 1}`}
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
                   <div>
@@ -998,7 +1008,7 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input aria-label="Deposit percentage" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit required (percentage)" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
@@ -1305,12 +1315,14 @@ export default function ProposalBuilder() {
                       value={newCustomDrink.name}
                       onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
                       placeholder="Drink name"
+                      aria-label="Drink name"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newCustomDrink.description}
                       onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
+                      aria-label="Drink description"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
@@ -1319,6 +1331,7 @@ export default function ProposalBuilder() {
                         value={newCustomDrink.price}
                         onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
                         placeholder="Price"
+                        aria-label="Drink price"
                         className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
                       <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
@@ -1549,9 +1562,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
+                    <label htmlFor="pb-logo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
                   </div>
                   <Input
+                    id="pb-logo-url"
                     value={appearanceLogoUrl}
                     onChange={e => setAppearanceLogoUrl(e.target.value)}
                     placeholder="https://example.com/logo.png"
@@ -1568,9 +1582,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
+                    <label htmlFor="pb-venue-photo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
                   </div>
                   <Input
+                    id="pb-venue-photo-url"
                     value={appearanceVenuePhotoUrl}
                     onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
                     placeholder="https://example.com/venue.jpg"

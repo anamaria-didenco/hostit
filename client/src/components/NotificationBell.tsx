@@ -47,10 +47,11 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
 }) {
   const [open, setOpen] = useState(false);
   const utils = trpc.useUtils();
-  const { data: unread = 0 } = trpc.notifications.unreadCount.useQuery(undefined, {
+  const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
   });
+  const unread = unreadData ?? 0;
   const listQuery = trpc.notifications.list.useQuery({ limit: 30 }, { staleTime: 30_000 });
   const alerts = (listQuery.data ?? []) as Alert[];
   const markRead = trpc.notifications.markRead.useMutation({
@@ -60,13 +61,22 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
     },
   });
 
-  // Count went up → fetch the list so the popover and browser alerts are current.
+  // Count went up → fetch the list so the popover and browser alerts are current,
+  // and say so: the bell's label changing ("Alerts, 5 unread") isn't announced.
+  // Nothing is counted until the first count arrives: the 0 shown while it
+  // loads isn't a count, and going from it to the real one isn't new alerts.
   const lastUnread = useRef<number | null>(null);
+  const [announcement, setAnnouncement] = useState("");
   useEffect(() => {
-    if (lastUnread.current !== null && unread > lastUnread.current) void listQuery.refetch();
+    if (unreadData === undefined) return;
+    if (lastUnread.current !== null && unread > lastUnread.current) {
+      void listQuery.refetch();
+      const fresh = unread - lastUnread.current;
+      setAnnouncement(`${fresh} new alert${fresh === 1 ? "" : "s"}, ${unread} unread`);
+    }
     lastUnread.current = unread;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unread]);
+  }, [unreadData]);
 
   // Browser notification for alerts that arrived since the page loaded.
   const knownMaxId = useRef<number | null>(null);
@@ -92,6 +102,12 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
   }, [listQuery.data]);
 
   useEffect(() => { if (open) void listQuery.refetch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [open]);
+  // Clear it again so the same words can be announced next time.
+  useEffect(() => {
+    if (!announcement) return;
+    const t = setTimeout(() => setAnnouncement(""), 5000);
+    return () => clearTimeout(t);
+  }, [announcement]);
 
   const openAlert = (a: Alert) => {
     if (!a.readAt) markRead.mutate({ id: a.id });
@@ -104,6 +120,8 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
   const iconColour = variant === "sidebar" ? (unread > 0 ? "#ffffff" : "#bcc8db") : undefined;
 
   return (
+    <>
+    <span role="status" className="sr-only">{announcement}</span>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -176,5 +194,6 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
         )}
       </PopoverContent>
     </Popover>
+    </>
   );
 }

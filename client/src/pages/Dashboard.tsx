@@ -77,6 +77,7 @@ import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { formatEventDate } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
@@ -346,7 +347,7 @@ function ApiTokensSection() {
         <div className="border-t border-gold/20 pt-4">
           <div className="font-bebas text-xs tracking-widest text-forest mb-2">CREATE NEW TOKEN</div>
           <div className="flex items-center gap-2">
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Claude Desktop"
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Claude Desktop" aria-label="New token name"
               className="flex-1 font-dm text-sm border border-gold/30 px-3 py-2 bg-white focus:outline-none focus:border-forest" />
             <button onClick={() => newName.trim() && createMutation.mutate({ name: newName.trim() })}
               disabled={!newName.trim() || createMutation.isPending}
@@ -595,8 +596,8 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
         </div>
         <div className="flex-1 overflow-auto py-2">
           {groups.map(g => (
-            <div key={g.label} className="mb-1">
-              <div className="px-4 pt-3 pb-1 font-bebas tracking-widest text-[11px] text-ink/55">{g.label.toUpperCase()}</div>
+            <div key={g.label} className="mb-1" role="group" aria-labelledby={`settings-group-${g.label.replace(/\W+/g, '-')}`}>
+              <div id={`settings-group-${g.label.replace(/\W+/g, '-')}`} className="px-4 pt-3 pb-1 font-bebas tracking-widest text-[11px] text-ink/55">{g.label.toUpperCase()}</div>
               {g.items.map(item => (
                 <button
                   key={item.id}
@@ -782,6 +783,7 @@ function PostEventSpendPrompt() {
                   type="number"
                   inputMode="decimal"
                   placeholder="0.00"
+                  aria-label={`Final spend for ${b.firstName} ${b.lastName ?? ''}`.trim()}
                   value={draft.spend}
                   onChange={e => setDrafts(d => ({ ...d, [b.id]: { ...draft, spend: e.target.value } }))}
                   className="w-28 border border-gold/30 px-2 py-1 text-sm font-dm rounded-none focus:outline-none focus:border-forest"
@@ -789,6 +791,7 @@ function PostEventSpendPrompt() {
                 <input
                   type="text"
                   placeholder="Notes (optional)"
+                  aria-label={`Notes for ${b.firstName} ${b.lastName ?? ''}`.trim()}
                   value={draft.notes}
                   onChange={e => setDrafts(d => ({ ...d, [b.id]: { ...draft, notes: e.target.value } }))}
                   className="w-40 border border-gold/30 px-2 py-1 text-sm font-dm rounded-none focus:outline-none focus:border-forest"
@@ -856,7 +859,7 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
       {spaces.length > 1 && (
         <button type="button" onClick={() => onChange(allSelected ? "" : names.join(", "))}
           className="mt-2 font-bebas tracking-widest text-[11px] text-forest hover:underline">
-          {allSelected ? "✕ CLEAR ALL" : "⛶ FULL VENUE (ALL SPACES)"}
+          <span aria-hidden="true">{allSelected ? "✕ " : "⛶ "}</span>{allSelected ? "CLEAR ALL" : "FULL VENUE (ALL SPACES)"}
         </button>
       )}
     </div>
@@ -1275,7 +1278,7 @@ export default function Dashboard() {
     try { localStorage.setItem('vfhq_calendar_needs', next ? '1' : '0'); } catch { /* private mode */ }
     // On a tall calendar the panel can still start below the fold, so bring it
     // into view when it's switched on — otherwise nothing visibly happens.
-    if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }), 50);
     return next;
   });
   // With the "Needs you today" panel showing, the calendar sizes to its content
@@ -1819,7 +1822,7 @@ export default function Dashboard() {
     setDrawerView('details');
     setDrawerSections(prev => saveDrawerSections({ ...prev, money: true }));
     window.setTimeout(() => {
-      document.getElementById('drawer-sec-money')?.closest('section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('drawer-sec-money')?.closest('section')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     }, 120);
   };
   const [drawerBeoNonce, setDrawerBeoNonce] = React.useState(0);
@@ -1887,10 +1890,20 @@ export default function Dashboard() {
       reports: "Reports",
       payments: "Payments",
     };
-    const label = TAB_TITLES[tab] ?? "Dashboard";
+    // Settings has 15 sections under one tab: name the section too, so a
+    // screen-reader user hears which one opened (the h1 changes silently).
+    const SETTINGS_TITLES: Partial<Record<SettingsSubTab, string>> = {
+      venue: "Venue", "brand-pack": "Brand Pack", "floor-plans": "Floor Plans", menu: "Menu & Catalogue",
+      taxes: "Taxes & Fees", "lead-form": "Contact Form", statuses: "Enquiry Statuses", waitlist: "Waitlist",
+      templates: "Templates", "follow-ups": "Follow-ups", "automated-tasks": "Automated Tasks", email: "Email",
+      "staff-emails": "BEO Email Recipients", team: "Team", integrations: "Integrations",
+    };
+    const tabLabel = TAB_TITLES[tab] ?? "Dashboard";
+    const subLabel = tab === "settings" ? SETTINGS_TITLES[settingsSubTab] : undefined;
+    const label = subLabel ? `${subLabel} · ${tabLabel}` : tabLabel;
     const venueName = (venueSettings as any)?.name;
     document.title = venueName ? `${label} · ${venueName} · VenueFlow` : `${label} · VenueFlow`;
-  }, [tab, venueSettings]);
+  }, [tab, settingsSubTab, venueSettings]);
 
   const pipelineStages = React.useMemo(() => {
     return customStatusDefs.map(d => {
@@ -2182,6 +2195,9 @@ export default function Dashboard() {
   const [drawerEdit, setDrawerEdit] = useState<{ field: string; value: string; last?: string } | null>(null);
   const drawerEditRef = useRef(drawerEdit);
   drawerEditRef.current = drawerEdit;
+  // A malformed email is reported at the field (it was only a toast).
+  const [drawerEmailError, setDrawerEmailError] = useState(false);
+  useEffect(() => { if (drawerEdit?.field !== "email") setDrawerEmailError(false); }, [drawerEdit?.field]);
   // Enter saves / Escape cancels on every inline field editor in the panel.
   const drawerEditKeys = (field: string) => (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") { e.preventDefault(); saveDrawerField(field, e.currentTarget.value); }
@@ -2196,7 +2212,11 @@ export default function Dashboard() {
       return;
     }
     // A malformed email stays open in the editor to fix.
-    if (field === "email" && !looksLikeEmail(raw)) { toast.error(BAD_EMAIL_MSG); return; }
+    if (field === "email" && !looksLikeEmail(raw)) {
+      setDrawerEmailError(true);
+      document.getElementById("drawer-email-input")?.focus();
+      return;
+    }
     let mutValue: any = raw;
     if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
     else if (field === "totalNzd" || field === "depositNzd" || field === "minimumSpend") mutValue = raw === "" ? null : Number(raw);
@@ -3717,7 +3737,7 @@ export default function Dashboard() {
                           <div className="flex gap-2 pt-2 border-t border-gold/15">
                             <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
                               className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                            <input type="date" aria-label="Jump to date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
                               onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
                               className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
                           </div>
@@ -3732,7 +3752,7 @@ export default function Dashboard() {
                       </button>
                     )}
                     <button onClick={() => setCalDate(new Date())} className="vf-btn vf-btn-secondary">TODAY</button>
-                    <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print the week's run sheets"
+                    <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print week: every run sheet for a week"
                       className="vf-btn vf-btn-secondary"><Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">PRINT WEEK</span></button>
                     <button onClick={() => setTab('calendar' as any)} className="vf-btn vf-btn-secondary"><span className="hidden sm:inline">FULL </span>VIEW</button>
                   </div>
@@ -3914,7 +3934,7 @@ export default function Dashboard() {
       <GlobalFinder open={finderOpen} onOpenChange={setFinderOpen} isStaff={isStaff} stages={pipelineStages}
         onOpenLead={id => { void openLeadFromUrlOrFinder(id); }} onOpenEvent={id => setLocation(`/event/${id}`)} />
       {/* ── TOP NAVIGATION BAR (mobile only — desktop uses the sidebar) ──────── */}
-      <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-3" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
+      <nav aria-label="Top bar" className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-3" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
         <button onClick={() => setTab("overview" as any)} className="flex items-center pr-3 border-r border-border mr-2 flex-shrink-0 focus:outline-none">
           <img src="/logo-full.png" alt="VenueFlow" className="h-6 w-auto" />
@@ -4293,10 +4313,12 @@ export default function Dashboard() {
                           </button>
                           <div className="flex gap-2 shrink-0">
                             <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'event' })}
+                              aria-label={`Use ${fmtHhmm(m.bookingTime)} (the event's time) for ${[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}`}
                               className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
                               USE {fmtHhmm(m.bookingTime).toUpperCase()}
                             </button>
                             <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'runsheet' })}
+                              aria-label={`Use ${fmtHhmm(m.runsheetTime)} (the run sheet's time) for ${[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}`}
                               className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
                               USE {fmtHhmm(m.runsheetTime).toUpperCase()}
                             </button>
@@ -4676,8 +4698,11 @@ export default function Dashboard() {
                         const tone = (stage as any).swatch ?? '#2f5488';
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
+                        const stageHeadingId = `kanban-stage-${String(stage.key).replace(/[^a-z0-9_-]/gi, '_')}`;
                         return (
-                          <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col min-w-0">
+                          // Each column is a group named by its stage, so a card's
+                          // stage is known to screen readers too (it was a flat run).
+                          <div key={stage.key} role="group" aria-labelledby={stageHeadingId} className="w-72 flex-shrink-0 flex flex-col min-w-0">
                             {/* Column header — tracked title, colored rule, serif total */}
                             {/* min-h keeps every header the same height — a column
                                 with no total yet (e.g. New Enquiry) used to sit a
@@ -4688,8 +4713,8 @@ export default function Dashboard() {
                                   swatch colours (sky/amber/orange) only hit ~2:1 as
                                   text on cream. */}
                               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
-                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
-                              <span className="font-sans text-[12px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
+                              <span id={stageHeadingId} role="heading" aria-level={2} className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
+                              <span className="font-sans text-[12px] font-bold" style={{ color: '#6e665c' }}><span className="sr-only">, </span>{stageLeads.length}<span className="sr-only"> {stageLeads.length === 1 ? 'enquiry' : 'enquiries'}</span></span>
                               <span className="flex-1" />
                               {stageTotalLabel && (
                                 <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
@@ -4909,8 +4934,8 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
-                    <input
+                    <label htmlFor="compose-subject" className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
+                    <input id="compose-subject"
                       value={emailForm.subject}
                       onChange={e => setEmailForm(f => ({ ...f, subject: e.target.value }))}
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest"
@@ -4918,8 +4943,8 @@ export default function Dashboard() {
                     />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE</label>
-                    <textarea
+                    <label htmlFor="compose-message" className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE</label>
+                    <textarea id="compose-message"
                       value={emailForm.body}
                       onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
                       rows={8}
@@ -5041,6 +5066,14 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                  {/* Send stays disabled until both are filled: say so, rather than
+                      leave a faded button with no reason. */}
+                  {(!emailForm.subject || !emailForm.body) && (
+                    <p id="compose-send-hint" className="font-dm text-xs text-stone-600 text-right">
+                      {!emailForm.subject && !emailForm.body ? "Add a subject and a message to send."
+                        : !emailForm.subject ? "Add a subject to send." : "Add a message to send."}
+                    </p>
+                  )}
                   <div className="flex gap-3 justify-end pt-2">
                     <button onClick={() => { setShowEmailModal(false); setEmailAttachments([]); }}
                       className="border border-border font-bebas tracking-widest text-xs px-5 py-2 text-ink/60 hover:text-ink transition-colors">
@@ -5061,6 +5094,7 @@ export default function Dashboard() {
                         signatureId: emailSigId || undefined,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
+                      aria-describedby={!emailForm.subject || !emailForm.body ? "compose-send-hint" : undefined}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
                       <Send className="w-3 h-3" />
                       {sendEmail.isPending ? 'SENDING...' : `SEND EMAIL${emailAttachments.length > 0 ? ` (+${emailAttachments.length})` : ''}`}
@@ -5101,7 +5135,7 @@ export default function Dashboard() {
                   </button>
                   <button onClick={() => setShowPrintWeek(true)}
                     title="Print every event's run sheet for a week, in one PDF"
-                    aria-label="Print the week's run sheets"
+                    aria-label="Print week: every run sheet for a week"
                     className="vf-btn vf-btn-secondary">
                     <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
                   </button>
@@ -5198,7 +5232,7 @@ export default function Dashboard() {
                         <div className="flex gap-2 pt-2 border-t border-gold/15">
                           <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
                             className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                          <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                          <input type="date" aria-label="Jump to date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
                             onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
                             className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
                         </div>
@@ -5694,7 +5728,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <Select value={eventSortBy} onValueChange={(v: any) => setEventTablePrefs({ sortBy: v })}>
-                      <SelectTrigger className="h-8 text-xs font-inter border-gray-200 rounded-lg w-36">
+                      <SelectTrigger aria-label="Sort events by" className="h-8 text-xs font-inter border-gray-200 rounded-lg w-36">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -5863,11 +5897,11 @@ export default function Dashboard() {
                                 <div className="flex gap-1 lg:justify-end items-center" onClick={e => e.stopPropagation()}>
                                   {item._type === 'booking' ? (
                                     <>
-                                      <button onClick={() => setLocation(`/event/${item.id}`)} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">OPEN</button>
-                                      <button onClick={() => setLocation(`/runsheet?bookingId=${item.id}`)} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all flex items-center gap-1"><Clock className="w-3 h-3" /> RUNSHEET</button>
+                                      <button onClick={() => setLocation(`/event/${item.id}`)} aria-label={`Open ${item.firstName ?? ''} ${item.lastName ?? ''}`.trim()} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">OPEN</button>
+                                      <button onClick={() => setLocation(`/runsheet?bookingId=${item.id}`)} aria-label={`Runsheet for ${item.firstName ?? ''} ${item.lastName ?? ''}`.trim()} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all flex items-center gap-1"><Clock className="w-3 h-3" /> RUNSHEET</button>
                                     </>
                                   ) : (
-                                    <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">VIEW</button>
+                                    <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} aria-label={`View ${item.firstName ?? ''} ${item.lastName ?? ''}`.trim()} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">VIEW</button>
                                   )}
                                   <button
                                     onClick={() => {
@@ -5878,6 +5912,7 @@ export default function Dashboard() {
                                       }
                                     }}
                                     className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100/60 rounded transition-colors"
+                                    aria-label={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'} for ${item.firstName ?? ''} ${item.lastName ?? ''}`.trim()}
                                     title={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'}`}>
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -6193,7 +6228,7 @@ export default function Dashboard() {
                         onClick={() => {
                           if (dayBookings.length > 0) {
                             // scroll to booking in the list below
-                            document.getElementById(`booking-${dayBookings[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            document.getElementById(`booking-${dayBookings[0].id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' });
                           } else if (dayLeads.length > 0) {
                             setSelectedLead(dayLeads[0]);
                             setTab('enquiries');
@@ -6314,7 +6349,7 @@ export default function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
                         <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
-                        <Input id="vs-venue-name" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
+                        <Input id="vs-venue-name" autoComplete="organization" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
@@ -6324,12 +6359,12 @@ export default function Dashboard() {
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-website" className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
-                        <Input id="vs-website" value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
+                        <Input id="vs-website" inputMode="url" autoComplete="url" value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
                           placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-notification-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
-                        <Input id="vs-notification-email" type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
+                        <Input id="vs-notification-email" type="text" inputMode="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Where new enquiry notifications are sent. Add multiple addresses separated by commas — every address gets a copy. Requires SMTP configured in Settings → Email.</p>
                       </div>
@@ -6342,32 +6377,32 @@ export default function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
                         <label htmlFor="vs-address1" className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
-                        <Input id="vs-address1" value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
+                        <Input id="vs-address1" autoComplete="address-line1" value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
                           placeholder="166 Cashel Street" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-address2" className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 2</label>
-                        <Input id="vs-address2" value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
+                        <Input id="vs-address2" autoComplete="address-line2" value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
                           placeholder="Christchurch Central City" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
                         <label htmlFor="vs-suburb" className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBURB / CITY</label>
-                        <Input id="vs-suburb" value={settingsForm.suburb} onChange={e => setSettingsForm((f: any) => ({ ...f, suburb: e.target.value }))}
+                        <Input id="vs-suburb" autoComplete="address-level2" value={settingsForm.suburb} onChange={e => setSettingsForm((f: any) => ({ ...f, suburb: e.target.value }))}
                           placeholder="Christchurch" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
                         <label htmlFor="vs-state" className="font-bebas text-xs tracking-widest text-sage block mb-1">STATE / REGION</label>
-                        <Input id="vs-state" value={settingsForm.state} onChange={e => setSettingsForm((f: any) => ({ ...f, state: e.target.value }))}
+                        <Input id="vs-state" autoComplete="address-level1" value={settingsForm.state} onChange={e => setSettingsForm((f: any) => ({ ...f, state: e.target.value }))}
                           placeholder="Canterbury" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
                         <label htmlFor="vs-postcode" className="font-bebas text-xs tracking-widest text-sage block mb-1">POSTCODE</label>
-                        <Input id="vs-postcode" value={settingsForm.postcode} onChange={e => setSettingsForm((f: any) => ({ ...f, postcode: e.target.value }))}
+                        <Input id="vs-postcode" inputMode="numeric" autoComplete="postal-code" value={settingsForm.postcode} onChange={e => setSettingsForm((f: any) => ({ ...f, postcode: e.target.value }))}
                           placeholder="8011" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
                         <label htmlFor="vs-country" className="font-bebas text-xs tracking-widest text-sage block mb-1">COUNTRY</label>
-                        <Input id="vs-country" value={settingsForm.country} onChange={e => setSettingsForm((f: any) => ({ ...f, country: e.target.value }))}
+                        <Input id="vs-country" autoComplete="country-name" value={settingsForm.country} onChange={e => setSettingsForm((f: any) => ({ ...f, country: e.target.value }))}
                           placeholder="New Zealand" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                     </div>
@@ -6591,8 +6626,8 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DESCRIPTION</h2>
                     <div className="space-y-4">
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE TYPE</label>
-                        <select value={settingsForm.venueType} onChange={e => setSettingsForm((f: any) => ({ ...f, venueType: e.target.value }))}
+                        <label htmlFor="set-venue-type" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE TYPE</label>
+                        <select id="set-venue-type" value={settingsForm.venueType} onChange={e => setSettingsForm((f: any) => ({ ...f, venueType: e.target.value }))}
                           className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                           <option value="">None</option>
                           {["Restaurant","Bar","Function Venue","Hotel","Rooftop","Garden","Winery","Brewery","Private Dining Room","Conference Centre","Other"].map(t => (
@@ -6601,8 +6636,8 @@ export default function Dashboard() {
                         </select>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PRICE CATEGORY</label>
-                        <div className="flex gap-4">
+                        <label id="set-price-category" className="font-bebas text-xs tracking-widest text-sage block mb-2">PRICE CATEGORY</label>
+                        <div className="flex gap-4" role="radiogroup" aria-labelledby="set-price-category">
                           {["$$","$$$","$$$$"].map(p => (
                             <label key={p} className="flex items-center gap-2 cursor-pointer">
                               <input type="radio" name="priceCategory" value={p} checked={settingsForm.priceCategory === p}
@@ -6614,8 +6649,8 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ABOUT YOUR VENUE</label>
-                        <Textarea value={settingsForm.aboutVenue} onChange={e => setSettingsForm((f: any) => ({ ...f, aboutVenue: e.target.value }))}
+                        <label htmlFor="set-about-venue" className="font-bebas text-xs tracking-widest text-sage block mb-1">ABOUT YOUR VENUE</label>
+                        <Textarea id="set-about-venue" value={settingsForm.aboutVenue} onChange={e => setSettingsForm((f: any) => ({ ...f, aboutVenue: e.target.value }))}
                           placeholder="Describe your venue..." rows={4}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                       </div>
@@ -6627,18 +6662,18 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">AVAILABILITY SETTINGS</h2>
                     <div className="space-y-4">
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">EVENT DURATION</label>
-                        <div className="grid grid-cols-2 gap-3">
+                        <label id="set-event-duration" className="font-bebas text-xs tracking-widest text-sage block mb-2">EVENT DURATION</label>
+                        <div className="grid grid-cols-2 gap-3" role="group" aria-labelledby="set-event-duration">
                           <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Duration</label>
-                            <select value={settingsForm.minEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, minEventDuration: e.target.value }))}
+                            <label htmlFor="set-min-duration" className="font-dm text-xs text-sage/70 block mb-1">Minimum Duration</label>
+                            <select id="set-min-duration" value={settingsForm.minEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, minEventDuration: e.target.value }))}
                               className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                               {["30 minutes","1 hour","2 hours","3 hours","4 hours"].map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Duration</label>
-                            <select value={settingsForm.maxEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, maxEventDuration: e.target.value }))}
+                            <label htmlFor="set-max-duration" className="font-dm text-xs text-sage/70 block mb-1">Maximum Duration</label>
+                            <select id="set-max-duration" value={settingsForm.maxEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, maxEventDuration: e.target.value }))}
                               className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                               {["2 hours","3 hours","4 hours","6 hours","8 hours","10 hours","12 hours","No limit"].map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
@@ -6646,19 +6681,19 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">LEAD TIME</label>
+                        <label id="set-lead-time" className="font-bebas text-xs tracking-widest text-sage block mb-2">LEAD TIME</label>
                         <p className="font-dm text-xs text-sage/60 mb-2">To maximise your inquiries, we recommend your lead time be as short as possible.</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-3" role="group" aria-labelledby="set-lead-time">
                           <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Lead Time</label>
-                            <select value={settingsForm.minLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, minLeadTime: e.target.value }))}
+                            <label htmlFor="set-min-lead" className="font-dm text-xs text-sage/70 block mb-1">Minimum Lead Time</label>
+                            <select id="set-min-lead" value={settingsForm.minLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, minLeadTime: e.target.value }))}
                               className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                               {["Same day","1 day","2 days","3 days","1 week","2 weeks","1 month"].map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Lead Time</label>
-                            <select value={settingsForm.maxLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, maxLeadTime: e.target.value }))}
+                            <label htmlFor="set-max-lead" className="font-dm text-xs text-sage/70 block mb-1">Maximum Lead Time</label>
+                            <select id="set-max-lead" value={settingsForm.maxLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, maxLeadTime: e.target.value }))}
                               className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                               {["1 month","2 months","3 months","6 months","1 year","2 years"].map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
@@ -6666,8 +6701,8 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUFFER TIME</label>
-                        <select value={settingsForm.bufferTime} onChange={e => setSettingsForm((f: any) => ({ ...f, bufferTime: e.target.value }))}
+                        <label htmlFor="set-buffer-time" className="font-bebas text-xs tracking-widest text-sage block mb-2">BUFFER TIME</label>
+                        <select id="set-buffer-time" value={settingsForm.bufferTime} onChange={e => setSettingsForm((f: any) => ({ ...f, bufferTime: e.target.value }))}
                           className="w-48 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                           {["None","15 minutes","30 minutes","45 minutes","1 hour","2 hours"].map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
@@ -6694,8 +6729,8 @@ export default function Dashboard() {
                             </div>
                             <div className="flex items-center gap-2">
                               <div>
-                                <label className="font-dm text-xs text-sage/60 block">Start Time</label>
-                                <Input type="time" value={h.start} disabled={!h.enabled}
+                                <label htmlFor={`oh2-${i}-start`} className="font-dm text-xs text-sage/60 block">Start Time</label>
+                                <Input id={`oh2-${i}-start`} aria-label={`${h.day} start time`} type="time" value={h.start} disabled={!h.enabled}
                                   onChange={e => {
                                     const updated = [...hours]; updated[i] = { ...h, start: e.target.value };
                                     setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
@@ -6703,8 +6738,8 @@ export default function Dashboard() {
                                   className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
                               </div>
                               <div>
-                                <label className="font-dm text-xs text-sage/60 block">End Time</label>
-                                <Input type="time" value={h.end} disabled={!h.enabled}
+                                <label htmlFor={`oh2-${i}-end`} className="font-dm text-xs text-sage/60 block">End Time</label>
+                                <Input id={`oh2-${i}-end`} aria-label={`${h.day} end time`} type="time" value={h.end} disabled={!h.enabled}
                                   onChange={e => {
                                     const updated = [...hours]; updated[i] = { ...h, end: e.target.value };
                                     setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
@@ -6846,33 +6881,33 @@ export default function Dashboard() {
                   });
                 }} className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
-                    <Input name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
+                    <label htmlFor="smtp-host" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
+                    <Input id="smtp-host" name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
-                    <Input name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
+                    <label htmlFor="smtp-port" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
+                    <Input id="smtp-port" name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
-                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="you@yourvenue.co.nz"
+                    <label htmlFor="smtp-user" className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
+                    <Input id="smtp-user" name="smtpUser" inputMode="email" autoComplete="off" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PASSWORD (Google App Password — 16 chars)</label>
-                    <Input name="smtpPass" type="password" defaultValue={venueSettings?.smtpPass ?? ''} placeholder="xxxx xxxx xxxx xxxx"
+                    <label htmlFor="smtp-pass" className="font-bebas text-xs tracking-widest text-sage block mb-1">PASSWORD (Google App Password — 16 chars)</label>
+                    <Input id="smtp-pass" name="smtpPass" type="password" autoComplete="new-password" defaultValue={venueSettings?.smtpPass ?? ''} placeholder="xxxx xxxx xxxx xxxx"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME (shown in inbox)</label>
-                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="Your Venue Events"
+                    <label htmlFor="smtp-from-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME (shown in inbox)</label>
+                    <Input id="smtp-from-name" name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="Your Venue Events"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
-                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
+                    <label htmlFor="smtp-from-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
+                    <Input id="smtp-from-email" name="smtpFromEmail" inputMode="email" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div className="md:col-span-2 flex items-center gap-3">
@@ -6923,6 +6958,7 @@ export default function Dashboard() {
                             value={sig.label ?? ""}
                             onChange={e => patch({ label: e.target.value })}
                             placeholder="Name this signature (e.g. Ana-Maria, Events Team)"
+                            aria-label="Signature name"
                             className="flex-1 min-w-0 rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm font-semibold px-3 py-2 bg-white"
                           />
                           <button
@@ -6937,6 +6973,7 @@ export default function Dashboard() {
                             <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">SENDER NAME (shown on the email)</p>
                             <input
                               value={sig.fromName ?? ""}
+                              aria-label="Sender name (shown on the email)"
                               onChange={e => patch({ fromName: e.target.value })}
                               placeholder="e.g. Alex at Your Venue"
                               className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
@@ -6947,6 +6984,7 @@ export default function Dashboard() {
                             <input
                               type="email"
                               value={sig.replyTo ?? ""}
+                              aria-label="Reply-to email (where replies go)"
                               onChange={e => patch({ replyTo: e.target.value })}
                               placeholder="e.g. events@yourvenue.co.nz"
                               className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
@@ -6957,6 +6995,7 @@ export default function Dashboard() {
                           <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">JOB TITLE (shown under the name)</p>
                           <input
                             value={sig.title ?? ""}
+                            aria-label="Job title (shown under the name)"
                             onChange={e => patch({ title: e.target.value })}
                             placeholder="e.g. Events Manager"
                             className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
@@ -7033,6 +7072,7 @@ export default function Dashboard() {
                           <p className="font-bebas tracking-widest text-[11px] text-sage mb-1">SIGN-OFF TEXT</p>
                           <Textarea
                             value={sig.signature ?? ""}
+                            aria-label="Sign-off text"
                             onChange={e => patch({ signature: e.target.value })}
                             rows={4}
                             placeholder={`e.g.\n\nKind regards,\nAlex Smith\nYour Venue Events\nph: 03 123 4567 | www.yourvenue.co.nz`}
@@ -7092,18 +7132,18 @@ export default function Dashboard() {
                 {showChecklistForm && (
                   <div className="dante-card p-5 mb-4 space-y-3">
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME *</label>
-                      <Input required value={checklistForm.name} onChange={e => setChecklistForm(f => ({ ...f, name: e.target.value }))}
+                      <label htmlFor="tpl-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME *</label>
+                      <Input id="tpl-name" required value={checklistForm.name} onChange={e => setChecklistForm(f => ({ ...f, name: e.target.value }))}
                         placeholder="e.g. Wedding Reception Setup" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                     </div>
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-                      <Input value={checklistForm.description} onChange={e => setChecklistForm(f => ({ ...f, description: e.target.value }))}
+                      <label htmlFor="tpl-description" className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                      <Input id="tpl-description" value={checklistForm.description} onChange={e => setChecklistForm(f => ({ ...f, description: e.target.value }))}
                         placeholder="Brief description of when to use this template" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                     </div>
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHECKLIST ITEMS (one per line) *</label>
-                      <Textarea value={checklistForm.items} onChange={e => setChecklistForm(f => ({ ...f, items: e.target.value }))}
+                      <label htmlFor="tpl-items" className="font-bebas text-xs tracking-widest text-sage block mb-1">CHECKLIST ITEMS (one per line) *</label>
+                      <Textarea id="tpl-items" value={checklistForm.items} onChange={e => setChecklistForm(f => ({ ...f, items: e.target.value }))}
                         placeholder={"Set up tables and chairs\nPrepare bar station\nCheck AV equipment\nBriefing with staff\nWelcome guests"}
                         rows={6} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm font-dm" />
                       <p className="font-dm text-xs text-sage mt-1">Each line becomes a separate checkbox item.</p>
@@ -7280,9 +7320,9 @@ export default function Dashboard() {
                       {/* Customiser controls */}
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">ACCENT COLOUR</label>
+                          <label htmlFor="embed-accent" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">ACCENT COLOUR</label>
                           <div className="flex items-center gap-1.5">
-                            <input type="color" value={accentValid ? `#${cleanHex}` : (venueSettings?.primaryColor || "#2D4A3E")}
+                            <input id="embed-accent" type="color" value={accentValid ? `#${cleanHex}` : (venueSettings?.primaryColor || "#2D4A3E")}
                               aria-label="Accent colour"
                               onChange={e => setEmbedAccent(e.target.value.replace(/^#/, ""))}
                               className="w-8 h-8 border border-border rounded cursor-pointer flex-shrink-0" />
@@ -7292,23 +7332,23 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">FONT</label>
-                          <select value={embedFont} onChange={e => setEmbedFont(e.target.value)}
+                          <label htmlFor="embed-font" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">FONT</label>
+                          <select id="embed-font" value={embedFont} onChange={e => setEmbedFont(e.target.value)}
                             aria-label="Font"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                             {FONTS.map(f => <option key={f} value={f}>{f || "Default (saved)"}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">START HEIGHT</label>
-                          <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
+                          <label htmlFor="embed-height" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">START HEIGHT</label>
+                          <input id="embed-height" type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
                             aria-label="Start height in pixels"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">MAX WIDTH</label>
-                          <input type="text" value={embedMaxWidth} onChange={e => setEmbedMaxWidth(e.target.value.replace(/[^0-9a-z]/gi, ""))}
-                            aria-label="Maximum width in pixels, or none for full width"
+                          <label htmlFor="embed-max-width" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">MAX WIDTH</label>
+                          <input id="embed-max-width" type="text" value={embedMaxWidth} onChange={e => setEmbedMaxWidth(e.target.value.replace(/[^0-9a-z]/gi, ""))}
+                            aria-label="Max width in pixels, or none for full width"
                             placeholder="520 · none = full"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
@@ -7317,8 +7357,8 @@ export default function Dashboard() {
                       {embedSnippetTab === "script" && (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                           <div>
-                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">LAYOUT</label>
-                            <select value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
+                            <label htmlFor="embed-layout" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">LAYOUT</label>
+                            <select id="embed-layout" value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
                               aria-label="Layout"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                               <option value="">3 steps (default)</option>
@@ -7326,8 +7366,8 @@ export default function Dashboard() {
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PLACEMENT</label>
-                            <select value={embedPlacement} onChange={e => setEmbedPlacement(e.target.value as "" | "floating")}
+                            <label htmlFor="embed-placement" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PLACEMENT</label>
+                            <select id="embed-placement" value={embedPlacement} onChange={e => setEmbedPlacement(e.target.value as "" | "floating")}
                               aria-label="Placement"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                               <option value="">Inline (default)</option>
@@ -7335,15 +7375,15 @@ export default function Dashboard() {
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PREFILL EVENT TYPE</label>
-                            <input type="text" value={embedPrefillEventType} onChange={e => setEmbedPrefillEventType(e.target.value)}
+                            <label htmlFor="embed-prefill" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">PREFILL EVENT TYPE</label>
+                            <input id="embed-prefill" type="text" value={embedPrefillEventType} onChange={e => setEmbedPrefillEventType(e.target.value)}
                               aria-label="Prefill event type"
                               placeholder="e.g. Christmas Party" className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">GOOGLE ADS LABEL</label>
-                            <input type="text" value={embedGadsLabel} onChange={e => setEmbedGadsLabel(e.target.value)}
-                              aria-label="Google Ads conversion label"
+                            <label htmlFor="embed-gads-label" className="font-bebas tracking-widest text-[11px] text-gray-700 block mb-1">GOOGLE ADS LABEL</label>
+                            <input id="embed-gads-label" type="text" value={embedGadsLabel} onChange={e => setEmbedGadsLabel(e.target.value)}
+                              aria-label="Google Ads label (the conversion label)"
                               placeholder="AW-XXXXXXX/yyyy" className="w-full border border-border rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-sage-green" />
                           </div>
                         </div>
@@ -7441,10 +7481,10 @@ export default function Dashboard() {
                     {settingsForm.logoUrl && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
+                          <label htmlFor="form-logo-size" className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
                           <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
-                        <input type="range" min={30} max={200} step={5}
+                        <input id="form-logo-size" type="range" min={30} max={200} step={5}
                           aria-label="Logo size percentage"
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
@@ -7459,9 +7499,9 @@ export default function Dashboard() {
                   {/* Colour + Font row */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">HEADER COLOUR</label>
+                      <label htmlFor="form-header-colour" className="font-bebas text-xs tracking-widest text-sage block mb-2">HEADER COLOUR</label>
                       <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                        <input id="form-header-colour" type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
                           aria-label="Header colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
@@ -7508,9 +7548,9 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     {/* Page background colour */}
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PAGE BACKGROUND</label>
+                      <label htmlFor="form-page-bg" className="font-bebas text-xs tracking-widest text-sage block mb-2">PAGE BACKGROUND</label>
                       <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.formPageBg ?? '#f8f5f0'}
+                        <input id="form-page-bg" type="color" value={settingsForm.formPageBg ?? '#f8f5f0'}
                           aria-label="Page background colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
@@ -7524,9 +7564,9 @@ export default function Dashboard() {
 
                     {/* Form card background colour */}
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">FORM CARD BACKGROUND</label>
+                      <label htmlFor="form-card-bg" className="font-bebas text-xs tracking-widest text-sage block mb-2">FORM CARD BACKGROUND</label>
                       <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.formCardBg ?? '#ffffff'}
+                        <input id="form-card-bg" type="color" value={settingsForm.formCardBg ?? '#ffffff'}
                           aria-label="Form card background colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
@@ -7540,9 +7580,9 @@ export default function Dashboard() {
 
                     {/* Button colour */}
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[11px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
+                      <label htmlFor="form-button-colour" className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[11px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
                       <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
+                        <input id="form-button-colour" type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
                           aria-label="Button colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
@@ -7630,14 +7670,16 @@ export default function Dashboard() {
                 <div className="dante-card p-5 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h2 className="font-bebas text-xs tracking-widest text-sage">AUTO-REPLY TO ENQUIRER</h2>
+                      <h2 id="autoreply-heading" className="font-bebas text-xs tracking-widest text-sage">AUTO-REPLY TO ENQUIRER</h2>
                       <p className="font-dm text-xs text-ink/70 mt-1">Email the enquirer a branded “we’ve got it” confirmation the moment they submit, so they’re not left wondering. Needs your SMTP set up above.</p>
                     </div>
                     <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                      {/* Named after the feature ("ON" alone said nothing), keeping the visible word. */}
                       <input type="checkbox" checked={!!settingsForm.enquiryAutoReplyEnabled}
                         onChange={e => setSettingsForm((f: any) => ({ ...f, enquiryAutoReplyEnabled: e.target.checked }))}
+                        aria-labelledby="autoreply-heading autoreply-state"
                         className="w-4 h-4 accent-forest" />
-                      <span className="font-bebas text-xs tracking-widest text-ink/70">{settingsForm.enquiryAutoReplyEnabled ? 'ON' : 'OFF'}</span>
+                      <span id="autoreply-state" className="font-bebas text-xs tracking-widest text-ink/70">{settingsForm.enquiryAutoReplyEnabled ? 'ON' : 'OFF'}</span>
                     </label>
                   </div>
                   {settingsForm.enquiryAutoReplyEnabled && (
@@ -7739,10 +7781,10 @@ export default function Dashboard() {
                   {/* Photo height slider */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="font-bebas text-xs tracking-widest text-sage">PHOTO HEIGHT</label>
+                      <label htmlFor="form-photo-height" className="font-bebas text-xs tracking-widest text-sage">PHOTO HEIGHT</label>
                       <span className="font-dm text-xs text-ink/70">{settingsForm.galleryPhotoHeight ?? 128}px</span>
                     </div>
-                    <input type="range" min={60} max={320} step={8}
+                    <input id="form-photo-height" type="range" min={60} max={320} step={8}
                       aria-label="Photo height in pixels"
                       value={settingsForm.galleryPhotoHeight ?? 128}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, galleryPhotoHeight: Number(e.target.value) }))}
@@ -7827,13 +7869,13 @@ export default function Dashboard() {
                 <div className="dante-card p-5 space-y-4">
                   <h2 className="font-bebas text-xs tracking-widest text-sage">FORM CONTENT</h2>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM TITLE</label>
-                    <Input value={settingsForm.leadFormTitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormTitle: e.target.value }))}
+                    <label htmlFor="form-title" className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM TITLE</label>
+                    <Input id="form-title" value={settingsForm.leadFormTitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormTitle: e.target.value }))}
                       placeholder="Book Your Event" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
-                    <Textarea value={settingsForm.leadFormSubtitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
+                    <label htmlFor="form-subtitle" className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
+                    <Textarea id="form-subtitle" value={settingsForm.leadFormSubtitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
                       placeholder={DEFAULT_LEAD_FORM_SUBTITLE}
                       rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                   </div>
@@ -7994,7 +8036,7 @@ export default function Dashboard() {
                     <div className="border-t border-gold/20 bg-cream/40 p-5 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ACCOUNT ID</label>
+                          <label htmlFor="nbi-account-id" className="font-bebas text-xs tracking-widest text-sage block mb-1">ACCOUNT ID</label>
                           <input
                             type="text"
                             id="nbi-account-id"
@@ -8004,7 +8046,7 @@ export default function Dashboard() {
                           />
                         </div>
                         <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE ID</label>
+                          <label htmlFor="nbi-venue-id" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE ID</label>
                           <input
                             type="text"
                             id="nbi-venue-id"
@@ -8076,6 +8118,7 @@ export default function Dashboard() {
                           <div key={i} className="grid grid-cols-12 gap-2 items-center">
                             <input
                               value={m.spaceName}
+                              aria-label={`Space name, mapping ${i + 1}`}
                               onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, spaceName: e.target.value } : x))}
                               placeholder="Space name (e.g. Restaurant)"
                               className="col-span-4 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
@@ -8190,14 +8233,14 @@ export default function Dashboard() {
                       {nbiConnected && (
                         <div className="border-t border-gold/20 pt-4 mt-2">
                           <div className="font-bebas text-xs tracking-widest text-sage mb-2">NOWBOOKIT → VENUEFLOW (pull bookings in)</div>
-                          <label className="font-bebas text-[11px] tracking-widest text-ink/60 block mb-1">INBOUND WEBHOOK URL</label>
+                          <label htmlFor="nbi-webhook-url" className="font-bebas text-[11px] tracking-widest text-ink/60 block mb-1">INBOUND WEBHOOK URL</label>
                           <p className="font-dm text-[12px] text-ink/60 mb-2 leading-relaxed">
                             <strong className="text-ink/80">Only needed for the reverse direction.</strong> Paste this URL into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made <em>directly in NowBookIt</em> will then appear in VenueFlow automatically.
                             <br />
                             <span className="text-ink/70">Bookings made in VenueFlow already push to NowBookIt via the auto-sync toggle above — you don't need this URL for that.</span>
                           </p>
                           <div className="flex gap-2">
-                            <input
+                            <input id="nbi-webhook-url"
                               type="text"
                               readOnly
                               value={nbiWebhook?.url ?? 'Loading…'}
@@ -8361,10 +8404,10 @@ export default function Dashboard() {
                     {settingsForm.logoUrl && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
+                          <label htmlFor="brand-logo-size" className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
                           <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
-                        <input type="range" min={30} max={200} step={5}
+                        <input id="brand-logo-size" type="range" min={30} max={200} step={5}
                           aria-label="Logo size percentage"
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
@@ -8383,6 +8426,7 @@ export default function Dashboard() {
                         className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                       <Input value={settingsForm.brandAccentColor ?? ""}
                         onChange={e => setSettingsForm((f: any) => ({ ...f, brandAccentColor: e.target.value }))}
+                        aria-label="Accent colour hex value"
                         placeholder="#2f5488" className="w-32 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       {settingsForm.brandAccentColor && (
                         <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, brandAccentColor: "" }))}
@@ -8438,13 +8482,14 @@ export default function Dashboard() {
                   {/* Branded proposal template (custom HTML) */}
                   <div className="dante-card p-5 mb-4 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <h2 className="font-bebas tracking-widest text-base text-ink">BRANDED PROPOSAL (HTML)</h2>
+                      <h2 id="branded-proposal-heading" className="font-bebas tracking-widest text-base text-ink">BRANDED PROPOSAL (HTML)</h2>
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input type="checkbox"
                           checked={!!settingsForm.proposalTemplateEnabled}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, proposalTemplateEnabled: e.target.checked ? 1 : 0 }))}
+                          aria-labelledby="branded-proposal-heading branded-proposal-state"
                           className="w-4 h-4 accent-sage-green" />
-                        <span className="font-bebas text-xs tracking-widest text-ink/80">{settingsForm.proposalTemplateEnabled ? "ON" : "OFF"}</span>
+                        <span id="branded-proposal-state" className="font-bebas text-xs tracking-widest text-ink/80">{settingsForm.proposalTemplateEnabled ? "ON" : "OFF"}</span>
                       </label>
                     </div>
                     <p className="font-dm text-xs text-ink/60">
@@ -8491,6 +8536,7 @@ export default function Dashboard() {
                     </div>
 
                     <textarea
+                      aria-label="Branded proposal HTML"
                       value={settingsForm.proposalTemplateHtml ?? ""}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, proposalTemplateHtml: e.target.value }))}
                       spellCheck={false}
@@ -8550,12 +8596,12 @@ export default function Dashboard() {
                     <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD RECIPIENT</h2>
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME</label>
-                        <input value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
+                        <label htmlFor="beo-recipient-name" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME</label>
+                        <input id="beo-recipient-name" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                       </div>
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL</label>
-                        <input value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} type="email" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz"
+                        <label htmlFor="beo-recipient-email" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL</label>
+                        <input id="beo-recipient-email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} type="email" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz"
                           onKeyDown={e => { if (e.key === 'Enter' && newStaffName.trim() && emailValid) addStaffEmailMut.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() }); }} />
                       </div>
                       <button
@@ -8571,7 +8617,7 @@ export default function Dashboard() {
                     </button>
                     {staffBulkOpen && (
                       <div className="mt-2 space-y-2">
-                        <textarea value={staffBulkText} onChange={e => setStaffBulkText(e.target.value)} rows={4} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest resize-y" placeholder={"Paste names + emails — one per line, or comma-separated.\nSarah Jones <sarah@venue.co.nz>\nJoe Bloggs, joe@venue.co.nz"} />
+                        <textarea value={staffBulkText} onChange={e => setStaffBulkText(e.target.value)} rows={4} aria-label="Paste multiple recipients" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest resize-y" placeholder={"Paste names + emails — one per line, or comma-separated.\nSarah Jones <sarah@venue.co.nz>\nJoe Bloggs, joe@venue.co.nz"} />
                         <button
                           onClick={() => { if (staffBulkText.trim()) addStaffBulkMut.mutate({ text: staffBulkText }); }}
                           disabled={!staffBulkText.trim() || addStaffBulkMut.isPending}
@@ -8639,9 +8685,12 @@ export default function Dashboard() {
                 );
                 return (
                 <div className="max-w-3xl mx-auto">
+                  {/* The page's h1 comes first so the outline reads Team > Account logins,
+                      Team access links (the Account logins h2 used to come before any h1). */}
+                  <h1 className="sr-only">Team</h1>
                   <AccountLoginsSection />
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-6">
-                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Team Access Links</h1>
+                    <h2 className="font-cormorant text-3xl font-semibold text-ink">Team Access Links</h2>
                     <button onClick={() => setShowTeamForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1 shrink-0 whitespace-nowrap">
                       <Plus className="w-3 h-3" /> ADD MEMBER
                     </button>
@@ -8654,16 +8703,16 @@ export default function Dashboard() {
                       <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD TEAM MEMBER</h2>
                       <div className="space-y-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
-                          <input value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
+                          <label htmlFor="team-member-name" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
+                          <input id="team-member-name" value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL (OPTIONAL)</label>
-                          <input value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz" />
+                          <label htmlFor="team-member-email" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL (OPTIONAL)</label>
+                          <input id="team-member-email" value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">ROLE</label>
-                          <select value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white">
+                          <label htmlFor="team-member-role" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">ROLE</label>
+                          <select id="team-member-role" value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white">
                             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                           </select>
                         </div>
@@ -8848,8 +8897,8 @@ export default function Dashboard() {
                 {/* Reporting Settings */}
                 <div className="bg-white border border-gray-200 rounded p-4">
                   <h2 className="font-semibold text-gray-800 mb-4">Reporting Settings</h2>
-                  <label className="block text-xs text-gray-500 mb-1">Revenue projections based on</label>
-                  <select className="w-full border border-gray-200 rounded p-2 text-sm text-gray-700">
+                  <label htmlFor="set-revenue-basis" className="block text-xs text-gray-500 mb-1">Revenue projections based on</label>
+                  <select id="set-revenue-basis" className="w-full border border-gray-200 rounded p-2 text-sm text-gray-700">
                     <option>Grand Total</option>
                     <option>Subtotal</option>
                   </select>
@@ -8961,13 +9010,13 @@ export default function Dashboard() {
                           <h3 className="font-bebas tracking-widest text-xs text-gray-500 mb-3">{editingInvId ? 'EDIT ITEM' : 'NEW INVENTORY ITEM'}</h3>
                           <div className="grid grid-cols-2 gap-3 mb-3">
                             <div className="col-span-2">
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NAME *</label>
-                              <input value={invForm.name} onChange={e => setInvForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Round Table — White Linen"
+                              <label htmlFor="inv-name" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NAME *</label>
+                              <input id="inv-name" value={invForm.name} onChange={e => setInvForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Round Table — White Linen"
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SHAPE</label>
-                              <select value={invForm.type} onChange={e => { const t = e.target.value; const defs: Record<string,{w:number,h:number}> = {round_table:{w:80,h:80},rect_table:{w:120,h:60},chair:{w:30,h:30},bar:{w:160,h:50},stage:{w:200,h:80},dance_floor:{w:200,h:200},dj_booth:{w:80,h:60},buffet:{w:160,h:50},gift_table:{w:100,h:50},entrance:{w:60,h:20}}; const d = defs[t] ?? {w:80,h:60}; setInvForm(f => ({ ...f, type: t, width: d.w, height: d.h })); }}
+                              <label htmlFor="inv-shape" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SHAPE</label>
+                              <select id="inv-shape" value={invForm.type} onChange={e => { const t = e.target.value; const defs: Record<string,{w:number,h:number}> = {round_table:{w:80,h:80},rect_table:{w:120,h:60},chair:{w:30,h:30},bar:{w:160,h:50},stage:{w:200,h:80},dance_floor:{w:200,h:200},dj_booth:{w:80,h:60},buffet:{w:160,h:50},gift_table:{w:100,h:50},entrance:{w:60,h:20}}; const d = defs[t] ?? {w:80,h:60}; setInvForm(f => ({ ...f, type: t, width: d.w, height: d.h })); }}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy bg-white">
                                 <option value="round_table">Round Table</option>
                                 <option value="rect_table">Rect Table</option>
@@ -8982,37 +9031,37 @@ export default function Dashboard() {
                               </select>
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">COLOUR</label>
+                              <label htmlFor="inv-colour" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">COLOUR</label>
                               <div className="flex items-center gap-2">
-                                <input type="color" value={invForm.color} onChange={e => setInvForm(f => ({ ...f, color: e.target.value }))}
+                                <input id="inv-colour" type="color" value={invForm.color} onChange={e => setInvForm(f => ({ ...f, color: e.target.value }))}
                                   className="w-10 h-8 border border-gray-200 rounded cursor-pointer flex-shrink-0" />
                                 <div style={{ width: 32, height: 32, backgroundColor: invForm.color, borderRadius: invForm.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
                                 <span className="font-dm text-xs text-gray-600">{invForm.color}</span>
                               </div>
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">WIDTH (px)</label>
-                              <input type="number" min="20" value={invForm.width} onChange={e => setInvForm(f => ({ ...f, width: parseInt(e.target.value) || 20 }))}
+                              <label htmlFor="inv-width" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">WIDTH (px)</label>
+                              <input id="inv-width" type="number" min="20" value={invForm.width} onChange={e => setInvForm(f => ({ ...f, width: parseInt(e.target.value) || 20 }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">HEIGHT (px)</label>
-                              <input type="number" min="20" value={invForm.height} onChange={e => setInvForm(f => ({ ...f, height: parseInt(e.target.value) || 20 }))}
+                              <label htmlFor="inv-height" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">HEIGHT (px)</label>
+                              <input id="inv-height" type="number" min="20" value={invForm.height} onChange={e => setInvForm(f => ({ ...f, height: parseInt(e.target.value) || 20 }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SEATS</label>
-                              <input type="number" min="1" value={invForm.seats} placeholder="–" onChange={e => setInvForm(f => ({ ...f, seats: e.target.value }))}
+                              <label htmlFor="inv-seats" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SEATS</label>
+                              <input id="inv-seats" type="number" min="1" value={invForm.seats} placeholder="–" onChange={e => setInvForm(f => ({ ...f, seats: e.target.value }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">QTY OWNED</label>
-                              <input type="number" min="1" value={invForm.quantity} placeholder="–" onChange={e => setInvForm(f => ({ ...f, quantity: e.target.value }))}
+                              <label htmlFor="inv-qty" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">QTY OWNED</label>
+                              <input id="inv-qty" type="number" min="1" value={invForm.quantity} placeholder="–" onChange={e => setInvForm(f => ({ ...f, quantity: e.target.value }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div className="col-span-2">
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NOTES</label>
-                              <input value={invForm.notes} placeholder="e.g. Stored in back room" onChange={e => setInvForm(f => ({ ...f, notes: e.target.value }))}
+                              <label htmlFor="inv-notes" className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NOTES</label>
+                              <input id="inv-notes" value={invForm.notes} placeholder="e.g. Stored in back room" onChange={e => setInvForm(f => ({ ...f, notes: e.target.value }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div className="col-span-2">
@@ -9205,6 +9254,7 @@ export default function Dashboard() {
                     <p className="font-dm text-xs text-ink/70 mb-3">Customise the course headers used inside Runsheet Builder (one per line). Leave blank to use defaults.</p>
                     <textarea
                       rows={6}
+                      aria-label="Runsheet F&B courses, one per line"
                       value={settingsForm.customCourses || ''}
                       onChange={e => {
                         setSettingsForm((f: any) => ({ ...f, customCourses: e.target.value }));
@@ -9255,7 +9305,7 @@ export default function Dashboard() {
                       {showCatalogCategoryForm && (
                         <form onSubmit={e => { e.preventDefault(); createCatalogCategory.mutate({ name: catalogCategoryForm.name, type: catalogActiveType, description: catalogCategoryForm.description || undefined }); }}
                           className="p-3 border-b border-gold/10 bg-linen/40 space-y-2">
-                          <Input required value={catalogCategoryForm.name} onChange={e => setCatalogCategoryForm(f => ({ ...f, name: e.target.value }))}
+                          <Input required aria-label="Category name" value={catalogCategoryForm.name} onChange={e => setCatalogCategoryForm(f => ({ ...f, name: e.target.value }))}
                             placeholder={catalogActiveType === 'food' ? 'e.g. Canapés, Grazing, Shared Plates…' : 'e.g. Wines, Cocktails, Beer, Non-Alcoholic…'}
                             className="rounded-none border border-gold/30 text-sm h-8" />
                           <div className="flex gap-1.5">
@@ -9305,6 +9355,7 @@ export default function Dashboard() {
                                 value={catalogGuestCount}
                                 onChange={e => setCatalogGuestCount(e.target.value)}
                                 placeholder="Guests"
+                                aria-label="Guests"
                                 className="w-16 font-dm text-xs text-ink bg-transparent outline-none placeholder:text-ink/65"
                               />
                             </div>
@@ -9367,7 +9418,7 @@ export default function Dashboard() {
                               <p className="font-dm text-xs text-ink/70 mb-1"><span className="font-semibold text-forest">✨ AI Smart Add</span> — paste anything: a menu PDF excerpt, a supplier list, an email, even a rough description. AI will extract items into the current category.</p>
                               <p className="font-dm text-[12px] text-ink/60">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
                             </div>
-                            <Textarea value={catalogAiText} onChange={e => setCatalogAiText(e.target.value)}
+                            <Textarea value={catalogAiText} onChange={e => setCatalogAiText(e.target.value)} aria-label="Text for AI Smart Add"
                               placeholder={catalogActiveType === 'food'
                                 ? "e.g.\n• Smoked salmon blini with creme fraiche - $8.50pp\n• Pork belly bao buns - $9 each\n• Vegetarian arancini, pea & mint - $6.50pp (V, GF available)\n\n…or just paste a whole menu and let AI sort it out."
                                 : "e.g.\nNZ Pinot Noir 2022 - $14 per glass / $65 per bottle\nLocal IPA on tap - $12\nEspresso Martini cocktail - $18\nHouse-made lemonade (non-alc) - $7"}
@@ -9446,7 +9497,7 @@ export default function Dashboard() {
                         {showCatalogCsvImport && (
                           <div className="p-4 border-b border-gold/10 bg-linen/40 space-y-3">
                             <p className="font-dm text-xs text-ink/60">Paste CSV data below. Format: <code className="bg-gold/10 px-1">name, description, pricing_type (per_person/per_item), price, unit, allergens</code></p>
-                            <Textarea value={catalogCsvText} onChange={e => setCatalogCsvText(e.target.value)}
+                            <Textarea value={catalogCsvText} onChange={e => setCatalogCsvText(e.target.value)} aria-label="CSV data"
                               placeholder="Smoked Salmon Blini, Served with crème fraîche, per_person, 8.50, person, gluten\nVegetable Spring Roll, Crispy and golden, per_item, 3.00, piece,"
                               className="rounded-none border border-gold/30 font-mono text-xs h-28" />
                             <div className="flex gap-2">
@@ -9476,19 +9527,19 @@ export default function Dashboard() {
                           }} className="p-4 border-b border-gold/10 bg-linen/30 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ITEM NAME *</label>
-                                <Input required value={catalogItemForm.name} onChange={e => setCatalogItemForm(f => ({ ...f, name: e.target.value }))}
+                                <label htmlFor="cat-item-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">ITEM NAME *</label>
+                                <Input id="cat-item-name" required value={catalogItemForm.name} onChange={e => setCatalogItemForm(f => ({ ...f, name: e.target.value }))}
                                   placeholder="e.g. Smoked Salmon Blini" className="rounded-none border border-gold/30 text-sm h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE (NZD, EXCL. GST)</label>
-                                <Input type="number" step="0.01" value={catalogItemForm.price} onChange={e => setCatalogItemForm(f => ({ ...f, price: e.target.value }))}
+                                <label htmlFor="cat-item-price" className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE (NZD, EXCL. GST)</label>
+                                <Input id="cat-item-price" type="number" step="0.01" value={catalogItemForm.price} onChange={e => setCatalogItemForm(f => ({ ...f, price: e.target.value }))}
                                   placeholder="8.50" className="rounded-none border border-gold/30 text-sm h-9" />
                               </div>
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-                              <Input value={catalogItemForm.description} onChange={e => setCatalogItemForm(f => ({ ...f, description: e.target.value }))}
+                              <label htmlFor="cat-item-description" className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                              <Input id="cat-item-description" value={catalogItemForm.description} onChange={e => setCatalogItemForm(f => ({ ...f, description: e.target.value }))}
                                 placeholder="Optional description" className="rounded-none border border-gold/30 text-sm h-9" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -9506,15 +9557,15 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div>
-                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UNIT LABEL</label>
-                                <Input value={catalogItemForm.unit} onChange={e => setCatalogItemForm(f => ({ ...f, unit: e.target.value }))}
+                                <label htmlFor="cat-item-unit" className="font-bebas text-xs tracking-widest text-sage block mb-1">UNIT LABEL</label>
+                                <Input id="cat-item-unit" value={catalogItemForm.unit} onChange={e => setCatalogItemForm(f => ({ ...f, unit: e.target.value }))}
                                   placeholder={catalogItemForm.pricingType === 'per_person' ? 'person' : 'piece'}
                                   className="rounded-none border border-gold/30 text-sm h-9" />
                               </div>
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DIETARY &amp; ALLERGENS</label>
-                              <Input value={catalogItemForm.allergens} onChange={e => setCatalogItemForm(f => ({ ...f, allergens: e.target.value }))}
+                              <label htmlFor="cat-item-allergens" className="font-bebas text-xs tracking-widest text-sage block mb-1">DIETARY &amp; ALLERGENS</label>
+                              <Input id="cat-item-allergens" value={catalogItemForm.allergens} onChange={e => setCatalogItemForm(f => ({ ...f, allergens: e.target.value }))}
                                 placeholder="e.g. V · GFA · DFA, contains nuts" className="rounded-none border border-gold/30 text-sm h-9" />
                             </div>
                             <div className="flex gap-2">
@@ -9606,6 +9657,7 @@ export default function Dashboard() {
                               <div className="flex items-center gap-2 px-4 py-2 border-b border-gold/10 bg-linen/30">
                                 <input
                                   type="checkbox"
+                                  aria-label="Select all items"
                                   checked={allSelected}
                                   onChange={() => {
                                     setCatalogSelectedIds(allSelected ? new Set() : new Set(items.map((i: any) => i.id)));
@@ -9629,6 +9681,7 @@ export default function Dashboard() {
                                 <div key={item.id} className={`flex flex-wrap md:flex-nowrap items-start justify-between gap-y-2 px-4 py-3 group ${isSelected ? 'bg-forest/5' : 'hover:bg-linen/30'} ${item.available ? '' : 'bg-stone-50'}`}>
                                   <input
                                     type="checkbox"
+                                    aria-label={`Select ${item.name}`}
                                     checked={isSelected}
                                     onChange={() => toggleCatalogSelected(item.id)}
                                     className="mt-1 mr-3 cursor-pointer flex-shrink-0"
@@ -9955,7 +10008,7 @@ export default function Dashboard() {
                     // change itself; a real event needs it filled in first.)
                     if (!selectedBooking._isLead && ['booked', 'confirmed', 'tentative'].includes(newStatus) && !selectedBooking.spaceName?.trim()) {
                       setDrawerAddFields(prev => new Set(prev).add('space'));
-                      toast.error('Pick a space first. The Space field is now showing under Details.', { duration: 5000 });
+                      toast.error('Pick a space first. The Space field is now showing under Details.');
                       return;
                     }
                     if (selectedBooking._isLead) {
@@ -10277,7 +10330,7 @@ export default function Dashboard() {
                     </div>
                     {drawerEdit?.field === "guestCount" ? (
                       <div className="flex items-center gap-1 mt-1">
-                        <Input type="number" min="0" value={drawerEdit.value}
+                        <Input type="number" min="0" value={drawerEdit.value} aria-label="Guests"
                           onChange={e => setDrawerEdit({ field: "guestCount", value: e.target.value })}
                           onKeyDown={drawerEditKeys("guestCount")}
                           className="h-8 text-xs w-24" autoFocus />
@@ -10310,7 +10363,7 @@ export default function Dashboard() {
                     </div>
                     {drawerEdit?.field === "minimumSpend" ? (
                       <div className="flex items-center gap-1 mt-1">
-                        <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                        <Input type="number" min="0" step="0.01" value={drawerEdit.value} aria-label="Minimum spend"
                           onChange={e => setDrawerEdit({ field: "minimumSpend", value: e.target.value })}
                           onKeyDown={drawerEditKeys("minimumSpend")}
                           placeholder="e.g. 2500" className="h-8 text-xs flex-1 min-w-[7rem]" autoFocus />
@@ -10423,9 +10476,12 @@ export default function Dashboard() {
                       )}
                     </div>
                     {drawerEdit?.field === "email" ? (
+                      <>
                       <div className="flex items-center gap-1 mt-1">
-                        <Input type="email" value={drawerEdit.value}
-                          onChange={e => setDrawerEdit({ field: "email", value: e.target.value })}
+                        <Input id="drawer-email-input" type="email" value={drawerEdit.value} aria-label="Email"
+                          aria-invalid={drawerEmailError || undefined}
+                          aria-describedby={drawerEmailError ? "drawer-email-error" : undefined}
+                          onChange={e => { setDrawerEdit({ field: "email", value: e.target.value }); setDrawerEmailError(false); }}
                           onKeyDown={drawerEditKeys("email")}
                           className="h-8 text-xs flex-1" autoFocus />
                         <button onClick={() => saveDrawerField("email", drawerEdit.value)}
@@ -10433,6 +10489,8 @@ export default function Dashboard() {
                         <button onClick={() => setDrawerEdit(null)}
                           className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
+                      {drawerEmailError && <p id="drawer-email-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{BAD_EMAIL_MSG}</p>}
+                      </>
                     ) : (
                       <a href={`mailto:${selectedBooking.email}`}
                         className="block font-dm text-sm text-forest underline decoration-forest/30 underline-offset-2 hover:decoration-forest truncate">
@@ -10518,12 +10576,12 @@ export default function Dashboard() {
                   enquiry looks the same however you open it. */}
               {selectedBooking._isLead && !isStaff && (
                 <div className="border border-gold/30 bg-white p-3">
-                  <h3 className="font-bebas tracking-widest text-xs text-ink/70 mb-2">ENQUIRY SOURCE</h3>
+                  <h3 id="drawer-source-heading" className="font-bebas tracking-widest text-xs text-ink/70 mb-2">ENQUIRY SOURCE</h3>
                   <Select
                     value={selectedBooking.source ?? ""}
                     onValueChange={(v) => updateLeadSource.mutate({ id: selectedBooking.id, source: v })}
                   >
-                    <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0 font-dm text-sm">
+                    <SelectTrigger aria-labelledby="drawer-source-heading" className="rounded-none border border-gold/30 focus:ring-0 font-dm text-sm">
                       <SelectValue placeholder="Select source…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -10576,7 +10634,7 @@ export default function Dashboard() {
                           </div>
                           {drawerEdit?.field === field ? (
                             <div className="flex items-center gap-1 mt-1 flex-wrap">
-                              <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                              <Input type="number" min="0" step="0.01" value={drawerEdit.value} aria-label={label}
                                 onChange={e => setDrawerEdit({ field, value: e.target.value })}
                                 onKeyDown={drawerEditKeys(field)}
                                 className="h-8 text-sm w-28" autoFocus />
@@ -10984,17 +11042,19 @@ export default function Dashboard() {
                         value={drawerNewPayment.amount}
                         onChange={e => setDrawerNewPayment(p => ({ ...p, amount: e.target.value }))}
                         placeholder="Amount (NZD)"
+                        aria-label="Amount (NZD)"
                         className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
                       />
                       <Input
                         type="date"
                         value={drawerNewPayment.paidAt}
                         onChange={e => setDrawerNewPayment(p => ({ ...p, paidAt: e.target.value }))}
+                        aria-label="Date received"
                         className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <select value={drawerNewPayment.type} onChange={e => setDrawerNewPayment(p => ({ ...p, type: e.target.value }))}
+                      <select value={drawerNewPayment.type} onChange={e => setDrawerNewPayment(p => ({ ...p, type: e.target.value }))} aria-label="Payment type"
                         className="border border-gold/30 bg-white text-xs px-2 py-1.5 h-8 focus:outline-none focus:border-forest">
                         <option value="deposit">Deposit</option>
                         <option value="partial">Partial</option>
@@ -11002,7 +11062,7 @@ export default function Dashboard() {
                         <option value="refund">Refund</option>
                         <option value="other">Other</option>
                       </select>
-                      <select value={drawerNewPayment.method} onChange={e => setDrawerNewPayment(p => ({ ...p, method: e.target.value }))}
+                      <select value={drawerNewPayment.method} onChange={e => setDrawerNewPayment(p => ({ ...p, method: e.target.value }))} aria-label="Payment method"
                         className="border border-gold/30 bg-white text-xs px-2 py-1.5 h-8 focus:outline-none focus:border-forest">
                         <option value="bank_transfer">Bank Transfer</option>
                         <option value="eftpos">EFTPOS</option>
@@ -11015,6 +11075,7 @@ export default function Dashboard() {
                       value={drawerNewPayment.notes}
                       onChange={e => setDrawerNewPayment(p => ({ ...p, notes: e.target.value }))}
                       placeholder="Notes (optional)"
+                      aria-label="Payment notes"
                       className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
                     />
                     <button
@@ -11257,32 +11318,32 @@ export default function Dashboard() {
           </DialogHeader>
           <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined, minSpendWeekend: spaceForm.minSpendWeekend ? parseFloat(spaceForm.minSpendWeekend) : undefined, packagesFromPp: spaceForm.packagesFromPp ? parseFloat(spaceForm.packagesFromPp) : undefined, showPricingOnForm: spaceForm.showPricingOnForm, color: spaceForm.color || undefined }); }} className="space-y-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
-              <Input required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
+              <label htmlFor="space-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
+              <Input id="space-name" required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. The Main Dining Room" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
-                <Input type="number" value={spaceForm.minCapacity} onChange={e => setSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
+                <label htmlFor="space-min-capacity" className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
+                <Input id="space-min-capacity" type="number" value={spaceForm.minCapacity} onChange={e => setSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
                   placeholder="e.g. 20" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
-                <Input type="number" value={spaceForm.maxCapacity} onChange={e => setSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
+                <label htmlFor="space-max-capacity" className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
+                <Input id="space-max-capacity" type="number" value={spaceForm.maxCapacity} onChange={e => setSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
                   placeholder="e.g. 120" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
-              <Input type="number" value={spaceForm.minSpend} onChange={e => setSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
+              <label htmlFor="space-min-spend" className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
+              <Input id="space-min-spend" type="number" value={spaceForm.minSpend} onChange={e => setSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="e.g. 2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <SpacePricingFields form={spaceForm} setForm={setSpaceForm} />
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
+              <label htmlFor="space-colour" className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
               <div className="flex items-center gap-2.5">
-                <input type="color" aria-label="Calendar colour for this space"
+                <input id="space-colour" type="color" aria-label="Calendar colour for this space"
                   value={spaceForm.color || autoSpaceColor(spaceForm.name) || '#2f5488'}
                   onChange={e => setSpaceForm(f => ({ ...f, color: e.target.value }))}
                   className="w-10 h-9 p-0.5 border border-gold/30 rounded cursor-pointer bg-white" />
@@ -11295,8 +11356,8 @@ export default function Dashboard() {
               <p className="font-dm text-xs text-sage/60 mt-1">Colour-codes this space's events on the calendar.</p>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-              <Textarea value={spaceForm.description} onChange={e => setSpaceForm(f => ({ ...f, description: e.target.value }))}
+              <label htmlFor="space-description" className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+              <Textarea id="space-description" value={spaceForm.description} onChange={e => setSpaceForm(f => ({ ...f, description: e.target.value }))}
                 rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
             </div>
             <button type="submit" disabled={createSpace.isPending}
@@ -11317,32 +11378,32 @@ export default function Dashboard() {
           </DialogHeader>
           <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null, minSpendWeekend: editSpaceForm.minSpendWeekend ? parseFloat(editSpaceForm.minSpendWeekend) : null, packagesFromPp: editSpaceForm.packagesFromPp ? parseFloat(editSpaceForm.packagesFromPp) : null, showPricingOnForm: editSpaceForm.showPricingOnForm, color: editSpaceForm.color || null }); }} className="space-y-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
-              <Input required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
+              <label htmlFor="edit-space-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
+              <Input id="edit-space-name" required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="The Main Dining Room" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
-                <Input type="number" value={editSpaceForm.minCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
+                <label htmlFor="edit-space-min-capacity" className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
+                <Input id="edit-space-min-capacity" type="number" value={editSpaceForm.minCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
                   placeholder="20" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
-                <Input type="number" value={editSpaceForm.maxCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
+                <label htmlFor="edit-space-max-capacity" className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
+                <Input id="edit-space-max-capacity" type="number" value={editSpaceForm.maxCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
                   placeholder="120" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
               </div>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
-              <Input type="number" value={editSpaceForm.minSpend} onChange={e => setEditSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
+              <label htmlFor="edit-space-min-spend" className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
+              <Input id="edit-space-min-spend" type="number" value={editSpaceForm.minSpend} onChange={e => setEditSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <SpacePricingFields form={editSpaceForm} setForm={setEditSpaceForm} />
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
+              <label htmlFor="edit-space-colour" className="font-bebas text-xs tracking-widest text-sage block mb-1">CALENDAR COLOUR</label>
               <div className="flex items-center gap-2.5">
-                <input type="color" aria-label="Calendar colour for this space"
+                <input id="edit-space-colour" type="color" aria-label="Calendar colour for this space"
                   value={editSpaceForm.color || autoSpaceColor(editSpaceForm.name) || '#2f5488'}
                   onChange={e => setEditSpaceForm(f => ({ ...f, color: e.target.value }))}
                   className="w-10 h-9 p-0.5 border border-gold/30 rounded cursor-pointer bg-white" />
@@ -11355,8 +11416,8 @@ export default function Dashboard() {
               <p className="font-dm text-xs text-sage/60 mt-1">Colour-codes this space's events on the calendar.</p>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-              <Textarea value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}
+              <label htmlFor="edit-space-description" className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+              <Textarea id="edit-space-description" value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}
                 rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
             </div>
             <button type="submit" disabled={updateSpace.isPending}
@@ -11455,7 +11516,7 @@ export default function Dashboard() {
                   onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
                   spaces={spaces} invalid={quickCreateSpaceError} />
               ) : (
-                <Input value={quickCreateForm.spaceName}
+                <Input value={quickCreateForm.spaceName} aria-label="Space"
                   onChange={e => { setQuickCreateForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setQuickCreateSpaceError(false); }}
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                   aria-invalid={quickCreateSpaceError}
@@ -11556,9 +11617,9 @@ export default function Dashboard() {
 
               {/* Week picker + load button */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">WEEK STARTING (MONDAY)</label>
+                <label htmlFor="weekly-week-start" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">WEEK STARTING (MONDAY)</label>
                 <div className="flex gap-2">
-                  <input type="date" value={weeklyWeekStart}
+                  <input id="weekly-week-start" type="date" value={weeklyWeekStart}
                     onChange={e => { setWeeklyWeekStart(e.target.value); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
                     className="flex-1 border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
                   <button
@@ -11600,16 +11661,16 @@ export default function Dashboard() {
 
               {/* Subject */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SUBJECT</label>
-                <input type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
+                <label htmlFor="weekly-subject" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SUBJECT</label>
+                <input id="weekly-subject" type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
                   placeholder="Staff Briefing — Weekly Runsheets"
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
               </div>
 
               {/* Body */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EMAIL BODY</label>
-                <textarea rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
+                <label htmlFor="weekly-body" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EMAIL BODY</label>
+                <textarea id="weekly-body" rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-y"
                   placeholder="Email body will auto-fill once events are loaded…" />
               </div>
@@ -11620,8 +11681,9 @@ export default function Dashboard() {
                 if (sigs.length === 0) return null;
                 return (
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <label htmlFor="weekly-signature" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
                     <select
+                      id="weekly-signature"
                       value={weeklySigId}
                       onChange={e => setWeeklySigId(e.target.value)}
                       className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest bg-white"
@@ -11682,11 +11744,11 @@ export default function Dashboard() {
                 )}
                 {/* Add to saved list */}
                 <div className="border-t border-gold/20 px-3 py-2.5 space-y-2">
-                  <div className="font-bebas tracking-widest text-[11px] text-ink/65">ADD TO LIST</div>
+                  <label htmlFor="weekly-new-staff-name" className="block font-bebas tracking-widest text-[11px] text-ink/65">ADD TO LIST</label>
                   <div className="flex gap-1.5">
-                    <input value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
+                    <input id="weekly-new-staff-name" aria-label="Add to list: name" value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
                       placeholder="Name" className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
-                    <input value={weeklyNewStaffEmail} onChange={e => setWeeklyNewStaffEmail(e.target.value)}
+                    <input aria-label="Add to list: email" value={weeklyNewStaffEmail} onChange={e => setWeeklyNewStaffEmail(e.target.value)}
                       placeholder="email@venue.co.nz" type="email"
                       className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
                     <button
@@ -11703,8 +11765,8 @@ export default function Dashboard() {
 
               {/* Extra ad-hoc emails */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/65">(this send only)</span></label>
-                <textarea value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
+                <label htmlFor="weekly-extra-emails" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/65">(this send only)</span></label>
+                <textarea id="weekly-extra-emails" value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
                   placeholder="extra1@example.com, extra2@example.com"
                   rows={2}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-none" />
@@ -11860,7 +11922,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <label htmlFor={`${addEnquiryFormId}-phone`} className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
-                  <Input id={`${addEnquiryFormId}-phone`} value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
+                  <Input id={`${addEnquiryFormId}-phone`} type="tel" value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="021 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
@@ -11933,7 +11995,7 @@ export default function Dashboard() {
                     onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
                     spaces={spaces} invalid={addEnquirySpaceError} />
                 ) : (
-                  <Input value={addEnquiryForm.spaceName}
+                  <Input value={addEnquiryForm.spaceName} aria-label="Space"
                     onChange={e => { setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setAddEnquirySpaceError(false); }}
                     placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                     aria-invalid={addEnquirySpaceError}

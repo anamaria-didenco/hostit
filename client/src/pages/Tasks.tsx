@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -63,26 +63,41 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<TaskFormValues>(initial);
+  // Shown at the field (it was only a 4-second toast, with nothing marked).
+  const [titleError, setTitleError] = useState("");
+  const titleRef = useRef<HTMLInputElement>(null);
+  const fid = useId();
   const submit = () => {
-    if (!form.title.trim()) { toast.error("Title is required"); return; }
+    if (!form.title.trim()) {
+      setTitleError("Give the task a title.");
+      titleRef.current?.focus();
+      return;
+    }
     onSubmit(form);
   };
   return (
     <div className={`dante-card p-5 space-y-3 ${className}`}>
       <h2 className="font-bebas tracking-widest text-xs text-sage">{heading}</h2>
       <div>
-        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TITLE *</label>
+        <label htmlFor={`${fid}-title`} className="font-bebas text-xs tracking-widest text-sage block mb-1">TITLE *</label>
         <Input
+          id={`${fid}-title`}
+          ref={titleRef}
           value={form.title}
-          onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+          onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setTitleError(""); }}
           placeholder="e.g. Send proposal to Sarah"
+          aria-required="true"
+          aria-invalid={titleError ? true : undefined}
+          aria-describedby={titleError ? `${fid}-title-error` : undefined}
           className="rounded-none border-gold/30 focus-visible:ring-0 focus-visible:border-burgundy"
           onKeyDown={e => e.key === "Enter" && submit()}
         />
+        {titleError && <p id={`${fid}-title-error`} role="alert" className="font-dm text-xs text-red-700 mt-1">{titleError}</p>}
       </div>
       <div>
-        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+        <label htmlFor={`${fid}-description`} className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
         <Textarea
+          id={`${fid}-description`}
           value={form.description}
           onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
           placeholder="Optional notes..."
@@ -92,8 +107,9 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DUE DATE</label>
+          <label htmlFor={`${fid}-due`} className="font-bebas text-xs tracking-widest text-sage block mb-1">DUE DATE</label>
           <input
+            id={`${fid}-due`}
             type="date"
             value={form.dueDate}
             onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
@@ -101,9 +117,9 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
           />
         </div>
         <div>
-          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
+          <label htmlFor={`${fid}-priority`} className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
           <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v as any }))}>
-            <SelectTrigger className="rounded-none border-gold/30 focus:ring-0 focus:border-burgundy">
+            <SelectTrigger id={`${fid}-priority`} className="rounded-none border-gold/30 focus:ring-0 focus:border-burgundy">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -317,7 +333,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                 }`}
               >
                 <button
-                  aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
+                  aria-label={`${task.completed ? "Mark task incomplete" : "Mark task complete"}: ${task.title}`}
                   onClick={() => completeTask(task, !task.completed)}
                   disabled={isStaff}
                   className="mt-0.5 flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-full text-sage hover:text-burgundy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors disabled:pointer-events-none"
@@ -390,7 +406,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                     }}
                     className="flex-shrink-0 -m-2 p-2.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                     title="Edit task"
-                    aria-label="Edit task"
+                    aria-label={`Edit task: ${task.title}`}
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
@@ -400,7 +416,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                     onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
                     className="flex-shrink-0 -m-2 p-2.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                     title="Delete task"
-                    aria-label="Delete task"
+                    aria-label={`Delete task: ${task.title}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

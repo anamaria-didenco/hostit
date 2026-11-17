@@ -1,4 +1,5 @@
 import React from "react";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { Download, ExternalLink, X } from "lucide-react";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
@@ -45,8 +46,8 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
     try {
       const d = frameRef.current?.contentDocument;
       if (!d) return;
-      if (id === null) d.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
-      else d.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (id === null) d.defaultView?.scrollTo({ top: 0, behavior: scrollBehavior() });
+      else d.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     } catch { /* ignore */ }
   };
   React.useEffect(() => {

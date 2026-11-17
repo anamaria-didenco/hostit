@@ -403,6 +403,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <button onClick={onAction}
                     className="inline-flex items-center justify-center gap-1.5 h-9 w-full px-3 rounded-[6px] font-sans text-[13px] font-bold whitespace-nowrap border-[1.5px] transition-colors hover:border-primary"
+                    aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                     style={action.primary
                       ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                       : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
@@ -438,6 +439,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     </div>
                     <button onClick={onAction}
                       className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[6px] font-sans text-[14px] font-bold whitespace-nowrap border-[1.5px] flex-shrink-0"
+                      aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                       style={action.primary
                         ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                         : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>

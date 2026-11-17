@@ -141,7 +141,7 @@ export default function EmbedDocs() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900" style={{ fontFamily: "system-ui, sans-serif" }}>
+    <main className="min-h-screen bg-gray-50 text-gray-900" style={{ fontFamily: "system-ui, sans-serif" }}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
         <header className="mb-8">
           <div className="text-xs font-bold uppercase tracking-widest text-[#2f5488] mb-1">VenueFlowHQ</div>
@@ -175,7 +175,6 @@ export default function EmbedDocs() {
                 <label className="flex flex-col gap-1">
                   <span className="text-xs font-semibold text-gray-600">Max width (px, or none)</span>
                   <input value={maxW} onChange={e => setMaxW(e.target.value.replace(/[^0-9a-z]/gi, ""))} placeholder="520"
-                    aria-label="Maximum width in pixels, or none"
                     className="border border-gray-300 rounded px-2 py-1.5 text-sm font-mono w-full focus:outline-none focus:border-gray-500" />
                 </label>
                 <div className="flex flex-col gap-2 justify-end text-sm">
@@ -190,6 +189,8 @@ export default function EmbedDocs() {
                   <span className="text-xs font-semibold text-gray-600">Your embed code</span>
                   <button onClick={() => { navigator.clipboard?.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
                     className="text-xs font-semibold text-[#2f5488] hover:underline">{copied ? "Copied!" : "Copy"}</button>
+                  {/* The button's text change isn't announced on its own. */}
+                  <span role="status" className="sr-only">{copied ? "Embed code copied" : ""}</span>
                 </div>
                 <pre className="bg-gray-900 text-gray-100 rounded-lg p-3 text-[12px] overflow-x-auto"><code>{snippet}</code></pre>
               </div>
@@ -255,6 +256,6 @@ export default function EmbedDocs() {
 
         <footer className="text-xs text-gray-600 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
       </div>
-    </div>
+    </main>
   );
 }

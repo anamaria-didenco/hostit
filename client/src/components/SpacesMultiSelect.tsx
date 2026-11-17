@@ -51,7 +51,7 @@ export function SpacesMultiSelect({
             : "border-gold/40 text-ink/80 hover:border-forest/40 hover:text-forest"
         } ${isLegacy ? "border-dashed" : ""}`}
       >
-        {on ? "✓ " : ""}{label}
+        {on && <span aria-hidden="true">✓ </span>}{label}
       </button>
     );
   };
@@ -72,7 +72,7 @@ export function SpacesMultiSelect({
             isFullVenue ? "border-forest bg-forest text-cream" : "border-forest/50 text-forest hover:bg-forest/10"
           }`}
         >
-          {isFullVenue ? "✓ FULL VENUE" : "FULL VENUE"}
+          {isFullVenue && <span aria-hidden="true">✓ </span>}FULL VENUE
         </button>
       )}
       {saved.map(s => chip(s.name, `${s.name}${s.capacitySeated ? ` (${s.capacitySeated} seated)` : ""}`))}
