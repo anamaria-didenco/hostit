@@ -6318,7 +6318,7 @@ export default function Dashboard() {
                   if (Object.keys(errors).length) {
                     setVenueErrors(errors);
                     setVenueSettingsSection("details");
-                    toast.error("Not saved. Something in Basic Details needs fixing first.");
+                    toast.error("Not saved. Something in Basic Details needs fixing first.", { id: "venue-details-invalid", duration: 4000 });
                     setTimeout(() => focusFirstError(errors, VENUE_DETAIL_FIELDS), 0);
                     return;
                   }

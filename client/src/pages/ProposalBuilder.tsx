@@ -552,7 +552,8 @@ export default function ProposalBuilder() {
     const formError = locked ? null : titleMissing ?? moneyError;
     if (formError) {
       if (!opts.auto) {
-        toast.error(formError);
+        // The error is also shown at the field, so the toast needn't stay until closed.
+        toast.error(formError, { id: "proposal-form-invalid", duration: 4000 });
         (titleMissing ? document.getElementById("pb-title") : taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
       }
       return null;

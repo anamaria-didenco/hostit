@@ -181,6 +181,9 @@ function signedInAgain() {
   if (!noticeShown) return;
   setKeeping(false);
   failedQueries.clear();
+  // Error toasts from saves that failed while signed out ("Failed to add record")
+  // are out of date now, and an error toast can stay until it is closed.
+  for (const t of toast.getToasts()) if ("type" in t && t.type === "error") toast.dismiss(t.id);
   setNotice("signed-in-again");
   setTimeout(() => { if (notice === "signed-in-again") setNotice(null); }, 8000);
 }
