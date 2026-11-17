@@ -1,9 +1,9 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { DollarSign, X, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { currency } from "@/lib/money";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 import { noonInTzMs, ymdInTz } from "@shared/automatedTasks";
 
 /**
@@ -51,6 +51,7 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
   const [result, setResult] = React.useState<Result | null>(null);
   const prefilled = React.useRef(false);
   const amountRef = React.useRef<HTMLInputElement>(null);
+  const resultRef = React.useRef<HTMLParagraphElement>(null);
 
   // Deposit while it is due; otherwise the outstanding balance as the final payment.
   React.useEffect(() => {
@@ -70,15 +71,9 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
     }
   }, [booking, summary]);
 
-  React.useEffect(() => { amountRef.current?.focus(); }, []);
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose(); }
-    };
-    // Capture phase, so the drawer underneath doesn't also close on Escape.
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  // The form is swapped for the result card: say what happened and keep
+  // keyboard focus in the dialog (it was lost to <body>).
+  React.useEffect(() => { if (result) resultRef.current?.focus(); }, [result]);
 
   const add = trpc.payments.add.useMutation({
     onSuccess: async (r: any) => {
@@ -123,10 +118,10 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
 
   const name = booking ? `${(booking as any).firstName ?? ""} ${(booking as any).lastName ?? ""}`.trim() : "";
 
-  return createPortal(
-    <div className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="record-payment-title"
+  // Escape closes only this, not the drawer underneath (Radix marks the key handled).
+  return (
+    <DialogShell onClose={onClose} className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+      <DialogShellContent aria-labelledby="record-payment-title" initialFocus={amountRef}
         className="bg-cream border-2 border-forest w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="bg-forest-dark px-5 py-3.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -143,7 +138,7 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
           <div className="p-5 space-y-4" role="status">
             <div className="flex items-start gap-2">
               <CheckCircle className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
-              <p className="font-dm text-sm text-ink">
+              <p ref={resultRef} tabIndex={-1} className="font-dm text-sm text-ink">
                 {result.fullyPaid ? "Recorded. This event is paid in full." : "Payment recorded."}
               </p>
             </div>
@@ -211,9 +206,8 @@ export function RecordPaymentDialog({ bookingId, onClose, onRecorded }: {
             </div>
           </form>
         )}
-      </div>
-    </div>,
-    document.body
+      </DialogShellContent>
+    </DialogShell>
   );
 }
 
