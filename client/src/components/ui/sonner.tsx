@@ -34,16 +34,27 @@ function useBottomBarClearance(showing: boolean) {
       const w = window.innerWidth, h = window.innerHeight;
       // Where the stack sits: full width up to Sonner's 600px breakpoint, else the bottom-right corner.
       const xs = w <= 600 ? [16, w / 2, w - 16] : [w - 372, w - 200, w - 32];
+      // A bar can sit on top of another one (on a phone the bulk-select
+      // toolbar sits just above the tab bar), so once a bar is found, look
+      // again just above it, or an error toast covers that bar's buttons.
       let top = h;
-      for (const x of xs) {
-        for (const y of [h - 2, h - 32]) {
-          let el = document.elementsFromPoint(x, y).find(e => !e.closest("[data-sonner-toaster]")) ?? null;
-          while (el && el !== document.body && !/^(fixed|sticky)$/.test(getComputedStyle(el).position)) el = el.parentElement;
-          if (!el || el === document.body || getComputedStyle(el).bottom === "auto") continue;
-          const r = el.getBoundingClientRect();
-          // A bar, not a drawer or overlay that fills the screen.
-          if (r.bottom >= h - 40 && r.height <= h / 2) top = Math.min(top, r.top);
+      let ys = [h - 2, h - 32];
+      for (let round = 0; round < 4; round++) {
+        let next = top;
+        for (const x of xs) {
+          for (const y of ys) {
+            if (y < 0) continue;
+            let el = document.elementsFromPoint(x, y).find(e => !e.closest("[data-sonner-toaster]")) ?? null;
+            while (el && el !== document.body && !/^(fixed|sticky)$/.test(getComputedStyle(el).position)) el = el.parentElement;
+            if (!el || el === document.body || getComputedStyle(el).bottom === "auto") continue;
+            const r = el.getBoundingClientRect();
+            // A bar, not a drawer or overlay that fills the screen.
+            if (r.bottom >= top - 40 && r.height <= h / 2) next = Math.min(next, r.top);
+          }
         }
+        if (next >= top) break;
+        top = next;
+        ys = [top - 2, top - 16];
       }
       setClearance(Math.max(0, Math.round(h - top)));
     };
