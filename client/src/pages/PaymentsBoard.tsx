@@ -1059,7 +1059,10 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
         </label>
       )}
       {/* Event info */}
-      <button onClick={onOpen} className="text-left min-w-0 lg:w-64 flex-shrink-0 group" aria-label={`Open ${row.name}, ${fmtDate(row.eventDate)}`}>
+      {/* Named by what it shows (name, date, type, space, guests): an
+          "Open …" label didn't contain the visible words, so voice control
+          ("click Grace Holloway") couldn't reach it. */}
+      <button onClick={onOpen} className="text-left min-w-0 lg:w-64 flex-shrink-0 group">
         <div className="font-cormorant text-base font-semibold text-ink truncate leading-tight group-hover:underline">{row.name}</div>
         <div className="flex items-center gap-1.5 font-dm text-xs text-sage mt-0.5 flex-wrap">
           <CalendarDays className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
