@@ -253,7 +253,7 @@ export default function EmbedDocs() {
           </ul>
         </section>
 
-        <footer className="text-xs text-gray-400 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
+        <footer className="text-xs text-gray-600 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
       </div>
     </div>
   );
