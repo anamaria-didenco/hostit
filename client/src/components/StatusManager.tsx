@@ -369,14 +369,16 @@ function StatusEditor({ initialStatuses, onSaved, retried }: { initialStatuses: 
 
         {/* Add new status */}
         {showAdd ? (
-          <div className="mt-3 border border-dashed border-[#8D957E]/40 rounded-xl p-4 space-y-3">
+          // Escape anywhere in the panel closes it, as in the edit row (it worked only in the name box).
+          <div className="mt-3 border border-dashed border-[#8D957E]/40 rounded-xl p-4 space-y-3"
+            onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); closeAdd(false); } }}>
             <div className="flex gap-2">
               <input
                 autoFocus
                 aria-label="New status name"
                 value={addLabel}
                 onChange={e => setAddLabel(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") addStatus(); if (e.key === "Escape") closeAdd(false); }}
+                onKeyDown={e => { if (e.key === "Enter") addStatus(); }}
                 placeholder="Status name (e.g. Site Visit)"
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-[#8D957E]/40"
               />
