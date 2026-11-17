@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronUp, ChevronDown, Pencil, Check, X } from "lucide-react";
+import { DEFAULT_STATUSES, holdColourNote, keepHoldDistinct, parseCustomStatuses, statusEditorSeed, type StatusDef } from "@shared/enquiryStatuses";
 
-export type StatusDef = {
-  key: string;
-  label: string;
-  colorId: string;
-};
+// The status list and its rules live in shared/ so the server tests can check them.
+export { DEFAULT_STATUSES, parseCustomStatuses, type StatusDef };
 
 export const COLOR_PRESETS = [
   { id: "blue",    label: "VenueFlow",classes: "border-[#2f5488] bg-[#e8edf6] text-[#2f5488]",          swatch: "#2f5488",  calClasses: "bg-[#2f5488] text-white",          barClasses: "bg-[#2f5488]",    dayClasses: "border-l-4 border-[#2f5488] bg-[#e8edf6]"   },
@@ -24,18 +23,6 @@ export const COLOR_PRESETS = [
   { id: "teal",    label: "Teal",    classes: "border-teal-400 bg-teal-100 text-teal-800",             swatch: "#2dd4bf",  calClasses: "bg-teal-700 text-white",           barClasses: "bg-teal-400",     dayClasses: "border-l-4 border-teal-400 bg-teal-50"      },
   { id: "red",     label: "Red",     classes: "border-red-400 bg-red-100 text-red-800",                swatch: "#f87171",  calClasses: "bg-red-700 text-white",            barClasses: "bg-red-400",      dayClasses: "border-l-4 border-red-400 bg-red-50"        },
   { id: "gray",    label: "Gray",    classes: "border-gray-400 bg-gray-100 text-gray-700",             swatch: "#9ca3af",  calClasses: "bg-gray-300 text-gray-800",        barClasses: "bg-gray-300",     dayClasses: "border-l-4 border-gray-400 bg-gray-50"      },
-];
-
-export const DEFAULT_STATUSES: StatusDef[] = [
-  { key: "new",           label: "New Enquiry",   colorId: "blue"    },
-  { key: "contacted",     label: "Contacted",     colorId: "sky"     },
-  { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
-  { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
-  // A date hold (server/holds.ts): the date is kept for the client until an expiry.
-  { key: "tentative",     label: "On Hold",       colorId: "purple"  },
-  { key: "booked",        label: "Confirmed",     colorId: "forest"  },
-  { key: "finished",      label: "Finished",      colorId: "gray"    },
-  { key: "lost",          label: "Lost",          colorId: "red"     },
 ];
 
 export function getStatusClasses(colorId: string): string {
@@ -86,39 +73,56 @@ export function statusSwatch(statusKey: string | null | undefined, statuses?: St
   return COLOR_PRESETS.find(c => c.id === id)?.swatch ?? "#9ca3af";
 }
 
-export function parseCustomStatuses(raw: string | null | undefined): StatusDef[] {
-  if (!raw) return DEFAULT_STATUSES;
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return keepHoldDistinct(parsed);
-  } catch {}
-  return DEFAULT_STATUSES;
-}
-
-// Proposal Sent and On Hold used to share the yellow family, so on the calendar,
-// the legend and the lists you couldn't tell a held date from a quote out with
-// the client. A venue's saved list that still has them in the same family gets
-// On Hold moved to purple (the new default). Any other colour a venue chose for
-// On Hold is left alone, and it can be changed again in Settings → Statuses.
-const YELLOW_FAMILY = new Set(["yellow", "amber"]);
-function keepHoldDistinct(list: StatusDef[]): StatusDef[] {
-  const proposal = list.find(s => s.key === "proposal_sent");
-  const hold = list.find(s => s.key === "tentative");
-  if (!proposal || !hold) return list;
-  if (!YELLOW_FAMILY.has(proposal.colorId) || !YELLOW_FAMILY.has(hold.colorId)) return list;
-  return list.map(s => (s.key === "tentative" ? { ...s, colorId: "purple" } : s));
-}
-
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
+/**
+ * The 14 colours as a radio group: one Tab stop, arrow keys move and choose
+ * (as with any set of radio buttons), and each swatch says its colour name and
+ * whether it is chosen.
+ */
+function ColourPicker({ value, onChange, label }: { value: string; onChange: (id: string) => void; label: string }) {
+  const current = Math.max(0, COLOR_PRESETS.findIndex(c => c.id === value));
+  return (
+    <div role="radiogroup" aria-label={label} onKeyDown={onArrowChoose} className="flex gap-1.5 flex-wrap">
+      {COLOR_PRESETS.map((cp, idx) => {
+        const checked = idx === current;
+        return (
+          <button
+            key={cp.id}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            aria-label={cp.label}
+            tabIndex={rovingTabIndex(checked, idx, true)}
+            title={cp.label}
+            onClick={() => onChange(cp.id)}
+            className={`w-6 h-6 rounded-full border-2 transition ${checked ? "border-gray-800 scale-125 shadow" : "border-transparent hover:scale-110"}`}
+            style={{ backgroundColor: cp.swatch }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 interface Props {
-  initialStatuses: StatusDef[];
+  /** The venue's settings row from venue.get: undefined while it loads, null when the venue has none yet. */
+  venueSettings: { customStatuses?: string | null } | null | undefined;
   onSaved: (statuses: StatusDef[]) => void;
 }
 
-export default function StatusManager({ initialStatuses, onSaved }: Props) {
+export default function StatusManager({ venueSettings, onSaved }: Props) {
+  // Never start the editor before the saved list has arrived: every change saves the
+  // whole list, so an editor seeded with the defaults (opening this screen from a link
+  // or a reload) wrote them over the venue's real statuses.
+  const seed = statusEditorSeed(venueSettings);
+  if (!seed) return <p className="text-sm text-gray-500" role="status">Loading statuses…</p>;
+  return <StatusEditor initialStatuses={seed} onSaved={onSaved} />;
+}
+
+function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef[]; onSaved: (statuses: StatusDef[]) => void }) {
   const [statuses, setStatuses] = useState<StatusDef[]>(initialStatuses);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -127,18 +131,31 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
   const [addColorId, setAddColorId] = useState("sky");
   const [showAdd, setShowAdd] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Read out after a reorder, which is otherwise silent for a screen-reader user.
+  const [announcement, setAnnouncement] = useState("");
+  // Row buttons by "<status key>:<edit|up|down>", so focus can be put back where the
+  // user was after a row is saved, moved or deleted (otherwise it falls to the page).
+  const rowButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+  const focusRowButton = (key: string, which: "edit" | "up" | "down") =>
+    requestAnimationFrame(() => rowButtons.current[`${key}:${which}`]?.focus());
 
   const updateVenue = trpc.venue.update.useMutation({
-    onSuccess: () => {
-      toast.success("Statuses saved");
-      setDirty(false);
-      onSaved(statuses);
-    },
     onError: (e) => toast.error(e.message || "Failed to save"),
   });
 
   function save(updated: StatusDef[]) {
-    updateVenue.mutate({ customStatuses: JSON.stringify(updated) });
+    // On Hold can't share Gold/Yellow with Proposal Sent (see keepHoldDistinct). Save the
+    // colours that will really be shown, and say so, rather than "saved" and a quiet revert.
+    const note = holdColourNote(updated);
+    const toSave = keepHoldDistinct(updated);
+    if (toSave !== updated) setStatuses(toSave);
+    updateVenue.mutate({ customStatuses: JSON.stringify(toSave) }, {
+      onSuccess: () => {
+        toast.success("Statuses saved", note ? { description: note } : undefined);
+        setDirty(false);
+        onSaved(toSave);
+      },
+    });
   }
 
   function startEdit(s: StatusDef) {
@@ -147,8 +164,15 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
     setEditColorId(s.colorId);
   }
 
+  function cancelEdit() {
+    const key = editingKey;
+    setEditingKey(null);
+    if (key) focusRowButton(key, "edit");
+  }
+
   function commitEdit() {
     if (!editLabel.trim()) return;
+    const key = editingKey;
     const updated = statuses.map(s =>
       s.key === editingKey ? { ...s, label: editLabel.trim(), colorId: editColorId } : s
     );
@@ -156,14 +180,28 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
     setEditingKey(null);
     setDirty(true);
     save(updated);
+    if (key) focusRowButton(key, "edit");
   }
 
   function deleteStatus(key: string) {
     if (statuses.length <= 1) { toast.error("You need at least one status."); return; }
+    const idx = statuses.findIndex(s => s.key === key);
+    const label = statuses[idx]?.label ?? key;
+    if (!window.confirm(`Delete the "${label}" status? This saves straight away.`)) return;
     const updated = statuses.filter(s => s.key !== key);
     setStatuses(updated);
     setDirty(true);
     save(updated);
+    const neighbour = updated[Math.min(idx, updated.length - 1)];
+    if (neighbour) focusRowButton(neighbour.key, "edit");
+  }
+
+  function moved(updated: StatusDef[], key: string, preferred: "up" | "down") {
+    const idx = updated.findIndex(s => s.key === key);
+    // Stay on the arrow that was pressed, unless the row reached the end and it is now disabled.
+    const atEnd = preferred === "up" ? idx === 0 : idx === updated.length - 1;
+    focusRowButton(key, atEnd ? (preferred === "up" ? "down" : "up") : preferred);
+    setAnnouncement(`${updated[idx].label} moved to position ${idx + 1} of ${updated.length}.`);
   }
 
   function moveUp(idx: number) {
@@ -173,6 +211,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
     setStatuses(updated);
     setDirty(true);
     save(updated);
+    moved(updated, updated[idx - 1].key, "up");
   }
 
   function moveDown(idx: number) {
@@ -182,6 +221,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
     setStatuses(updated);
     setDirty(true);
     save(updated);
+    moved(updated, updated[idx + 1].key, "down");
   }
 
   function addStatus() {
@@ -197,30 +237,37 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
     save(updated);
   }
 
+  // While a row is being edited: would its colours make On Hold look like Proposal Sent?
+  const editHoldNote = editingKey
+    ? holdColourNote(statuses.map(s => (s.key === editingKey ? { ...s, label: editLabel.trim() || s.label, colorId: editColorId } : s)))
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-dm text-base font-semibold text-ink mb-1">Enquiry Statuses</h3>
+        <h2 className="font-dm text-base font-semibold text-ink mb-1">Enquiry Statuses</h2>
         <p className="text-sm text-gray-500 mb-4">
           Customise the name and colour of each status. Changes apply immediately across the calendar, pipeline, and reports.
         </p>
 
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <ul aria-label="Statuses, in pipeline order" className="border border-gray-200 rounded-xl overflow-hidden">
           {statuses.map((s, idx) => {
             const colorClasses = getStatusClasses(s.colorId);
             const calPreview = getStatusCalClasses(s.colorId);
             const isEditing = editingKey === s.key;
             return (
-              <div key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
-                {/* Order arrows */}
-                <div className="flex flex-col gap-0.5 shrink-0">
-                  <button aria-label="Move status up" onClick={() => moveUp(idx)} disabled={idx === 0}
-                    className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition">
-                    <ChevronUp className="w-3.5 h-3.5" />
+              <li key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
+                {/* Order arrows: 24px targets, dark enough to find (they were 18px at about 1.5:1). */}
+                <div className="flex flex-col shrink-0">
+                  <button type="button" aria-label={`Move ${s.label} up`} onClick={() => moveUp(idx)} disabled={idx === 0}
+                    ref={el => { rowButtons.current[`${s.key}:up`] = el; }}
+                    className="w-6 h-6 inline-flex items-center justify-center rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                    <ChevronUp className="w-4 h-4" />
                   </button>
-                  <button aria-label="Move status down" onClick={() => moveDown(idx)} disabled={idx === statuses.length - 1}
-                    className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition">
-                    <ChevronDown className="w-3.5 h-3.5" />
+                  <button type="button" aria-label={`Move ${s.label} down`} onClick={() => moveDown(idx)} disabled={idx === statuses.length - 1}
+                    ref={el => { rowButtons.current[`${s.key}:down`] = el; }}
+                    className="w-6 h-6 inline-flex items-center justify-center rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                    <ChevronDown className="w-4 h-4" />
                   </button>
                 </div>
 
@@ -236,49 +283,47 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
 
                 {/* Edit form inline */}
                 {isEditing ? (
-                  <div className="flex flex-1 items-center gap-2 flex-wrap">
+                  <div className="flex flex-1 items-center gap-2 flex-wrap"
+                    onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); } }}>
                     <input
                       autoFocus
+                      aria-label={`Name for ${s.label}`}
                       value={editLabel}
                       onChange={e => setEditLabel(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingKey(null); }}
+                      onKeyDown={e => { if (e.key === "Enter") commitEdit(); }}
                       className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#8D957E]/40"
                     />
-                    <div className="flex gap-1.5 flex-wrap">
-                      {COLOR_PRESETS.map(cp => (
-                        <button
-                          key={cp.id}
-                          title={cp.label}
-                          onClick={() => setEditColorId(cp.id)}
-                          className={`w-6 h-6 rounded-full border-2 transition ${editColorId === cp.id ? "border-gray-800 scale-125 shadow" : "border-transparent hover:scale-110"}`}
-                          style={{ backgroundColor: cp.swatch }}
-                        />
-                      ))}
-                    </div>
-                    <button aria-label="Save status" onClick={commitEdit} className="p-1.5 rounded-lg bg-[#8D957E] text-white hover:bg-[#7a8269]"><Check className="w-3.5 h-3.5" /></button>
-                    <button aria-label="Cancel edit" onClick={() => setEditingKey(null)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-700"><X className="w-3.5 h-3.5" /></button>
+                    <ColourPicker value={editColorId} onChange={setEditColorId} label={`Colour for ${s.label}`} />
+                    <button type="button" aria-label={`Save ${s.label}`} onClick={commitEdit} className="p-1.5 rounded-lg bg-[#8D957E] text-white hover:bg-[#7a8269]"><Check className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label="Cancel edit" onClick={cancelEdit} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-700"><X className="w-3.5 h-3.5" /></button>
+                    <p role="status" className="w-full text-xs text-amber-900 empty:hidden">{editHoldNote}</p>
                   </div>
                 ) : (
                   <>
                     {/* The internal key means nothing to a venue and, on a phone, pushed the
                         edit / delete buttons off the end of the row. */}
-                    <span className="hidden sm:block flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
-                    <div className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button aria-label="Edit status" onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+                    <span className="hidden sm:block flex-1 text-xs text-gray-500 font-mono">{s.key}</span>
+                    {/* Always shown: hidden until hover, they could not be found by keyboard
+                        or on a tablet, where there is no hover. */}
+                    <div className="ml-auto flex items-center gap-1">
+                      <button type="button" aria-label={`Edit ${s.label}`} onClick={() => startEdit(s)}
+                        ref={el => { rowButtons.current[`${s.key}:edit`] = el; }}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button aria-label="Delete status" onClick={() => deleteStatus(s.key)}
+                      <button type="button" aria-label={`Delete ${s.label}`} onClick={() => deleteStatus(s.key)}
                         disabled={statuses.length <= 1}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-30 disabled:cursor-not-allowed">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </>
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
+        <p role="status" className="sr-only">{announcement}</p>
 
         {/* Add new status */}
         {showAdd ? (
@@ -286,6 +331,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
             <div className="flex gap-2">
               <input
                 autoFocus
+                aria-label="New status name"
                 value={addLabel}
                 onChange={e => setAddLabel(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addStatus(); if (e.key === "Escape") setShowAdd(false); }}
@@ -295,15 +341,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-500 font-dm">Colour:</span>
-              {COLOR_PRESETS.map(cp => (
-                <button
-                  key={cp.id}
-                  title={cp.label}
-                  onClick={() => setAddColorId(cp.id)}
-                  className={`w-6 h-6 rounded-full border-2 transition ${addColorId === cp.id ? "border-gray-800 scale-125 shadow" : "border-transparent hover:scale-110"}`}
-                  style={{ backgroundColor: cp.swatch }}
-                />
-              ))}
+              <ColourPicker value={addColorId} onChange={setAddColorId} label="Colour for the new status" />
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-xs font-bebas tracking-widest px-2 py-0.5 border ${getStatusClasses(addColorId)}`}>
@@ -333,7 +371,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
       </div>
 
       {updateVenue.isPending && (
-        <p className="text-xs text-gray-400">Saving…</p>
+        <p className="text-xs text-gray-500">Saving…</p>
       )}
     </div>
   );

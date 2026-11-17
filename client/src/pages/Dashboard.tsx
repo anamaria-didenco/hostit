@@ -9426,7 +9426,7 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-500 mb-6">Define the pipeline stages your enquiries move through. Rename, reorder, add or remove stages to match your workflow.</p>
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
                   <StatusManager
-                    initialStatuses={parseCustomStatuses((venueSettings as any)?.customStatuses)}
+                    venueSettings={venueSettings as any}
                     onSaved={() => refetchSettings()}
                   />
                 </div>
