@@ -215,10 +215,13 @@
   }
 
   /* Text boxes that set no border colour of their own get the 3:1 field
-     border instead of the 1.3:1 hairline every element inherits above. */
+     border instead of the 1.3:1 hairline every element inherits above. That
+     includes a class that compiles to nothing (border-gold/30: gold has no
+     opacity steps), which on a select trigger also drops its border-input. */
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
   textarea,
-  select {
+  select,
+  button[data-slot="select-trigger"] {
     border-color: var(--field-border);
   }
 
@@ -578,7 +581,8 @@
   :is(input, textarea, select, button:where([data-slot="select-trigger"])):is(
     .border-border, .border-input, .border-gray-200, .border-gray-300,
     .border-stone-200, .border-stone-300, .border-\[\#e6dccb\], .border-\[\#e3ddd0\],
-    .border-\[\#c9a84c\]\/10, .border-\[\#c9a84c\]\/20, .border-\[\#c9a84c\]\/30
+    .border-\[\#c9a84c\]\/10, .border-\[\#c9a84c\]\/20, .border-\[\#c9a84c\]\/30,
+    .border-gold
   ) {
     border-color: var(--field-border);
   }
