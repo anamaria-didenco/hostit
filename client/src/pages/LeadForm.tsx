@@ -9,7 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
+import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -1408,15 +1408,15 @@ export default function LeadForm() {
     const budgetGuide = field.id === 'budgetRange' ? guidance.budget : null;
     return (
       <>
-        {/* One Tab stop per group; arrow keys move and choose, as radio buttons do.
-            Clicking (or Space on) the chosen pill still clears it, as before. */}
+        {/* One Tab stop per group; arrow keys move and choose, and Space keeps the
+            choice, as radio buttons do. Clicking the chosen pill still clears it, as before. */}
         <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} onKeyDown={onArrowChoose} className="flex gap-2 flex-wrap items-center">
           {options.map((o, idx) => {
             const isSel = selected === o.value;
             return (
               <button key={o.value} type="button" role="radio" aria-checked={isSel}
                 tabIndex={rovingTabIndex(isSel, idx, options.some(x => x.value === selected))}
-                onClick={() => setForm(p => ({ ...p, [field.id]: isSel ? '' : o.value }))}
+                onClick={e => setForm(p => ({ ...p, [field.id]: clearsChoice(isSel, e) ? '' : o.value }))}
                 className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                 style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
                 {o.label}
@@ -1475,7 +1475,7 @@ export default function LeadForm() {
                   return (
                     <button key={o} type="button" role="radio" aria-checked={isSel}
                       tabIndex={rovingTabIndex(isSel, idx, extra.opts!.includes(form.eventDetail ?? ''))}
-                      onClick={() => setForm(p => ({ ...p, eventDetail: isSel ? '' : o }))}
+                      onClick={e => setForm(p => ({ ...p, eventDetail: clearsChoice(isSel, e) ? '' : o }))}
                       className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                       style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
                       {o}
@@ -1514,7 +1514,7 @@ export default function LeadForm() {
             return (
               <button key={s} type="button" role="radio" aria-checked={isSel}
                 tabIndex={rovingTabIndex(isSel, idx, (SOURCE_OPTIONS as readonly string[]).includes(selected))}
-                onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
+                onClick={e => setForm(p => ({ ...p, source: clearsChoice(isSel, e) ? '' : s }))}
                 className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
                 style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
                 {s}

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { nextIndexForKey } from "@shared/rovingFocus";
 
 export { rovingTabIndex } from "@shared/rovingFocus";
@@ -27,6 +27,15 @@ export function onArrowChoose(e: KeyboardEvent<HTMLElement>) {
     // keys keep focus on the options, as with native tabs and radio buttons.
     requestAnimationFrame(() => { if (el.isConnected && !group.contains(document.activeElement)) el.focus(); });
   }
+}
+
+/**
+ * For a pill group where clicking the chosen pill clears it: true only for a
+ * mouse or touch click on the chosen pill. Space or Enter on it (a click with
+ * detail 0) leaves it chosen, as on a native radio button.
+ */
+export function clearsChoice(isChosen: boolean, e: MouseEvent): boolean {
+  return isChosen && e.detail !== 0;
 }
 
 /**
