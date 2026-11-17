@@ -10,6 +10,7 @@ import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
 import MovedNote from "@/components/MovedNote";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
  * The Option-C enquiries list: one signal-first list where every row leads with
@@ -230,6 +231,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   React.useEffect(() => {
     onRowsChange?.(rows.map((r) => r.lead.id));
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
+  // focus on that row (or the next one) instead of dropping it to the page.
+  const rowsRef = React.useRef<HTMLDivElement>(null);
+  useFocusKeeper(rowsRef);
 
   const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
@@ -317,7 +322,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         )}
 
         {/* Rows */}
-        <div className="flex flex-col gap-2">
+        <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
             <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
           ) : rows.map(({ lead, signal }) => {
