@@ -1190,6 +1190,18 @@ export default function Dashboard() {
     bulkBarHadFocus.current = false;
     if (!document.activeElement || document.activeElement === document.body) document.getElementById('leads-more-actions')?.focus();
   });
+  // "Select multiple" goes with its menu and More actions turns into CANCEL:
+  // focus goes on to SELECT ALL (CANCEL when no rows are listed), not <body>.
+  // CANCEL turns back into More actions, so focus goes there.
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const bulkCancelRef = useRef<HTMLButtonElement>(null);
+  const bulkModeFocus = useRef(false);
+  React.useLayoutEffect(() => {
+    if (!bulkModeFocus.current) return;
+    bulkModeFocus.current = false;
+    if (bulkSelectMode) (selectAllRef.current ?? bulkCancelRef.current)?.focus();
+    else document.getElementById('leads-more-actions')?.focus();
+  }, [bulkSelectMode]);
   // A selection is only ever of rows on screen (enquiryOrder is what the list
   // shows): a tab, search or filter change drops the ones it takes away, so a
   // bulk Delete or Set status can't reach an enquiry that isn't shown.
@@ -4320,7 +4332,7 @@ export default function Dashboard() {
                       </button>
                     )}
                     {bulkSelectMode && leadViewMode !== "kanban" ? (
-                      <button onClick={() => { setBulkSelectMode(false); setSelectedLeadIds(new Set()); }}
+                      <button ref={bulkCancelRef} onClick={() => { bulkModeFocus.current = true; setBulkSelectMode(false); setSelectedLeadIds(new Set()); }}
                         className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border rounded-lg transition-colors bg-forest text-cream border-forest">
                         CANCEL
                       </button>
@@ -4338,7 +4350,7 @@ export default function Dashboard() {
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
                             </button>
                             {leadViewMode !== "kanban" && (
-                              <button onClick={() => { setBulkSelectMode(true); setSelectedLeadIds(new Set()); setActionsMenuOpen(false); }}
+                              <button onClick={() => { bulkModeFocus.current = true; setBulkSelectMode(true); setSelectedLeadIds(new Set()); setActionsMenuOpen(false); }}
                                 className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                                 <CheckSquare className="w-3.5 h-3.5 text-ink/60" /> Select multiple
                               </button>
@@ -4380,7 +4392,7 @@ export default function Dashboard() {
                 {bulkSelectMode && leadsSubTab !== "winback" && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox"
+                      <input type="checkbox" ref={selectAllRef}
                         checked={allShownSelected(selectedLeadIds, enquiryOrder)}
                         onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(enquiryOrder) : new Set())}
                         className="w-4 h-4 accent-forest cursor-pointer" />
