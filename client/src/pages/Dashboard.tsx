@@ -11289,7 +11289,7 @@ export default function Dashboard() {
               <button
                 onClick={() => { if (!bulkDelete.isPending) bulkDelete.mutate({ ids: Array.from(selectedLeadIds) }); }}
                 aria-disabled={bulkDelete.isPending || undefined}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg aria-disabled:opacity-50 aria-disabled:pointer-events-none transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-700 hover:bg-red-800 rounded-lg aria-disabled:opacity-50 aria-disabled:pointer-events-none transition-colors"
               >
                 {bulkDelete.isPending ? 'Deleting…' : `Delete ${selectedLeadIds.size}`}
               </button>
