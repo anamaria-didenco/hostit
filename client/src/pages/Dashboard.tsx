@@ -1332,6 +1332,19 @@ export default function Dashboard() {
     if (!selectedBooking) return;
     return () => { drawerClosedAt.current = Date.now(); };
   }, [selectedBooking?.id]);
+  // The panel's header is sticky: keep Tab / Shift+Tab from scrolling the
+  // focused control in underneath it.
+  const drawerHeaderRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const panel = drawerRef.current, header = drawerHeaderRef.current;
+    if (!panel || !header) return;
+    const fit = () => { panel.style.scrollPaddingTop = `${header.offsetHeight + 8}px`; };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, [selectedBooking?.id]);
   useEffect(() => {
     if (!selectedBooking) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -9563,7 +9576,7 @@ export default function Dashboard() {
           >
             {/* Header — sticky, so the name, the when/who summary and the close
                 button stay in view however far down the panel you scroll. */}
-            <div className="sticky top-0 z-10 flex-shrink-0 bg-forest-dark px-4 md:px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
+            <div ref={drawerHeaderRef} className="sticky top-0 z-10 flex-shrink-0 bg-forest-dark px-4 md:px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
               <div className="min-w-0">
                 {/* text-cream/NN opacity modifiers don't compile in this theme
                     (they fall back to dark ink on navy) — use opacity-* instead. */}
