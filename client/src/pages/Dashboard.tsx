@@ -96,6 +96,7 @@ import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
+import { LockOpen } from "lucide-react";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -7558,29 +7559,36 @@ export default function Dashboard() {
                         <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70">TYPE</div>
                         <div className="col-span-3"></div>
                       </div>
-                      {formFields.map((field, i) => (
+                      {formFields.map((field, i) => {
+                        // Each switch says which field it changes and whether it is on: there were
+                        // 15 identical "Toggle field visibility" buttons with no state.
+                        const defaultLabel = DEFAULT_FORM_FIELDS.find(d => d.id === field.id)?.label;
+                        const fieldName = field.label.trim() || defaultLabel || 'this field';
+                        return (
                         <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
                           {/* Visible toggle */}
                           <div className="col-span-1">
-                            <button type="button" aria-label="Toggle field visibility" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
-                              className={`${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
+                            <button type="button" role="switch" aria-checked={field.visible} aria-label={`Show ${fieldName} on form`}
+                              title={field.visible ? 'Shown on the form' : 'Hidden from the form'}
+                              onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
+                              className={`inline-flex items-center justify-center w-7 h-7 -ml-1.5 ${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
                               {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </button>
                           </div>
-                          {/* Required toggle */}
+                          {/* Required toggle: a closed lock when required, an open one when not (it was colour alone). */}
                           <div className="col-span-1">
-                            <button type="button"
-                              aria-label="Toggle field required"
+                            <button type="button" role="switch" aria-checked={field.required} aria-label={`${fieldName} required`}
+                              title={field.required ? 'Required' : 'Optional'}
                               disabled={field.id === 'firstName' || field.id === 'email'}
                               onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, required: !f.required } : f) : prev)}
-                              className={`${field.required ? 'text-amber-500' : 'text-ink/20'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
-                              <Lock className="w-3.5 h-3.5" />
+                              className={`inline-flex items-center justify-center w-7 h-7 -ml-1.5 ${field.required ? 'text-amber-700' : 'text-ink/65'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
+                              {field.required ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                           {/* Label */}
                           <div className="col-span-5">
                             <input type="text" value={field.label}
-                              aria-label={`Label for the ${field.type} field`}
+                              aria-label={`Label for the ${defaultLabel ?? field.label} field`}
                               onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
                               className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
                           </div>
@@ -7612,7 +7620,8 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   {/* Add custom field */}
