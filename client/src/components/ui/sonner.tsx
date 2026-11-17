@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { createElement, Fragment, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "next-themes";
 import { toast, useSonner, Toaster as Sonner, type ToasterProps } from "sonner";
+import { errorToastOptions } from "@shared/errorToast";
 
 // An error has to be read (and often acted on) before it goes, so error toasts
 // stay until the close button dismisses them (WCAG 2.2.1). Patched once here
@@ -9,8 +10,16 @@ import { toast, useSonner, Toaster as Sonner, type ToasterProps } from "sonner";
 // their timing. An error whose call gives its own duration keeps it: only do
 // that for a pointer to errors that stay on the page anyway (the enquiry form's
 // "Please fill in …", whose message also stays at the field).
+// An error with no id of its own gets one from its message, so raising it again
+// replaces the copy already showing instead of stacking another to close.
 const showError = toast.error;
-toast.error = ((message, data) => showError(message, { ...data, duration: data?.duration ?? Infinity })) as typeof toast.error;
+let errorsShown = 0;
+toast.error = ((message, data) => {
+  // The repeat's words are the same, so the live region would stay silent; a
+  // new key makes React put the text back, which is announced like a new toast.
+  const title = typeof message === "string" ? createElement(Fragment, { key: ++errorsShown }, message) : message;
+  return showError(title, errorToastOptions(message, data));
+}) as typeof toast.error;
 
 // Toasts sit at the bottom of the screen, where some pages keep a bar fixed (the
 // phone tab bar, a checklist's footer). An error toast now stays until it is
