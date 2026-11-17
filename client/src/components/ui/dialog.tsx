@@ -268,6 +268,20 @@ function DialogShell({
   );
 }
 
+const TABBABLE = 'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [contenteditable=""], [contenteditable="true"], [tabindex]';
+
+/** The last control in `box` that Tab can reach (shown, not tabindex=-1, not in an inert part). */
+function lastTabbable(box: HTMLElement): HTMLElement | null {
+  const all = Array.from(box.querySelectorAll<HTMLElement>(TABBABLE));
+  for (let i = all.length - 1; i >= 0; i--) {
+    const el = all[i];
+    if (el.tabIndex < 0 || el.closest("[inert]") || !el.getClientRects().length) continue;
+    if (getComputedStyle(el).visibility === "hidden") continue;
+    return el;
+  }
+  return null;
+}
+
 function DialogShellContent({
   children,
   initialFocus,
@@ -277,6 +291,7 @@ function DialogShellContent({
   onCloseAutoFocus,
   onEscapeKeyDown,
   onPointerDownOutside,
+  onKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   /** Focus this on open; otherwise the dialog box itself takes focus. */
@@ -308,6 +323,15 @@ function DialogShellContent({
       onEscapeKeyDown={e => {
         if (e.isComposing || isComposing()) { e.preventDefault(); return; }
         onEscapeKeyDown?.(e);
+      }}
+      onKeyDown={e => {
+        onKeyDown?.(e);
+        // With no initialFocus the box itself has focus on open. Radix wraps
+        // Shift+Tab only from the first control, so from the box it went
+        // nowhere: go to the last control, as Shift+Tab from the first does.
+        if (e.defaultPrevented || e.key !== "Tab" || !e.shiftKey || e.target !== e.currentTarget) return;
+        const last = lastTabbable(e.currentTarget);
+        if (last) { e.preventDefault(); last.focus(); }
       }}
       onPointerDownOutside={e => {
         onPointerDownOutside?.(e);
