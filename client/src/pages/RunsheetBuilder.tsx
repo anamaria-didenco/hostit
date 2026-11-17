@@ -1461,6 +1461,10 @@ export default function RunsheetBuilder() {
   // Custom item mode for F&B add form
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
   const [fnbCustomName, setFnbCustomName] = useState('');
+  // "Add" with no dish name: said at the field (and focus taken there), not
+  // only in a toast that vanishes and leaves focus on the button.
+  const [fnbNameMissing, setFnbNameMissing] = useState(false);
+  const fnbCustomNameRef = useRef<HTMLInputElement>(null);
   const [fnbCustomCourse, setFnbCustomCourse] = useState('Other');
   const [fnbCustomDrinkCat, setFnbCustomDrinkCat] = useState('');
 
@@ -1549,7 +1553,8 @@ export default function RunsheetBuilder() {
   }
   function addFnbItem() {
     const item = buildPendingFnbItem();
-    if (!item) { toast.error('Enter a dish name'); return; }
+    if (!item) { setFnbNameMissing(true); fnbCustomNameRef.current?.focus(); return; }
+    setFnbNameMissing(false);
     setFnbItems(prev => [...prev, item]);
     clearFnbInputs();
   }
@@ -4829,7 +4834,7 @@ export default function RunsheetBuilder() {
                 <div className="font-bebas tracking-widest text-[11px] text-ink/75">ADD ITEM</div>
                 <div className="flex gap-2 flex-wrap">
                   <button
-                    onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
+                    onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); setFnbNameMissing(false); }}
                     aria-pressed={fnbCustomMode}
                     className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 border rounded-sm px-3 min-h-[44px] transition-colors ${
                       fnbCustomMode ? 'bg-gold/20 border-gold text-ink font-semibold' : 'border-gold/20 text-ink/80 hover:bg-linen'
@@ -4881,19 +4886,27 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DISH NAME *</label>
+                      <label htmlFor="rb-custom-dish-name" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DISH NAME *</label>
                       <Input
+                        id="rb-custom-dish-name"
+                        ref={fnbCustomNameRef}
                         value={fnbCustomName}
-                        onChange={e => setFnbCustomName(e.target.value)}
+                        onChange={e => { setFnbCustomName(e.target.value); if (e.target.value.trim()) setFnbNameMissing(false); }}
                         placeholder="e.g. Beef Wellington"
+                        aria-required="true"
+                        aria-invalid={fnbNameMissing || undefined}
+                        aria-describedby={fnbNameMissing ? "rb-custom-dish-name-error" : undefined}
                         className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                         onKeyDown={e => e.key === 'Enter' && addFnbItem()}
                         autoFocus
                       />
+                      {fnbNameMissing && (
+                        <p id="rb-custom-dish-name-error" role="alert" className="font-dm text-xs text-red-700 mt-1">Enter a dish name</p>
+                      )}
                     </div>
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
-                      <Input
+                      <label htmlFor="rb-custom-service-time" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
+                      <Input id="rb-custom-service-time"
                         type="time"
                         value={newFnbItem.serviceTime ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
