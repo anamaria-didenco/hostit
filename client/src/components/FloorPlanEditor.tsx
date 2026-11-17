@@ -1215,7 +1215,14 @@ export default function FloorPlanEditor({
             <div className="p-4 text-center flex flex-col items-center justify-center h-full">
               <MousePointer className="w-8 h-8 text-ink/20 mb-2" />
               <p className="font-dm text-xs text-ink/65">Select an element to edit its properties</p>
-              <p className="font-dm text-[10px] text-ink/65 mt-2">Or click an element in the left panel to add it, or drag it onto the canvas</p>
+              {/* Says what the left panel's open tab offers: only Elements can be dragged. */}
+              <p className="font-dm text-[10px] text-ink/65 mt-2">
+                {sidebarTab === "elements"
+                  ? "Or click an element in the left panel to add it, or drag it onto the canvas"
+                  : inventory && inventory.length > 0
+                    ? "Or click an item in the left panel to place it on the canvas"
+                    : "Or add one from the Elements tab in the left panel"}
+              </p>
               <div className="mt-4 border-t border-border w-full pt-3">
                 <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">CANVAS SIZE</p>
                 <div className="grid grid-cols-2 gap-2">
