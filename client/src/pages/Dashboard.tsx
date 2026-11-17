@@ -11219,7 +11219,7 @@ export default function Dashboard() {
                   onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
                   spaces={spaces} invalid={quickCreateSpaceError} />
               ) : (
-                <Input value={quickCreateForm.spaceName}
+                <Input value={quickCreateForm.spaceName} aria-label="Space"
                   onChange={e => { setQuickCreateForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setQuickCreateSpaceError(false); }}
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                   aria-invalid={quickCreateSpaceError}
@@ -11692,7 +11692,7 @@ export default function Dashboard() {
                     onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
                     spaces={spaces} invalid={addEnquirySpaceError} />
                 ) : (
-                  <Input value={addEnquiryForm.spaceName}
+                  <Input value={addEnquiryForm.spaceName} aria-label="Space"
                     onChange={e => { setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setAddEnquirySpaceError(false); }}
                     placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                     aria-invalid={addEnquirySpaceError}

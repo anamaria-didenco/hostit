@@ -1313,12 +1313,14 @@ export default function ProposalBuilder() {
                       value={newCustomDrink.name}
                       onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
                       placeholder="Drink name"
+                      aria-label="Drink name"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newCustomDrink.description}
                       onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
+                      aria-label="Drink description"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
@@ -1327,6 +1329,7 @@ export default function ProposalBuilder() {
                         value={newCustomDrink.price}
                         onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
                         placeholder="Price"
+                        aria-label="Drink price"
                         className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
                       <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
@@ -1557,9 +1560,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
+                    <label htmlFor="pb-logo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
                   </div>
                   <Input
+                    id="pb-logo-url"
                     value={appearanceLogoUrl}
                     onChange={e => setAppearanceLogoUrl(e.target.value)}
                     placeholder="https://example.com/logo.png"
@@ -1576,9 +1580,10 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Image className="w-3.5 h-3.5 text-muted-foreground" />
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
+                    <label htmlFor="pb-venue-photo-url" className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
                   </div>
                   <Input
+                    id="pb-venue-photo-url"
                     value={appearanceVenuePhotoUrl}
                     onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
                     placeholder="https://example.com/venue.jpg"
