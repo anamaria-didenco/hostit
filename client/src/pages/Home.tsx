@@ -349,8 +349,10 @@ export default function Home() {
           <img src="/logo-full.png" alt="VenueFlow" className="h-[22px] w-auto" />
           <p className="text-[12.5px] text-[#7e7466]">© {new Date().getFullYear()} VenueFlowHQ · New Zealand's Venue Management Platform</p>
           <div className="flex gap-[22px]">
+            {/* Plain text until these pages exist: as links to "#" they were Tab
+                stops (and links to screen readers) that went nowhere. */}
             {["Privacy", "Terms", "Contact"].map(item => (
-              <a key={item} href="#" className="text-[12.5px] text-muted-foreground hover:text-foreground transition-colors">{item}</a>
+              <span key={item} className="text-[12.5px] text-muted-foreground">{item}</span>
             ))}
           </div>
         </div>
