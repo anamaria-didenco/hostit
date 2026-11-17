@@ -3003,6 +3003,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         billingNote: z.string().nullable().optional(),
         // The user has seen the date-clash warning and chosen to go ahead.
         allowClash: z.boolean().optional(),
+        // Sent by the run sheet builder when the guest count is typed there:
+        // that sheet takes the new count as the builder's own save, not as
+        // "changed somewhere else" (server/runsheetGuests.ts).
+        runsheetEditor: z.object({ runsheetId: z.number().int(), editorId: z.string().max(64), expectedVersion: z.number().int().optional() }).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -3010,7 +3014,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const { id, allowClash, ...rest } = input;
+        const { id, allowClash, runsheetEditor, ...rest } = input;
         // Double-booking guard: moving a live event to a new date, time or
         // space — or bringing a cancelled one back — checks the calendar.
         if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
@@ -3146,7 +3150,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
         if (rest.guestCount !== undefined) {
           const { syncRunsheetGuests } = await import('./runsheetGuests');
-          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount, runsheetEditor);
           if (guestsBefore !== rest.guestCount) runsheetTouched = true;
         }
         // New space → the event's run sheets too, but only copies that still

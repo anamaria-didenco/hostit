@@ -13,7 +13,7 @@ import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { DRINK_GROUPS, DRINK_GROUP_LABEL, drinkGroupOf, groupDrinks } from "@shared/drinkGroups";
 import { eventBalance, isFoodBeverageCost } from "@shared/eventBilling";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -24,11 +24,11 @@ import {
   Loader2, Check, AlertTriangle, Info,
 } from "lucide-react";
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLoginUrl } from "@/const";
@@ -39,6 +39,7 @@ import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import { isOncePerEvent } from "@shared/nowNext";
+import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -113,7 +114,10 @@ function StageChip({ stage }: { stage: { label: string; settled: boolean } }) {
   );
 }
 
-function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
+// The grip is a keyboard control too (Space to pick up, arrows to move, Space
+// to drop — dnd-kit's KeyboardSensor) and shows while focused. With nothing
+// to reorder it is left out of the Tab order, where it was a dead stop.
+function SortableSection({ id, label, reorderable = true, children }: { id: string; label: string; reorderable?: boolean; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -127,15 +131,94 @@ function SortableSection({ id, children }: { id: string; children: React.ReactNo
       <div
         {...attributes}
         {...listeners}
-        className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 transition-opacity"
+        {...(reorderable ? { "aria-label": `Reorder ${label}` } : { tabIndex: -1, "aria-hidden": true })}
+        className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 focus-visible:opacity-100 transition-opacity"
         title="Drag to reorder"
       >
-        <GripVertical className="w-3.5 h-3.5 text-ink/75" />
+        <GripVertical className="w-3.5 h-3.5 text-ink/75" aria-hidden />
       </div>
       {children}
     </div>
   );
 }
+
+// Smooth scrolling unless the person has asked their device for reduced
+// motion (an explicit `behavior: 'smooth'` ignores the CSS rule for it).
+const scrollBehavior = (): ScrollBehavior =>
+  (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
+// The last control Tab reaches in a pop-up (the same test Radix uses).
+function lastTabbable(panel: HTMLElement): HTMLElement | undefined {
+  const all = Array.from(panel.querySelectorAll<HTMLElement>('*')).filter(el =>
+    el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && !el.hidden
+    && !(el instanceof HTMLInputElement && el.type === 'hidden'));
+  return all.reverse().find(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+}
+
+// ── Pop-ups ────────────────────────────────────────────────────────────
+// Every pop-up on this page sits on Radix Dialog, so focus moves into it and
+// stays there, Escape closes it, and the page behind is hidden from screen
+// readers. Each is named by its own visible heading (wrap it in
+// <RsDialogTitle asChild>, and any subtitle in <RsDialogDescription asChild>)
+// and keeps its own look: `overlayClassName` is the
+// backdrop, `className` the panel. Radix only returns focus to its own
+// trigger buttons, which these pop-ups don't use, so focus goes back here to
+// whatever had it when the pop-up opened — or `returnFocus` when that has
+// gone (a menu item, say).
+function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = false, closeOnEscape = true, focusDialog = false, returnFocus, role, described = false, children }: {
+  onClose: () => void;
+  overlayClassName: string;
+  className: string;
+  closeOnOutsideClick?: boolean;
+  closeOnEscape?: boolean;
+  /** Focus the panel itself rather than its first control — for a pop-up
+   *  that can open while someone is typing, so a keystroke can't press a
+   *  button by accident. */
+  focusDialog?: boolean;
+  returnFocus?: React.RefObject<HTMLElement | null>;
+  role?: "dialog" | "alertdialog";
+  /** Has an <RsDialogDescription> (its subtitle or message). */
+  described?: boolean;
+  children: React.ReactNode;
+}) {
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  return (
+    <DialogPrimitive.Root open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className={overlayClassName}>
+          <DialogPrimitive.Content
+            ref={panelRef}
+            role={role ?? "dialog"}
+            aria-modal="true"
+            {...(described ? {} : { "aria-describedby": undefined })}
+            className={className}
+            onOpenAutoFocus={focusDialog ? e => { e.preventDefault(); panelRef.current?.focus(); } : undefined}
+            onCloseAutoFocus={e => {
+              e.preventDefault();
+              const back = opener && opener !== document.body && opener.isConnected ? opener : returnFocus?.current;
+              back?.focus();
+            }}
+            onKeyDown={e => {
+              // Radix wraps Shift+Tab only from the first control. From the
+              // panel itself (where focusDialog puts focus) it went nowhere.
+              if (e.key === 'Tab' && e.shiftKey && e.target === e.currentTarget) {
+                const last = lastTabbable(e.currentTarget);
+                if (last) { e.preventDefault(); last.focus(); }
+              }
+            }}
+            onEscapeKeyDown={closeOnEscape ? undefined : e => e.preventDefault()}
+            onPointerDownOutside={closeOnOutsideClick ? undefined : e => e.preventDefault()}
+          >
+            {children}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+const RsDialogTitle = DialogPrimitive.Title;
+const RsDialogDescription = DialogPrimitive.Description;
 
 const CATEGORIES = [
   { value: "setup", label: "Setup", color: "bg-blue-100 text-blue-700" },
@@ -476,6 +559,23 @@ export default function RunsheetBuilder() {
   };
   const isConflict = (e: unknown) => (e as { data?: { code?: string } } | undefined)?.data?.code === 'CONFLICT';
 
+  // The tab's title says which run sheet this is (several are often open at
+  // once); the page's own title comes back on the way out.
+  useEffect(() => {
+    const before = document.title;
+    return () => { document.title = before; };
+  }, []);
+  useEffect(() => {
+    const name = title.trim();
+    document.title = name ? `Run sheet · ${name} · VenueFlow` : 'Run sheet · VenueFlow';
+  }, [title]);
+  // Sent with a change this page makes to the event that also reaches this
+  // sheet (the guest count), so the server counts it as this page's own save
+  // instead of telling this page "someone else changed this run sheet".
+  const ownSheetEditor = () => (sheetId
+    ? { runsheetEditor: { runsheetId: sheetId, editorId: editorIdRef.current, expectedVersion: versionRef.current ?? undefined } }
+    : {});
+
   // ── "NOW" indicator for live service ──────────────────────────────────────
   // Updates every 30s. Lets the timeline highlight the currently-active item
   // so staff can see at a glance "where are we right now?"
@@ -498,14 +598,14 @@ export default function RunsheetBuilder() {
     if (Number.isNaN(h) || Number.isNaN(m)) return -1;
     return h * 60 + m;
   };
-  // Whether the runsheet is for "today" (so the NOW indicator is meaningful)
+  // Whether the runsheet is for "today" (so the NOW indicator is meaningful).
+  // eventDate is a calendar day ("2026-11-29"): read as a Date it is UTC
+  // midnight, which west of UTC is the day before.
   const isToday = (() => {
     if (!eventDate) return false;
     const today = new Date();
-    const evt = new Date(eventDate);
-    return evt.getFullYear() === today.getFullYear()
-      && evt.getMonth() === today.getMonth()
-      && evt.getDate() === today.getDate();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return eventDayKey(eventDate) === todayKey;
   })();
 
   // Keep sheetId in sync with the URL — navigate() changes the URL but doesn't
@@ -649,7 +749,10 @@ export default function RunsheetBuilder() {
       return next;
     });
   }
-  const sectionSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sectionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   function handleSectionDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -799,6 +902,8 @@ export default function RunsheetBuilder() {
   // BEO HTML so there's one source of truth for the printed document.
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  // Where focus goes back to when the BEO preview (opened from this menu) closes.
+  const exportMenuButtonRef = useRef<HTMLButtonElement>(null);
   // Quick-jump rail replaces the six tabs: every section is always on the
   // page; the rail scrolls to it and highlights where you are.
   // Rail order MUST match page order — the rail is pinned from the top of the
@@ -818,7 +923,7 @@ export default function RunsheetBuilder() {
   const scrollToSection = (id: string) => {
     setActiveSection(id);
     const el = document.getElementById(`rb-${id}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
   };
   // Track which section is in view so the rail highlights correctly while
   // the user scrolls the document.
@@ -1388,6 +1493,10 @@ export default function RunsheetBuilder() {
   // Custom item mode for F&B add form
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
   const [fnbCustomName, setFnbCustomName] = useState('');
+  // "Add" with no dish name: said at the field (and focus taken there), not
+  // only in a toast that vanishes and leaves focus on the button.
+  const [fnbNameMissing, setFnbNameMissing] = useState(false);
+  const fnbCustomNameRef = useRef<HTMLInputElement>(null);
   const [fnbCustomCourse, setFnbCustomCourse] = useState('Other');
   const [fnbCustomDrinkCat, setFnbCustomDrinkCat] = useState('');
 
@@ -1476,7 +1585,8 @@ export default function RunsheetBuilder() {
   }
   function addFnbItem() {
     const item = buildPendingFnbItem();
-    if (!item) { toast.error('Enter a dish name'); return; }
+    if (!item) { setFnbNameMissing(true); fnbCustomNameRef.current?.focus(); return; }
+    setFnbNameMissing(false);
     setFnbItems(prev => [...prev, item]);
     clearFnbInputs();
   }
@@ -1749,7 +1859,7 @@ export default function RunsheetBuilder() {
       // Only push a real number; an empty field must not null the booking's pax.
       if (!v.trim() || !Number.isFinite(n) || n < 0) return;
       if (moneyBooking && Number(moneyBooking.guestCount ?? NaN) === n) return;
-      syncGuestCount.mutate({ id: effectiveBookingId, guestCount: n } as any);
+      syncGuestCount.mutate({ id: effectiveBookingId, guestCount: n, ...ownSheetEditor() } as any);
     }, 800);
   };
   // Floor plans
@@ -1830,16 +1940,8 @@ export default function RunsheetBuilder() {
   // Which staff link the user is currently emailing (drives the modal).
   const [emailingLink, setEmailingLink] = useState<{ id: number; token: string; label: string } | null>(null);
 
-  // Escape-to-close for the custom modal overlays. Each mirrors the setter the
-  // modal's own close button calls; the hook only binds a listener while open.
-  useEscapeKey(beoPreviewOpen, () => setBeoPreviewOpen(false));
-  useEscapeKey(showPasteImport, () => setShowPasteImport(false));
-  useEscapeKey(showDietaryManager, () => setShowDietaryManager(false));
-  useEscapeKey(showSetupManager, () => setShowSetupManager(false));
-  useEscapeKey(showCatalogSelector, () => setShowCatalogSelector(false));
-  useEscapeKey(showFnbPaste, () => setShowFnbPaste(false));
-  useEscapeKey(showChecklistPaste, () => setShowChecklistPaste(false));
-  useEscapeKey(emailingLink !== null, () => { if (!sendingStaffEmail) setEmailingLink(null); });
+  // Escape closes each pop-up through RsDialog (Radix), calling the same
+  // setter as the pop-up's own close button.
   // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [extraEmails, setExtraEmails] = useState("");
@@ -1942,7 +2044,7 @@ export default function RunsheetBuilder() {
       hydratedSheetRef.current = (existing as any).id;
       versionRef.current = (existing as any).version ?? 0;
       setTitle(existing.title);
-      setEventDate(existing.eventDate ? new Date(existing.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(existing.eventDate, DEFAULT_VENUE_TZ));
       setVenueName(existing.venueName ?? "");
       setSpaceName(existing.spaceName ?? "");
       setGuestCount(existing.guestCount ? String(existing.guestCount) : "");
@@ -2026,7 +2128,7 @@ export default function RunsheetBuilder() {
     // Only seed main fields if we're creating fresh (no existing runsheet)
     if (!sheetId) {
       setTitle(`${lead.firstName} ${lead.lastName ?? ""} — ${lead.eventType ?? "Event"}`);
-      setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(lead.eventDate, DEFAULT_VENUE_TZ));
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
       // Map spaceId → space name so the venue/space dropdown is pre-selected
@@ -2045,7 +2147,7 @@ export default function RunsheetBuilder() {
   // Auto-populate from linked proposal
   useEffect(() => {
     if (linkedProposal && !sheetId) {
-      if (linkedProposal.eventDate) setEventDate(new Date(linkedProposal.eventDate).toLocaleDateString("en-CA"));
+      if (linkedProposal.eventDate) setEventDate(eventDayKey(linkedProposal.eventDate, DEFAULT_VENUE_TZ));
       if (linkedProposal.guestCount) setGuestCount(String(linkedProposal.guestCount));
       if (linkedProposal.spaceName) setSpaceName(linkedProposal.spaceName);
     }
@@ -2055,7 +2157,7 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (booking && !sheetId) {
       setTitle(`${booking.firstName} ${booking.lastName ?? ''} — ${booking.eventType ?? 'Event'}`.trim());
-      setEventDate(booking.eventDate ? new Date(booking.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(booking.eventDate, DEFAULT_VENUE_TZ));
       setGuestCount(booking.guestCount ? String(booking.guestCount) : "");
       setEventType(booking.eventType ?? "");
       setContactName(`${booking.firstName} ${booking.lastName ?? ""}`.trim());
@@ -2844,7 +2946,7 @@ export default function RunsheetBuilder() {
                       {rs.eventDate && (
                         <span className="font-dm text-xs text-ink/75 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {new Date(rs.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          {formatEventDate(rs.eventDate, { weekday: "short", day: "numeric", month: "short", year: "numeric" }, DEFAULT_VENUE_TZ)}
                         </span>
                       )}
                       {rs.eventType && (
@@ -2956,6 +3058,7 @@ export default function RunsheetBuilder() {
           {/* ── Consolidated Export menu ────────────────────────────────── */}
           <div className="relative">
             <button
+              ref={exportMenuButtonRef}
               onClick={() => setExportMenuOpen(v => !v)}
               aria-expanded={exportMenuOpen}
               aria-haspopup="menu"
@@ -3168,7 +3271,7 @@ export default function RunsheetBuilder() {
         {eventDate && (
           <span className="hidden sm:inline-flex items-center gap-1.5 font-dm text-xs text-ink/75">
             <Calendar className="w-3.5 h-3.5" />
-            {new Date(eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+            {formatEventDate(eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         )}
         {guestCount && (
@@ -3464,6 +3567,7 @@ export default function RunsheetBuilder() {
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
+              aria-label="Run sheet title"
               className="text-xl sm:text-2xl font-serif font-semibold text-ink tracking-[-0.01em] border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
               placeholder="Event Runsheet Title"
             />
@@ -3484,8 +3588,8 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{formattedEventDate || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">EVENT TYPE</label>
-                <Input
+                <label htmlFor="rb-event-type" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">EVENT TYPE</label>
+                <Input id="rb-event-type"
                   value={eventType}
                   onChange={e => setEventType(e.target.value)}
                   placeholder="Wedding, Birthday..."
@@ -3495,13 +3599,13 @@ export default function RunsheetBuilder() {
               </div>
               {/* Full width on a phone: in a half-width column each space chip sat on its own row. */}
               <div className="col-span-2 md:col-span-1">
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">VENUE / SPACE</label>
-                <SpacePicker value={spaceName} onChange={setSpaceName} />
+                <label id="rb-space-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">VENUE / SPACE</label>
+                <div role="group" aria-labelledby="rb-space-label"><SpacePicker value={spaceName} onChange={setSpaceName} /></div>
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">GUESTS</label>
-                <Input
+                <label htmlFor="rb-guests" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">GUESTS</label>
+                <Input id="rb-guests"
                   type="number"
                   value={guestCount}
                   onChange={e => handleGuestCountChange(e.target.value)}
@@ -3527,7 +3631,7 @@ export default function RunsheetBuilder() {
                     <strong>Guest numbers don't match.</strong> This runsheet says {sheetPax}, but the event (calendar, dashboard, Payments) says {Number(eventPax)}.
                   </span>
                   <span className="flex gap-2">
-                    <button type="button" onClick={() => syncGuestCount.mutate({ id: effectiveBookingId, guestCount: sheetPax } as any)}
+                    <button type="button" onClick={() => syncGuestCount.mutate({ id: effectiveBookingId, guestCount: sheetPax, ...ownSheetEditor() } as any)}
                       className="font-bebas tracking-widest text-[11px] border border-forest/40 text-forest px-2 py-1 hover:bg-forest/5">
                       USE {sheetPax} EVERYWHERE
                     </button>
@@ -3568,8 +3672,8 @@ export default function RunsheetBuilder() {
             {/* Contact info row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/20">
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
-                <Input
+                <label htmlFor="rb-contact-name" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><User className="w-3 h-3" aria-hidden /> CLIENT NAME</label>
+                <Input id="rb-contact-name"
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
                   placeholder="Client name..."
@@ -3578,8 +3682,9 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
-                <Input
+                <label htmlFor="rb-contact-phone" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" aria-hidden /> PHONE</label>
+                <Input id="rb-contact-phone"
+                  inputMode="tel"
                   value={contactPhone}
                   onChange={e => setContactPhone(e.target.value)}
                   placeholder="Phone number..."
@@ -3588,8 +3693,9 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
-                <Input
+                <label htmlFor="rb-contact-email" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" aria-hidden /> EMAIL</label>
+                <Input id="rb-contact-email"
+                  inputMode="email"
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="Email address..."
@@ -3660,7 +3766,7 @@ export default function RunsheetBuilder() {
               const isHidden = hiddenSections.has(sectionId);
 
               if (sectionId === 'setup') return (
-                <SortableSection key="setup" id="setup">
+                <SortableSection key="setup" id="setup" label="Venue setup" reorderable={sectionOrder.length > 1}>
                   <div id="rb-setup" data-print-section="setup" className={`dante-card mb-6 scroll-mt-[120px] md:scroll-mt-[140px] print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
@@ -3669,7 +3775,7 @@ export default function RunsheetBuilder() {
                         className="flex-1 flex items-center gap-2 pl-6 pr-3 py-3 hover:bg-linen transition-colors text-left"
                       >
                         <Building2 className="w-4 h-4 text-forest flex-shrink-0" />
-                        <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+                        <span id="rb-setup-heading" className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
                         {venueSetup && !isHidden && (() => {
                           // The setup note is rich text (stored as HTML); show it as plain words, not "<p>Long banquet…".
                           const plain = String(venueSetup).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
@@ -3729,8 +3835,8 @@ export default function RunsheetBuilder() {
                           ))}
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SETUP SUMMARY (ONE LINE)</label>
-                          <input
+                          <label htmlFor="rb-setup-summary" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SETUP SUMMARY (ONE LINE)</label>
+                          <input id="rb-setup-summary"
                             value={setupSummary}
                             onChange={e => setSetupSummary(e.target.value)}
                             placeholder="One line — e.g. 'Seated · 2 × tables of 8'"
@@ -3738,6 +3844,7 @@ export default function RunsheetBuilder() {
                           />
                         </div>
                         <RichTextarea
+                          labelledBy="rb-setup-heading"
                           value={venueSetup}
                           onChange={setVenueSetup}
                           placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
@@ -3757,7 +3864,7 @@ export default function RunsheetBuilder() {
               if (sectionId === 'dietary') return null;
               // (legacy block kept below but unreachable; renderable if needed in future)
               if (false && sectionId === 'dietary') return (
-                <SortableSection key="dietary" id="dietary">
+                <SortableSection key="dietary" id="dietary" label="Dietary requirements" reorderable={sectionOrder.length > 1}>
                   <div className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
@@ -3981,7 +4088,7 @@ export default function RunsheetBuilder() {
               <span className="text-[#5e2018]/70"> — brief the floor before service.</span>
             </div>
             <button
-              onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+              onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); }}
               className="flex-none font-dm text-xs font-semibold text-[#a13226] border border-[#eccfca] hover:bg-[#f7ddd8] rounded-sm px-2.5 min-h-[44px] transition-colors"
             >
               Manage
@@ -4030,8 +4137,9 @@ export default function RunsheetBuilder() {
 
             {/* Event notes — at top */}
             <div data-print-section="notes" className="px-5 py-3 border-b border-gold/20 bg-linen/30">
-              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1.5">EVENT NOTES</label>
+              <label id="rb-event-notes-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1.5">EVENT NOTES</label>
               <RichTextarea
+                labelledBy="rb-event-notes-label"
                 value={notes}
                 onChange={setNotes}
                 placeholder="Any additional notes for the event..."
@@ -4101,15 +4209,24 @@ export default function RunsheetBuilder() {
                               type="time"
                               value={item.time}
                               onChange={e => updateItemField(idx, "time", e.target.value)}
-                              aria-label="Start time"
+                              aria-label={`Start time for ${item.title || 'this moment'}`}
                               title="Click to set the time"
                               // The input is transparent (the styled 12-hour time
                               // shows behind it), so the native clock icon is
-                              // hidden — open the picker explicitly on click/focus
-                              // so the field is actually selectable on desktop.
+                              // hidden — open the picker explicitly on click so
+                              // the field is actually selectable on desktop. Not
+                              // on focus: the open picker swallowed Tab, so a
+                              // keyboard couldn't get past the timeline. From the
+                              // keyboard the field shows itself instead (type the
+                              // time, or Enter for the picker); a click keeps the
+                              // styled time showing, as before. The native clock
+                              // button is hidden: it was an invisible extra Tab
+                              // stop, and click / Enter open the picker anyway.
                               onClick={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
-                              onFocus={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); try { (e.currentTarget as any).showPicker?.(); } catch {} } }}
+                              onPointerDown={e => { e.currentTarget.dataset.pointer = ''; }}
+                              onBlur={e => { delete e.currentTarget.dataset.pointer; }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer bg-white text-ink font-dm text-sm rounded-sm [&:focus:not([data-pointer])]:opacity-100 [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                           </div>
                           <div className="hidden print:block font-serif text-base font-semibold tracking-[-0.01em] whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
@@ -4222,8 +4339,8 @@ export default function RunsheetBuilder() {
                         <div className="border-t border-gold/15 px-5 py-4 space-y-4 bg-linen/30 no-print">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DURATION (MINS)</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-duration`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DURATION (MINS)</label>
+                              <Input id={`rb-item-${idx}-duration`}
                                 type="text"
                                 inputMode="numeric"
                                 value={item.duration > 0 ? String(item.duration) : ''}
@@ -4236,8 +4353,8 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CATEGORY</label>
-                              <select
+                              <label htmlFor={`rb-item-${idx}-category`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CATEGORY</label>
+                              <select id={`rb-item-${idx}-category`}
                                 value={item.category}
                                 onChange={e => updateItemField(idx, "category", e.target.value)}
                                 className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4248,8 +4365,8 @@ export default function RunsheetBuilder() {
                               </select>
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">ASSIGNED TO</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-assigned`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">ASSIGNED TO</label>
+                              <Input id={`rb-item-${idx}-assigned`}
                                 value={item.assignedTo ?? ""}
                                 onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
                                 placeholder="Staff member..."
@@ -4257,8 +4374,8 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">NOTES</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-notes`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">NOTES</label>
+                              <Input id={`rb-item-${idx}-notes`}
                                 value={item.description ?? ""}
                                 onChange={e => updateItemField(idx, "description", e.target.value)}
                                 placeholder="Additional notes..."
@@ -4318,7 +4435,7 @@ export default function RunsheetBuilder() {
                 whole block is no-print (its label + hint used to leak onto the
                 page, and its echo double-printed the footer). */}
             <div className="px-5 py-4 border-t border-gold/20 no-print">
-              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">FOOTER NOTE</label>
+              <label id="rb-footer-note-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-xs text-ink/65 mb-2">Shown at the bottom of the runsheet — a closing note or terms. Payment terms live in Payment Notes, so they don't need repeating here.</p>
               {/* Read-only echo of the single source. Stops the same sentence
                   being typed into two fields and drifting out of step. */}
@@ -4338,6 +4455,7 @@ export default function RunsheetBuilder() {
                 </div>
               )}
               <RichTextarea
+                labelledBy="rb-footer-note-label"
                 value={footerText}
                 onChange={setFooterText}
                 placeholder="e.g. Final payment of $2,400 due on the day. Thank you for choosing us!"
@@ -4491,6 +4609,7 @@ export default function RunsheetBuilder() {
                             type="number" min={1}
                             value={d.count}
                             onChange={e => updateDietary(idx, "count", Number(e.target.value))}
+                            aria-label={`Guests needing ${d.name || 'this requirement'}`}
                             className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 leading-none"
                           />
                           <span className="font-bebas tracking-widest text-xs text-ink/75 mb-1">GUESTS</span>
@@ -4498,12 +4617,14 @@ export default function RunsheetBuilder() {
                         <input
                           value={d.name}
                           onChange={e => updateDietary(idx, "name", e.target.value)}
+                          aria-label={`Dietary requirement ${idx + 1}`}
                           className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full"
                         />
                         <input
                           value={d.notes ?? ""}
                           onChange={e => updateDietary(idx, "notes", e.target.value)}
                           placeholder="Notes..."
+                          aria-label={`Notes for ${d.name || 'this requirement'}`}
                           className="w-full font-dm text-xs text-ink/75 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/50"
                         />
                         {/* Named guests with this dietary — type a name + Enter to
@@ -4524,6 +4645,7 @@ export default function RunsheetBuilder() {
                             onChange={e => setDietNameDraft(prev => ({ ...prev, [idx]: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDietaryName(idx, dietNameDraft[idx] ?? ""); setDietNameDraft(prev => ({ ...prev, [idx]: "" })); } }}
                             placeholder="+ Add guest name"
+                            aria-label={`Add a guest name for ${d.name || 'this requirement'}`}
                             className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none placeholder:text-forest"
                           />
                         </div>
@@ -4536,6 +4658,7 @@ export default function RunsheetBuilder() {
                     value={newDietary.name}
                     onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Add requirement..."
+                    aria-label="New dietary requirement"
                     className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                     onKeyDown={e => e.key === "Enter" && addDietary()}
                   />
@@ -4544,12 +4667,14 @@ export default function RunsheetBuilder() {
                     value={newDietary.count}
                     onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
                     placeholder="Count"
+                    aria-label="Guests needing it"
                     className="w-20 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Input
                     value={newDietary.notes}
                     onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Notes (optional)"
+                    aria-label="Notes for the new requirement (optional)"
                     className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Button
@@ -4568,8 +4693,9 @@ export default function RunsheetBuilder() {
             {/* Kitchen / chef notes — mirrors the Drinks/Bar notes; prints on
                 the BEO and the live staff runsheet. */}
             <div className="px-5 py-4 border-t border-gold/20 no-print">
-              <div className="font-bebas tracking-widest text-xs text-ink/75 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" /> KITCHEN NOTES</div>
+              <div id="rb-kitchen-notes-label" className="font-bebas tracking-widest text-xs text-ink/75 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" aria-hidden /> KITCHEN NOTES</div>
               <Textarea
+                aria-labelledby="rb-kitchen-notes-label"
                 value={kitchenNotes}
                 onChange={e => setKitchenNotes(e.target.value)}
                 placeholder={`e.g.\n• Allergy plates to be prepped separately\n• Canapés out at 6:15, mains 7:00\n• Chef to plate desserts to order`}
@@ -4740,7 +4866,7 @@ export default function RunsheetBuilder() {
                     than telling you to go and find it further down the page. */}
                 <button
                   type="button"
-                  onClick={() => { setProposalSectionOpen(true); setTimeout(() => document.getElementById('rb-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
+                  onClick={() => { setProposalSectionOpen(true); setTimeout(() => document.getElementById('rb-proposal')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }), 50); }}
                   className="flex-none font-dm text-xs font-semibold text-forest border border-forest/40 rounded-sm px-3 min-h-[40px] -my-2 hover:bg-forest/5"
                 >
                   Link a proposal
@@ -4754,7 +4880,7 @@ export default function RunsheetBuilder() {
                 <div className="font-bebas tracking-widest text-[11px] text-ink/75">ADD ITEM</div>
                 <div className="flex gap-2 flex-wrap">
                   <button
-                    onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
+                    onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); setFnbNameMissing(false); }}
                     aria-pressed={fnbCustomMode}
                     className={`min-h-[40px] max-md:min-h-[44px] font-dm text-xs flex items-center gap-1.5 border rounded-sm px-3 min-h-[44px] transition-colors ${
                       fnbCustomMode ? 'bg-gold/20 border-gold text-ink font-semibold' : 'border-gold/20 text-ink/80 hover:bg-linen'
@@ -4783,8 +4909,8 @@ export default function RunsheetBuilder() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
-                      <select
+                      <label htmlFor="rb-custom-course" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
+                      <select id="rb-custom-course"
                         value={fnbCustomCourse}
                         onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
                         className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4794,8 +4920,8 @@ export default function RunsheetBuilder() {
                     </div>
                     {fnbCustomCourse === 'Drinks' && (
                       <div>
-                        <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
-                        <select
+                        <label htmlFor="rb-custom-drink-cat" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
+                        <select id="rb-custom-drink-cat"
                           value={fnbCustomDrinkCat}
                           onChange={e => setFnbCustomDrinkCat(e.target.value)}
                           className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4806,19 +4932,27 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DISH NAME *</label>
+                      <label htmlFor="rb-custom-dish-name" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DISH NAME *</label>
                       <Input
+                        id="rb-custom-dish-name"
+                        ref={fnbCustomNameRef}
                         value={fnbCustomName}
-                        onChange={e => setFnbCustomName(e.target.value)}
+                        onChange={e => { setFnbCustomName(e.target.value); if (e.target.value.trim()) setFnbNameMissing(false); }}
                         placeholder="e.g. Beef Wellington"
+                        aria-required="true"
+                        aria-invalid={fnbNameMissing || undefined}
+                        aria-describedby={fnbNameMissing ? "rb-custom-dish-name-error" : undefined}
                         className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                         onKeyDown={e => e.key === 'Enter' && addFnbItem()}
                         autoFocus
                       />
+                      {fnbNameMissing && (
+                        <p id="rb-custom-dish-name-error" role="alert" className="font-dm text-xs text-red-700 mt-1">Enter a dish name</p>
+                      )}
                     </div>
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
-                      <Input
+                      <label htmlFor="rb-custom-service-time" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
+                      <Input id="rb-custom-service-time"
                         type="time"
                         value={newFnbItem.serviceTime ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
@@ -4839,8 +4973,8 @@ export default function RunsheetBuilder() {
                   </div>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY FLAGS</label>
-                      <Input
+                      <label htmlFor="rb-custom-dietary" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY FLAGS</label>
+                      <Input id="rb-custom-dietary"
                         value={newFnbItem.dietary ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
                         placeholder="GF, VG, DF, NF..."
@@ -5011,48 +5145,48 @@ export default function RunsheetBuilder() {
                           {isExpanded && (
                             <div className={`px-5 py-4 border-b border-gold/20 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
-                                <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                <label htmlFor={`rb-fnb-${originalIdx}-course`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
+                                <select id={`rb-fnb-${originalIdx}-course`} value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                   {courses.map(c => <option key={c} value={c}>{c}</option>)}
                                   {!courses.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
                                 </select>
                               </div>
                               {isDrinks && (
                                 <div>
-                                  <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
-                                  <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                  <label htmlFor={`rb-fnb-${originalIdx}-drink-cat`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
+                                  <select id={`rb-fnb-${originalIdx}-drink-cat`} value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                     <option value="">— No category —</option>
                                     {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                   </select>
                                 </div>
                               )}
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
-                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-time`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
+                                <input id={`rb-fnb-${originalIdx}-time`} type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">QTY / COVERS</label>
-                                <input type="number" min={1} value={item.qty || 1} onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-qty`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">QTY / COVERS</label>
+                                <input id={`rb-fnb-${originalIdx}-qty`} type="number" min={1} value={item.qty || 1} onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY / ALLERGEN</label>
-                                <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-dietary`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY / ALLERGEN</label>
+                                <input id={`rb-fnb-${originalIdx}-dietary`} value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">STAFF ASSIGNED</label>
-                                <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-staff`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">STAFF ASSIGNED</label>
+                                <input id={`rb-fnb-${originalIdx}-staff`} value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PREP NOTES</label>
-                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-prep`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PREP NOTES</label>
+                                <input id={`rb-fnb-${originalIdx}-prep`} value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PLATING NOTES</label>
-                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-plating`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PLATING NOTES</label>
+                                <input id={`rb-fnb-${originalIdx}-plating`} value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">UNIT PRICE (NZD)</label>
-                                <input
+                                <label htmlFor={`rb-fnb-${originalIdx}-price`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">UNIT PRICE (NZD)</label>
+                                <input id={`rb-fnb-${originalIdx}-price`}
                                   type="number"
                                   min={0}
                                   step="0.01"
@@ -5069,12 +5203,12 @@ export default function RunsheetBuilder() {
                                 )}
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DESCRIPTION</label>
-                                <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-description`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DESCRIPTION</label>
+                                <input id={`rb-fnb-${originalIdx}-description`} value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CHANGED FROM (OPTIONAL)</label>
-                                <input value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-previous`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CHANGED FROM (OPTIONAL)</label>
+                                <input id={`rb-fnb-${originalIdx}-previous`} value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                             </div>
                           )}
@@ -5082,7 +5216,7 @@ export default function RunsheetBuilder() {
                       );
                     });
                     return (
-                      <SortableSection id={course} key={course}>
+                      <SortableSection id={course} key={course} label={`course ${course}`} reorderable={displayedFoodCourses.length > 1}>
                       <div>
                         {/* Editable course header with rename + delete. The drag
                             grip (from SortableSection) appears on hover at the left. */}
@@ -5327,8 +5461,8 @@ export default function RunsheetBuilder() {
                 </div>
                 {(rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') && (
                   <div className="mt-3 flex items-center gap-3">
-                    <label className="font-bebas text-xs tracking-widest text-ink/75">TAB AMOUNT (NZD)</label>
-                    <Input
+                    <label htmlFor="rb-tab-amount" className="font-bebas text-xs tracking-widest text-ink/75">TAB AMOUNT (NZD)</label>
+                    <Input id="rb-tab-amount"
                       type="number"
                       value={rsTabAmount}
                       onChange={e => setRsTabAmount(e.target.value)}
@@ -5424,6 +5558,7 @@ export default function RunsheetBuilder() {
                     type="text"
                     value={newRsCustomDrink.name}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, name: e.target.value }))}
+                    aria-label="Custom drink name"
                     placeholder="Drink name (e.g. Signature Espresso Martini)"
                     className="sm:col-span-5 min-w-0 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
@@ -5431,6 +5566,7 @@ export default function RunsheetBuilder() {
                     type="text"
                     value={newRsCustomDrink.description}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, description: e.target.value }))}
+                    aria-label="Custom drink description (optional)"
                     placeholder="Description (optional)"
                     className="sm:col-span-5 min-w-0 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
@@ -5461,8 +5597,9 @@ export default function RunsheetBuilder() {
 
               {/* Drinks / Bar Notes */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="font-bebas tracking-widest text-xs text-ink/75 mb-3">DRINKS / BAR NOTES</div>
+                <div id="rb-bar-notes-label" className="font-bebas tracking-widest text-xs text-ink/75 mb-3">DRINKS / BAR NOTES</div>
                 <Textarea
+                  aria-labelledby="rb-bar-notes-label"
                   value={rsBarNotes}
                   onChange={e => setRsBarNotes(e.target.value)}
                   placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night\n• Set up: 1× espresso martini station, 2× cocktail bartenders`}
@@ -5604,6 +5741,7 @@ export default function RunsheetBuilder() {
               <Input
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
+                aria-label="Add a checklist item"
                 placeholder="Add a checklist item..."
                 className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                 onKeyDown={e => e.key === 'Enter' && addChecklistItem()}
@@ -5744,8 +5882,8 @@ export default function RunsheetBuilder() {
             {proposalSectionOpen && (
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">SELECT PROPOSAL</label>
-                  <select
+                  <label htmlFor="rb-linked-proposal" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">SELECT PROPOSAL</label>
+                  <select id="rb-linked-proposal"
                     value={linkedProposalId ?? ""}
                     onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
                     className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
@@ -5849,6 +5987,10 @@ export default function RunsheetBuilder() {
                   <div className="space-y-2">
                     {(staffLinks ?? []).map((link: any) => {
                       const url = `${window.location.origin}/staff/${link.token}`;
+                      // A link saved without a label was read out as "the
+                      // null link"; name it a staff link instead.
+                      const label = link.label?.trim();
+                      const linkName = label || 'staff';
                       return (
                         <div key={link.id} className="flex items-center gap-2 bg-linen border border-gold/20 px-3 py-2">
                           <Key className="w-3.5 h-3.5 text-gold shrink-0" />
@@ -5866,8 +6008,8 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }}
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
-                            title={`Copy the ${link.label} link`}
-                            aria-label={`Copy the ${link.label} link`}
+                            title={`Copy the ${linkName} link`}
+                            aria-label={`Copy the ${linkName} link`}
                           >
                             <Clipboard className="w-4 h-4" aria-hidden />
                           </button>
@@ -5876,8 +6018,8 @@ export default function RunsheetBuilder() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
-                            title={`Open the ${link.label} link in a new tab`}
-                            aria-label={`Open the ${link.label} link in a new tab`}
+                            title={`Open the ${linkName} link in a new tab`}
+                            aria-label={`Open the ${linkName} link in a new tab`}
                           >
                             <ExternalLink className="w-4 h-4" aria-hidden />
                           </a>
@@ -5892,7 +6034,7 @@ export default function RunsheetBuilder() {
                             }}
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
                             title="Email the staff briefing (runsheet link + PDF)"
-                            aria-label={`Email the ${link.label} briefing to staff`}
+                            aria-label={label ? `Email the ${label} briefing to staff` : 'Email the briefing to staff'}
                           >
                             <Mail className="w-4 h-4" aria-hidden />
                           </button>
@@ -5905,7 +6047,7 @@ export default function RunsheetBuilder() {
                               <button
                                 onClick={() => { deleteStaffLinkMutation.mutate({ id: link.id }); setConfirmDeleteLinkId(null); }}
                                 className="min-h-[44px] px-2.5 rounded-sm font-dm text-xs font-semibold bg-[#b3261e] text-white hover:bg-[#8f1e18] transition-colors"
-                                aria-label={`Confirm deleting the ${link.label} link`}
+                                aria-label={`Confirm deleting the ${linkName} link`}
                               >
                                 Delete link
                               </button>
@@ -5920,8 +6062,8 @@ export default function RunsheetBuilder() {
                             <button
                               onClick={() => setConfirmDeleteLinkId(link.id)}
                               className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/75 hover:bg-[#b3261e]/10 hover:text-[#b3261e] transition-colors"
-                              title={`Delete the ${link.label} link`}
-                              aria-label={`Delete the ${link.label} link`}
+                              title={`Delete the ${linkName} link`}
+                              aria-label={`Delete the ${linkName} link`}
                             >
                               <Trash2 className="w-4 h-4" aria-hidden />
                             </button>
@@ -6664,17 +6806,18 @@ export default function RunsheetBuilder() {
 
       {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
       {beoPreviewOpen && effectiveBookingId && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print">
+        <RsDialog onClose={() => setBeoPreviewOpen(false)} returnFocus={exportMenuButtonRef} described
+          overlayClassName="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print" className="flex-1 min-h-0 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 bg-forest text-cream shadow-lg shrink-0">
             <div className="flex items-center gap-2.5">
               <Eye className="w-5 h-5 text-gold shrink-0" />
               <div>
-                <div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div>
-                <div className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div></RsDialogTitle>
+                <RsDialogDescription asChild><div className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div></RsDialogDescription>
               </div>
             </div>
-            <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/85 hover:text-gold p-1.5 transition-colors" title="Close">
+            <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/85 hover:text-gold p-1.5 transition-colors" title="Close" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -6699,9 +6842,9 @@ export default function RunsheetBuilder() {
               </div>
               {/* Footer note editor */}
               <div className="px-4 py-3">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-1">FOOTER NOTE / MESSAGE</div>
+                <div id="rb-beo-footer-label" className="font-bebas tracking-widest text-xs text-forest mb-1">FOOTER NOTE / MESSAGE</div>
                 <p className="font-dm text-xs text-ink/75 mb-2">The closing note at the very bottom — payment terms, a thank-you, anything. Keep “Footer note” ticked above to show it.</p>
-                <RichTextarea value={footerText} onChange={setFooterText} placeholder="e.g. Final payment of $2,400 due on the day. Grazie!" minHeight="80px" />
+                <RichTextarea labelledBy="rb-beo-footer-label" value={footerText} onChange={setFooterText} placeholder="e.g. Final payment of $2,400 due on the day. Grazie!" minHeight="80px" />
                 <button
                   onClick={async () => { try { await handleSave(); } catch {} setPreviewNonce(n => n + 1); }}
                   disabled={saving}
@@ -6752,21 +6895,21 @@ export default function RunsheetBuilder() {
               </button>
             </div>
           </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowPasteImport(false)} described
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest shrink-0">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div></RsDialogTitle>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div></RsDialogDescription>
               </div>
-              <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors">
-                <span className="text-2xl leading-none">&times;</span>
+              <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors" aria-label="Close">
+                <span className="text-2xl leading-none" aria-hidden>&times;</span>
               </button>
             </div>
 
@@ -6774,8 +6917,8 @@ export default function RunsheetBuilder() {
               {!parsedData ? (
                 <>
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE YOUR TEXT BELOW</label>
-                    <textarea
+                    <label htmlFor="rb-paste-import-text" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE YOUR TEXT BELOW</label>
+                    <textarea id="rb-paste-import-text"
                       autoFocus
                       value={pasteText}
                       onChange={e => setPasteText(e.target.value)}
@@ -6908,18 +7051,18 @@ export default function RunsheetBuilder() {
                           <div key={item._editId ?? i} className="grid grid-cols-12 gap-1 px-3 py-1.5 items-center text-sm font-dm hover:bg-linen/30 group">
                             <div className="col-span-2">
                               <input type="text" value={item.time ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, time: e.target.value } : p))}
-                                className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" />
+                                className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" aria-label={`Time for ${item.title || `item ${i + 1}`}`} />
                             </div>
                             <div className="col-span-1">
                               <input type="text" inputMode="numeric" value={item.duration > 0 ? String(item.duration) : ''} onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, duration: raw === '' ? 0 : Number(raw) } : p)); }}
-                                className="w-full text-xs text-ink/75 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="—" />
+                                className="w-full text-xs text-ink/75 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="—" aria-label={`Minutes for ${item.title || `item ${i + 1}`}`} />
                             </div>
                             <div className="col-span-4">
                               <input type="text" value={item.title ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p))}
-                                className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Title" />
+                                className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Title" aria-label={`Title of item ${i + 1}`} />
                             </div>
                             <div className="col-span-2">
-                              <select value={item.category ?? 'other'} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p))}
+                              <select aria-label={`Category for ${item.title || `item ${i + 1}`}`} value={item.category ?? 'other'} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p))}
                                 className={`w-full text-[11px] font-bebas px-1 py-0.5 border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none ${catStyle(String(item.category ?? 'other').toLowerCase())}`}>
                                 {CATEGORIES.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -6929,12 +7072,12 @@ export default function RunsheetBuilder() {
                           {/* DESCRIPTION */}
                           <div className="col-span-2">
                             <input type="text" value={item.description ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p))}
-                              className="w-full text-xs text-ink/80 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" />
+                              className="w-full text-xs text-ink/80 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" aria-label={`Notes for ${item.title || `item ${i + 1}`}`} />
                           </div>
                           {/* DELETE */}
                           <div className="col-span-1 flex justify-end">
                             <button onClick={() => setEditedParsedTimeline(prev => prev.filter((_, j) => j !== i))}
-                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-red-500 transition-all p-0.5" title="Remove">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-red-500 transition-all p-0.5" title="Remove" aria-label={`Remove ${item.title || `item ${i + 1}`}`}>
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
@@ -6966,22 +7109,24 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── EDIT CONFLICT ─────────────────────────────────────────────────── */}
+      {/* No Escape or click-away: closing it without a choice would leave
+          saving stopped with nothing on screen to say so. It opens while
+          someone may be typing, so focus goes to the dialog, not a button. */}
       {conflict && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="alertdialog" aria-modal="true" aria-labelledby="rs-conflict-title" aria-describedby="rs-conflict-body" className="bg-white w-full max-w-md shadow-2xl">
+        <RsDialog onClose={() => {}} role="alertdialog" described closeOnEscape={false} focusDialog
+          overlayClassName="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gold/50 bg-forest">
               <AlertTriangle className="w-4 h-4 text-cream" />
-              <span id="rs-conflict-title" className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span>
+              <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span></RsDialogTitle>
             </div>
-            <div id="rs-conflict-body" className="p-5 space-y-3 font-dm text-sm text-ink">
+            <RsDialogDescription asChild><div className="p-5 space-y-3 font-dm text-sm text-ink">
               <p>It was saved somewhere else while you had it open — by someone else, or in another tab. Saving stopped here so neither of you loses work.</p>
               <p className="text-ink/80"><strong>Load the latest</strong> to see their changes; anything you changed in the last few seconds that hasn't saved will be lost. <strong>Keep mine</strong> saves this page over theirs.</p>
-            </div>
+            </div></RsDialogDescription>
             <div className="flex flex-col-reverse sm:flex-row gap-2 px-5 py-4 border-t border-gold/20">
               <Button variant="outline" onClick={keepMyVersion} disabled={resolvingConflict} className="flex-1 rounded-sm border-gold/40 font-bebas tracking-widest text-xs min-h-[44px]">
                 {resolvingConflict ? 'SAVING…' : 'KEEP MINE'}
@@ -6990,25 +7135,24 @@ export default function RunsheetBuilder() {
                 LOAD THE LATEST
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── DIETARY OPTIONS MANAGER MODAL ────────────────────────────────── */}
       {showDietaryManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-md shadow-2xl">
+        <RsDialog onClose={() => setShowDietaryManager(false)} described
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
                 <Leaf className="w-4 h-4 text-cream" />
-                <span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span>
+                <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowDietaryManager(false)} className="text-cream/85 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p>
+              <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p></RsDialogDescription>
               <div className="space-y-2">
                 {editingDietaries.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -7024,6 +7168,7 @@ export default function RunsheetBuilder() {
                   value={newDietaryOption}
                   onChange={e => setNewDietaryOption(e.target.value)}
                   placeholder="Add new option..."
+                  aria-label="New dietary option"
                   className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && newDietaryOption.trim()) {
@@ -7046,25 +7191,24 @@ export default function RunsheetBuilder() {
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE OPTIONS'}
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── SETUP TEMPLATES MANAGER MODAL ─────────────────────────────────── */}
       {showSetupManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl">
+        <RsDialog onClose={() => setShowSetupManager(false)} described
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-cream" />
-                <span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span>
+                <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowSetupManager(false)} className="text-cream/85 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p>
+              <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p></RsDialogDescription>
               <div className="space-y-2">
                 {editingSetups.map((t, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 border border-gold/50 bg-linen/50">
@@ -7084,12 +7228,14 @@ export default function RunsheetBuilder() {
                   value={newSetupLabel}
                   onChange={e => setNewSetupLabel(e.target.value)}
                   placeholder="Template name (e.g. Cocktail)"
+                  aria-label="New template name"
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Textarea
                   value={newSetupValue}
                   onChange={e => setNewSetupValue(e.target.value)}
                   placeholder="Setup description..."
+                  aria-label="New template setup description"
                   rows={2}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
@@ -7113,25 +7259,24 @@ export default function RunsheetBuilder() {
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE TEMPLATES'}
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
       {showCatalogSelector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowCatalogSelector(false)} described
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div></RsDialogTitle>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div></RsDialogDescription>
                 {gstInclusive && (
                   <div className="font-dm text-gold text-xs mt-1">This runsheet is set to &ldquo;prices include GST&rdquo; — catalogue prices don&rsquo;t, so check the Costs tab.</div>
                 )}
               </div>
-              <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
-                <span className="text-2xl leading-none">&times;</span>
+              <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors" aria-label="Close">
+                <span className="text-2xl leading-none" aria-hidden>&times;</span>
               </button>
             </div>
 
@@ -7217,11 +7362,13 @@ export default function RunsheetBuilder() {
                           {/* Checkbox toggle */}
                           <button
                             onClick={() => toggle(item)}
+                            aria-label={`Select ${item.name}`}
+                            aria-pressed={isSelected}
                             className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                               isSelected ? 'bg-forest border-forest' : 'border-ink/30'
                             }`}
                           >
-                            {isSelected && <span className="text-white text-xs leading-none">✓</span>}
+                            {isSelected && <span className="text-white text-xs leading-none" aria-hidden>✓</span>}
                           </button>
                           {/* Item info */}
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
@@ -7234,6 +7381,7 @@ export default function RunsheetBuilder() {
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
                                 onClick={e => { e.stopPropagation(); setQty(item, qty - 1); }}
+                                aria-label={`One fewer ${item.name}`}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >-</button>
                               <input
@@ -7242,10 +7390,12 @@ export default function RunsheetBuilder() {
                                 value={qty}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => setQty(item, Math.max(1, parseInt(e.target.value) || 1))}
+                                aria-label={`Quantity of ${item.name}`}
                                 className="w-10 text-center text-xs font-dm border border-gold/20 focus:border-forest focus:outline-none py-0.5"
                               />
                               <button
                                 onClick={e => { e.stopPropagation(); setQty(item, qty + 1); }}
+                                aria-label={`One more ${item.name}`}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >+</button>
                             </div>
@@ -7293,21 +7443,20 @@ export default function RunsheetBuilder() {
                 </Button>
               </div>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── AI F&B PASTE MODAL ──────────────────────────────────────────── */}
       {showFnbPaste && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowFnbPaste(false)} described
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" /> AI F&B PASTE
-                </div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" aria-hidden /> AI F&B PASTE
+                </div></RsDialogTitle>
+                <RsDialogDescription asChild><div className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div></RsDialogDescription>
               </div>
               <button aria-label="Close" onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -7318,8 +7467,8 @@ export default function RunsheetBuilder() {
               {fnbParsedItems.length === 0 ? (
                 <div className="p-6 space-y-4">
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE CATERING TEXT</label>
-                    <textarea
+                    <label htmlFor="rb-fnb-paste-text" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE CATERING TEXT</label>
+                    <textarea id="rb-fnb-paste-text"
                       autoFocus
                       value={fnbPasteText}
                       onChange={e => setFnbPasteText(e.target.value)}
@@ -7368,14 +7517,16 @@ export default function RunsheetBuilder() {
                   </div>
                   <div className="space-y-1">
                     {fnbParsedItems.map((item: any, idx: number) => (
-                      <div
+                      <button
+                        type="button"
                         key={item._editId}
                         onClick={() => setFnbParsedItems(prev => prev.map((it, i) => i === idx ? { ...it, _selected: !it._selected } : it))}
-                        className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-colors ${
+                        aria-pressed={!!item._selected}
+                        className={`w-full text-left flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-colors ${
                           item._selected ? 'bg-forest/5 border-forest' : 'bg-white border-transparent hover:bg-linen'
                         }`}
                       >
-                        <div className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                        <div aria-hidden className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                           item._selected ? 'bg-forest border-forest' : 'border-ink/30'
                         }`}>
                           {item._selected && <span className="text-white text-xs leading-none">✓</span>}
@@ -7393,7 +7544,7 @@ export default function RunsheetBuilder() {
                             {item.prepNotes && <span className="italic">{item.prepNotes}</span>}
                           </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                   <button
@@ -7432,16 +7583,15 @@ export default function RunsheetBuilder() {
                 </Button>
               )}
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
       {showChecklistPaste && (
-        <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" onClick={() => setShowChecklistPaste(false)}>
-          <div role="dialog" aria-modal="true" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <RsDialog onClose={() => setShowChecklistPaste(false)} closeOnOutsideClick
+          overlayClassName="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between flex-wrap gap-y-2 px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold" />
-                <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
+                <RsDialogTitle asChild><h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowChecklistPaste(false)} className="text-ink/75 hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
@@ -7452,6 +7602,7 @@ export default function RunsheetBuilder() {
                   <Textarea
                     value={checklistPasteText}
                     onChange={e => setChecklistPasteText(e.target.value)}
+                    aria-label="Text to turn into checklist items"
                     placeholder={"e.g.\n- Confirm final headcount with client\n- Brief floor staff at 4pm\n- Set up bar with house pours\n- Polish glassware"}
                     className="min-h-[260px] font-dm text-sm rounded-sm border border-gold/50 focus-visible:ring-0 focus-visible:border-forest"
                   />
@@ -7480,9 +7631,9 @@ export default function RunsheetBuilder() {
                   <div className="divide-y divide-gold/20 border border-gold/20">
                     {checklistParsed.items.map((it, i) => (
                       <div key={i} className="flex items-center gap-2 px-3 py-2">
-                        <input type="checkbox" checked={it._selected} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, _selected: e.target.checked } : x) }))} />
-                        <Input value={it.text} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }))} className="flex-1 h-8 text-sm rounded-sm border-gold/20" />
-                        <select value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
+                        <input type="checkbox" aria-label={`Add “${it.text || `item ${i + 1}`}”`} checked={it._selected} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, _selected: e.target.checked } : x) }))} />
+                        <Input aria-label={`Checklist item ${i + 1}`} value={it.text} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }))} className="flex-1 h-8 text-sm rounded-sm border-gold/20" />
+                        <select aria-label={`Category for checklist item ${i + 1}`} value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
                           {['admin','staff','setup','bar','kitchen','guest','other'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <button aria-label="Remove item" onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/75 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -7496,8 +7647,7 @@ export default function RunsheetBuilder() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </RsDialog>
       )}
       {/* ── Staff email briefing modal ─────────────────────────────────── */}
       {emailingLink && (() => {
@@ -7534,9 +7684,7 @@ export default function RunsheetBuilder() {
             // Briefing Email). Falls back to the built-in defaults so
             // nothing breaks for venues that never customised it.
             const eventTitleStr = title || 'the event';
-            const eventDateStr = eventDate
-              ? new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })
-              : '';
+            const eventDateStr = formatEventDate(eventDate, { weekday: 'long', day: 'numeric', month: 'long' });
             const venueNameStr = (venueSettings as any)?.name || '';
             const fill = (s: string) => s
               .replace(/\{eventTitle\}/g, eventTitleStr)
@@ -7580,14 +7728,14 @@ export default function RunsheetBuilder() {
         };
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" onClick={() => !sendingStaffEmail && setEmailingLink(null)}>
-            <div role="dialog" aria-modal="true" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
+          <RsDialog onClose={() => { if (!sendingStaffEmail) setEmailingLink(null); }} closeOnOutsideClick={!sendingStaffEmail} closeOnEscape={!sendingStaffEmail} described
+            overlayClassName="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl">
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between flex-wrap gap-y-2">
                 <div>
-                  <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
-                  <p className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
+                  <RsDialogTitle asChild><h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2></RsDialogTitle>
+                  <RsDialogDescription asChild><p className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p></RsDialogDescription>
                 </div>
-                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/75 hover:text-ink p-1 disabled:opacity-30" title="Close">
+                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/75 hover:text-ink p-1 disabled:opacity-30" title="Close" aria-label="Close">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -7653,12 +7801,14 @@ export default function RunsheetBuilder() {
                       value={newStaffName}
                       onChange={e => setNewStaffName(e.target.value)}
                       placeholder="Name"
+                      aria-label="Staff member's name"
                       className="flex-1 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
                     />
                     <input
                       value={newStaffEmail}
                       onChange={e => setNewStaffEmail(e.target.value)}
                       placeholder="email@venue.co.nz"
+                      aria-label="Staff member's email"
                       type="email"
                       className="flex-1 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
                     />
@@ -7686,6 +7836,7 @@ export default function RunsheetBuilder() {
                       <textarea
                         value={bulkStaffPaste}
                         onChange={e => setBulkStaffPaste(e.target.value)}
+                        aria-label="Staff emails to add, comma or line separated"
                         placeholder={"Joe Bloggs <joe@venue.co.nz>, Sam Smith sam@venue.co.nz\nor just\njoe@venue.co.nz; sam@venue.co.nz; alex@venue.co.nz"}
                         rows={4}
                         className="w-full border border-gold/50 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest"
@@ -7706,8 +7857,8 @@ export default function RunsheetBuilder() {
 
               {/* Ad-hoc one-off addresses */}
               <div className="px-5 py-4 border-b border-gold/20">
-                <label className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
-                <textarea
+                <label htmlFor="rb-staff-extra-emails" className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
+                <textarea id="rb-staff-extra-emails"
                   value={extraEmails}
                   onChange={e => setExtraEmails(e.target.value)}
                   placeholder="extra1@example.com, extra2@example.com"
@@ -7725,8 +7876,8 @@ export default function RunsheetBuilder() {
                 if (sigs.length === 0) return null;
                 return (
                   <div className="px-5 py-4 border-b border-gold/20">
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
-                    <select
+                    <label htmlFor="rb-staff-signature" className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <select id="rb-staff-signature"
                       value={staffSigId}
                       onChange={e => setStaffSigId(e.target.value)}
                       className="w-full border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
@@ -7760,8 +7911,7 @@ export default function RunsheetBuilder() {
                   >{sendingStaffEmail ? 'SENDING…' : 'SEND BRIEFING'}</button>
                 </div>
               </div>
-            </div>
-          </div>
+          </RsDialog>
         );
       })()}
       <style>{`

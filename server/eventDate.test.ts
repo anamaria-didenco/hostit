@@ -43,6 +43,15 @@ describe("event dates", () => {
     expect(dayWithTimeFrom(proposalDay, new Date("2026-11-07T00:00:00.000Z"), NZ)).toEqual(proposalDay);
     expect(dayWithTimeFrom(null, enquiry, NZ)).toEqual(enquiry);
   });
+
+  it("shows a calendar-day string (the run sheet's date field) on that day in any zone", () => {
+    // Read with new Date() and shown in a Los Angeles browser, "2026-11-29"
+    // was Sat 28 Nov: it parses as UTC midnight.
+    for (const tz of [NZ, "America/Los_Angeles", "UTC", undefined]) {
+      expect(formatEventDate("2026-11-29", opts, tz)).toBe("Sun, 29 Nov");
+      expect(eventDayKey("2026-11-29", tz)).toBe("2026-11-29");
+    }
+  });
 });
 
 describe("compareEventDates (the Invoice button's soonest-first list)", () => {
