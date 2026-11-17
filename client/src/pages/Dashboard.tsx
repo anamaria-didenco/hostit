@@ -74,6 +74,7 @@ import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { formatEventDate } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
@@ -1195,7 +1196,7 @@ export default function Dashboard() {
     try { localStorage.setItem('vfhq_calendar_needs', next ? '1' : '0'); } catch { /* private mode */ }
     // On a tall calendar the panel can still start below the fold, so bring it
     // into view when it's switched on — otherwise nothing visibly happens.
-    if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (next) setTimeout(() => document.getElementById('calendar-needs-today')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }), 50);
     return next;
   });
   // With the "Needs you today" panel showing, the calendar sizes to its content
@@ -1655,7 +1656,7 @@ export default function Dashboard() {
     setDrawerView('details');
     setDrawerSections(prev => saveDrawerSections({ ...prev, money: true }));
     window.setTimeout(() => {
-      document.getElementById('drawer-sec-money')?.closest('section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('drawer-sec-money')?.closest('section')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     }, 120);
   };
   const [drawerBeoNonce, setDrawerBeoNonce] = React.useState(0);
@@ -5930,7 +5931,7 @@ export default function Dashboard() {
                         onClick={() => {
                           if (dayBookings.length > 0) {
                             // scroll to booking in the list below
-                            document.getElementById(`booking-${dayBookings[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            document.getElementById(`booking-${dayBookings[0].id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' });
                           } else if (dayLeads.length > 0) {
                             setSelectedLead(dayLeads[0]);
                             setTab('enquiries');

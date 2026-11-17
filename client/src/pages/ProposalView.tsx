@@ -7,6 +7,7 @@ import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-rea
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { currency } from "@/lib/money";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
 import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
@@ -154,7 +155,7 @@ export default function ProposalView() {
       setShowDecline(false);
       setClientMessage("");
       // The answer banner sits at the top of the page; bring it into view.
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: scrollBehavior() });
       toast.success(result.status === "accepted" ? "Booking confirmed." : "Thanks — your reply has been sent.");
     },
     // The server's messages are written for the client (expired, already
