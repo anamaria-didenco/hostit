@@ -68,6 +68,8 @@ import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLO
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { contrastRatio, readableOn } from "@shared/contrast";
+import { monthGridTarget, monthGridDefaultDay, monthCellLabel, friendlyDay, statusWords } from "@shared/monthGrid";
+import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
@@ -1205,6 +1207,52 @@ export default function Dashboard() {
   // (a flex item with overflow-auto has min-height 0, so it would otherwise
   // collapse once the pane is no longer a fixed height).
   const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto vf-pane-scroll';
+  // Month grid keyboard: the grid is one Tab stop. The arrow keys move between
+  // days (Page Up/Down a month, Home/End the ends of the week) and only the day
+  // with focus has its events and add buttons in the Tab order. Enter goes into
+  // the day, Escape back out to it.
+  const [monthFocusDay, setMonthFocusDay] = useState<string | null>(null);
+  const monthGridRef = useRef<HTMLDivElement>(null);
+  const monthGridPendingFocus = useRef<string | null>(null);
+  const focusMonthDay = (ymd: string) => {
+    setMonthFocusDay(ymd);
+    const el = monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`);
+    if (el) { el.focus(); return; }
+    // Off this month: show that month, then focus the day once it's drawn.
+    monthGridPendingFocus.current = ymd;
+    const [y, m] = ymd.split('-').map(Number);
+    setCalDate(new Date(y, m - 1, 1));
+  };
+  useEffect(() => {
+    const ymd = monthGridPendingFocus.current;
+    if (!ymd) return;
+    const el = monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`);
+    if (el) { monthGridPendingFocus.current = null; el.focus(); }
+  });
+  const onMonthGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const cell = target.closest<HTMLElement>('[role="gridcell"][data-day]');
+    if (!cell) return;
+    if (target === cell && (e.key === 'Enter' || e.key === ' ' || e.key === 'F2')) {
+      const first = cell.querySelector<HTMLElement>('button, a[href]');
+      if (first) { e.preventDefault(); first.focus(); }
+      return;
+    }
+    if (target !== cell && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cell.focus(); return; }
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    let next: string | null = null;
+    if (e.key === 'Home' || e.key === 'End') {
+      const days = Array.from(cell.parentElement?.querySelectorAll<HTMLElement>('[data-day]') ?? []);
+      next = (e.key === 'Home' ? days[0] : days[days.length - 1])?.dataset.day ?? null;
+    } else {
+      next = monthGridTarget(cell.dataset.day!, e.key);
+    }
+    if (!next) return;
+    // stopPropagation keeps the Calendar's own ←/→ (previous/next month)
+    // shortcut from firing as well.
+    e.preventDefault(); e.stopPropagation();
+    focusMonthDay(next);
+  };
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
@@ -5011,15 +5059,23 @@ export default function Dashboard() {
                 tabIndex={0}
                 className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest"
               >
-                {pipelineStages.map(s => (
-                  <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
-                    {/* Matches the card colours: confirmed green, proposal sent yellow. */}
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch }} />
-                    <span>{s.label}</span>
-                  </div>
-                ))}
+                {pipelineStages.map(s => {
+                  // Matches the card colours: confirmed green, proposal sent yellow.
+                  // The icon is the same one the month chips show for the status.
+                  const fill = ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch;
+                  return (
+                    <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: fill, color: readableOn(fill) }}>
+                        <CalendarStatusIcon status={s.key} className="w-3 h-3" />
+                      </div>
+                      <span>{s.label}</span>
+                    </div>
+                  );
+                })}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#991b1b" }} />
+                  <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: "#991b1b", color: "#fff" }}>
+                    <CalendarStatusIcon status="" overdue className="w-3 h-3" />
+                  </div>
                   <span>Overdue</span>
                 </div>
                 {/* Spaces: the coloured stripe on each day and the left edge of each
@@ -5030,7 +5086,7 @@ export default function Dashboard() {
                     <span className="font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground flex-shrink-0">Spaces</span>
                     {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).map((sp: any) => (
                       <div key={`space-${sp.id}`} className="flex items-center gap-1.5 flex-shrink-0">
-                        <div className="w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
+                        <div className="vf-swatch w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
                         <span>{sp.name}</span>
                       </div>
                     ))}
@@ -5043,11 +5099,12 @@ export default function Dashboard() {
 
               {/* Month View — desktop grid */}
               {calendarView === "month" && (
-              <div className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
+              <div ref={monthGridRef} role="grid" aria-label={new Date(year, month, 1).toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })} onKeyDown={onMonthGridKeyDown}
+                className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
-                <div className="grid grid-cols-7 border-b border-border">
-                  {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                    <div key={d} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
+                <div role="row" className="grid grid-cols-7 border-b border-border">
+                  {["MON","TUE","WED","THU","FRI","SAT","SUN"].map((d, i) => (
+                    <div key={d} role="columnheader" aria-label={["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][i]} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
                       d === 'SAT' || d === 'SUN' ? 'text-muted-foreground bg-[#f4efe6]/50' : 'text-primary'
                     }`}>{d}</div>
                   ))}
@@ -5071,10 +5128,16 @@ export default function Dashboard() {
                   const weeks = [];
                   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
                   const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
+                  // The one day in the Tab order (see onMonthGridKeyDown).
+                  const shownDays = cells.filter(Boolean).map(c => {
+                    const y = c!.isOverflow ? nextYear : year, m = c!.isOverflow ? nextMonth : month;
+                    return `${y}-${String(m + 1).padStart(2, '0')}-${String(c!.day).padStart(2, '0')}`;
+                  });
+                  const activeDay = monthFocusDay && shownDays.includes(monthFocusDay) ? monthFocusDay : monthGridDefaultDay(year, month, ymdLocalD(new Date()));
                   return weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
+                    <div key={wi} role="row" className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
                       {week.map((cell, di) => {
-                        if (!cell) return <div key={di} className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
+                        if (!cell) return <div key={di} role="gridcell" className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
                         const { day, isOverflow } = cell;
                         const cellYear = isOverflow ? nextYear : year;
                         const cellMonth = isOverflow ? nextMonth : month;
@@ -5087,10 +5150,28 @@ export default function Dashboard() {
                           ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
                           : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const isActive = dateStr === activeDay;
+                        // Controls inside a day are only in the Tab order on the focused day.
+                        const innerTab = isActive ? 0 : -1;
+                        const cellLabel = monthCellLabel({
+                          ymd: dateStr, isToday, title: dayTitles.get(dateStr),
+                          events: [
+                            ...dayBookings.map((b: any) => ({ name: [b.firstName, b.lastName].filter(Boolean).join(' '), status: statusWords(getStatusInfo(b.status).label) })),
+                            ...dayLeads.map((l: any) => ({ name: [l.firstName, l.lastName].filter(Boolean).join(' '), status: statusWords(getStatusInfo(l.status).label) })),
+                          ],
+                        });
                         return (
                           <div key={di}
+                            role="gridcell"
+                            data-day={dateStr}
+                            tabIndex={isActive ? 0 : -1}
+                            aria-label={cellLabel}
                             aria-current={isToday ? "date" : undefined}
-                            className={`group border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                            onFocus={() => setMonthFocusDay(dateStr)}
+                            // A click on the day's background doesn't take focus (only
+                            // its buttons do), so mouse use is exactly as before.
+                            onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, a')) e.preventDefault(); }}
+                            className={`group focus-visible:!outline-offset-[-2px] border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
@@ -5104,10 +5185,10 @@ export default function Dashboard() {
                               isToday ? 'vf-today bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {editDayTitle && !isOverflow && !dayTitles.get(dateStr) && (
-                              <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
+                              <DayTitleAddButton tabIndex={innerTab} dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
                             )}
                             </div>
-                            <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
+                            <DayTitleText tabIndex={innerTab} title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
                                 to the event count. So a day with 1 bar event and 1 restaurant
@@ -5163,9 +5244,12 @@ export default function Dashboard() {
                                     // A held date draws as a dashed, hatched "HOLD" chip, never a solid booking.
                                     const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
+                                    const overdue = isLead && isOverdueLead(ev);
+                                    const band = statusBandStyle(ev.status, overdue, ev.spaceName);
                                     return (
                                       <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
                                         <button
+                                          tabIndex={innerTab}
                                           draggable
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
@@ -5174,14 +5258,22 @@ export default function Dashboard() {
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
                                           {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[12px] tabular-nums opacity-70 leading-snug">{time}</span>}
-                                          {/* Status in words too, not only the chip colour. */}
-                                          {!isHold && monthChipTag(ev) && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
+                                          {/* Status in words too, not only the chip colour. (Screen
+                                              readers get the full status in the sr-only text below.) */}
+                                          {!isHold && monthChipTag(ev) && <span aria-hidden="true" className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
                                           {!isLead && <DoubleBookedTag flaggedAt={ev.clashFlaggedAt} compact />}
                                           {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
                                           <span className="truncate font-semibold text-[12px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          {/* Status end-cap in the status colour, distinct from the space colour the chip wears. */}
-                                          {statusBandStyle(ev.status, isLead && isOverdueLead(ev), ev.spaceName) && (
-                                            <span aria-hidden="true" title={getStatusInfo(ev.status).label} style={statusBandStyle(ev.status, isLead && isOverdueLead(ev), ev.spaceName)} className="ml-auto shrink-0 self-stretch -my-0.5 -mr-1.5 w-4 rounded-r border-l-2 border-white" />
+                                          <span className="sr-only">{`, ${statusWords(getStatusInfo(ev.status).label)}${overdue ? ', follow-up overdue' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
+                                          {/* Status end-cap: the status colour (distinct from the space
+                                              colour the chip wears) and the status's icon, so it isn't
+                                              colour alone. Without a space colour the whole chip is the
+                                              status colour and the cap is just the icon. */}
+                                          {(band || !isHold) && (
+                                            <span aria-hidden="true" title={getStatusInfo(ev.status).label} style={band}
+                                              className={`ml-auto shrink-0 self-stretch -my-0.5 -mr-1.5 w-4 grid place-items-center ${band ? 'vf-swatch rounded-r border-l-2 border-white' : ''}`}>
+                                              {!isHold && <CalendarStatusIcon status={ev.status} overdue={overdue} className="w-2.5 h-2.5" />}
+                                            </span>
                                           )}
                                         </button>
                                         {/* The hover-only 14px "×" delete that used to sit on every chip is gone:
@@ -5192,6 +5284,7 @@ export default function Dashboard() {
                                   })}
                                   {extra > 0 && (
                                     <button
+                                      tabIndex={innerTab}
                                       onClick={() => { setCalDate(new Date(cellYear, cellMonth, day)); setCalendarView('day'); }}
                                       className="w-full text-left font-dm font-semibold text-[12px] text-primary hover:underline px-1.5 h-6 flex items-center transition-colors"
                                       title={`View all ${dayEvents.length} events on this day`}>
@@ -5205,6 +5298,7 @@ export default function Dashboard() {
                                 dashed chip, so they read as appointments, not events. */}
                             {!isOverflow && (monthWalkthroughs ?? []).filter((w: any) => w.walkthroughAt && new Date(w.walkthroughAt).getDate() === day).map((w: any) => (
                               <button key={`wt-${w.id}`}
+                                tabIndex={innerTab}
                                 onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
                                 className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
                                 title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
@@ -5218,9 +5312,10 @@ export default function Dashboard() {
                                 than the paste-an-email modal. */}
                             {!isOverflow && (
                               <button
+                                tabIndex={innerTab}
                                 onClick={() => setQuickCreateDate(dateStr)}
-                                aria-label={`Add enquiry on ${dateStr}`}
-                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
+                                aria-label={`Add enquiry on ${friendlyDay(dateStr)}`}
+                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100"
                                 title="Add enquiry on this day">
                                 <Plus className="w-4 h-4" />
                               </button>
