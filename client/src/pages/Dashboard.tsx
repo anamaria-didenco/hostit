@@ -11313,9 +11313,9 @@ export default function Dashboard() {
 
               {/* Week picker + load button */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">WEEK STARTING (MONDAY)</label>
+                <label htmlFor="weekly-week-start" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">WEEK STARTING (MONDAY)</label>
                 <div className="flex gap-2">
-                  <input type="date" value={weeklyWeekStart}
+                  <input id="weekly-week-start" type="date" value={weeklyWeekStart}
                     onChange={e => { setWeeklyWeekStart(e.target.value); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
                     className="flex-1 border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
                   <button
@@ -11357,16 +11357,16 @@ export default function Dashboard() {
 
               {/* Subject */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SUBJECT</label>
-                <input type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
+                <label htmlFor="weekly-subject" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SUBJECT</label>
+                <input id="weekly-subject" type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
                   placeholder="Staff Briefing — Weekly Runsheets"
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
               </div>
 
               {/* Body */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EMAIL BODY</label>
-                <textarea rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
+                <label htmlFor="weekly-body" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EMAIL BODY</label>
+                <textarea id="weekly-body" rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-y"
                   placeholder="Email body will auto-fill once events are loaded…" />
               </div>
@@ -11377,8 +11377,9 @@ export default function Dashboard() {
                 if (sigs.length === 0) return null;
                 return (
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <label htmlFor="weekly-signature" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
                     <select
+                      id="weekly-signature"
                       value={weeklySigId}
                       onChange={e => setWeeklySigId(e.target.value)}
                       className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest bg-white"
@@ -11439,11 +11440,11 @@ export default function Dashboard() {
                 )}
                 {/* Add to saved list */}
                 <div className="border-t border-gold/20 px-3 py-2.5 space-y-2">
-                  <div className="font-bebas tracking-widest text-[11px] text-ink/65">ADD TO LIST</div>
+                  <label htmlFor="weekly-new-staff-name" className="block font-bebas tracking-widest text-[11px] text-ink/65">ADD TO LIST</label>
                   <div className="flex gap-1.5">
-                    <input value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
+                    <input id="weekly-new-staff-name" aria-label="Add to list: name" value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
                       placeholder="Name" className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
-                    <input value={weeklyNewStaffEmail} onChange={e => setWeeklyNewStaffEmail(e.target.value)}
+                    <input aria-label="Add to list: email" value={weeklyNewStaffEmail} onChange={e => setWeeklyNewStaffEmail(e.target.value)}
                       placeholder="email@venue.co.nz" type="email"
                       className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
                     <button
@@ -11460,8 +11461,8 @@ export default function Dashboard() {
 
               {/* Extra ad-hoc emails */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/65">(this send only)</span></label>
-                <textarea value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
+                <label htmlFor="weekly-extra-emails" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/65">(this send only)</span></label>
+                <textarea id="weekly-extra-emails" value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
                   placeholder="extra1@example.com, extra2@example.com"
                   rows={2}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-none" />
