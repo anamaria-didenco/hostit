@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { shouldReturnFocus } from "@shared/focusReturn";
 import { XIcon } from "lucide-react";
 import * as React from "react";
 
@@ -19,9 +20,59 @@ const DialogCompositionContext = React.createContext<{
 export const useDialogComposition = () =>
   React.useContext(DialogCompositionContext);
 
+// Radix only gives focus back to a <DialogTrigger>. Most dialogs here open from
+// state (a button's onClick, Ctrl+K, a row action), so on close focus fell to
+// <body> and the next Tab started from the top of the page. The Root remembers
+// what had focus when the dialog opened; the content puts it back on close.
+const DialogReturnFocusContext = React.createContext<React.MutableRefObject<HTMLElement | null> | null>(null);
+
+function activeHTMLElement(): HTMLElement | null {
+  const a = typeof document !== "undefined" ? document.activeElement : null;
+  return a instanceof HTMLElement && a !== document.body ? a : null;
+}
+
+/**
+ * onCloseAutoFocus: refocus the opener (or `fallback` when the opener has gone,
+ * e.g. a menu item) unless focus has already gone somewhere on purpose.
+ */
+function useReturnFocus(onCloseAutoFocus?: (e: Event) => void, fallback?: () => HTMLElement | null) {
+  const openerRef = React.useContext(DialogReturnFocusContext);
+  return React.useCallback(
+    (e: Event) => {
+      onCloseAutoFocus?.(e);
+      if (e.defaultPrevented) return;
+      const opener = openerRef?.current;
+      const target = opener?.isConnected ? opener : fallback?.() ?? null;
+      const active = document.activeElement;
+      const dialog = e.currentTarget instanceof Node ? e.currentTarget : null;
+      const place = !active || active === document.body ? "body" : dialog?.contains(active) ? "inside-dialog" : "elsewhere";
+      if (!target || !shouldReturnFocus({ connected: target.isConnected }, place)) return;
+      e.preventDefault();
+      target.focus();
+    },
+    [onCloseAutoFocus, fallback, openerRef]
+  );
+}
+
 function Dialog({
+  open,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  const openerRef = React.useRef<HTMLElement | null>(null);
+  // Controlled (open={state}): remember the opener as it opens, before the
+  // content mounts and moves focus inside. Layout effect, so it runs first.
+  React.useLayoutEffect(() => {
+    if (open) openerRef.current = activeHTMLElement();
+  }, [open]);
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      // Uncontrolled (a DialogTrigger): remember it on the way in.
+      if (next && open === undefined) openerRef.current = activeHTMLElement();
+      onOpenChange?.(next);
+    },
+    [open, onOpenChange]
+  );
   const composingRef = React.useRef(false);
   const justEndedRef = React.useRef(false);
   const endTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,7 +109,9 @@ function Dialog({
 
   return (
     <DialogCompositionContext.Provider value={contextValue}>
-      <DialogPrimitive.Root data-slot="dialog" {...props} />
+      <DialogReturnFocusContext.Provider value={openerRef}>
+        <DialogPrimitive.Root data-slot="dialog" open={open} onOpenChange={handleOpenChange} {...props} />
+      </DialogReturnFocusContext.Provider>
     </DialogCompositionContext.Provider>
   );
 }
@@ -104,6 +157,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   onEscapeKeyDown,
+  onCloseAutoFocus,
   overlayClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -112,6 +166,7 @@ function DialogContent({
   overlayClassName?: string;
 }) {
   const { isComposing } = useDialogComposition();
+  const handleCloseAutoFocus = useReturnFocus(onCloseAutoFocus);
 
   const handleEscapeKeyDown = React.useCallback(
     (e: KeyboardEvent) => {
@@ -141,6 +196,7 @@ function DialogContent({
           className
         )}
         onEscapeKeyDown={handleEscapeKeyDown}
+        onCloseAutoFocus={handleCloseAutoFocus}
         {...props}
       >
         {children}
@@ -155,6 +211,100 @@ function DialogContent({
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
+  );
+}
+
+/**
+ * The same Radix dialog with none of DialogContent's look, for the app's own
+ * pop-ups (dark header, bottom sheet on phones, sits above the event drawer).
+ * Swap the two wrapper divs and keep the markup inside as it is:
+ *
+ *   <DialogShell onClose={close} className="fixed inset-0 z-50 flex …">   (the backdrop)
+ *     <DialogShellContent aria-labelledby="title-id" className="bg-white …"> (the box)
+ *
+ * It moves focus in, keeps Tab inside, closes on Escape, hides the page behind
+ * from screen readers, and gives focus back to whatever opened it.
+ */
+function DialogShell({
+  open = true,
+  onClose,
+  className,
+  style,
+  children,
+}: {
+  /** Leave out when the pop-up is only rendered while open. */
+  open?: boolean;
+  /** Escape, a click on the backdrop. Ignore the call to keep it open (e.g. while saving). */
+  onClose: () => void;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={next => { if (!next) onClose(); }}>
+      <DialogPortal>
+        <DialogPrimitive.Overlay data-slot="dialog-overlay" className={className} style={style}>
+          {children}
+        </DialogPrimitive.Overlay>
+      </DialogPortal>
+    </Dialog>
+  );
+}
+
+function DialogShellContent({
+  children,
+  initialFocus,
+  returnFocus,
+  closeOnOutsideClick = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+  onEscapeKeyDown,
+  onPointerDownOutside,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** Focus this on open; otherwise the dialog box itself takes focus. */
+  initialFocus?: React.RefObject<HTMLElement | null>;
+  /** Focus this on close when the element that opened the dialog has gone. */
+  returnFocus?: () => HTMLElement | null;
+  /** false: a click on the backdrop does nothing (as before for this one). */
+  closeOnOutsideClick?: boolean;
+}) {
+  const { isComposing } = useDialogComposition();
+  const handleCloseAutoFocus = useReturnFocus(onCloseAutoFocus, returnFocus);
+  return (
+    <DialogPrimitive.Content
+      data-slot="dialog-content"
+      aria-modal="true"
+      aria-describedby={undefined}
+      onOpenAutoFocus={e => {
+        onOpenAutoFocus?.(e);
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        const box = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
+        box?.focus();
+        // The control itself takes focus a tick later: a dialog opened by a
+        // key (Enter on "Lost" in a menu) must not have that same key press
+        // the button it lands on.
+        if (initialFocus) setTimeout(() => { if (!box || document.activeElement === box) initialFocus.current?.focus(); }, 0);
+      }}
+      onCloseAutoFocus={handleCloseAutoFocus}
+      onEscapeKeyDown={e => {
+        if (e.isComposing || isComposing()) { e.preventDefault(); return; }
+        onEscapeKeyDown?.(e);
+      }}
+      onPointerDownOutside={e => {
+        onPointerDownOutside?.(e);
+        // A tap on a toast (its Undo, its close) is not a tap on the backdrop.
+        const t = e.target instanceof Element ? e.target : null;
+        if (!closeOnOutsideClick || t?.closest("[data-sonner-toaster]")) e.preventDefault();
+      }}
+      {...props}
+    >
+      {/* Radix looks for its own Title; the visible heading is linked with
+          aria-labelledby instead, so this stays empty and hidden. */}
+      <DialogPrimitive.Title asChild><span hidden /></DialogPrimitive.Title>
+      {children}
+    </DialogPrimitive.Content>
   );
 }
 
@@ -216,6 +366,8 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogShell,
+  DialogShellContent,
   DialogTitle,
   DialogTrigger
 };
