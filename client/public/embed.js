@@ -277,17 +277,32 @@
     // last control no longer lands on links hidden under the backdrop. Only
     // what this script marked is unmarked on close.
     var madeInert = [];
+    var pageWatch = null;
+    function markInert(el) {
+      if (el.nodeType !== 1 || el === panel || el === backdrop || el === bubble || el.hasAttribute("inert")) return;
+      el.setAttribute("inert", "");
+      madeInert.push(el);
+    }
     function setPageInert(on) {
       var i;
+      if (pageWatch) { pageWatch.disconnect(); pageWatch = null; }
       for (i = 0; i < madeInert.length; i++) madeInert[i].removeAttribute("inert");
       madeInert = [];
       if (!on) return;
       var kids = document.body.children;
-      for (i = 0; i < kids.length; i++) {
-        var el = kids[i];
-        if (el === panel || el === backdrop || el === bubble || el.hasAttribute("inert")) continue;
-        el.setAttribute("inert", "");
-        madeInert.push(el);
+      for (i = 0; i < kids.length; i++) markInert(kids[i]);
+      // A cookie banner, chat widget or re-render the page adds while the
+      // sheet is open would sit reachable behind it: mark those too.
+      if (typeof MutationObserver === "function") {
+        pageWatch = new MutationObserver(function (records) {
+          for (var r = 0; r < records.length; r++) {
+            var added = records[r].addedNodes;
+            for (var a = 0; a < added.length; a++) {
+              if (added[a].parentNode === document.body) markInert(added[a]);
+            }
+          }
+        });
+        pageWatch.observe(document.body, { childList: true });
       }
     }
     function close() {

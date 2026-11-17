@@ -11,6 +11,7 @@ import vm from "node:vm";
 type Listener = (e: any) => void;
 
 class FakeEl {
+  nodeType = 1;
   tagName: string;
   attrs: Record<string, string> = {};
   children: FakeEl[] = [];
@@ -41,7 +42,11 @@ class FakeEl {
   getAttribute(k: string) { return k in this.attrs ? this.attrs[k] : null; }
   hasAttribute(k: string) { return k in this.attrs; }
   removeAttribute(k: string) { delete this.attrs[k]; }
-  appendChild(c: FakeEl) { c.parentNode = this; this.children.push(c); return c; }
+  appendChild(c: FakeEl) {
+    c.parentNode = this; this.children.push(c);
+    for (const mo of this.doc.observers) if (mo.target === this) mo.queue.push({ addedNodes: [c] });
+    return c;
+  }
   insertBefore(c: FakeEl) { return this.appendChild(c); }
   contains(other: FakeEl | null): boolean {
     for (let n = other; n; n = n.parentNode) if (n === this) return true;
@@ -56,8 +61,19 @@ class FakeEl {
   }
 }
 
+/** MutationObserver for childList only; records wait until flush(), as they wait for a microtask in a browser. */
+class FakeMutationObserver {
+  target: FakeEl | null = null;
+  queue: { addedNodes: FakeEl[] }[] = [];
+  constructor(private cb: (records: { addedNodes: FakeEl[] }[]) => void, private doc: FakeDoc) { doc.observers.push(this); }
+  observe(target: FakeEl, opts: { childList?: boolean }) { if (opts.childList) this.target = target; }
+  disconnect() { this.target = null; this.queue = []; }
+  flush() { const q = this.queue; this.queue = []; if (q.length) this.cb(q); }
+}
+
 class FakeDoc {
   readyState = "complete";
+  observers: FakeMutationObserver[] = [];
   listeners: Record<string, Listener[]> = {};
   body = new FakeEl("body", this);
   activeElement: FakeEl = this.body;
@@ -75,6 +91,8 @@ class FakeDoc {
   addEventListener(t: string, fn: Listener) { (this.listeners[t] ??= []).push(fn); }
   removeEventListener() {}
   keydown(key: string) { for (const fn of this.listeners.keydown ?? []) fn({ key, defaultPrevented: false }); }
+  /** Deliver pending MutationObserver records. */
+  flush() { for (const mo of this.observers) mo.flush(); }
 }
 
 function load({ narrow = false } = {}) {
@@ -90,7 +108,8 @@ function load({ narrow = false } = {}) {
     addEventListener: (t: string, fn: Listener) => { (winListeners[t] ??= []).push(fn); },
   };
   const code = readFileSync(path.resolve(import.meta.dirname, "../client/public/embed.js"), "utf8");
-  vm.runInNewContext(code, { window, document, console, URL, URLSearchParams });
+  const MutationObserver = function (this: any, cb: any) { return new FakeMutationObserver(cb, document); };
+  vm.runInNewContext(code, { window, document, console, URL, URLSearchParams, MutationObserver });
   const [backdrop, panel, bubble] = document.body.children.slice(2);
   const iframe = panel.children[0];
   const message = (data: any) => {
@@ -195,9 +214,44 @@ describe("embed.js floating widget as a dialog", () => {
     expect(hostInert.hasAttribute("inert")).toBe(true);
   });
 
+  it("as the bottom sheet, also makes what the page adds while it is open inert, and only that", () => {
+    // A cookie banner or chat widget that turns up after the sheet opened
+    // was left reachable behind the aria-modal sheet.
+    const { document, bubble, message } = load({ narrow: true });
+    bubble.dispatch("click");
+    const banner = document.body.appendChild(document.createElement("div"));
+    const ownInert = document.createElement("div");
+    ownInert.setAttribute("inert", "");
+    document.body.appendChild(ownInert);
+    // Deeper additions are covered by their inert ancestor; not touched.
+    const nested = banner.appendChild(document.createElement("a"));
+    document.flush();
+    expect(banner.hasAttribute("inert")).toBe(true);
+    expect(nested.hasAttribute("inert")).toBe(false);
+    document.keydown("Escape");
+    expect(banner.hasAttribute("inert")).toBe(false);
+    // Already inert when the page added it: left that way.
+    expect(ownInert.hasAttribute("inert")).toBe(true);
+    // Closed: what the page adds now stays usable.
+    const later = document.body.appendChild(document.createElement("div"));
+    document.flush();
+    expect(later.hasAttribute("inert")).toBe(false);
+    // Open again: the watch starts again, and the form closing itself ends it.
+    bubble.dispatch("click");
+    const chat = document.body.appendChild(document.createElement("div"));
+    document.flush();
+    expect(chat.hasAttribute("inert")).toBe(true);
+    message({ type: "vf-close-widget" });
+    expect(chat.hasAttribute("inert")).toBe(false);
+    expect(later.hasAttribute("inert")).toBe(false);
+  });
+
   it("as the corner panel, leaves the page behind usable", () => {
-    const { bubble, hostLink } = load();
+    const { document, bubble, hostLink } = load();
     bubble.dispatch("click");
     expect(hostLink.hasAttribute("inert")).toBe(false);
+    const banner = document.body.appendChild(document.createElement("div"));
+    document.flush();
+    expect(banner.hasAttribute("inert")).toBe(false);
   });
 });
