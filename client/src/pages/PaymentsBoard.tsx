@@ -940,8 +940,10 @@ function SummaryCard({ label, value, tone, icon, selected, onClick }: {
 
 // A status chip that opens a menu of its states (arrow keys, Enter, Escape all
 // work, and screen readers hear which one is selected).
-function StatusChip<V extends string>({ label, state, value, options, onChange, disabled, title, locked }: {
+function StatusChip<V extends string>({ label, state, value, options, onChange, disabled, title, locked, who }: {
   label: string; state: keyof typeof CHIP; value: V; disabled?: boolean; title?: string;
+  /** Whose booking it is: every row has the same chips, so the name says which. */
+  who?: string;
   options: Array<{ value: V; label: string; state: keyof typeof CHIP }>;
   onChange: (v: V) => void;
   /** The state comes from Xero, so picking another here wouldn't stick: show it, don't offer a menu. */
@@ -959,7 +961,7 @@ function StatusChip<V extends string>({ label, state, value, options, onChange, 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={disabled}>
-        <button type="button" title={title}
+        <button type="button" title={title} aria-label={who ? `${label}: ${who}` : undefined}
           className="font-sans font-semibold text-[13px] px-2.5 py-1.5 rounded-md border border-black/10 hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
           style={{ background: c.bg, color: c.text }}>
           {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
@@ -1002,7 +1004,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
     : row.depositNzd > 0 ? `Deposit ${depAmt}due` : "Deposit due · no amount set";
   const depositChip = (
     <StatusChip label={depositLabel} state={!row.depositRequired || depositMoot ? "none" : row.depositPaid ? "paid" : "todo"}
-      value={depositValue} disabled={busy} locked={row.depositPaidInXero}
+      value={depositValue} disabled={busy} locked={row.depositPaidInXero} who={row.name}
       title={row.depositPaidInXero ? "Paid in Xero — the payment hasn't come into VenueFlow yet"
         : row.depositDraft ? "A draft deposit invoice is waiting in Xero — approve it there to send it"
         : "Choose the deposit status"}
@@ -1026,7 +1028,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
   const draftTitle = "A draft invoice is waiting in Xero — approve it there to send it (this updates on the next Xero sync)";
   const foodChip = (
     <StatusChip label={`Food · ${streamWord(row.foodStatus, row.foodContra, row.foodDraft, row.foodPaidInXero)}`} state={stateFor(row.foodStatus)}
-      value={row.foodStatus} disabled={busy} locked={row.foodDraft || row.foodPaidInXero}
+      value={row.foodStatus} disabled={busy} locked={row.foodDraft || row.foodPaidInXero} who={row.name}
       title={row.foodDraft ? draftTitle : row.foodPaidInXero ? "Paid in Xero" : "Choose the food payment status"}
       options={STREAM_STATES} onChange={v => onFood(v as FoodStatus)} />
   );
@@ -1034,7 +1036,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
   const suggested = row.drinksInferred && row.drinksStatus !== "paid";
   const drinksChip = (
     <StatusChip label={`Drinks · ${streamWord(row.drinksStatus, row.drinksContra, row.drinksDraft, row.drinksPaidInXero)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
-      value={row.drinksStatus} disabled={busy} locked={row.drinksDraft || row.drinksPaidInXero}
+      value={row.drinksStatus} disabled={busy} locked={row.drinksDraft || row.drinksPaidInXero} who={row.name}
       title={row.drinksDraft ? draftTitle : row.drinksPaidInXero ? "Paid in Xero" : suggested ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
       options={STREAM_STATES} onChange={v => onDrinks(v as DrinksStatus)} />
   );

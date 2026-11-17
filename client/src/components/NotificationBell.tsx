@@ -60,10 +60,16 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
     },
   });
 
-  // Count went up → fetch the list so the popover and browser alerts are current.
+  // Count went up → fetch the list so the popover and browser alerts are current,
+  // and say so: the bell's label changing ("Alerts, 5 unread") isn't announced.
   const lastUnread = useRef<number | null>(null);
+  const [announcement, setAnnouncement] = useState("");
   useEffect(() => {
-    if (lastUnread.current !== null && unread > lastUnread.current) void listQuery.refetch();
+    if (lastUnread.current !== null && unread > lastUnread.current) {
+      void listQuery.refetch();
+      const fresh = unread - lastUnread.current;
+      setAnnouncement(`${fresh} new alert${fresh === 1 ? "" : "s"}, ${unread} unread`);
+    }
     lastUnread.current = unread;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unread]);
@@ -92,6 +98,12 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
   }, [listQuery.data]);
 
   useEffect(() => { if (open) void listQuery.refetch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [open]);
+  // Clear it again so the same words can be announced next time.
+  useEffect(() => {
+    if (!announcement) return;
+    const t = setTimeout(() => setAnnouncement(""), 5000);
+    return () => clearTimeout(t);
+  }, [announcement]);
 
   const openAlert = (a: Alert) => {
     if (!a.readAt) markRead.mutate({ id: a.id });
@@ -104,6 +116,8 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
   const iconColour = variant === "sidebar" ? (unread > 0 ? "#ffffff" : "#bcc8db") : undefined;
 
   return (
+    <>
+    <span role="status" className="sr-only">{announcement}</span>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -176,5 +190,6 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
         )}
       </PopoverContent>
     </Popover>
+    </>
   );
 }
