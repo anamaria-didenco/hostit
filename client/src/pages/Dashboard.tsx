@@ -100,6 +100,7 @@ import { LockOpen } from "lucide-react";
 import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidation";
 import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
 import { closeMenuOnEscape, onArrowChoose } from "@/lib/rovingKeys";
+import { holdTyping } from "@/lib/sessionExpiry";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -2804,6 +2805,8 @@ export default function Dashboard() {
   const composeTo = useRef<unknown>(null);
   const composeWasOpen = useRef(false);
   const composeTyped = () => !!emailForm.body.trim() && emailForm.body !== composeBaseline.current;
+  // A kept draft is typing to keep if the session ends (see lib/sessionExpiry).
+  useEffect(() => holdTyping("compose-draft", () => !!composeDraft.current), []);
   useEffect(() => {
     if (showEmailModal) {
       composeWasOpen.current = true;

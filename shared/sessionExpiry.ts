@@ -23,3 +23,36 @@ export function signedOutAction(opts: { typedOnPage: boolean; publicPage: boolea
 export function meWhileKept<T extends { user?: unknown }>(fetched: T | undefined, kept: T | null): T | undefined {
   return kept && !fetched?.user ? kept : fetched;
 }
+
+/** <input> types a person types into. A tick box, a radio button or a list choice isn't typing. */
+const TYPING_INPUT_TYPES = new Set(["", "text", "email", "tel", "url", "number", "password", "date", "time", "datetime-local", "month", "week"]);
+
+/** Whether typing in this field is work to keep (a search box isn't). */
+export function isTypingField(field: { tag: string; type?: string | null; role?: string | null; contentEditable?: boolean }): boolean {
+  if (field.role === "searchbox") return false;
+  if (field.contentEditable) return true;
+  const tag = field.tag.toLowerCase();
+  if (tag === "textarea") return true;
+  return tag === "input" && TYPING_INPUT_TYPES.has((field.type ?? "").toLowerCase());
+}
+
+/**
+ * Whether a field that was typed in still holds that typing when the session
+ * ends: it is still on the page (not in a dialog that has closed, or on another
+ * screen) and it wasn't emptied again. Typing once used to count for good, so
+ * a cleared search box still kept the page much later.
+ */
+export function stillHoldsTyping(field: { onPage: boolean; value: string }): boolean {
+  return field.onPage && field.value.trim() !== "";
+}
+
+/**
+ * Whether a dismissed "you've been signed out" notice comes back. It does when
+ * a save fails, or a screen can't load (Dismiss used to hide it for good, so
+ * every later save failed with no word of why). A screen that is already showing
+ * and only fails to refresh in the background (a timed check, coming back to the
+ * tab) doesn't bring it back.
+ */
+export function signedOutNoticeComesBack(opts: { showing: boolean; backgroundRefresh: boolean }): boolean {
+  return !opts.showing && !opts.backgroundRefresh;
+}

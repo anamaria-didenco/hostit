@@ -5,15 +5,16 @@ import { TRPCClientError } from "@trpc/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
 import { isPublicClientPath } from "@shared/pwaScope";
-import { signedOutAction } from "@shared/sessionExpiry";
+import { isTypingField, signedOutAction, signedOutNoticeComesBack, stillHoldsTyping } from "@shared/sessionExpiry";
 import { getLoginUrl } from "@/const";
 
 /*
- * When the session ends while the app is open. If anything has been typed on
- * the page, the page stays as it is and a notice (role="alert", until
- * dismissed) offers to sign in again in a new tab; once a request that failed
- * works again, it says "signed in again". With nothing typed it still goes to
- * sign-in, and the sign-in page says why.
+ * When the session ends while the app is open. If a field on the page still
+ * holds something typed, the page stays as it is and a notice (role="alert",
+ * until dismissed; a later failed save brings it back) offers to sign in again
+ * in a new tab; once a request that failed works again, it says "signed in
+ * again". With nothing typed it still goes to sign-in, and the sign-in page
+ * says why.
  *
  * The notice is its own element on <body>, not a toast: it has to work over an
  * open dialog (a toast can't be clicked behind a modal's overlay), so it sits
@@ -29,7 +30,10 @@ import { getLoginUrl } from "@/const";
 
 const SIGNED_OUT_FLAG = "vf-signed-out";
 
-let typedOnPage = false;
+// Fields typed in. Only those still on the page and not emptied again count (see typedOnPage).
+const typedFields = new Set<HTMLElement>();
+// Typing kept while its fields are closed (the email composer's unsent draft).
+const heldTyping = new Map<string, () => boolean>();
 let hadSession = false;
 let noticeShown = false;
 let lastMe: { user?: unknown } | null = null;
@@ -68,20 +72,47 @@ function isAuthMe(queryKey: readonly unknown[]): boolean {
   return Array.isArray(key) && key[0] === "auth" && key[1] === "me";
 }
 
-function isEditable(t: EventTarget | null): boolean {
-  return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement
-    || (t instanceof HTMLElement && t.isContentEditable);
+function noteTyping(t: EventTarget | null) {
+  if (!(t instanceof HTMLElement)) return;
+  if (!isTypingField({ tag: t.tagName, type: t.getAttribute("type"), role: t.getAttribute("role"), contentEditable: t.isContentEditable })) return;
+  typedFields.add(t);
+  if (typedFields.size > 50) typedOnPage(); // drops fields that have gone
+}
+
+/**
+ * Count typing that is kept in memory while its fields are closed, such as an
+ * unsent email that comes back when the composer reopens. `has` says whether
+ * there is any now. Returns the cleanup for useEffect.
+ */
+export function holdTyping(key: string, has: () => boolean) {
+  heldTyping.set(key, has);
+  return () => { heldTyping.delete(key); };
+}
+
+/** Is there typing on the page to keep? */
+function typedOnPage(): boolean {
+  let typed = [...heldTyping.values()].some(has => has());
+  for (const el of typedFields) {
+    if (!el.isConnected) { typedFields.delete(el); continue; }
+    const value = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : el.textContent ?? "";
+    if (stillHoldsTyping({ onPage: true, value })) typed = true;
+  }
+  return typed;
 }
 
 function isUnauthorized(error: unknown): boolean {
   return error instanceof TRPCClientError && error.message === UNAUTHED_ERR_MSG;
 }
 
-function handleUnauthorized() {
-  if (signedOutAction({ typedOnPage, publicPage: isPublicClientPath(window.location.pathname) }) === "keep-page") {
-    if (noticeShown) return;
-    setKeeping(true);
-    setNotice("signed-out");
+/** `backgroundRefresh`: a query that already has data refreshing (not a save, not a screen loading). */
+function handleUnauthorized(backgroundRefresh = false) {
+  if (signedOutAction({ typedOnPage: typedOnPage(), publicPage: isPublicClientPath(window.location.pathname) }) === "keep-page") {
+    if (!noticeShown) {
+      setKeeping(true);
+      setNotice("signed-out");
+    } else if (signedOutNoticeComesBack({ showing: notice === "signed-out", backgroundRefresh })) {
+      setNotice("signed-out");
+    }
     return;
   }
   if (hadSession) {
@@ -92,7 +123,7 @@ function handleUnauthorized() {
 
 /** Watch the query and mutation caches for "not signed in" (replaces the old straight redirect). */
 export function watchForSignOut(queryClient: QueryClient) {
-  document.addEventListener("input", e => { if (isEditable(e.target)) typedOnPage = true; }, true);
+  document.addEventListener("input", e => noteTyping(e.target), true);
 
   // Ask the server again: after signing in in another tab and coming back, or after a save worked.
   const recheck = () => {
@@ -108,7 +139,7 @@ export function watchForSignOut(queryClient: QueryClient) {
       const error = query.state.error;
       if (isUnauthorized(error)) {
         failedQueries.add(query.queryHash);
-        handleUnauthorized();
+        handleUnauthorized(query.state.data !== undefined);
       }
       console.error("[API Query Error]", error);
     } else if (event.action.type === "success") {
