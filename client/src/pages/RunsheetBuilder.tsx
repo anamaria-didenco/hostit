@@ -3775,7 +3775,7 @@ export default function RunsheetBuilder() {
                         className="flex-1 flex items-center gap-2 pl-6 pr-3 py-3 hover:bg-linen transition-colors text-left"
                       >
                         <Building2 className="w-4 h-4 text-forest flex-shrink-0" />
-                        <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+                        <span id="rb-setup-heading" className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
                         {venueSetup && !isHidden && (() => {
                           // The setup note is rich text (stored as HTML); show it as plain words, not "<p>Long banquet…".
                           const plain = String(venueSetup).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
@@ -3844,6 +3844,7 @@ export default function RunsheetBuilder() {
                           />
                         </div>
                         <RichTextarea
+                          labelledBy="rb-setup-heading"
                           value={venueSetup}
                           onChange={setVenueSetup}
                           placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
@@ -4136,8 +4137,9 @@ export default function RunsheetBuilder() {
 
             {/* Event notes — at top */}
             <div data-print-section="notes" className="px-5 py-3 border-b border-gold/20 bg-linen/30">
-              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1.5">EVENT NOTES</label>
+              <label id="rb-event-notes-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1.5">EVENT NOTES</label>
               <RichTextarea
+                labelledBy="rb-event-notes-label"
                 value={notes}
                 onChange={setNotes}
                 placeholder="Any additional notes for the event..."
@@ -4433,7 +4435,7 @@ export default function RunsheetBuilder() {
                 whole block is no-print (its label + hint used to leak onto the
                 page, and its echo double-printed the footer). */}
             <div className="px-5 py-4 border-t border-gold/20 no-print">
-              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">FOOTER NOTE</label>
+              <label id="rb-footer-note-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-xs text-ink/65 mb-2">Shown at the bottom of the runsheet — a closing note or terms. Payment terms live in Payment Notes, so they don't need repeating here.</p>
               {/* Read-only echo of the single source. Stops the same sentence
                   being typed into two fields and drifting out of step. */}
@@ -4453,6 +4455,7 @@ export default function RunsheetBuilder() {
                 </div>
               )}
               <RichTextarea
+                labelledBy="rb-footer-note-label"
                 value={footerText}
                 onChange={setFooterText}
                 placeholder="e.g. Final payment of $2,400 due on the day. Thank you for choosing us!"
@@ -4690,8 +4693,9 @@ export default function RunsheetBuilder() {
             {/* Kitchen / chef notes — mirrors the Drinks/Bar notes; prints on
                 the BEO and the live staff runsheet. */}
             <div className="px-5 py-4 border-t border-gold/20 no-print">
-              <div className="font-bebas tracking-widest text-xs text-ink/75 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" /> KITCHEN NOTES</div>
+              <div id="rb-kitchen-notes-label" className="font-bebas tracking-widest text-xs text-ink/75 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" aria-hidden /> KITCHEN NOTES</div>
               <Textarea
+                aria-labelledby="rb-kitchen-notes-label"
                 value={kitchenNotes}
                 onChange={e => setKitchenNotes(e.target.value)}
                 placeholder={`e.g.\n• Allergy plates to be prepped separately\n• Canapés out at 6:15, mains 7:00\n• Chef to plate desserts to order`}
@@ -5554,6 +5558,7 @@ export default function RunsheetBuilder() {
                     type="text"
                     value={newRsCustomDrink.name}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, name: e.target.value }))}
+                    aria-label="Custom drink name"
                     placeholder="Drink name (e.g. Signature Espresso Martini)"
                     className="sm:col-span-5 min-w-0 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
@@ -5561,6 +5566,7 @@ export default function RunsheetBuilder() {
                     type="text"
                     value={newRsCustomDrink.description}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, description: e.target.value }))}
+                    aria-label="Custom drink description (optional)"
                     placeholder="Description (optional)"
                     className="sm:col-span-5 min-w-0 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
@@ -5591,8 +5597,9 @@ export default function RunsheetBuilder() {
 
               {/* Drinks / Bar Notes */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="font-bebas tracking-widest text-xs text-ink/75 mb-3">DRINKS / BAR NOTES</div>
+                <div id="rb-bar-notes-label" className="font-bebas tracking-widest text-xs text-ink/75 mb-3">DRINKS / BAR NOTES</div>
                 <Textarea
+                  aria-labelledby="rb-bar-notes-label"
                   value={rsBarNotes}
                   onChange={e => setRsBarNotes(e.target.value)}
                   placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night\n• Set up: 1× espresso martini station, 2× cocktail bartenders`}
@@ -5734,6 +5741,7 @@ export default function RunsheetBuilder() {
               <Input
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
+                aria-label="Add a checklist item"
                 placeholder="Add a checklist item..."
                 className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                 onKeyDown={e => e.key === 'Enter' && addChecklistItem()}
@@ -6819,9 +6827,9 @@ export default function RunsheetBuilder() {
               </div>
               {/* Footer note editor */}
               <div className="px-4 py-3">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-1">FOOTER NOTE / MESSAGE</div>
+                <div id="rb-beo-footer-label" className="font-bebas tracking-widest text-xs text-forest mb-1">FOOTER NOTE / MESSAGE</div>
                 <p className="font-dm text-xs text-ink/75 mb-2">The closing note at the very bottom — payment terms, a thank-you, anything. Keep “Footer note” ticked above to show it.</p>
-                <RichTextarea value={footerText} onChange={setFooterText} placeholder="e.g. Final payment of $2,400 due on the day. Grazie!" minHeight="80px" />
+                <RichTextarea labelledBy="rb-beo-footer-label" value={footerText} onChange={setFooterText} placeholder="e.g. Final payment of $2,400 due on the day. Grazie!" minHeight="80px" />
                 <button
                   onClick={async () => { try { await handleSave(); } catch {} setPreviewNonce(n => n + 1); }}
                   disabled={saving}

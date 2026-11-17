@@ -7,6 +7,8 @@ interface RichTextareaProps {
   placeholder?: string;
   className?: string;
   minHeight?: string;
+  /** id of the visible heading that names this field. */
+  labelledBy?: string;
 }
 
 // Two semantic marks instead of a free colour picker and a font-size menu.
@@ -18,7 +20,7 @@ interface RichTextareaProps {
 const MARK_HIGHLIGHT = '#f7efdd'; // amber tint — "look at this"
 const MARK_ALERT = '#b3261e';     // editorial red — "this matters"
 
-export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px' }: RichTextareaProps) {
+export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px', labelledBy }: RichTextareaProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // Toolbars stay collapsed until the field is being edited. Three of these
@@ -103,7 +105,9 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
         contentEditable
         role="textbox"
         aria-multiline="true"
-        aria-label={placeholder}
+        aria-label={labelledBy ? undefined : placeholder}
+        aria-labelledby={labelledBy}
+        aria-placeholder={labelledBy ? placeholder : undefined}
         tabIndex={0}
         suppressContentEditableWarning
         onInput={handleInput}
