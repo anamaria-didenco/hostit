@@ -283,7 +283,7 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
 
                 {/* Edit form inline */}
                 {isEditing ? (
-                  <div className="flex flex-1 items-center gap-2 flex-wrap"
+                  <div className="flex flex-1 min-w-full sm:min-w-0 items-center gap-2 flex-wrap"
                     onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); } }}>
                     <input
                       autoFocus
