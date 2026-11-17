@@ -1263,6 +1263,14 @@
   display: none;
 }
 
+/* Upload buttons are a <label> around a visually-hidden (sr-only, not
+   display:none) file input, so Tab reaches the input and Space/Enter opens the
+   file picker. The 1px input can't show a ring, so its label shows it. */
+label:has(input[type="file"]:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* Honour the OS "reduce motion" preference (vestibular safety). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

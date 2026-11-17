@@ -458,7 +458,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
 function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: string; uploads: any[]; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const up = trpc.portal.uploadFile.useMutation({
-    onSuccess: () => { toast.success("Uploaded — thanks!"); onChanged(); },
+    onSuccess: (_d, vars) => { toast.success(`Uploaded ${vars.filename} — thanks!`); onChanged(); },
     onError: (e) => toast.error(e.message || "Upload failed."),
     onSettled: () => setBusy(false),
   });
@@ -485,7 +485,7 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
         </div>
         <label className="px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer whitespace-nowrap" style={{ background: T.accent, color: T.onAccent, opacity: busy ? 0.6 : 1 }}>
           {busy ? "Uploading…" : "Upload"}
-          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={onFile} disabled={busy} />
+          <input type="file" accept="image/*,application/pdf" aria-label="Upload a file" className="sr-only" onChange={onFile} disabled={busy} />
         </label>
       </div>
       <div className="p-4">

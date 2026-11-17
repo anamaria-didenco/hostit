@@ -893,7 +893,7 @@ export default function FloorPlanEditor({
             <label className="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-gold/40 hover:border-gold hover:bg-gold/5 transition-colors" title="Upload background photo (blueprint, venue photo to trace over)">
               <Upload className="w-3 h-3 text-ink/65" />
               <span className="text-xs font-bebas tracking-wider text-ink/70">BG PHOTO</span>
-              <input type="file" accept="image/*" className="hidden" onChange={e => {
+              <input type="file" accept="image/*" aria-label="BG photo: upload a background image to trace over" className="sr-only" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
                 const img = new Image();
                 const objectUrl = URL.createObjectURL(file);

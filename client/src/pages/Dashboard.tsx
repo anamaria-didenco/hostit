@@ -4764,7 +4764,7 @@ export default function Dashboard() {
                           <input
                             type="file"
                             multiple
-                            className="hidden"
+                            className="sr-only"
                             onChange={async e => {
                               const files = Array.from(e.target.files ?? []);
                               const loaded = await Promise.all(files.map(f => new Promise<{ filename: string; content: string; contentType: string }>(resolve => {
@@ -4777,6 +4777,10 @@ export default function Dashboard() {
                             }}
                           />
                         </label>
+                        {/* The hidden picker can't say what was chosen: announce it. */}
+                        <span className="sr-only" aria-live="polite">
+                          {emailAttachments.length > 0 ? `Attached: ${emailAttachments.map(a => a.filename).join(', ')}` : ''}
+                        </span>
                       </div>
                     </div>
                     {proposalAttached && (
@@ -6266,7 +6270,7 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <label className="cursor-pointer block">
-                          <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                          <input type="file" accept="image/*" className="sr-only" onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
                             try {
                               const dataUrl = await compressToDataUrl(file, 1600, 800, 0.80);
@@ -6685,7 +6689,7 @@ export default function Dashboard() {
                                   type="file"
                                   accept="image/*"
                                   aria-label={sig.photo ? "Change signature photo" : "Upload signature photo"}
-                                  className="hidden"
+                                  className="sr-only"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
@@ -6717,7 +6721,7 @@ export default function Dashboard() {
                                   type="file"
                                   accept="image/*"
                                   aria-label={sig.signatureLogo ? "Change signature logo" : "Upload signature logo"}
-                                  className="hidden"
+                                  className="sr-only"
                                   onChange={e => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
@@ -7279,7 +7283,7 @@ export default function Dashboard() {
                       <label className="flex items-center gap-3 border border-dashed border-gold/30 p-3 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors rounded">
                         <Upload className="w-4 h-4 text-ink/65 flex-shrink-0" />
                         <span className="font-dm text-xs text-ink/60">Upload a background image (JPG, PNG)</span>
-                        <input type="file" accept="image/*" className="hidden"
+                        <input type="file" accept="image/*" className="sr-only"
                           onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
                             try {
@@ -7509,7 +7513,7 @@ export default function Dashboard() {
                           <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors flex-shrink-0" style={{ width: `${tileW}px`, height: `${ph}px` }}>
                             <Upload className="w-5 h-5 text-ink/65 mb-1" />
                             <span className="font-dm text-xs text-ink/60">Upload photo</span>
-                            <input type="file" accept="image/*" className="hidden"
+                            <input type="file" accept="image/*" className="sr-only"
                               onChange={async e => {
                                 const file = e.target.files?.[0]; if (!file) return;
                                 try {
@@ -8734,7 +8738,7 @@ export default function Dashboard() {
                                 )}
                                 <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
                                   <Upload className="w-3 h-3" /> UPLOAD PNG
-                                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => {
+                                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={e => {
                                     const file = e.target.files?.[0]; if (!file) return;
                                     const img = new Image();
                                     const url = URL.createObjectURL(file);
@@ -9015,7 +9019,7 @@ export default function Dashboard() {
                               className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border ${showCatalogAiPanel ? 'bg-forest text-cream border-forest' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>✨ AI ADD</button>
                             <label className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border cursor-pointer ${catalogPdfLoading ? 'bg-forest/40 text-cream border-forest cursor-wait' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>
                               {catalogPdfLoading ? 'READING…' : '📄 UPLOAD PDF'}
-                              <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={catalogPdfLoading}
+                              <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={catalogPdfLoading}
                                 onChange={async e => {
                                   const file = e.target.files?.[0];
                                   e.target.value = "";
