@@ -1201,9 +1201,24 @@ export default function Dashboard() {
       let scroller: HTMLElement | null = null;
       for (let a = area.parentElement; a; a = a.parentElement) {
         const o = getComputedStyle(a).overflowY;
-        if ((o === 'auto' || o === 'scroll') && a.scrollHeight > a.clientHeight) { scroller = a; break; }
+        if (o === 'auto' || o === 'scroll') { scroller = a; break; }
       }
-      const bottom = scroller ? Math.min(scroller.getBoundingClientRect().bottom, window.innerHeight) : area.getBoundingClientRect().bottom;
+      let bottom: number;
+      if (scroller) {
+        bottom = Math.min(scroller.getBoundingClientRect().bottom, window.innerHeight);
+      } else {
+        // Measured without the padding this sets: where the bar covers the whole
+        // list (a small phone), the padding outgrows the area, and measuring with
+        // it would add to the last measure on every resize. Taking it off can
+        // pull the page's scroll back, so that is put back too.
+        const padNow = area.style.paddingBottom;
+        const page = document.scrollingElement;
+        const scrolled = page?.scrollTop ?? 0;
+        area.style.paddingBottom = '0px';
+        bottom = area.getBoundingClientRect().bottom;
+        area.style.paddingBottom = padNow;
+        if (page && page.scrollTop !== scrolled) page.scrollTop = scrolled;
+      }
       setBulkBarCover(Math.max(0, Math.round(bottom - el.getBoundingClientRect().top)));
     };
     const ro = new ResizeObserver(measure);
@@ -4628,7 +4643,7 @@ export default function Dashboard() {
                 // out of reach: below xl (iPad landscape and zoomed windows too)
                 // it fits the screen and wraps, and on phones it sits above the
                 // tab bar. Desktop (1280px and up) is as it was.
-                <div ref={bulkBarRef} className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex max-xl:flex-wrap max-xl:w-max max-xl:max-w-[calc(100vw-2rem)] items-center gap-3 max-xl:gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                <div ref={bulkBarRef} data-toast-clear className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex max-xl:flex-wrap max-xl:w-max max-xl:max-w-[calc(100vw-2rem)] items-center gap-3 max-xl:gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
