@@ -6069,16 +6069,27 @@ export default function RunsheetBuilder() {
             </div>
             <div className="px-5 py-4 space-y-2">
               {(existing?.attachments ?? []).map((att: any) => (
-                <div key={att.id} className="flex items-center gap-3 px-3 py-2 border border-gold/20 hover:bg-linen/40 transition-colors group">
-                  <FileText className="w-4 h-4 text-forest flex-shrink-0" />
-                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 font-dm text-sm text-ink hover:text-forest truncate" title={att.name}>
-                    {att.name}
-                  </a>
+                <div key={att.id} className={`flex items-center gap-3 px-3 py-2 border transition-colors group ${att.missing ? 'border-red-300 bg-red-50' : 'border-gold/20 hover:bg-linen/40'}`}>
+                  <FileText className={`w-4 h-4 flex-shrink-0 ${att.missing ? 'text-red-700' : 'text-forest'}`} />
+                  {att.missing ? (
+                    // The row is saved but the PDF itself is no longer on the
+                    // server, so staff can't open it and the live link leaves
+                    // it out. Say so rather than show a link to an error page.
+                    <div className="flex-1 min-w-0">
+                      <p className="font-dm text-sm text-ink truncate" title={att.name}>{att.name}</p>
+                      <p className="font-dm text-xs text-red-800">File missing on the server, so staff can't see it. Remove it and attach the PDF again.</p>
+                    </div>
+                  ) : (
+                    <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 font-dm text-sm text-ink hover:text-forest truncate" title={att.name}>
+                      {att.name}
+                    </a>
+                  )}
                   <span className="font-dm text-xs text-ink/75 flex-shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
                   <button
                     onClick={() => { if (confirm(`Remove ${att.name}?`)) removeAttachmentMutation.mutate({ runsheetId: sheetId, attachmentId: att.id }); }}
-                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/75 hover:text-red-500"
+                    className={`${att.missing ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100'} transition-opacity p-1 text-ink/75 hover:text-red-500`}
                     title="Remove"
+                    aria-label={`Remove ${att.name}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
