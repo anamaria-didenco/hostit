@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { floorPlanItemName, summarizeFloorPlan } from "@shared/floorPlanSummary";
+import { planKeyAction } from "@shared/floorPlanKeys";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type FPElement = {
@@ -120,19 +121,27 @@ function kindName(type: string, customPalette: CustomPaletteItem[]) {
   return words ? words[0].toUpperCase() + words.slice(1) : "Item";
 }
 
-const NUDGE_KEYS: Record<string, [number, number]> = {
-  ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
-};
+// Focus an item (or the plan) after a click, tap or drop, so the keys act on
+// it, without drawing the keyboard focus ring: its selection outline already
+// shows which item it is. The ring is back next time it gets focus from the
+// keyboard. Focus that moves on from it (after Delete or Ctrl+D) stays quiet.
+function focusQuietly(el: Element | null | undefined) {
+  if (!(el instanceof HTMLElement)) return;
+  el.dataset.quietFocus = "";
+  el.style.setProperty("outline", "none", "important");
+  el.addEventListener("blur", () => { delete el.dataset.quietFocus; el.style.removeProperty("outline"); }, { once: true });
+  el.focus({ preventScroll: true });
+}
+const hasQuietFocus = () => document.activeElement instanceof HTMLElement && "quietFocus" in document.activeElement.dataset;
 
 // ─── Render a single element on the canvas ───────────────────────────────────
-const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, onNudge, readOnly, customPalette, hintId }: {
+const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette, hintId }: {
   el: FPElement;
   selected: boolean;
   onSelect: (id: string) => void;
   onDragStart: (e: React.MouseEvent, id: string) => void;
   onResizeStart: (e: React.MouseEvent, id: string, corner: string) => void;
   onRotateStart: (e: React.MouseEvent, id: string) => void;
-  onNudge?: (id: string, dx: number, dy: number, big: boolean) => void;
   readOnly?: boolean;
   customPalette: CustomPaletteItem[];
   hintId?: string;
@@ -161,8 +170,9 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
   return (
     <div
       // In the editor each item is a Tab stop named "Table 1, 8 seats":
-      // focusing it selects it, the arrow keys move it, and R / Delete act on
-      // it.
+      // focusing it selects it (Enter or Space selects it again after
+      // Escape), and the arrows, R and Delete act on the selected item. A
+      // click or tap focuses it too, without a focus ring.
       {...(readOnly ? {} : {
         role: "button",
         tabIndex: 0,
@@ -170,11 +180,9 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
         "aria-describedby": hintId,
         "data-el-id": el.id,
         onFocus: () => onSelect(el.id),
+        onPointerDown: (e: React.PointerEvent) => focusQuietly(e.currentTarget),
         onKeyDown: (e: React.KeyboardEvent) => {
-          const d = NUDGE_KEYS[e.key];
-          if (!d || e.target !== e.currentTarget) return;
-          e.preventDefault();
-          onNudge?.(el.id, d[0], d[1], e.shiftKey);
+          if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onSelect(el.id); }
         },
       })}
       onMouseDown={(e) => { onSelect(el.id); onDragStart(e, el.id); }}
@@ -305,7 +313,6 @@ export default function FloorPlanEditor({
   const resizeRef = useRef<{ id: string; corner: string; startX: number; startY: number; origX: number; origY: number; origW: number; origH: number } | null>(null);
   const rotateRef = useRef<{ id: string; cx: number; cy: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const pointerOnPlan = useRef(false);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
   const hintId = useId();
@@ -332,8 +339,8 @@ export default function FloorPlanEditor({
     dragRef.current = { id, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y };
   }, [readOnly]);
 
-  // ── Move the focused element with the arrow keys (one grid square, or 1px
-  // with Snap off; Shift for five) ────────────────────────────────────────
+  // ── Move the selected element with the arrow keys (one grid square, or
+  // 1px with Snap off; Shift for five) ───────────────────────────────────
   const handleNudge = useCallback((id: string, dx: number, dy: number, big: boolean) => {
     if (readOnly) return;
     const step = (snapToGrid ? GRID : 1) * (big ? 5 : 1);
@@ -470,7 +477,8 @@ export default function FloorPlanEditor({
     };
     setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
     setSelected(newEl.id);
-    pointerOnPlan.current = true; // Delete / R act on the dropped item, as before
+    // Delete / R act on the dropped item, as before: give it focus.
+    setTimeout(() => focusQuietly(canvasRef.current?.querySelector(`[data-el-id="${CSS.escape(newEl.id)}"]`)), 0);
   }, [zoom, snap, customPalette]);
 
   // ── Selected element ─────────────────────────────────────────────────────
@@ -507,9 +515,12 @@ export default function FloorPlanEditor({
       const copy: FPElement = { ...el, id: `${el.type}-${Date.now()}`, x: el.x + GRID, y: el.y + GRID };
       setTimeout(() => {
         setSelected(copy.id);
-        // Keyboard: move focus to the copy, so the arrows move what's selected.
+        // Focus was on the plan: move it to the copy, which is now selected.
         const c = canvasRef.current;
-        if (c && c.contains(document.activeElement)) c.querySelector<HTMLElement>(`[data-el-id="${CSS.escape(copy.id)}"]`)?.focus();
+        if (c && c.contains(document.activeElement)) {
+          const t = c.querySelector<HTMLElement>(`[data-el-id="${CSS.escape(copy.id)}"]`);
+          if (hasQuietFocus()) focusQuietly(t); else t?.focus();
+        }
       }, 0);
       return { ...prev, elements: [...prev.elements, copy] };
     });
@@ -563,36 +574,33 @@ export default function FloorPlanEditor({
   };
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
-  // Delete / Backspace / R act only on the plan itself: while the canvas or
-  // one of its items has focus, or straight after a mouse click (or drop) on
-  // the plan, until the next click or Tab elsewhere. Backspace on "Zoom in"
-  // used to delete the selected table, and R fired from any button. (A click
-  // doesn't move focus, so mouse users get no keyboard focus ring.)
-  useEffect(() => {
-    const onDown = (e: PointerEvent) => { pointerOnPlan.current = !!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target); };
-    const onFocusIn = (e: FocusEvent) => { if (!(canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target))) pointerOnPlan.current = false; };
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("focusin", onFocusIn);
-    return () => { document.removeEventListener("pointerdown", onDown, true); document.removeEventListener("focusin", onFocusIn); };
-  }, []);
+  // The arrows, Delete / Backspace and R act on the selected item (the one
+  // the properties panel shows), and only while the plan itself (the canvas
+  // or one of its items) has focus, never from a button or other control:
+  // see shared/floorPlanKeys.ts. A click or tap on an item gives it focus, so
+  // mouse users can still click a table and press Delete or R.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSelected(); return; }
-      const onPlan = pointerOnPlan.current || (!!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target));
-      if (onPlan && (e.key === "Delete" || e.key === "Backspace") && selected) {
+      const canvas = canvasRef.current;
+      const onPlan = !!canvas && e.target instanceof Node && canvas.contains(e.target);
+      const act = planKeyAction({ key: e.key, shift: e.shiftKey, modifier: e.metaKey || e.ctrlKey || e.altKey }, onPlan, selected);
+      if (act?.kind === "nudge") { e.preventDefault(); handleNudge(act.id, act.dx, act.dy, act.big); }
+      if (act?.kind === "delete") {
         e.preventDefault();
-        const hadFocus = !!canvasRef.current?.contains(document.activeElement);
+        const onIt = document.activeElement?.getAttribute("data-el-id") === act.id;
+        const quiet = hasQuietFocus();
         deleteSelected();
         // The deleted item had focus: keep it on the plan, not lost to <body>.
-        if (hadFocus) canvasRef.current?.focus({ preventScroll: true });
+        if (onIt && canvas) { if (quiet) focusQuietly(canvas); else canvas.focus({ preventScroll: true }); }
       }
-      if (onPlan && (e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey && !e.altKey) rotateSelected();
+      if (act?.kind === "rotate") rotateSelected();
       if (e.key === "Escape") setSelected(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, duplicateSelected]);
+  }, [selected, duplicateSelected, handleNudge]);
 
   // ── Share & PDF ──────────────────────────────────────────────────────────
   const generateLink = trpc.floorPlans.generateShareLink.useMutation({
@@ -1091,7 +1099,6 @@ export default function FloorPlanEditor({
                   onDragStart={readOnly ? () => {} : handleDragStart}
                   onResizeStart={handleResizeStart}
                   onRotateStart={handleRotateStart}
-                  onNudge={handleNudge}
                   readOnly={readOnly}
                   customPalette={customPalette}
                   hintId={hintId}
