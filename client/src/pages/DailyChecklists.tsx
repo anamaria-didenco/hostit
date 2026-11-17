@@ -255,7 +255,7 @@ export default function DailyChecklists() {
                 onClick={() => { setShowAiPaste(true); setAiParsed(null); setAiPasteText(""); }}
                 className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40 transition-colors text-white font-bebas tracking-wider text-sm px-3 md:px-4 py-2.5 rounded min-h-[44px]"
                 title="Paste a to-do list and AI builds a checklist"
-                aria-label="AI Smart Paste — paste a to-do list and AI builds a checklist"
+                aria-label="AI paste: paste a to-do list and AI builds a checklist"
               >
                 <Sparkles className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden md:inline">AI PASTE</span>

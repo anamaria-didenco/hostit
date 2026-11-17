@@ -14,6 +14,8 @@ import { getLoginUrl } from "@/const";
 import { currency } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
 import BookingInvoices from "@/components/BookingInvoices";
+import { pageTitle } from "@shared/pageTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const PAYMENT_TYPES = [
   { value: "deposit", label: "Deposit" },
@@ -186,6 +188,8 @@ export default function PaymentTracker() {
     onError: () => toast.error("Couldn't send the receipt"),
   });
 
+  useDocumentTitle(booking ? pageTitle(["Payments", `${booking.firstName ?? ""} ${booking.lastName ?? ""}`]) : null);
+
   if (authLoading) return null;
   if (!user) { window.location.href = getLoginUrl(); return null; }
   if (!bookingId) return (
@@ -334,7 +338,9 @@ export default function PaymentTracker() {
           >
             <div className="flex items-center gap-2">
               <Plus className={`w-4 h-4 text-burgundy transition-transform ${adding ? "rotate-45" : ""}`} aria-hidden="true" />
-              <span className="font-bebas tracking-widest text-sm text-burgundy">RECORD PAYMENT</span>
+              {/* Not also "RECORD PAYMENT": that is the submit button below, and a
+                  keyboard user reaching this toggle first collapsed the form. */}
+              <span className="font-bebas tracking-widest text-sm text-burgundy">ADD A PAYMENT</span>
             </div>
           </button>
           {adding && (

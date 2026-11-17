@@ -202,12 +202,12 @@ export default function DailyChecklistLive() {
 
   if (!checklist) {
     return (
-      <div className="min-h-screen bg-linen flex items-center justify-center px-4">
+      <main className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</p>
+          <h1 className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</h1>
           <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid or has been removed.</p>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -405,7 +405,7 @@ export default function DailyChecklistLive() {
                   <button
                     onClick={() => { setConfirmDeleteId(null); startEdit(item); }}
                     className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors border-b border-stone-100"
-                    aria-label="Edit item"
+                    aria-label={`Edit item: ${item.text}`}
                     title="Edit item"
                   >
                     <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
@@ -424,7 +424,7 @@ export default function DailyChecklistLive() {
                     <button
                       onClick={() => setConfirmDeleteId(item.id)}
                       className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors"
-                      aria-label="Delete item"
+                      aria-label={`Delete item: ${item.text}`}
                       title="Delete item"
                     >
                       <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
