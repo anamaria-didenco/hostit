@@ -257,7 +257,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background">
+    <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
         {/* View tabs */}
         <div className="flex items-end justify-between gap-4 flex-wrap">

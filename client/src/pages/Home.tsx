@@ -188,7 +188,9 @@ export default function Home() {
                 <Button asChild variant="paper" className="hidden sm:inline-flex">
                   <Link href="/signup">Sign up</Link>
                 </Button>
-                <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap">
+                {/* Under 360px (a phone at 400% zoom) the header can't fit both
+                    buttons; the same "Join the waitlist" is the hero's first button. */}
+                <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap max-[360px]:hidden">
                   <span className="sm:hidden">Waitlist</span>
                   <span className="hidden sm:inline">Join waitlist</span>
                   <ArrowRight className="w-3.5 h-3.5" />

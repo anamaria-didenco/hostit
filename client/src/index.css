@@ -1306,6 +1306,15 @@
   :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) { forced-color-adjust: none; background-color: Highlight !important; color: HighlightText !important; }
 }
 
+/* Short screens: a laptop zoomed to 200-400%, or a phone on its side. The
+   Enquiries and Calendar tabs fill the screen with a fixed header and scroll
+   only the list underneath, and at 256px tall that list had 0px left. Below
+   480px tall the whole page scrolls instead. */
+@media (max-height: 480px) {
+  #vf-main { overflow-y: auto !important; }
+  #vf-main .vf-pane { height: auto !important; overflow: visible !important; }
+  #vf-main .vf-pane-scroll { flex: none !important; min-height: 0 !important; overflow: visible !important; }
+}
 
 /* Skip-to-content link — visually hidden until focused. */
 .skip-link {

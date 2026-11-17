@@ -901,9 +901,11 @@ export default function ProposalBuilder() {
               </Button>
             </div>
 
-            {/* Header */}
-            <div className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 mb-2">
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
+            {/* Header. On a phone each line stacks: the description on its own
+                row, then qty, price, total and remove (side by side the
+                description box was crushed to 28px). */}
+            <div className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-x-2 gap-y-1 mb-2">
+              <div className="col-span-4 sm:col-span-1 font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
@@ -928,8 +930,8 @@ export default function ProposalBuilder() {
             )}
             <div className="space-y-2 mb-4">
               {lineItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
-                  <div className="min-w-0">
+                <div key={i} className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
+                  <div className="min-w-0 col-span-4 sm:col-span-1">
                     <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>

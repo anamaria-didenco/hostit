@@ -1204,7 +1204,7 @@ export default function Dashboard() {
   // root; dropping flex-1/overflow is what lets them flow at natural height
   // (a flex item with overflow-auto has min-height 0, so it would otherwise
   // collapse once the pane is no longer a fixed height).
-  const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto';
+  const calFill = showCalendarNeeds ? '' : 'flex-1 overflow-auto vf-pane-scroll';
   // New-venue setup steps (worked out from real data); the card hides itself
   // once everything is done.
   const { data: setupStatus } = trpc.quickstart.setupStatus.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
@@ -3510,10 +3510,10 @@ export default function Dashboard() {
   const overviewRolling = isCurrentCalMonth && !overviewShowPast;
   const monthCalendarCard = (
                   <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
                     <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
                     <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
-                    <div className="flex-1 min-w-0 relative">
+                    <div className="flex-1 min-w-[6rem] relative">
                       <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
                         <PopoverTrigger asChild>
                           <button
@@ -4216,10 +4216,10 @@ export default function Dashboard() {
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
-            <div className="flex h-full overflow-hidden">
+            <div className="vf-pane flex h-full overflow-hidden">
 
               {/* ── MAIN ENQUIRIES COLUMN ──────────────────────────────────── */}
-              <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+              <div className="vf-pane flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
@@ -4841,7 +4841,7 @@ export default function Dashboard() {
 
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
-            <div className={`flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
+            <div className={`vf-pane flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
               {/* Every other tab has a page-level <h1> (Overview, Pipeline,
                   Contacts, Tasks, Settings, …) — Calendar was the one
                   exception, which matters most here since a restricted staff
@@ -4851,9 +4851,9 @@ export default function Dashboard() {
               {/* Same page header as Overview, Enquiries, Payments and Tasks:
                   the title on the left, the page's actions on the right. The
                   navigation toolbar sits underneath. */}
-              <div className="flex items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
                 <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Calendar</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button onClick={toggleCalendarNeeds}
                     aria-pressed={showCalendarNeeds}
                     title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
@@ -4897,7 +4897,7 @@ export default function Dashboard() {
               {/* Calendar Toolbar */}
               <div className="border-b border-gold/15 bg-cream flex-shrink-0">
                 {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
-                <div className="flex items-center gap-2 px-3 md:px-6 py-3">
+                <div className="flex flex-wrap items-center gap-2 px-3 md:px-6 py-3">
                   {/* Desktop-only prev/next/today on row 1 */}
                   <button onClick={() => navCalendar(-1)} aria-label="Previous" title="Previous (←)"
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
@@ -4908,7 +4908,9 @@ export default function Dashboard() {
                   <button onClick={() => setTab('enquiries')} className="vf-btn vf-btn-secondary hidden! sm:inline-flex!" title="Go to enquiries list">
                     <List className="w-3.5 h-3.5" /> ENQUIRIES
                   </button>
-                  <div className="flex-1 min-w-0 relative">
+                  {/* Never narrower than "Nov 2026": below that the buttons wrap
+                      to a second line instead (it used to shrink to nothing). */}
+                  <div className="flex-1 min-w-[6rem] relative">
                     <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
                       <PopoverTrigger asChild>
                         <button
@@ -5037,7 +5039,7 @@ export default function Dashboard() {
               </div>
 
               {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
-              <div className={`flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
+              <div className={`vf-pane-scroll flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
 
               {/* Month View — desktop grid */}
               {calendarView === "month" && (
@@ -5328,7 +5330,7 @@ export default function Dashboard() {
               <div className={`${calFill} p-6`}>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All enquiries — {MONTHS[month]} {year}</h2>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => setShowWeeklyModal(true)}
                       className="h-8 px-3 text-xs font-bebas tracking-widest rounded-lg border border-forest/40 bg-forest/5 text-forest hover:bg-forest/10 flex items-center gap-1.5 transition-colors"

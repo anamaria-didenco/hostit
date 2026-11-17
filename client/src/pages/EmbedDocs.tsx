@@ -159,7 +159,7 @@ export default function EmbedDocs() {
         {/* Live preview */}
         <section className="mb-10">
           <h2 className="text-lg font-bold mb-3">Live preview</h2>
-          <div className="grid md:grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 gap-3">
                 {hexInput("Accent", accent, setAccent, "2f5488")}
