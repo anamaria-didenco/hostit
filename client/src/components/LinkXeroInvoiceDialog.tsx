@@ -123,7 +123,7 @@ export function LinkXeroInvoiceDialog({ onClose, lockedBookingId }: { onClose: (
 
         <div className="px-5 pt-3 flex gap-1 border-b border-gold/20">
           {([["link", "To link"], ["linked", "Linked by hand"]] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setTab(k)}
+            <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k}
               className={`px-3 py-2 font-bebas tracking-widest text-xs border-b-2 ${tab === k ? "border-forest text-forest" : "border-transparent text-stone-500 hover:text-ink"}`}>
               {label}{k === "link" && unlinked.data?.rows ? ` (${unlinked.data.rows.length})` : ""}
             </button>

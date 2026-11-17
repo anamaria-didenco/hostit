@@ -1018,7 +1018,7 @@ export default function ProposalBuilder() {
               <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input aria-label="Deposit percentage" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit percentage" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
