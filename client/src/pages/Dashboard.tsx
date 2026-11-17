@@ -6306,7 +6306,20 @@ export default function Dashboard() {
 
               {/* ── PROFILE & BRANDING SECTION ── */}
               {venueSettingsSection === "profile" && settingsForm && (
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  // This saves the whole venue form, Basic Details included, so check those too
+                  // and take the owner to the field that needs fixing.
+                  const errors = venueDetailsErrors(settingsForm);
+                  if (Object.keys(errors).length) {
+                    setVenueErrors(errors);
+                    setVenueSettingsSection("details");
+                    toast.error("Not saved. Something in Basic Details needs fixing first.");
+                    setTimeout(() => focusFirstError(errors, VENUE_DETAIL_FIELDS), 0);
+                    return;
+                  }
+                  updateSettings.mutate(settingsForm);
+                }} className="space-y-6">
 
                   {/* ── Banner Image ── */}
                   <div className="dante-card p-6">

@@ -86,6 +86,26 @@ export function smtpSettingsErrors(form: { smtpHost?: string | null; smtpPort?: 
   return errors;
 }
 
+/**
+ * The same checks on what venue.update receives (keys are its input names), so a
+ * save from anywhere else (the Profile & Branding save also sends the Basic
+ * Details fields, and the API) can't store them either. Only fields that are
+ * sent are checked.
+ */
+export function venueUpdateErrors(input: { name?: string; website?: string; notificationEmail?: string; smtpHost?: string; smtpPort?: number; smtpFromEmail?: string }): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const checks: [keyof typeof input, (v: any) => string | null][] = [
+    ["name", venueNameError], ["website", websiteError], ["notificationEmail", emailListError],
+    ["smtpHost", smtpHostError], ["smtpPort", smtpPortError], ["smtpFromEmail", emailError],
+  ];
+  for (const [key, check] of checks) {
+    if (input[key] === undefined) continue;
+    const message = check(input[key]);
+    if (message) errors[key] = message;
+  }
+  return errors;
+}
+
 /** A percentage the owner types (GST, deposit): 0 to 100. */
 export function percentError(value: number, what: string): string | null {
   return Number.isFinite(value) && value >= 0 && value <= 100 ? null : `${what} must be between 0 and 100%.`;

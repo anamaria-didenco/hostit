@@ -20,6 +20,7 @@ import { zonedDayBoundUtc } from "@shared/tz";
 import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/proposalTotals";
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
+import { venueUpdateErrors } from "@shared/settingsValidation";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -303,6 +304,12 @@ export const appRouter = router({
         beoPrintHide: z.string().max(500).optional(),
         staffBriefingSubject: z.string().optional(),
         staffBriefingBody: z.string().optional(),
+      }).superRefine((input, zctx) => {
+        // Settings pages check these at the field; refuse them here too, so no
+        // save path can store an empty venue name or a malformed address.
+        for (const [key, message] of Object.entries(venueUpdateErrors(input))) {
+          zctx.addIssue({ code: "custom", path: [key], message });
+        }
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
