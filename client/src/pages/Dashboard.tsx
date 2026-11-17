@@ -8,7 +8,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogShell, DialogShellContent, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
@@ -2817,15 +2817,15 @@ export default function Dashboard() {
 
   // Escape-to-close for the custom modal/drawer overlays. Each mirrors the
   // setter the modal's own close button calls; the hook only binds while open.
-  useEscapeKey(showEmailModal, () => setShowEmailModal(false));
   useEscapeKey(showBulkDeleteConfirm, () => setShowBulkDeleteConfirm(false));
-  useEscapeKey(showWeeklyModal, () => {
+  // (The weekly briefing modal closes on Escape through its Radix shell.)
+  const closeWeeklyModal = () => {
     setShowWeeklyModal(false);
     setWeeklyEventsData(null);
     setWeeklySubject('');
     setWeeklyBody('');
     setWeeklyExtraEmails('');
-  });
+  };
 
   // ── Saved BEO / briefing email recipients (Settings → BEO Email Recipients) ──
   const staffEmailList = trpc.staffEmails.list.useQuery(undefined, { enabled: settingsSubTab === "staff-emails" });
@@ -4605,9 +4605,9 @@ export default function Dashboard() {
           {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
           {/* Portalled to <body>: the event drawer makes #root inert while it is
               open, and the composer can now open over the drawer. */}
-          {showEmailModal && selectedLead && createPortal(
-            <div className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div role="dialog" aria-modal="true" aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
+          {showEmailModal && selectedLead && (
+            <DialogShell onClose={() => setShowEmailModal(false)} className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <DialogShellContent closeOnOutsideClick={false} aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
@@ -4826,9 +4826,9 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
-          , document.body)}
+              </DialogShellContent>
+            </DialogShell>
+          )}
           {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
@@ -11235,8 +11235,8 @@ export default function Dashboard() {
       <PrintWeekModal open={showPrintWeek} onClose={() => setShowPrintWeek(false)} initialDate={calDate} />
       <DayTitleModal date={editingDayTitle} current={editingDayTitle ? dayTitles.get(editingDayTitle) : undefined} onClose={() => setEditingDayTitle(null)} />
       {showWeeklyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
+        <DialogShell onClose={closeWeeklyModal} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
+          <DialogShellContent closeOnOutsideClick={false} aria-label="Email staff briefing, weekly" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
             {/* Header */}
             <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
@@ -11441,8 +11441,8 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </DialogShellContent>
+        </DialogShell>
       )}
 
       {/* Add Enquiry Modal */}

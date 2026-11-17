@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /** YYYY-MM-DD from LOCAL date parts — a calendar day, never shifted by UTC. */
 export function ymdLocal(d: Date): string {
@@ -62,15 +62,14 @@ export function DayTitleModal({ date, current, onClose }: { date: string | null;
     onError: e => toast.error(e.message || "Couldn't save the day title"),
   });
   useEffect(() => { setValue(current ?? ""); }, [date, current]);
-  useEscapeKey(!!date && !save.isPending, onClose);
   if (!date) return null;
   const [y, m, d] = date.split("-").map(Number);
   const label = new Date(y, m - 1, d).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const submit = (title: string) => save.mutate({ date, title });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4" onClick={() => !save.isPending && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="day-title-h" className="bg-white w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+    <DialogShell onClose={() => { if (!save.isPending) onClose(); }} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
+      <DialogShellContent aria-labelledby="day-title-h" className="bg-white w-full max-w-md shadow-2xl">
         <div className="bg-forest px-5 py-4 flex items-center justify-between">
           <div>
             <div id="day-title-h" className="font-bebas tracking-widest text-cream text-base">TITLE FOR THIS DAY</div>
@@ -106,7 +105,7 @@ export function DayTitleModal({ date, current, onClose }: { date: string | null;
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }
