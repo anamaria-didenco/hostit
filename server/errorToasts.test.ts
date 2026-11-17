@@ -10,8 +10,10 @@ import { errorToastId, errorToastOptions } from "../shared/errorToast";
 // failed download with an "Open printable page" button, say) vanishes before a
 // slow reader, or a screen-reader user, has dealt with it (WCAG 2.2.1).
 const CLIENT = path.resolve(__dirname, "../client/src");
-// The enquiry form's "Please fill in …" pointer: the same message stays at the field.
-const TIMED_POINTERS = ['id: "lead-form-invalid"'];
+// Pointers whose message also stays at the field: the enquiry form's "Please
+// fill in …", the proposal's GST/deposit check, and the venue form's "Something
+// in Basic Details needs fixing first" (shown with the fields to fix).
+const TIMED_POINTERS = ['id: "lead-form-invalid"', 'id: "proposal-form-invalid"', 'id: "venue-details-invalid"'];
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of fs.readdirSync(dir)) {
