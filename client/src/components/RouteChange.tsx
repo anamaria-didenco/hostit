@@ -27,23 +27,32 @@ export default function RouteChange() {
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
     // The page may still be loading, so wait (up to 5 s) for its heading. Give
-    // up if anything takes focus first (the page focusing a field, a drawer
-    // opening) or the user starts clicking or typing.
+    // up if anything else takes focus first (the page focusing a field, a
+    // drawer opening) or the user starts clicking or typing.
+    // On browser Back / Forward the page being left can render once more
+    // against the new address before it goes ("Event not found" for a moment),
+    // so a heading gets focus only once it has stayed put briefly, and if the
+    // focused heading is then removed anyway, the next one gets it.
     let stopped = false;
+    let candidate: HTMLElement | null = null;
+    let focused: HTMLElement | null = null;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
       stopped = true;
       observer.disconnect();
       clearTimeout(timer);
+      clearTimeout(settle);
       window.removeEventListener("pointerdown", stop, true);
       window.removeEventListener("keydown", stop, true);
     };
-    const tryFocus = () => {
-      if (stopped) return;
+    const focusTakenElsewhere = () => {
       const active = document.activeElement;
-      if (active && active !== document.body && active.isConnected) { stop(); return; }
-      const h1 = document.querySelector<HTMLElement>("main h1, [role='main'] h1") ?? document.querySelector<HTMLElement>("h1");
-      if (!h1) return;
-      stop();
+      return !!active && active !== document.body && active.isConnected && active !== focused;
+    };
+    const focusHeading = (h1: HTMLElement) => {
+      if (stopped || !h1.isConnected) return;
+      if (focusTakenElsewhere()) { stop(); return; }
+      focused = h1;
       if (!h1.hasAttribute("tabindex")) h1.setAttribute("tabindex", "-1");
       // A heading isn't a control: no focus ring on it (inline !important beats
       // the app-wide :focus-visible rule), and no scroll jump for anyone.
@@ -51,12 +60,22 @@ export default function RouteChange() {
       h1.addEventListener("blur", () => h1.style.removeProperty("outline"), { once: true });
       h1.focus({ preventScroll: true });
     };
-    const observer = new MutationObserver(tryFocus);
+    const check = () => {
+      if (stopped) return;
+      if (focusTakenElsewhere()) { stop(); return; }
+      if (focused?.isConnected) return;
+      const h1 = document.querySelector<HTMLElement>("main h1, [role='main'] h1") ?? document.querySelector<HTMLElement>("h1");
+      if (!h1 || h1 === candidate) return;
+      candidate = h1;
+      clearTimeout(settle);
+      settle = setTimeout(() => focusHeading(h1), 150);
+    };
+    const observer = new MutationObserver(check);
     observer.observe(document.body, { childList: true, subtree: true });
     const timer = setTimeout(stop, 5000);
     window.addEventListener("pointerdown", stop, true);
     window.addEventListener("keydown", stop, true);
-    const raf = requestAnimationFrame(tryFocus);
+    const raf = requestAnimationFrame(check);
     return () => { cancelAnimationFrame(raf); stop(); };
   }, [pathname]);
 
