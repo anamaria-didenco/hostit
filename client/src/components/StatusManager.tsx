@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { trpc } from "@/lib/trpc";
 import { onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { toast } from "sonner";
@@ -121,19 +121,41 @@ export default function StatusManager({ venueSettings, onSaved, loadFailed, onRe
   // whole list, so an editor seeded with the defaults (opening this screen from a link
   // or a reload) wrote them over the venue's real statuses.
   const seed = statusEditorSeed(venueSettings);
-  if (!seed && loadFailed) {
-    return (
-      <div role="alert" className="text-sm text-ink">
-        Your statuses couldn't be loaded, so they can't be changed right now.{" "}
-        {onRetry && <button type="button" onClick={onRetry} className="font-semibold text-forest underline">Try again</button>}
-      </div>
-    );
-  }
-  if (!seed) return <p className="text-sm text-gray-500" role="status">Loading statuses…</p>;
-  return <StatusEditor initialStatuses={seed} onSaved={onSaved} />;
+  // "Try again" goes away while the statuses load: focus follows to "Loading", then to
+  // the list, or back to "Try again" if they still can't load (it fell to the page).
+  const retried = useRef(false);
+  if (!seed && loadFailed) return <LoadFailed retried={retried} onRetry={onRetry} />;
+  if (!seed) return <LoadingStatuses retried={retried} />;
+  return <StatusEditor initialStatuses={seed} onSaved={onSaved} retried={retried} />;
 }
 
-function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef[]; onSaved: (statuses: StatusDef[]) => void }) {
+/** Takes focus when it appears after "Try again"; `last` once the statuses have loaded or failed again. */
+function useFocusAfterRetry<T extends HTMLElement>(retried: MutableRefObject<boolean>, last: boolean) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    if (!retried.current) return;
+    ref.current?.focus();
+    if (last) retried.current = false;
+  }, []);
+  return ref;
+}
+
+function LoadFailed({ retried, onRetry }: { retried: MutableRefObject<boolean>; onRetry?: () => void }) {
+  const button = useFocusAfterRetry<HTMLButtonElement>(retried, true);
+  return (
+    <div role="alert" className="text-sm text-ink">
+      Your statuses couldn't be loaded, so they can't be changed right now.{" "}
+      {onRetry && <button ref={button} type="button" onClick={() => { retried.current = true; onRetry(); }} className="font-semibold text-forest underline">Try again</button>}
+    </div>
+  );
+}
+
+function LoadingStatuses({ retried }: { retried: MutableRefObject<boolean> }) {
+  const text = useFocusAfterRetry<HTMLParagraphElement>(retried, false);
+  return <p ref={text} tabIndex={-1} className="text-sm text-gray-500" role="status">Loading statuses…</p>;
+}
+
+function StatusEditor({ initialStatuses, onSaved, retried }: { initialStatuses: StatusDef[]; onSaved: (statuses: StatusDef[]) => void; retried: MutableRefObject<boolean> }) {
   const [statuses, setStatuses] = useState<StatusDef[]>(initialStatuses);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -149,6 +171,14 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
   const rowButtons = useRef<Record<string, HTMLButtonElement | null>>({});
   const focusRowButton = (key: string, which: "edit" | "up" | "down") =>
     requestAnimationFrame(() => rowButtons.current[`${key}:${which}`]?.focus());
+  const listRef = useFocusAfterRetry<HTMLUListElement>(retried, true);
+  // Closing the add panel puts focus back on "Add a status" (it fell to the page).
+  const addButton = useRef<HTMLButtonElement>(null);
+  const closeAdd = (clear: boolean) => {
+    setShowAdd(false);
+    if (clear) setAddLabel("");
+    requestAnimationFrame(() => addButton.current?.focus());
+  };
 
   const updateVenue = trpc.venue.update.useMutation({
     onError: (e) => toast.error(e.message || "Failed to save"),
@@ -246,6 +276,7 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
     setShowAdd(false);
     setDirty(true);
     save(updated);
+    focusRowButton(key, "edit");
   }
 
   // While a row is being edited: would its colours make On Hold look like Proposal Sent?
@@ -261,7 +292,7 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
           Customise the name and colour of each status. Changes apply immediately across the calendar, pipeline, and reports.
         </p>
 
-        <ul aria-label="Statuses, in pipeline order" className="border border-gray-200 rounded-xl overflow-hidden">
+        <ul ref={listRef} tabIndex={-1} aria-label="Statuses, in pipeline order" className="border border-gray-200 rounded-xl overflow-hidden">
           {statuses.map((s, idx) => {
             const colorClasses = getStatusClasses(s.colorId);
             const calPreview = getStatusCalClasses(s.colorId);
@@ -345,7 +376,7 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
                 aria-label="New status name"
                 value={addLabel}
                 onChange={e => setAddLabel(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") addStatus(); if (e.key === "Escape") setShowAdd(false); }}
+                onKeyDown={e => { if (e.key === "Enter") addStatus(); if (e.key === "Escape") closeAdd(false); }}
                 placeholder="Status name (e.g. Site Visit)"
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-[#8D957E]/40"
               />
@@ -367,14 +398,14 @@ function StatusEditor({ initialStatuses, onSaved }: { initialStatuses: StatusDef
                 className="bg-[#8D957E] text-white text-sm font-semibold px-4 py-1.5 rounded-lg hover:bg-[#7a8269] disabled:opacity-40 transition">
                 Add Status
               </button>
-              <button onClick={() => { setShowAdd(false); setAddLabel(""); }}
+              <button onClick={() => closeAdd(true)}
                 className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)}
+          <button ref={addButton} onClick={() => setShowAdd(true)}
             className="mt-3 w-full flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-gray-800 border border-dashed border-gray-200 rounded-xl py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
             <Plus className="w-4 h-4" /> Add a status
           </button>
