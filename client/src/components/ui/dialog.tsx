@@ -201,9 +201,12 @@ function DialogContent({
       >
         {children}
         {showCloseButton && (
+          // Its own light chip, so the X reads on the dark headers most
+          // dialogs here have as well as on a plain one (it was ink at 70%
+          // on navy, about 1.4:1). 32px to see, 44px to tap (the ::before).
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus:ring-ring absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-sm border border-border bg-background text-foreground shadow-sm opacity-90 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none before:absolute before:-inset-1.5 before:content-[''] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>
