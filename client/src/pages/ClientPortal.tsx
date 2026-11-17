@@ -390,7 +390,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
     dietaries: diet.filter(x => x.name.trim()).map(x => ({ name: x.name.trim(), count: Math.max(0, Math.round(Number(x.count) || 0)), notes: x.notes?.trim() || undefined })),
     notes: notes.trim() || undefined,
   });
-  const FIELD = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none";
+  const FIELD = "w-full border !border-[var(--field-border)] rounded-lg px-3 py-2 text-sm focus:outline-none";
 
   return (
     <div className="rounded-xl shadow-sm overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>

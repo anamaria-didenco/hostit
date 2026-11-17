@@ -104,6 +104,10 @@
   --border:                 #e3ddd0;
   --input:                  #e6dccb;
   --ring:                   #2f5488;
+  /* Text-box outlines. A field's fill is the same cream as the page, so its
+     border is the only edge you can see: 3.8:1 on cream (WCAG asks for 3:1).
+     --input stays soft because cards and outline buttons use it too. */
+  --field-border:           #8a8073;
 
   /* ── Charts ── */
   --chart-1: #2f5488;   /* deep blue */
@@ -197,6 +201,21 @@
 
   input, textarea, select {
     font-family: var(--font-body);
+  }
+
+  /* Hint text in every field, not only the shared Input: the browser default
+     (half-strength text colour) was 3.2:1. Muted foreground is 5.9:1. */
+  ::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
+
+  /* Text boxes that set no border colour of their own get the 3:1 field
+     border instead of the 1.3:1 hairline every element inherits above. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
+  textarea,
+  select {
+    border-color: var(--field-border);
   }
 
   button:not(:disabled),
@@ -547,9 +566,22 @@
     border-color: #25426c;
   }
 
+  /* ── Text-box outlines ──
+     The pale paper-greys below are right for card edges but, on a text box,
+     leave a 1.3:1 outline as the only sign of where the box is. On form fields
+     they become the 3:1 field border. Element + class beats the plain colour
+     utility; focus:/hover:/aria-invalid: border colours still win. */
+  :is(input, textarea, select, button:where([data-slot="select-trigger"])):is(
+    .border-border, .border-input, .border-gray-200, .border-gray-300,
+    .border-stone-200, .border-stone-300, .border-\[\#e6dccb\], .border-\[\#e3ddd0\],
+    .border-\[\#c9a84c\]\/10, .border-\[\#c9a84c\]\/20, .border-\[\#c9a84c\]\/30
+  ) {
+    border-color: var(--field-border);
+  }
+
   /* ── Input focus = blue ring ── */
   .input-paradiso, .input-dante {
-    border: 1.5px solid #e6dccb;
+    border: 1.5px solid var(--field-border);
     border-radius: 4px;
     background: #fffdf9;
     font-family: var(--font-body);

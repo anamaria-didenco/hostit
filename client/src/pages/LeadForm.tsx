@@ -743,8 +743,9 @@ export default function LeadForm() {
     // colour reads as broken (the washed-out pink); a warm neutral reads as
     // "not ready yet" and matches the cream aesthetic.
     rules.push(`.vf-embed-root .vf-submit:disabled{opacity:1 !important;background:#e7e2d6 !important;color:#8f8676 !important;border-color:#e7e2d6 !important;box-shadow:none !important}`);
-    // Soft, warm input borders unless the embed sets its own border colour.
-    if (!borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:#cdbfa4}`);
+    // Warm input borders (3.8:1 on white, so the box edge is visible) unless
+    // the embed sets its own border colour.
+    if (!borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:#8a8073}`);
     if (textOverride) rules.push(`.vf-embed-root,.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{color:${textOverride}}`);
     if (labelOverride) rules.push(`.vf-embed-root label{color:${labelOverride}}`);
     if (borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:${borderOverride}}`);
