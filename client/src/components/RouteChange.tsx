@@ -5,6 +5,10 @@ import { routeTitle } from "@shared/pageTitle";
 // The marketing title from index.html, used by the landing page.
 const DEFAULT_TITLE = typeof document !== "undefined" ? document.title : "";
 
+// A page's main heading: an <h1>, or one written as role=heading level 1 (the
+// shared floor plan's).
+const H1 = "h1, [role='heading'][aria-level='1']";
+
 /**
  * What a full page load would do on an in-app navigation, for screen-reader
  * and keyboard users:
@@ -64,7 +68,7 @@ export default function RouteChange() {
       if (stopped) return;
       if (focusTakenElsewhere()) { stop(); return; }
       if (focused?.isConnected) return;
-      const h1 = document.querySelector<HTMLElement>("main h1, [role='main'] h1") ?? document.querySelector<HTMLElement>("h1");
+      const h1 = document.querySelector<HTMLElement>(`main :is(${H1}), [role='main'] :is(${H1})`) ?? document.querySelector<HTMLElement>(H1);
       if (!h1 || h1 === candidate) return;
       candidate = h1;
       clearTimeout(settle);
