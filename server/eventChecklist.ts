@@ -39,6 +39,21 @@ export function mergeChecklistItems(base: ChecklistItem[], incoming: ChecklistIt
   return out;
 }
 
+/**
+ * The name the run sheet gave its checklist before its title had loaded (the
+ * builder's placeholder title). A list still called this is renamed after its
+ * run sheet the next time the sheet opens.
+ */
+export const PLACEHOLDER_CHECKLIST_NAME = "Event Runsheet — Staff Checklist";
+
+/** The name a run sheet's checklist should have, if `current` is the placeholder. */
+export function correctedChecklistName(current: string | null | undefined, sheetTitle: string | null | undefined): string | null {
+  if ((current ?? "").trim() !== PLACEHOLDER_CHECKLIST_NAME) return null;
+  const title = (sheetTitle ?? "").trim();
+  if (!title || title === "Event Runsheet") return null;
+  return `${title} — Staff Checklist`;
+}
+
 /** The event's run sheet: the first one on the booking, else the enquiry's
  *  booking-less one (sheets made from the event drawer only carry leadId). */
 export async function findEventRunsheet(ownerId: number, bookingId: number) {
@@ -99,7 +114,7 @@ export async function getOrCreateRunsheetChecklist(
     // One at a time per run sheet, so two tabs opening it together can't make
     // two checklists or fold the same old list in twice.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('checklist_instances:runsheet'), ${runsheetId}::int)`);
-    const [sheet] = await tx.select({ bookingId: runsheets.bookingId }).from(runsheets)
+    const [sheet] = await tx.select({ bookingId: runsheets.bookingId, title: runsheets.title }).from(runsheets)
       .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ownerId))).limit(1);
     if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Runsheet not found" });
     const bookingId = sheet.bookingId ?? opts.bookingId ?? null;
@@ -118,22 +133,29 @@ export async function getOrCreateRunsheetChecklist(
     if (opts.addItems?.length) items = mergeChecklistItems(items, opts.addItems);
 
     let instance: ChecklistInstance;
+    const rename = existing ? correctedChecklistName(existing.name, sheet.title) : null;
     if (!existing) {
       [instance] = await tx.insert(checklistInstances).values({
         runsheetId,
         bookingId,
         ownerId,
-        name: opts.name ?? "Staff Checklist",
+        name: correctedChecklistName(opts.name, sheet.title) ?? opts.name ?? "Staff Checklist",
         items,
         shareToken: randomBytes(24).toString("hex"),
       }).returning();
     } else if (old.length || opts.addItems?.length || (existing.bookingId == null && bookingId != null) || !existing.shareToken) {
       [instance] = await tx.update(checklistInstances).set({
         items,
+        ...(rename ? { name: rename } : {}),
         bookingId: existing.bookingId ?? bookingId,
         shareToken: existing.shareToken ?? randomBytes(24).toString("hex"),
         updatedAt: new Date(),
       }).where(and(eq(checklistInstances.id, existing.id), eq(checklistInstances.ownerId, ownerId))).returning();
+    } else if (rename) {
+      // Only the name: the items aren't written back, so a tick made on the
+      // staff link meanwhile isn't undone.
+      [instance] = await tx.update(checklistInstances).set({ name: rename, updatedAt: new Date() })
+        .where(and(eq(checklistInstances.id, existing.id), eq(checklistInstances.ownerId, ownerId))).returning();
     } else {
       instance = existing;
     }

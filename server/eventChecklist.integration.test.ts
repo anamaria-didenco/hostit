@@ -10,7 +10,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
 import { bookings, checklistInstances, checklistTemplates, leads, runsheets } from "../drizzle/schema";
-import { mergeChecklistItems } from "./eventChecklist";
+import { correctedChecklistName, mergeChecklistItems, PLACEHOLDER_CHECKLIST_NAME } from "./eventChecklist";
 
 const HAS_DB = !!process.env.DATABASE_URL;
 
@@ -43,6 +43,16 @@ describe("mergeChecklistItems", () => {
       { id: "1", text: "Set tables", checked: true, checkedAt: "2026-10-01T00:00:00Z" },
       { id: "1-2", text: "Light candles", checked: false },
     ]);
+  });
+});
+
+describe("correctedChecklistName", () => {
+  it("renames only the placeholder name, after a real sheet title", () => {
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "Grace Holloway — Birthday")).toBe("Grace Holloway — Birthday — Staff Checklist");
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "Event Runsheet")).toBeNull();
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "  ")).toBeNull();
+    expect(correctedChecklistName("Bar crew list", "Grace Holloway — Birthday")).toBeNull();
+    expect(correctedChecklistName(null, "Grace Holloway — Birthday")).toBeNull();
   });
 });
 
@@ -143,6 +153,23 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
     const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, bookingId: bk.id });
     expect(inst.bookingId).toBe(bk.id);
     expect((await a.checklists.getForBooking({ bookingId: bk.id })).instance?.id).toBe(inst.id);
+  });
+
+  it("names a new checklist after its sheet, and fixes one left with the placeholder name", async () => {
+    const db = (await getDb())!;
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Ivy Example — Engagement", bookingId: bk.id } as any);
+    // A list made before the title loaded (the old bug)…
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: PLACEHOLDER_CHECKLIST_NAME });
+    expect(inst.name).toBe("Ivy Example — Engagement — Staff Checklist");
+    await db.update(checklistInstances).set({ name: PLACEHOLDER_CHECKLIST_NAME }).where(eq(checklistInstances.id, inst.id));
+    await a.checklists.saveItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-1", text: "Ice in wells", checked: false }] });
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-1", checked: true });
+    // …is renamed when the sheet next opens, and the staff tick stays.
+    const again = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Ivy Example — Engagement — Staff Checklist" });
+    expect(again.id).toBe(inst.id);
+    expect(again.name).toBe("Ivy Example — Engagement — Staff Checklist");
+    expect((again.items as any[]).map(i => i.checked)).toEqual([true]);
   });
 
   it("another venue can't read, create or fill an event's checklist", async () => {

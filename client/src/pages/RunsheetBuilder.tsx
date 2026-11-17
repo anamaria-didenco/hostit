@@ -1260,15 +1260,6 @@ export default function RunsheetBuilder() {
     },
   });
 
-  useEffect(() => {
-    if (sheetId && !checklistInstance) {
-      getOrCreateChecklist.mutate({
-        runsheetId: sheetId,
-        name: title ? `${title} — Staff Checklist` : 'Staff Checklist',
-        defaultItems: [],
-      });
-    }
-  }, [sheetId]);
 
   // Venue settings for customisable dietaries and setup templates
   const { data: venueSettings, refetch: refetchVenueSettings } = trpc.venue.getOwn.useQuery();
@@ -1638,6 +1629,24 @@ export default function RunsheetBuilder() {
   // edited, and a focus refetch used to pour the server copy over text that
   // was still being typed (see the load effect below).
   const { data: existing, isLoading: existingLoading, isError: existingError, refetch: refetchExisting } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId, refetchOnWindowFocus: false });
+
+  // Wait for the sheet itself, so a new checklist is named after its real
+  // title (it ran before the title loaded, so every list was called "Event
+  // Runsheet — Staff Checklist"). The server also corrects lists that got
+  // that name.
+  const checklistRequestedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!sheetId || checklistInstance || !existing || (existing as any).id !== sheetId) return;
+    if (checklistRequestedFor.current === sheetId) return;
+    checklistRequestedFor.current = sheetId;
+    const sheetTitle = (existing.title ?? "").trim();
+    getOrCreateChecklist.mutate({
+      runsheetId: sheetId,
+      name: sheetTitle ? `${sheetTitle} — Staff Checklist` : 'Staff Checklist',
+      defaultItems: [],
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetId, existing]);
   // A runsheet opened from the "My runsheets" list (or a bookmark) has no
   // leadId in the URL but usually has one on the record — resolve the lead
   // from either so the client contact still prefills.
