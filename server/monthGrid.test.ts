@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, addMonths, monthGridTarget, monthGridDefaultDay, friendlyDay, monthCellLabel, statusWords } from "../shared/monthGrid";
+import { addDays, addMonths, monthGridTarget, monthGridDefaultDay, inShownMonth, friendlyDay, monthCellLabel, statusWords } from "../shared/monthGrid";
 
 describe("month grid keys", () => {
   it("arrows move a day or a week, across month ends", () => {
@@ -26,6 +26,27 @@ describe("month grid keys", () => {
     expect(addDays("2026-09-27", 1)).toBe("2026-09-28");
     expect(addDays("2026-04-05", -1)).toBe("2026-04-04");
     expect(addMonths("2026-12-15", 1)).toBe("2027-01-15");
+  });
+});
+
+describe("month grid: which month a key lands in", () => {
+  // November 2026's grid draws 1-6 December in its last row. Page Down from
+  // 1-6 November used to stop on those greyed cells and leave November on
+  // screen, so a second Page Down skipped December.
+  it("a day from the next month's overflow row is not in the month on screen", () => {
+    for (const from of ["2026-11-01", "2026-11-03", "2026-11-06"]) {
+      const to = monthGridTarget(from, "PageDown")!;
+      expect(to.startsWith("2026-12-")).toBe(true);
+      expect(inShownMonth(to, 2026, 10)).toBe(false);
+      expect(inShownMonth(to, 2026, 11)).toBe(true);
+    }
+    expect(inShownMonth(monthGridTarget("2026-11-30", "ArrowRight")!, 2026, 10)).toBe(false);
+    expect(inShownMonth(monthGridTarget("2026-11-30", "ArrowLeft")!, 2026, 10)).toBe(true);
+  });
+  it("compares the year as well as the month", () => {
+    expect(inShownMonth("2027-01-03", 2026, 0)).toBe(false);
+    expect(inShownMonth("2027-01-03", 2027, 0)).toBe(true);
+    expect(inShownMonth(monthGridTarget("2026-12-03", "PageDown")!, 2027, 0)).toBe(true);
   });
 });
 

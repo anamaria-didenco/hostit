@@ -68,7 +68,7 @@ import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLO
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { contrastRatio, readableOn } from "@shared/contrast";
-import { monthGridTarget, monthGridDefaultDay, monthCellLabel, friendlyDay, statusWords } from "@shared/monthGrid";
+import { monthGridTarget, monthGridDefaultDay, inShownMonth, monthCellLabel, friendlyDay, statusWords } from "@shared/monthGrid";
 import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
@@ -1217,7 +1217,10 @@ export default function Dashboard() {
   const monthGridPendingFocus = useRef<string | null>(null);
   const focusMonthDay = (ymd: string) => {
     setMonthFocusDay(ymd);
-    const el = monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`);
+    // A next-month day drawn greyed in the last row doesn't count as on
+    // screen: it has no add buttons, and Page Down would skip that month.
+    const el = inShownMonth(ymd, calDate.getFullYear(), calDate.getMonth())
+      ? monthGridRef.current?.querySelector<HTMLElement>(`[data-day="${ymd}"]`) : null;
     if (el) { el.focus(); return; }
     // Off this month: show that month, then focus the day once it's drawn.
     monthGridPendingFocus.current = ymd;
@@ -1243,7 +1246,8 @@ export default function Dashboard() {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     let next: string | null = null;
     if (e.key === 'Home' || e.key === 'End') {
-      const days = Array.from(cell.parentElement?.querySelectorAll<HTMLElement>('[data-day]') ?? []);
+      const days = Array.from(cell.parentElement?.querySelectorAll<HTMLElement>('[data-day]') ?? [])
+        .filter(d => inShownMonth(d.dataset.day!, calDate.getFullYear(), calDate.getMonth()));
       next = (e.key === 'Home' ? days[0] : days[days.length - 1])?.dataset.day ?? null;
     } else {
       next = monthGridTarget(cell.dataset.day!, e.key);

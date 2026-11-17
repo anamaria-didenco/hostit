@@ -50,6 +50,17 @@ export function monthGridTarget(ymd: string, key: string): string | null {
 }
 
 /**
+ * Whether `ymd` belongs to the month on screen (`month0` is 0-based). The grid
+ * also draws the next month's first few days in its last row, greyed and
+ * without add buttons; a key that lands on one of those shows that month
+ * instead, so Page Down from 3 November goes to 3 December in December.
+ */
+export function inShownMonth(ymd: string, year: number, month0: number): boolean {
+  const [y, m] = parts(ymd);
+  return y === year && m === month0 + 1;
+}
+
+/**
  * Where the grid's single Tab stop sits before anyone has moved it: today when
  * today is in the month on screen, otherwise the 1st. `month0` is 0-based.
  */
