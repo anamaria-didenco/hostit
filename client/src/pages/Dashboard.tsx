@@ -67,8 +67,7 @@ import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKEN
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
-import { inkOnAccent } from "@shared/brand";
-import { contrastRatio } from "@shared/contrast";
+import { contrastRatio, readableOn } from "@shared/contrast";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
@@ -1126,7 +1125,9 @@ export default function Dashboard() {
     const fill = overdue ? "#991b1b"
       : ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[status]
         ?? (status === "finished" ? "#9ca3af" : (getStatusInfo(status) as any).swatch ?? "#9ca3af");
-    return { background: fill, color: inkOnAccent(fill) };
+    // Dark or white text, whichever reads better (the old brightness cut-off
+    // put white on the sky-blue Contacted band: 2.1:1).
+    return { background: fill, color: readableOn(fill) };
   };
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   // Lost/cancelled are dead ends, not work — the board hides them until asked
@@ -3671,7 +3672,7 @@ export default function Dashboard() {
                                       {(b.guestCount || b.spaceName) && (
                                         <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas !tracking-wider [overflow-wrap:anywhere] text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
                                     </div>
                                     {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3690,7 +3691,7 @@ export default function Dashboard() {
                                       {l.guestCount && (
                                         <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
                                       )}
-                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas tracking-wider text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas !tracking-wider [overflow-wrap:anywhere] text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                     {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3875,7 +3876,7 @@ export default function Dashboard() {
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.id === "enquiries" && unreadCount > 0 && (
-                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px]" style={{ background: "rgba(255,255,255,0.18)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
                 )}
               </button>
             );
@@ -5536,7 +5537,7 @@ export default function Dashboard() {
                             return (
                               <div key={item.id}
                                 className="rounded-xl px-4 py-3 transition-all hover:brightness-95 flex flex-col gap-1.5 lg:grid lg:items-center lg:gap-3"
-                                style={{ backgroundColor: (si.swatch ?? '#d4c5a9') + 'CC', borderLeft: `4px solid ${si.swatch ?? '#d4c5a9'}`, gridTemplateColumns: GRID }}>
+                                style={{ backgroundColor: (si.swatch ?? '#d4c5a9') + '26', borderLeft: `4px solid ${si.swatch ?? '#d4c5a9'}`, gridTemplateColumns: GRID }}>
                                 {/* Name */}
                                 <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0">{item.firstName} {item.lastName}</div>
                                 {/* Event type */}
@@ -5560,7 +5561,7 @@ export default function Dashboard() {
                                     : <span className="font-bebas text-[11px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
                                   {item._type === 'booking' && <DoubleBookedTag flaggedAt={item.clashFlaggedAt} />}
                                   {item._type === 'booking' && item.depositRequired !== false && (
-                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
+                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-800'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
                                   )}
                                 </div>
                                 {/* Actions */}
