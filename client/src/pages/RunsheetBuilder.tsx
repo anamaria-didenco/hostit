@@ -4173,12 +4173,14 @@ export default function RunsheetBuilder() {
                               // keyboard couldn't get past the timeline. From the
                               // keyboard the field shows itself instead (type the
                               // time, or Enter for the picker); a click keeps the
-                              // styled time showing, as before.
+                              // styled time showing, as before. The native clock
+                              // button is hidden: it was an invisible extra Tab
+                              // stop, and click / Enter open the picker anyway.
                               onClick={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); try { (e.currentTarget as any).showPicker?.(); } catch {} } }}
                               onPointerDown={e => { e.currentTarget.dataset.pointer = ''; }}
                               onBlur={e => { delete e.currentTarget.dataset.pointer; }}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer bg-white text-ink font-dm text-sm rounded-sm [&:focus:not([data-pointer])]:opacity-100"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer bg-white text-ink font-dm text-sm rounded-sm [&:focus:not([data-pointer])]:opacity-100 [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                           </div>
                           <div className="hidden print:block font-serif text-base font-semibold tracking-[-0.01em] whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
