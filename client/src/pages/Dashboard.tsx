@@ -4379,7 +4379,7 @@ export default function Dashboard() {
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
-                        aria-label="Search enquiries"
+                        aria-label="Search enquiries" data-search-box
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
                     {(teamList ?? []).length > 0 && (

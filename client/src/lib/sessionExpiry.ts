@@ -84,7 +84,7 @@ function isAuthMe(queryKey: readonly unknown[]): boolean {
 
 function noteTyping(t: EventTarget | null) {
   if (!(t instanceof HTMLElement)) return;
-  if (!isTypingField({ tag: t.tagName, type: t.getAttribute("type"), role: t.getAttribute("role"), contentEditable: t.isContentEditable })) return;
+  if (!isTypingField({ tag: t.tagName, type: t.getAttribute("type"), role: t.getAttribute("role"), contentEditable: t.isContentEditable, searchBox: t.hasAttribute("data-search-box") })) return;
   typedFields.add(t);
   if (typedFields.size > 50) typedOnPage(); // drops fields that have gone
 }

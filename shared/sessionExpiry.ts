@@ -31,9 +31,13 @@ export function meWhileKept<T extends { user?: unknown }>(fetched: T | undefined
 /** <input> types a person types into. A tick box, a radio button or a list choice isn't typing. */
 const TYPING_INPUT_TYPES = new Set(["", "text", "email", "tel", "url", "number", "password", "date", "time", "datetime-local", "month", "week"]);
 
-/** Whether typing in this field is work to keep (a search box isn't). */
-export function isTypingField(field: { tag: string; type?: string | null; role?: string | null; contentEditable?: boolean }): boolean {
-  if (field.role === "searchbox") return false;
+/**
+ * Whether typing in this field is work to keep (a search box isn't). `searchBox`:
+ * the field is marked as one (data-search-box), as the app's search boxes are
+ * plain text inputs or comboboxes.
+ */
+export function isTypingField(field: { tag: string; type?: string | null; role?: string | null; contentEditable?: boolean; searchBox?: boolean }): boolean {
+  if (field.searchBox || field.role === "searchbox") return false;
   if (field.contentEditable) return true;
   const tag = field.tag.toLowerCase();
   if (tag === "textarea") return true;

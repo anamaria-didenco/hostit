@@ -53,6 +53,9 @@ describe("what counts as typing to keep", () => {
 
   it("doesn't count search boxes, tick boxes or list choices", () => {
     expect(isTypingField({ tag: "INPUT", type: "search" })).toBe(false);
+    // 'Search enquiries' (a text box) and the Ctrl+K finder (a combobox) are marked data-search-box.
+    expect(isTypingField({ tag: "INPUT", searchBox: true })).toBe(false);
+    expect(isTypingField({ tag: "INPUT", role: "combobox", searchBox: true })).toBe(false);
     expect(isTypingField({ tag: "INPUT", role: "searchbox" })).toBe(false);
     expect(isTypingField({ tag: "INPUT", type: "checkbox" })).toBe(false);
     expect(isTypingField({ tag: "INPUT", type: "radio" })).toBe(false);
