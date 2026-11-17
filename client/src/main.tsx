@@ -1,11 +1,10 @@
 import { trpc } from "@/lib/trpc";
-import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { httpBatchLink } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
-import { getLoginUrl } from "./const";
+import { SignedOutBanner, SignedOutNotice, watchForSignOut } from "./lib/sessionExpiry";
 import "./index.css";
 import "./lib/installPrompt"; // starts listening for the browser's "install" offer straight away
 import { isPublicClientPath } from "@shared/pwaScope";
@@ -21,6 +20,8 @@ if (!isPublicClientPath(window.location.pathname)) {
 
 // The service worker makes the site installable and shows an offline page.
 // Production only, and not when embedded in another site's iframe (the enquiry form embed).
+// A new version takes over quietly (sw.js skipWaiting + clients.claim) and nothing here
+// reloads the page when it does, so an update can never throw away what someone is typing.
 if ("serviceWorker" in navigator && import.meta.env.PROD && window.self === window.top) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(err => console.warn("[PWA] service worker not registered", err));
@@ -38,32 +39,9 @@ const queryClient = new QueryClient({
   },
 });
 
-const redirectToLoginIfUnauthorized = (error: unknown) => {
-  if (!(error instanceof TRPCClientError)) return;
-  if (typeof window === "undefined") return;
-
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
-  if (!isUnauthorized) return;
-
-  window.location.href = getLoginUrl();
-};
-
-queryClient.getQueryCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
-    console.error("[API Query Error]", error);
-  }
-});
-
-queryClient.getMutationCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
-    console.error("[API Mutation Error]", error);
-  }
-});
+// "Not signed in" from the API: keeps a page with typing on it instead of jumping to
+// sign-in and losing it (see lib/sessionExpiry.ts).
+watchForSignOut(queryClient);
 
 const trpcClient = trpc.createClient({
   links: [
@@ -84,6 +62,8 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       <App />
+      <SignedOutNotice />
+      <SignedOutBanner />
     </QueryClientProvider>
   </trpc.Provider>
 );
