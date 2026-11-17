@@ -363,24 +363,27 @@ export default function DailyChecklists() {
                 const pct = cl.itemCount > 0 ? Math.round((cl.checkedCount / cl.itemCount) * 100) : 0;
                 return (
                   <div key={cl.id} className="bg-white border border-[#c9a84c]/30 rounded overflow-hidden shadow-sm">
+                    {/* A click anywhere on the header opens it. For the keyboard the
+                        name is the disclosure button, with Copy/Open/Duplicate/
+                        Delete beside it rather than nested inside it. */}
                     <div
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isExpanded}
-                      aria-label={`${cl.name} — ${isExpanded ? "collapse" : "expand"} checklist`}
-                      className="p-4 cursor-pointer hover:bg-[#f9f5ef]/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
+                      className="p-4 cursor-pointer hover:bg-[#f9f5ef]/50 transition-colors"
                       onClick={() => setExpandedId(isExpanded ? null : cl.id)}
-                      onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setExpandedId(isExpanded ? null : cl.id); } }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-label={`${cl.name} — ${isExpanded ? "collapse" : "expand"} checklist`}
+                          className="flex items-center gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
+                        >
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 rounded flex-shrink-0 ${cat.color}`}>{cat.label}</span>
                           <div className="min-w-0">
                             <div className="font-bebas text-lg tracking-wider text-[#1a1209] truncate">{cl.name}</div>
                             {cl.assignedDate && <div className="font-dm text-xs text-[#2f5488] font-medium truncate">{new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>}
                             {cl.description && <div className="font-dm text-xs text-[#83745b] truncate">{cl.description}</div>}
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           {cl.itemCount > 0 && (
                             <div className="text-right">
