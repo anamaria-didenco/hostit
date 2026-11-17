@@ -1,4 +1,4 @@
-import { createElement as h, Fragment, useEffect, useState } from "react";
+import { createElement as h, Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { TRPCClientError } from "@trpc/client";
@@ -42,8 +42,16 @@ let lastMe: { user?: unknown } | null = null;
 const failedQueries = new Set<string>();
 type NoticeState = "signed-out" | "signed-in-again" | null;
 let notice: NoticeState = null;
+// Where focus was when the notice appeared: keyboard focus goes back there when the
+// notice goes while it has focus (Dismiss dropped it to the page).
+let focusBeforeNotice: HTMLElement | null = null;
 const noticeListeners = new Set<(n: NoticeState) => void>();
 function setNotice(n: NoticeState) {
+  if (n === notice) return;
+  if (n === "signed-out") {
+    const active = document.activeElement;
+    focusBeforeNotice = active instanceof HTMLElement && active !== document.body ? active : null;
+  }
   notice = n;
   noticeListeners.forEach(l => l(n));
 }
@@ -215,21 +223,50 @@ function useFocusedDialog(on: boolean): HTMLElement | null {
   return dialog;
 }
 
+/** Focus put there from the keyboard. A click or tap on Dismiss leaves focus as it was before. */
+function keyboardFocused(el: Element): boolean {
+  try { return el.matches(":focus-visible"); } catch { return false; } // a browser without :focus-visible
+}
+
 /** The "you've been signed out" notice, mounted once beside the app. */
 export function SignedOutBanner() {
   const [state, setState] = useState<NoticeState>(notice);
-  useEffect(() => {
-    noticeListeners.add(setState);
-    return () => { noticeListeners.delete(setState); };
-  }, []);
   const signedOut = state === "signed-out";
   const dialog = useFocusedDialog(signedOut);
+  // Keyboard focus in the notice when it goes, or when its link goes (signed in
+  // again), fell to the page: put it back where it was before the notice.
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  const focusFrom = useRef<HTMLElement | null>(null);
+  const putFocusBack = useRef(false);
+  useEffect(() => {
+    const listener = (n: NoticeState) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && bannerRef.current?.contains(active) && keyboardFocused(active)) putFocusBack.current = true;
+      setState(n);
+    };
+    noticeListeners.add(listener);
+    return () => { noticeListeners.delete(listener); };
+  }, []);
+  useLayoutEffect(() => {
+    if (!putFocusBack.current) return;
+    putFocusBack.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body) return; // still on something
+    const back = [focusBeforeNotice, focusFrom.current].find(el => el?.isConnected && !bannerRef.current?.contains(el));
+    back?.focus();
+  }, [state]);
   const [copyFocused, setCopyFocused] = useState(false);
   useEffect(() => setCopyFocused(false), [dialog]); // the copy goes with its dialog
   if (!state) return null;
   const banner = createPortal(
     h("div", {
+      ref: bannerRef,
       role: "alert",
+      // Tabbing to the notice: if where focus was when it appeared has gone, go back to where it came from.
+      onFocus: (e: { relatedTarget: EventTarget | null }) => {
+        const from = e.relatedTarget;
+        if (from instanceof HTMLElement && !bannerRef.current?.contains(from)) focusFrom.current = from;
+      },
       // Over any dialog overlay, clickable even while a modal makes the page inert to the pointer,
       // and a click here doesn't close the dialog underneath.
       style: { pointerEvents: "auto" },
