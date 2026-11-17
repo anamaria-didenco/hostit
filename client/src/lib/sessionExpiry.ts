@@ -40,6 +40,15 @@ let hadSession = false;
 let noticeShown = false;
 let lastMe: { user?: unknown } | null = null;
 const failedQueries = new Set<string>();
+// Error toasts raised by saves that failed because the session had ended
+// ("Failed to add record"), so 'Signed in again' can clear them, and only them:
+// any other error stays until it is closed, as usual. Each is kept with the
+// toast as it was then, so one raised again since (a later failure with the
+// same message) stays.
+type ToastEntry = ReturnType<typeof toast.getHistory>[number];
+const signedOutToasts = new Map<string | number, ToastEntry>();
+const toastsWhenSent = new WeakMap<object, Map<string | number, ToastEntry>>();
+const toastSnapshot = () => new Map(toast.getHistory().map(t => [t.id, t] as const));
 type NoticeState = "signed-out" | "signed-in-again" | null;
 let notice: NoticeState = null;
 // Where focus was when the notice appeared: keyboard focus goes back there when the
@@ -71,6 +80,7 @@ export function subscribeKeptMe(listener: () => void) {
 }
 /** Signing out on purpose: stop keeping the page. */
 export function endKeptPage() {
+  signedOutToasts.clear();
   if (!noticeShown) return;
   setKeeping(false);
   failedQueries.clear();
@@ -165,9 +175,21 @@ export function watchForSignOut(queryClient: QueryClient) {
 
   queryClient.getMutationCache().subscribe(event => {
     if (event.type !== "updated") return;
-    if (event.action.type === "error") {
+    if (event.action.type === "pending") {
+      toastsWhenSent.set(event.mutation, toastSnapshot());
+    } else if (event.action.type === "error") {
       const error = event.mutation.state.error;
-      if (isUnauthorized(error)) handleUnauthorized();
+      if (isUnauthorized(error)) {
+        // The save's onError has raised its toasts by now, but a catch around
+        // mutateAsync only runs after this, so look once those have run too.
+        const before = toastsWhenSent.get(event.mutation);
+        if (before) setTimeout(() => {
+          for (const t of toast.getHistory()) {
+            if (before.get(t.id) !== t && "type" in t && t.type === "error") signedOutToasts.set(t.id, t);
+          }
+        }, 0);
+        handleUnauthorized();
+      }
       console.error("[API Mutation Error]", error);
     } else if (event.action.type === "success") {
       // Some requests work signed out too, so check rather than assume.
@@ -181,9 +203,11 @@ function signedInAgain() {
   if (!noticeShown) return;
   setKeeping(false);
   failedQueries.clear();
-  // Error toasts from saves that failed while signed out ("Failed to add record")
-  // are out of date now, and an error toast can stay until it is closed.
-  for (const t of toast.getToasts()) if ("type" in t && t.type === "error") toast.dismiss(t.id);
+  // The error toasts of saves that failed while signed out are out of date now
+  // (and an error toast can stay until it is closed).
+  const now = toastSnapshot();
+  for (const [id, t] of signedOutToasts) if (now.get(id) === t) toast.dismiss(id);
+  signedOutToasts.clear();
   setNotice("signed-in-again");
   setTimeout(() => { if (notice === "signed-in-again") setNotice(null); }, 8000);
 }
