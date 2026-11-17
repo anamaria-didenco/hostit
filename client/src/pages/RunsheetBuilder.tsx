@@ -3551,6 +3551,7 @@ export default function RunsheetBuilder() {
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
+              aria-label="Run sheet title"
               className="text-xl sm:text-2xl font-serif font-semibold text-ink tracking-[-0.01em] border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
               placeholder="Event Runsheet Title"
             />
@@ -3571,8 +3572,8 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{formattedEventDate || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">EVENT TYPE</label>
-                <Input
+                <label htmlFor="rb-event-type" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">EVENT TYPE</label>
+                <Input id="rb-event-type"
                   value={eventType}
                   onChange={e => setEventType(e.target.value)}
                   placeholder="Wedding, Birthday..."
@@ -3582,13 +3583,13 @@ export default function RunsheetBuilder() {
               </div>
               {/* Full width on a phone: in a half-width column each space chip sat on its own row. */}
               <div className="col-span-2 md:col-span-1">
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">VENUE / SPACE</label>
-                <SpacePicker value={spaceName} onChange={setSpaceName} />
+                <label id="rb-space-label" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">VENUE / SPACE</label>
+                <div role="group" aria-labelledby="rb-space-label"><SpacePicker value={spaceName} onChange={setSpaceName} /></div>
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">GUESTS</label>
-                <Input
+                <label htmlFor="rb-guests" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">GUESTS</label>
+                <Input id="rb-guests"
                   type="number"
                   value={guestCount}
                   onChange={e => handleGuestCountChange(e.target.value)}
@@ -3655,8 +3656,8 @@ export default function RunsheetBuilder() {
             {/* Contact info row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/20">
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
-                <Input
+                <label htmlFor="rb-contact-name" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><User className="w-3 h-3" aria-hidden /> CLIENT NAME</label>
+                <Input id="rb-contact-name"
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
                   placeholder="Client name..."
@@ -3665,8 +3666,9 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
-                <Input
+                <label htmlFor="rb-contact-phone" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" aria-hidden /> PHONE</label>
+                <Input id="rb-contact-phone"
+                  inputMode="tel"
                   value={contactPhone}
                   onChange={e => setContactPhone(e.target.value)}
                   placeholder="Phone number..."
@@ -3675,8 +3677,9 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
-                <Input
+                <label htmlFor="rb-contact-email" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" aria-hidden /> EMAIL</label>
+                <Input id="rb-contact-email"
+                  inputMode="email"
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="Email address..."
@@ -3816,8 +3819,8 @@ export default function RunsheetBuilder() {
                           ))}
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SETUP SUMMARY (ONE LINE)</label>
-                          <input
+                          <label htmlFor="rb-setup-summary" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SETUP SUMMARY (ONE LINE)</label>
+                          <input id="rb-setup-summary"
                             value={setupSummary}
                             onChange={e => setSetupSummary(e.target.value)}
                             placeholder="One line — e.g. 'Seated · 2 × tables of 8'"
@@ -4318,8 +4321,8 @@ export default function RunsheetBuilder() {
                         <div className="border-t border-gold/15 px-5 py-4 space-y-4 bg-linen/30 no-print">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DURATION (MINS)</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-duration`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DURATION (MINS)</label>
+                              <Input id={`rb-item-${idx}-duration`}
                                 type="text"
                                 inputMode="numeric"
                                 value={item.duration > 0 ? String(item.duration) : ''}
@@ -4332,8 +4335,8 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CATEGORY</label>
-                              <select
+                              <label htmlFor={`rb-item-${idx}-category`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CATEGORY</label>
+                              <select id={`rb-item-${idx}-category`}
                                 value={item.category}
                                 onChange={e => updateItemField(idx, "category", e.target.value)}
                                 className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4344,8 +4347,8 @@ export default function RunsheetBuilder() {
                               </select>
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">ASSIGNED TO</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-assigned`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">ASSIGNED TO</label>
+                              <Input id={`rb-item-${idx}-assigned`}
                                 value={item.assignedTo ?? ""}
                                 onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
                                 placeholder="Staff member..."
@@ -4353,8 +4356,8 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">NOTES</label>
-                              <Input
+                              <label htmlFor={`rb-item-${idx}-notes`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">NOTES</label>
+                              <Input id={`rb-item-${idx}-notes`}
                                 value={item.description ?? ""}
                                 onChange={e => updateItemField(idx, "description", e.target.value)}
                                 placeholder="Additional notes..."
@@ -4587,6 +4590,7 @@ export default function RunsheetBuilder() {
                             type="number" min={1}
                             value={d.count}
                             onChange={e => updateDietary(idx, "count", Number(e.target.value))}
+                            aria-label={`Guests needing ${d.name || 'this requirement'}`}
                             className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 leading-none"
                           />
                           <span className="font-bebas tracking-widest text-xs text-ink/75 mb-1">GUESTS</span>
@@ -4594,12 +4598,14 @@ export default function RunsheetBuilder() {
                         <input
                           value={d.name}
                           onChange={e => updateDietary(idx, "name", e.target.value)}
+                          aria-label="Dietary requirement"
                           className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full"
                         />
                         <input
                           value={d.notes ?? ""}
                           onChange={e => updateDietary(idx, "notes", e.target.value)}
                           placeholder="Notes..."
+                          aria-label={`Notes for ${d.name || 'this requirement'}`}
                           className="w-full font-dm text-xs text-ink/75 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/50"
                         />
                         {/* Named guests with this dietary — type a name + Enter to
@@ -4620,6 +4626,7 @@ export default function RunsheetBuilder() {
                             onChange={e => setDietNameDraft(prev => ({ ...prev, [idx]: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDietaryName(idx, dietNameDraft[idx] ?? ""); setDietNameDraft(prev => ({ ...prev, [idx]: "" })); } }}
                             placeholder="+ Add guest name"
+                            aria-label={`Add a guest name for ${d.name || 'this requirement'}`}
                             className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none placeholder:text-forest"
                           />
                         </div>
@@ -4632,6 +4639,7 @@ export default function RunsheetBuilder() {
                     value={newDietary.name}
                     onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Add requirement..."
+                    aria-label="New dietary requirement"
                     className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                     onKeyDown={e => e.key === "Enter" && addDietary()}
                   />
@@ -4640,12 +4648,14 @@ export default function RunsheetBuilder() {
                     value={newDietary.count}
                     onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
                     placeholder="Count"
+                    aria-label="Guests needing it"
                     className="w-20 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Input
                     value={newDietary.notes}
                     onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Notes (optional)"
+                    aria-label="Notes for the new requirement (optional)"
                     className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Button
@@ -4879,8 +4889,8 @@ export default function RunsheetBuilder() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
-                      <select
+                      <label htmlFor="rb-custom-course" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
+                      <select id="rb-custom-course"
                         value={fnbCustomCourse}
                         onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
                         className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4890,8 +4900,8 @@ export default function RunsheetBuilder() {
                     </div>
                     {fnbCustomCourse === 'Drinks' && (
                       <div>
-                        <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
-                        <select
+                        <label htmlFor="rb-custom-drink-cat" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
+                        <select id="rb-custom-drink-cat"
                           value={fnbCustomDrinkCat}
                           onChange={e => setFnbCustomDrinkCat(e.target.value)}
                           className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
@@ -4943,8 +4953,8 @@ export default function RunsheetBuilder() {
                   </div>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY FLAGS</label>
-                      <Input
+                      <label htmlFor="rb-custom-dietary" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY FLAGS</label>
+                      <Input id="rb-custom-dietary"
                         value={newFnbItem.dietary ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
                         placeholder="GF, VG, DF, NF..."
@@ -5115,48 +5125,48 @@ export default function RunsheetBuilder() {
                           {isExpanded && (
                             <div className={`px-5 py-4 border-b border-gold/20 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
-                                <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                <label htmlFor={`rb-fnb-${originalIdx}-course`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">COURSE</label>
+                                <select id={`rb-fnb-${originalIdx}-course`} value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                   {courses.map(c => <option key={c} value={c}>{c}</option>)}
                                   {!courses.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
                                 </select>
                               </div>
                               {isDrinks && (
                                 <div>
-                                  <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
-                                  <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                  <label htmlFor={`rb-fnb-${originalIdx}-drink-cat`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DRINK CATEGORY</label>
+                                  <select id={`rb-fnb-${originalIdx}-drink-cat`} value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                     <option value="">— No category —</option>
                                     {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                   </select>
                                 </div>
                               )}
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
-                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-time`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">SERVICE TIME</label>
+                                <input id={`rb-fnb-${originalIdx}-time`} type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">QTY / COVERS</label>
-                                <input type="number" min={1} value={item.qty || 1} onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-qty`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">QTY / COVERS</label>
+                                <input id={`rb-fnb-${originalIdx}-qty`} type="number" min={1} value={item.qty || 1} onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY / ALLERGEN</label>
-                                <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-dietary`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DIETARY / ALLERGEN</label>
+                                <input id={`rb-fnb-${originalIdx}-dietary`} value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">STAFF ASSIGNED</label>
-                                <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-staff`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">STAFF ASSIGNED</label>
+                                <input id={`rb-fnb-${originalIdx}-staff`} value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PREP NOTES</label>
-                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-prep`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PREP NOTES</label>
+                                <input id={`rb-fnb-${originalIdx}-prep`} value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PLATING NOTES</label>
-                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-plating`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">PLATING NOTES</label>
+                                <input id={`rb-fnb-${originalIdx}-plating`} value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">UNIT PRICE (NZD)</label>
-                                <input
+                                <label htmlFor={`rb-fnb-${originalIdx}-price`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">UNIT PRICE (NZD)</label>
+                                <input id={`rb-fnb-${originalIdx}-price`}
                                   type="number"
                                   min={0}
                                   step="0.01"
@@ -5173,12 +5183,12 @@ export default function RunsheetBuilder() {
                                 )}
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DESCRIPTION</label>
-                                <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-description`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">DESCRIPTION</label>
+                                <input id={`rb-fnb-${originalIdx}-description`} value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CHANGED FROM (OPTIONAL)</label>
-                                <input value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <label htmlFor={`rb-fnb-${originalIdx}-previous`} className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-1">CHANGED FROM (OPTIONAL)</label>
+                                <input id={`rb-fnb-${originalIdx}-previous`} value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                             </div>
                           )}
@@ -5431,8 +5441,8 @@ export default function RunsheetBuilder() {
                 </div>
                 {(rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') && (
                   <div className="mt-3 flex items-center gap-3">
-                    <label className="font-bebas text-xs tracking-widest text-ink/75">TAB AMOUNT (NZD)</label>
-                    <Input
+                    <label htmlFor="rb-tab-amount" className="font-bebas text-xs tracking-widest text-ink/75">TAB AMOUNT (NZD)</label>
+                    <Input id="rb-tab-amount"
                       type="number"
                       value={rsTabAmount}
                       onChange={e => setRsTabAmount(e.target.value)}
@@ -5848,8 +5858,8 @@ export default function RunsheetBuilder() {
             {proposalSectionOpen && (
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">SELECT PROPOSAL</label>
-                  <select
+                  <label htmlFor="rb-linked-proposal" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">SELECT PROPOSAL</label>
+                  <select id="rb-linked-proposal"
                     value={linkedProposalId ?? ""}
                     onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
                     className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
@@ -6868,8 +6878,8 @@ export default function RunsheetBuilder() {
               {!parsedData ? (
                 <>
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE YOUR TEXT BELOW</label>
-                    <textarea
+                    <label htmlFor="rb-paste-import-text" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE YOUR TEXT BELOW</label>
+                    <textarea id="rb-paste-import-text"
                       autoFocus
                       value={pasteText}
                       onChange={e => setPasteText(e.target.value)}
@@ -7002,18 +7012,18 @@ export default function RunsheetBuilder() {
                           <div key={item._editId ?? i} className="grid grid-cols-12 gap-1 px-3 py-1.5 items-center text-sm font-dm hover:bg-linen/30 group">
                             <div className="col-span-2">
                               <input type="text" value={item.time ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, time: e.target.value } : p))}
-                                className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" />
+                                className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" aria-label={`Time for ${item.title || `item ${i + 1}`}`} />
                             </div>
                             <div className="col-span-1">
                               <input type="text" inputMode="numeric" value={item.duration > 0 ? String(item.duration) : ''} onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, duration: raw === '' ? 0 : Number(raw) } : p)); }}
-                                className="w-full text-xs text-ink/75 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="—" />
+                                className="w-full text-xs text-ink/75 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="—" aria-label={`Minutes for ${item.title || `item ${i + 1}`}`} />
                             </div>
                             <div className="col-span-4">
                               <input type="text" value={item.title ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p))}
-                                className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Title" />
+                                className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Title" aria-label={`Title of item ${i + 1}`} />
                             </div>
                             <div className="col-span-2">
-                              <select value={item.category ?? 'other'} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p))}
+                              <select aria-label={`Category for ${item.title || `item ${i + 1}`}`} value={item.category ?? 'other'} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p))}
                                 className={`w-full text-[11px] font-bebas px-1 py-0.5 border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none ${catStyle(String(item.category ?? 'other').toLowerCase())}`}>
                                 {CATEGORIES.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -7023,12 +7033,12 @@ export default function RunsheetBuilder() {
                           {/* DESCRIPTION */}
                           <div className="col-span-2">
                             <input type="text" value={item.description ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p))}
-                              className="w-full text-xs text-ink/80 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" />
+                              className="w-full text-xs text-ink/80 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" aria-label={`Notes for ${item.title || `item ${i + 1}`}`} />
                           </div>
                           {/* DELETE */}
                           <div className="col-span-1 flex justify-end">
                             <button onClick={() => setEditedParsedTimeline(prev => prev.filter((_, j) => j !== i))}
-                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-red-500 transition-all p-0.5" title="Remove">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-red-500 transition-all p-0.5" title="Remove" aria-label={`Remove ${item.title || `item ${i + 1}`}`}>
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
@@ -7119,6 +7129,7 @@ export default function RunsheetBuilder() {
                   value={newDietaryOption}
                   onChange={e => setNewDietaryOption(e.target.value)}
                   placeholder="Add new option..."
+                  aria-label="New dietary option"
                   className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && newDietaryOption.trim()) {
@@ -7178,12 +7189,14 @@ export default function RunsheetBuilder() {
                   value={newSetupLabel}
                   onChange={e => setNewSetupLabel(e.target.value)}
                   placeholder="Template name (e.g. Cocktail)"
+                  aria-label="New template name"
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Textarea
                   value={newSetupValue}
                   onChange={e => setNewSetupValue(e.target.value)}
                   placeholder="Setup description..."
+                  aria-label="New template setup description"
                   rows={2}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
@@ -7310,11 +7323,13 @@ export default function RunsheetBuilder() {
                           {/* Checkbox toggle */}
                           <button
                             onClick={() => toggle(item)}
+                            aria-label={`Select ${item.name}`}
+                            aria-pressed={isSelected}
                             className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                               isSelected ? 'bg-forest border-forest' : 'border-ink/30'
                             }`}
                           >
-                            {isSelected && <span className="text-white text-xs leading-none">✓</span>}
+                            {isSelected && <span className="text-white text-xs leading-none" aria-hidden>✓</span>}
                           </button>
                           {/* Item info */}
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
@@ -7327,6 +7342,7 @@ export default function RunsheetBuilder() {
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
                                 onClick={e => { e.stopPropagation(); setQty(item, qty - 1); }}
+                                aria-label={`One fewer ${item.name}`}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >-</button>
                               <input
@@ -7335,10 +7351,12 @@ export default function RunsheetBuilder() {
                                 value={qty}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => setQty(item, Math.max(1, parseInt(e.target.value) || 1))}
+                                aria-label={`Quantity of ${item.name}`}
                                 className="w-10 text-center text-xs font-dm border border-gold/20 focus:border-forest focus:outline-none py-0.5"
                               />
                               <button
                                 onClick={e => { e.stopPropagation(); setQty(item, qty + 1); }}
+                                aria-label={`One more ${item.name}`}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >+</button>
                             </div>
@@ -7410,8 +7428,8 @@ export default function RunsheetBuilder() {
               {fnbParsedItems.length === 0 ? (
                 <div className="p-6 space-y-4">
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE CATERING TEXT</label>
-                    <textarea
+                    <label htmlFor="rb-fnb-paste-text" className="font-bebas tracking-widest text-[11px] text-ink/75 block mb-2">PASTE CATERING TEXT</label>
+                    <textarea id="rb-fnb-paste-text"
                       autoFocus
                       value={fnbPasteText}
                       onChange={e => setFnbPasteText(e.target.value)}
@@ -7460,14 +7478,16 @@ export default function RunsheetBuilder() {
                   </div>
                   <div className="space-y-1">
                     {fnbParsedItems.map((item: any, idx: number) => (
-                      <div
+                      <button
+                        type="button"
                         key={item._editId}
                         onClick={() => setFnbParsedItems(prev => prev.map((it, i) => i === idx ? { ...it, _selected: !it._selected } : it))}
-                        className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-colors ${
+                        aria-pressed={!!item._selected}
+                        className={`w-full text-left flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-colors ${
                           item._selected ? 'bg-forest/5 border-forest' : 'bg-white border-transparent hover:bg-linen'
                         }`}
                       >
-                        <div className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                        <div aria-hidden className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                           item._selected ? 'bg-forest border-forest' : 'border-ink/30'
                         }`}>
                           {item._selected && <span className="text-white text-xs leading-none">✓</span>}
@@ -7485,7 +7505,7 @@ export default function RunsheetBuilder() {
                             {item.prepNotes && <span className="italic">{item.prepNotes}</span>}
                           </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                   <button
@@ -7543,6 +7563,7 @@ export default function RunsheetBuilder() {
                   <Textarea
                     value={checklistPasteText}
                     onChange={e => setChecklistPasteText(e.target.value)}
+                    aria-label="Text to turn into checklist items"
                     placeholder={"e.g.\n- Confirm final headcount with client\n- Brief floor staff at 4pm\n- Set up bar with house pours\n- Polish glassware"}
                     className="min-h-[260px] font-dm text-sm rounded-sm border border-gold/50 focus-visible:ring-0 focus-visible:border-forest"
                   />
@@ -7571,9 +7592,9 @@ export default function RunsheetBuilder() {
                   <div className="divide-y divide-gold/20 border border-gold/20">
                     {checklistParsed.items.map((it, i) => (
                       <div key={i} className="flex items-center gap-2 px-3 py-2">
-                        <input type="checkbox" checked={it._selected} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, _selected: e.target.checked } : x) }))} />
-                        <Input value={it.text} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }))} className="flex-1 h-8 text-sm rounded-sm border-gold/20" />
-                        <select value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
+                        <input type="checkbox" aria-label={`Add “${it.text || `item ${i + 1}`}”`} checked={it._selected} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, _selected: e.target.checked } : x) }))} />
+                        <Input aria-label={`Checklist item ${i + 1}`} value={it.text} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }))} className="flex-1 h-8 text-sm rounded-sm border-gold/20" />
+                        <select aria-label={`Category for checklist item ${i + 1}`} value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
                           {['admin','staff','setup','bar','kitchen','guest','other'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <button aria-label="Remove item" onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/75 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -7743,12 +7764,14 @@ export default function RunsheetBuilder() {
                       value={newStaffName}
                       onChange={e => setNewStaffName(e.target.value)}
                       placeholder="Name"
+                      aria-label="Staff member's name"
                       className="flex-1 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
                     />
                     <input
                       value={newStaffEmail}
                       onChange={e => setNewStaffEmail(e.target.value)}
                       placeholder="email@venue.co.nz"
+                      aria-label="Staff member's email"
                       type="email"
                       className="flex-1 border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
                     />
@@ -7776,6 +7799,7 @@ export default function RunsheetBuilder() {
                       <textarea
                         value={bulkStaffPaste}
                         onChange={e => setBulkStaffPaste(e.target.value)}
+                        aria-label="Staff emails to add, comma or line separated"
                         placeholder={"Joe Bloggs <joe@venue.co.nz>, Sam Smith sam@venue.co.nz\nor just\njoe@venue.co.nz; sam@venue.co.nz; alex@venue.co.nz"}
                         rows={4}
                         className="w-full border border-gold/50 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest"
@@ -7796,8 +7820,8 @@ export default function RunsheetBuilder() {
 
               {/* Ad-hoc one-off addresses */}
               <div className="px-5 py-4 border-b border-gold/20">
-                <label className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
-                <textarea
+                <label htmlFor="rb-staff-extra-emails" className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
+                <textarea id="rb-staff-extra-emails"
                   value={extraEmails}
                   onChange={e => setExtraEmails(e.target.value)}
                   placeholder="extra1@example.com, extra2@example.com"
@@ -7815,8 +7839,8 @@ export default function RunsheetBuilder() {
                 if (sigs.length === 0) return null;
                 return (
                   <div className="px-5 py-4 border-b border-gold/20">
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
-                    <select
+                    <label htmlFor="rb-staff-signature" className="font-bebas tracking-widest text-[11px] text-ink/80 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <select id="rb-staff-signature"
                       value={staffSigId}
                       onChange={e => setStaffSigId(e.target.value)}
                       className="w-full border border-gold/50 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
