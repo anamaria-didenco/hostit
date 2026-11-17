@@ -167,9 +167,13 @@ export default function Checklist() {
                   The same list as the run sheet and the staff checklist link.
                 </p>
               </div>
-              <Link href={runsheetHref} className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-forest hover:text-ink transition-colors print:hidden min-h-[44px] flex-shrink-0">
-                <Clock className="w-3.5 h-3.5" />
-                <span>RUN SHEET</span>
+              {/* The styling (centred text too) stays on an inner box, as it was on the button, so
+                  the link still narrows (and wraps) beside a long subtitle on a phone. */}
+              <Link href={runsheetHref}>
+                <span className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-forest hover:text-ink transition-colors print:hidden min-h-[44px] flex-shrink-0 text-center">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>RUN SHEET</span>
+                </span>
               </Link>
             </div>
 
