@@ -47,10 +47,11 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
 }) {
   const [open, setOpen] = useState(false);
   const utils = trpc.useUtils();
-  const { data: unread = 0 } = trpc.notifications.unreadCount.useQuery(undefined, {
+  const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
   });
+  const unread = unreadData ?? 0;
   const listQuery = trpc.notifications.list.useQuery({ limit: 30 }, { staleTime: 30_000 });
   const alerts = (listQuery.data ?? []) as Alert[];
   const markRead = trpc.notifications.markRead.useMutation({
@@ -62,9 +63,12 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
 
   // Count went up → fetch the list so the popover and browser alerts are current,
   // and say so: the bell's label changing ("Alerts, 5 unread") isn't announced.
+  // Nothing is counted until the first count arrives: the 0 shown while it
+  // loads isn't a count, and going from it to the real one isn't new alerts.
   const lastUnread = useRef<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
   useEffect(() => {
+    if (unreadData === undefined) return;
     if (lastUnread.current !== null && unread > lastUnread.current) {
       void listQuery.refetch();
       const fresh = unread - lastUnread.current;
@@ -72,7 +76,7 @@ export function NotificationBell({ variant, onOpenLink, side = "bottom", align =
     }
     lastUnread.current = unread;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unread]);
+  }, [unreadData]);
 
   // Browser notification for alerts that arrived since the page loaded.
   const knownMaxId = useRef<number | null>(null);
