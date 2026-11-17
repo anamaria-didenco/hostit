@@ -48,15 +48,23 @@ function useBottomBarClearance(showing: boolean) {
             while (el && el !== document.body && !/^(fixed|sticky)$/.test(getComputedStyle(el).position)) el = el.parentElement;
             if (!el || el === document.body || getComputedStyle(el).bottom === "auto") continue;
             const r = el.getBoundingClientRect();
-            // A bar, not a drawer or overlay that fills the screen.
-            if (r.bottom >= top - 40 && r.height <= h / 2) next = Math.min(next, r.top);
+            // A bar, not a drawer or overlay that fills the screen. A bar marked
+            // data-toast-clear counts at any height: on a phone held sideways the
+            // wrapped bulk toolbar is most of the screen.
+            if (r.bottom >= top - 40 && (r.height <= h / 2 || el.hasAttribute("data-toast-clear"))) next = Math.min(next, r.top);
           }
         }
         if (next >= top) break;
         top = next;
         ys = [top - 2, top - 16];
       }
-      setClearance(Math.max(0, Math.round(h - top)));
+      // Never lift the stack off the top of the screen: with no room above the
+      // bars, the toast sits at the top, over as little of them as it can.
+      // (Only the offset changes: moving the stack to another position would
+      // mount the toasts again, and the live region would read them out again.)
+      const toastH = Math.max(56, ...Array.from(document.querySelectorAll("[data-sonner-toast]"), t => t.getBoundingClientRect().height));
+      const most = h - (w <= 600 ? 16 : 24) - toastH - 8;
+      setClearance(Math.max(0, Math.min(Math.round(h - top), Math.round(most))));
     };
     measure();
     const timer = window.setInterval(measure, 400);
