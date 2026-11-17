@@ -6635,14 +6635,14 @@ export default function Dashboard() {
                   });
                 }} className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
-                    <Input name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
+                    <label htmlFor="smtp-host" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
+                    <Input id="smtp-host" name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                     {smtpErrors.smtpHost && <p id="smtpHost-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpHost}</p>}
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
-                    <Input name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
+                    <label htmlFor="smtp-port" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
+                    <Input id="smtp-port" name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                     {smtpErrors.smtpPort && <p id="smtpPort-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpPort}</p>}
                   </div>
@@ -6662,8 +6662,8 @@ export default function Dashboard() {
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
-                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
+                    <label htmlFor="smtp-from-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
+                    <Input id="smtp-from-email" name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                     {smtpErrors.smtpFromEmail && <p id="smtpFromEmail-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpFromEmail}</p>}
                   </div>
@@ -7687,20 +7687,20 @@ export default function Dashboard() {
                           {/* Actions */}
                           <div className="col-span-3 flex items-center gap-1 justify-end">
                             <button type="button" disabled={i === 0}
-                              aria-label={`Move ${field.label} up`}
+                              aria-label={`Move ${fieldName} up`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
                               className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveUp className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" disabled={i === formFields.length - 1}
-                              aria-label={`Move ${field.label} down`}
+                              aria-label={`Move ${fieldName} down`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
                               className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveDown className="w-3.5 h-3.5" />
                             </button>
                             {!field.isDefault && (
                               <button type="button"
-                                aria-label="Delete field"
+                                aria-label={`Delete ${fieldName}`}
                                 onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
                                 className="text-ink/65 hover:text-red-500 transition-colors p-[5px]">
                                 <Trash2 className="w-3.5 h-3.5" />
