@@ -4593,13 +4593,16 @@ export default function Dashboard() {
 
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
-                <div ref={bulkBarRef} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                // On phones and tablets it ran off both sides, CLEAR and DELETE
+                // out of reach: below lg it fits the screen and wraps, and on
+                // phones it sits above the tab bar. Desktop is as it was.
+                <div ref={bulkBarRef} className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex max-lg:flex-wrap max-lg:w-max max-lg:max-w-[calc(100vw-2rem)] items-center gap-3 max-lg:gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
                   {/* aria-disabled, not disabled, while it saves: focus stays on the
                       button, so it can move to More actions when the bar goes. */}
-                  <div className={`flex items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
+                  <div className={`flex max-lg:flex-wrap items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
                     {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => {
