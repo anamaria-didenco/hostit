@@ -380,7 +380,7 @@ export default function DailyChecklistLive() {
                   <div className="mt-0.5 flex-shrink-0">
                     {isChecked
                       ? <CheckSquare className="w-5 h-5 text-forest" />
-                      : <Square className="w-5 h-5 text-stone-300" />
+                      : <Square className="w-5 h-5 text-stone-500" />
                     }
                   </div>
                   <div className="flex-1 min-w-0">
@@ -408,7 +408,7 @@ export default function DailyChecklistLive() {
                     aria-label="Edit item"
                     title="Edit item"
                   >
-                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                    <Pencil className="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
                   </button>
                   {isConfirmDelete ? (
                     <button
@@ -427,7 +427,7 @@ export default function DailyChecklistLive() {
                       aria-label="Delete item"
                       title="Delete item"
                     >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <Trash2 className="w-3.5 h-3.5 text-stone-500 [button:hover>&]:text-red-400" aria-hidden="true" />
                     </button>
                   )}
                 </div>

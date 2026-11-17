@@ -1707,7 +1707,7 @@ export default function LeadForm() {
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
             </button>
-            <p className="text-[9px] text-center text-gray-300">By submitting you agree to be contacted by {venueName}.</p>
+            <p className="text-[9px] text-center text-gray-600">By submitting you agree to be contacted by {venueName}.</p>
           </div>
         ) : (
           <>
@@ -1720,10 +1720,10 @@ export default function LeadForm() {
                   <div key={label} className="flex items-start gap-1">
                     <div className="flex flex-col items-center w-16">
                       <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors"
-                        style={on ? { backgroundColor: formButtonColor, color: textOnButton } : { backgroundColor: '#e5e7eb', color: '#9ca3af' }}>
+                        style={on ? { backgroundColor: formButtonColor, color: textOnButton } : { backgroundColor: '#e5e7eb', color: '#4b5563' }}>
                         {n}
                       </div>
-                      <span className="text-[9px] mt-1 font-semibold text-center leading-tight" style={{ color: embedStep === n ? formButtonColor : '#9ca3af' }}>{label}</span>
+                      <span className="text-[9px] mt-1 font-semibold text-center leading-tight" style={{ color: embedStep === n ? formButtonColor : '#4b5563' }}>{label}</span>
                     </div>
                     {i < steps.length - 1 && <div className="w-6 h-px mt-3" style={{ backgroundColor: embedStep > n ? formButtonColor : '#e5e7eb' }} />}
                   </div>
@@ -1858,7 +1858,7 @@ export default function LeadForm() {
                       {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
                     </button>
                   </div>
-                  <p className="text-[9px] text-center text-gray-300">By submitting you agree to be contacted by {venueName}.</p>
+                  <p className="text-[9px] text-center text-gray-600">By submitting you agree to be contacted by {venueName}.</p>
                 </div>
               )}
             </div>

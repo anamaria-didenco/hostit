@@ -255,11 +255,11 @@ function KanbanSettingsDialog({
               <span className="flex-1 font-inter text-sm font-medium text-gray-800">{stage.label}</span>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button onClick={() => moveUp(i)} disabled={i === 0}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-20 transition-colors">
                   <MoveUp className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => moveDown(i)} disabled={i === order.length - 1}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-20 transition-colors">
                   <MoveDown className="w-3.5 h-3.5" />
                 </button>
                 <button
@@ -279,7 +279,7 @@ function KanbanSettingsDialog({
           </button>
           <button
             onClick={() => { onSave({ visible: allStages.map(s => s.key), order: allStages.map(s => s.key) }); onClose(); }}
-            className="font-inter text-xs text-gray-400 hover:text-gray-600 px-3 py-2">
+            className="font-inter text-xs text-gray-600 hover:text-gray-900 px-3 py-2">
             Reset
           </button>
         </div>
@@ -320,7 +320,7 @@ function ApiTokensSection() {
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded bg-[#f3eee2] flex items-center justify-center flex-shrink-0">
-            <span className="font-bebas text-[#c97b29] text-sm tracking-wider">AI</span>
+            <span className="font-bebas text-[#8a5f18] text-sm tracking-wider">AI</span>
           </div>
           <div>
             <div className="font-cormorant font-semibold text-base text-ink">Claude / MCP Connector</div>
@@ -400,9 +400,9 @@ function WaitlistPanel() {
         <span className="font-bebas tracking-widest text-xs text-forest bg-forest/10 px-3 py-1.5 rounded">{entries.length} {entries.length === 1 ? 'ENTRY' : 'ENTRIES'}</span>
       </div>
       {waitlistData.isLoading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>
+        <div className="text-center py-16 text-gray-600 text-sm">Loading…</div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 text-sm">No waitlist entries yet.</div>
+        <div className="text-center py-16 text-gray-600 text-sm">No waitlist entries yet.</div>
       ) : (
         <div className="bg-white border border-border rounded overflow-hidden">
           <table className="w-full text-sm">
@@ -424,7 +424,7 @@ function WaitlistPanel() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{e.venueName ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{e.message ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
                     {new Date(e.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
                 </tr>
@@ -3768,7 +3768,7 @@ export default function Dashboard() {
             >
               {item.label}
               {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-700 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -5464,7 +5464,7 @@ export default function Dashboard() {
                 {(monthBookings ?? []).filter(Boolean).length === 0 && (monthLeadEvents ?? []).filter(Boolean).length === 0 ? (
                   <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                     <Calendar className="w-10 h-10 text-sage-green/30 mx-auto mb-3" />
-                    <p className="font-inter text-sm text-gray-400">No events this month</p>
+                    <p className="font-inter text-sm text-gray-600">No events this month</p>
                     <button onClick={openAddEnquiry} className="mt-3 font-inter text-xs font-semibold px-4 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Add enquiry</button>
                   </div>
                 ) : (
@@ -5483,7 +5483,7 @@ export default function Dashboard() {
                         return (
                           <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                             <SlidersHorizontal className="w-8 h-8 text-sage-green/30 mx-auto mb-3" />
-                            <p className="font-inter text-sm text-gray-400">No events match your current filters</p>
+                            <p className="font-inter text-sm text-gray-600">No events match your current filters</p>
                             <button
                               onClick={() => setEventTablePrefs({ ...DEFAULT_EVENT_TABLE_PREFS, hideStatuses: [] })}
                               className="mt-3 font-inter text-xs font-semibold px-4 py-2 border border-sage-green text-sage-dark rounded-lg hover:bg-sage-green/10 transition-colors"
@@ -6528,10 +6528,10 @@ export default function Dashboard() {
                     <li>Fill in the fields below using the values in the grey box, paste the App Password in the password field</li>
                   </ol>
                   <div className="mt-3 bg-blue-100 rounded p-3 font-mono text-xs text-blue-900 space-y-1">
-                    <div><span className="text-blue-600">SMTP Host:</span> smtp.gmail.com</div>
-                    <div><span className="text-blue-600">Port:</span> 587</div>
-                    <div><span className="text-blue-600">Username:</span> {venueSettings?.smtpUser || "you@yourvenue.co.nz"}</div>
-                    <div><span className="text-blue-600">Password:</span> [16-char App Password from Google]</div>
+                    <div><span className="text-blue-700">SMTP Host:</span> smtp.gmail.com</div>
+                    <div><span className="text-blue-700">Port:</span> 587</div>
+                    <div><span className="text-blue-700">Username:</span> {venueSettings?.smtpUser || "you@yourvenue.co.nz"}</div>
+                    <div><span className="text-blue-700">Password:</span> [16-char App Password from Google]</div>
                   </div>
                 </div>
 
@@ -7200,7 +7200,7 @@ export default function Dashboard() {
                       <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
                       <div className="text-sm text-white mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-600 font-bebas tracking-widest">HEADER PREVIEW</div>
                   </div>
                 </div>
 
@@ -7312,7 +7312,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-400 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[11px] text-gray-600 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
                   </div>
                 </div>
 
@@ -8525,7 +8525,7 @@ export default function Dashboard() {
                     <h2 className="font-semibold text-gray-800">Template Emails</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
-                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
+                  <div className="p-3 text-xs text-gray-600 border-b border-gray-100">Name</div>
                   {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
                     <div key={i} className="flex items-center justify-between flex-wrap gap-y-2 p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{name}</span>
@@ -8545,7 +8545,7 @@ export default function Dashboard() {
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Date Added</th>
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Size</th>
                     </tr></thead>
-                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
+                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-600">No attachments yet</td></tr></tbody>
                   </table>
                 </div>
                 {/* Reporting Settings */}
@@ -8556,7 +8556,7 @@ export default function Dashboard() {
                     <option>Grand Total</option>
                     <option>Subtotal</option>
                   </select>
-                  <p className="text-xs text-gray-400 mt-2">Choose whether to calculate revenue projections based on the grand total or subtotal.</p>
+                  <p className="text-xs text-gray-600 mt-2">Choose whether to calculate revenue projections based on the grand total or subtotal.</p>
                 </div>
                 {/* Event Types */}
                 <div className="bg-white border border-gray-200 rounded">
@@ -8646,7 +8646,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                         <div>
                           <h2 className="font-semibold text-gray-800 text-sm">Furniture Inventory</h2>
-                          <p className="font-dm text-xs text-gray-400 mt-0.5">Define your actual tables and chairs — colours, sizes, quantities. These appear in the floor plan builder so you place real items.</p>
+                          <p className="font-dm text-xs text-gray-600 mt-0.5">Define your actual tables and chairs — colours, sizes, quantities. These appear in the floor plan builder so you place real items.</p>
                         </div>
                         {!showInvForm && !editingInvId && (
                           <button
@@ -8690,7 +8690,7 @@ export default function Dashboard() {
                                 <input type="color" value={invForm.color} onChange={e => setInvForm(f => ({ ...f, color: e.target.value }))}
                                   className="w-10 h-8 border border-gray-200 rounded cursor-pointer flex-shrink-0" />
                                 <div style={{ width: 32, height: 32, backgroundColor: invForm.color, borderRadius: invForm.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
-                                <span className="font-dm text-xs text-gray-400">{invForm.color}</span>
+                                <span className="font-dm text-xs text-gray-600">{invForm.color}</span>
                               </div>
                             </div>
                             <div>
@@ -8719,18 +8719,18 @@ export default function Dashboard() {
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
                             <div className="col-span-2">
-                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">IMAGE <span className="normal-case font-dm text-gray-300">(PNG — optional)</span></label>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">IMAGE <span className="normal-case font-dm text-gray-500">(PNG — optional)</span></label>
                               <div className="flex items-center gap-3">
                                 {invForm.imageUrl ? (
                                   <div className="relative flex-shrink-0">
                                     <img src={invForm.imageUrl} alt="" className="w-12 h-12 object-contain border border-gray-200 rounded bg-gray-50" />
                                     <button type="button" aria-label="Remove image" onClick={() => setInvForm(f => ({ ...f, imageUrl: '' }))}
-                                      className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500">
+                                      className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-600 hover:text-red-500">
                                       <X className="w-2.5 h-2.5" />
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-300 text-[12px] flex-shrink-0">none</div>
+                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-500 text-[12px] flex-shrink-0">none</div>
                                 )}
                                 <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
                                   <Upload className="w-3 h-3" /> UPLOAD PNG
@@ -8752,7 +8752,7 @@ export default function Dashboard() {
                                   }} />
                                 </label>
                               </div>
-                              <p className="font-dm text-[12px] text-gray-300 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
+                              <p className="font-dm text-[12px] text-gray-600 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -8767,7 +8767,7 @@ export default function Dashboard() {
 
                       {/* Inventory list */}
                       {!furnitureInventory || furnitureInventory.length === 0 ? (
-                        <div className="p-8 text-center text-gray-400">
+                        <div className="p-8 text-center text-gray-600">
                           <p className="font-dm text-sm">No furniture items yet.</p>
                           <p className="font-dm text-xs mt-1">Add your tables and chairs to use them when building floor plans.</p>
                         </div>
@@ -8776,11 +8776,11 @@ export default function Dashboard() {
                           <table className="w-full min-w-[600px]">
                           <thead>
                             <tr className="border-b border-gray-50">
-                              <th className="text-left p-3 pl-5 text-xs font-medium text-gray-400 font-bebas tracking-widest">ITEM</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SHAPE</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SIZE</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SEATS</th>
-                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">QTY</th>
+                              <th className="text-left p-3 pl-5 text-xs font-medium text-gray-600 font-bebas tracking-widest">ITEM</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SHAPE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SIZE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">SEATS</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-600 font-bebas tracking-widest">QTY</th>
                               <th className="p-3"></th>
                             </tr>
                           </thead>
@@ -8794,7 +8794,7 @@ export default function Dashboard() {
                                       : <div style={{ width: 28, height: 28, backgroundColor: item.color, borderRadius: item.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />}
                                     <div>
                                       <p className="font-dm text-sm text-gray-800 font-medium">{item.name}</p>
-                                      {item.notes && <p className="font-dm text-xs text-gray-400 italic">{item.notes}</p>}
+                                      {item.notes && <p className="font-dm text-xs text-gray-600 italic">{item.notes}</p>}
                                     </div>
                                   </div>
                                 </td>
@@ -8805,7 +8805,7 @@ export default function Dashboard() {
                                 <td className="p-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     <button aria-label="Edit item" onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '', imageUrl: item.imageUrl ?? '' }); }}
-                                      className="text-gray-400 hover:text-gray-700 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                      className="text-gray-600 hover:text-gray-900 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Delete item" onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
                                       className="text-red-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
@@ -8825,7 +8825,7 @@ export default function Dashboard() {
                           <Grid className="w-8 h-8 text-gray-400" />
                         </div>
                         <h3 className="font-cormorant text-xl font-semibold text-gray-700 mb-2">No Floor Plans Yet</h3>
-                        <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">Create interactive floor plans for your event spaces. Drag and drop tables, chairs, and other elements to design your layouts.</p>
+                        <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">Create interactive floor plans for your event spaces. Drag and drop tables, chairs, and other elements to design your layouts.</p>
                         <button
                           onClick={() => setEditingFloorPlan({ id: null, name: 'New Floor Plan', canvasData: null })}
                           className="btn-forest text-cream text-xs font-bebas tracking-widest px-6 py-2"
@@ -11152,7 +11152,7 @@ export default function Dashboard() {
               </div>
             </div>
             <fieldset>
-              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></legend>
+              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-700">*</span></legend>
               {spaces && spaces.length > 0 ? (
                 <SpaceMultiSelect value={quickCreateForm.spaceName}
                   onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
@@ -11622,7 +11622,7 @@ export default function Dashboard() {
               <fieldset>
                 <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">
                   SPACE {addEnquiryNeedsSpace
-                    ? <span className="text-red-500">*</span>
+                    ? <span className="text-red-700">*</span>
                     : <span className="font-dm normal-case tracking-normal text-xs text-stone-600">(optional — you can pick one later)</span>}
                 </legend>
                 {spaces && spaces.length > 0 ? (
