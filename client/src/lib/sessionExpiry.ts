@@ -18,8 +18,9 @@ import { getLoginUrl } from "@/const";
  * The notice is its own element on <body>, not a toast: it has to work over an
  * open dialog (a toast can't be clicked behind a modal's overlay), so it sits
  * above the overlay and its clicks don't count as "outside" the dialog. A dialog
- * keeps keyboard focus inside itself, so the sign-in link is also put at the end
- * of the dialog that has focus, shown when it is tabbed to.
+ * keeps keyboard focus inside itself, so a copy of the sign-in link is also put
+ * (visually hidden) at the end of the dialog that has focus; while it has focus,
+ * the notice's own link shows the focus ring.
  *
  * While the page is kept, useAuth keeps the person who was signed in (see
  * keptMe), so a fresh "who is signed in?" check can't swap the page for the
@@ -190,6 +191,8 @@ export function SignedOutBanner() {
   }, []);
   const signedOut = state === "signed-out";
   const dialog = useFocusedDialog(signedOut);
+  const [copyFocused, setCopyFocused] = useState(false);
+  useEffect(() => setCopyFocused(false), [dialog]); // the copy goes with its dialog
   if (!state) return null;
   const banner = createPortal(
     h("div", {
@@ -204,19 +207,19 @@ export function SignedOutBanner() {
       h("p", { className: "font-semibold" }, signedOut ? "You've been signed out" : "Signed in again. You can save now."),
       signedOut && h("p", { className: "mt-1" }, "What you've typed is still here. Sign in again in a new tab, then come back to this one and save."),
       h("div", { className: "mt-2 flex flex-wrap items-center gap-3" },
-        signedOut && h("a", { href: getLoginUrl(), target: "_blank", rel: "noopener", className: "font-semibold text-forest underline" }, "Sign in (opens a new tab)"),
+        signedOut && h("a", { href: getLoginUrl(), target: "_blank", rel: "noopener", className: "font-semibold text-forest underline" + (copyFocused && dialog ? " outline-2 outline-offset-2 outline-[#2f5488]" : "") }, "Sign in (opens a new tab)"),
         h("button", { type: "button", onClick: () => setNotice(null), className: "text-ink/70 underline" }, "Dismiss"),
       ),
     ),
     document.body,
   );
   if (!signedOut || !dialog) return banner;
-  // Tab or Shift+Tab inside the dialog reaches this; it shows while focused.
+  // Tab or Shift+Tab inside the dialog reaches the copy (one Shift+Tab from the dialog's first control).
   return h(Fragment, null, banner, createPortal(
     h("a", {
-      href: getLoginUrl(), target: "_blank", rel: "noopener",
-      className: "sr-only focus:not-sr-only focus:block focus:px-3 focus:py-2 focus:bg-white focus:border-2 focus:border-red-700 font-dm text-sm font-semibold text-forest underline",
-    }, "Signed out: sign in again (opens a new tab)"),
+      href: getLoginUrl(), target: "_blank", rel: "noopener", className: "sr-only",
+      onFocus: () => setCopyFocused(true), onBlur: () => setCopyFocused(false),
+    }, "Signed out. Sign in again (opens a new tab)"),
     dialog,
   ));
 }
