@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, memo } from "react";
+import { useState, useRef, useCallback, useEffect, useId, memo } from "react";
 import {
   Trash2, RotateCw, ZoomIn, ZoomOut, MousePointer,
   Save, Plus, Share2, Copy, Check, Download, Upload, X,
@@ -6,6 +6,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { floorPlanItemName, summarizeFloorPlan } from "@shared/floorPlanSummary";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type FPElement = {
@@ -111,16 +112,30 @@ function getLabel(type: string, customPalette: CustomPaletteItem[]) {
     ?? type;
 }
 
+/** getLabel, but a bare type id ("round_table") reads as words ("Round table"). */
+function kindName(type: string, customPalette: CustomPaletteItem[]) {
+  const label = getLabel(type, customPalette);
+  if (label !== type) return label;
+  const words = type.replace(/[-_]+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "Item";
+}
+
+const NUDGE_KEYS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+};
+
 // ─── Render a single element on the canvas ───────────────────────────────────
-const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette }: {
+const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, onNudge, readOnly, customPalette, hintId }: {
   el: FPElement;
   selected: boolean;
   onSelect: (id: string) => void;
   onDragStart: (e: React.MouseEvent, id: string) => void;
   onResizeStart: (e: React.MouseEvent, id: string, corner: string) => void;
   onRotateStart: (e: React.MouseEvent, id: string) => void;
+  onNudge?: (id: string, dx: number, dy: number, big: boolean) => void;
   readOnly?: boolean;
   customPalette: CustomPaletteItem[];
+  hintId?: string;
 }) {
   const color = el.color
     ?? ELEMENT_COLORS[el.type]
@@ -145,7 +160,27 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
 
   return (
     <div
-      onMouseDown={(e) => { onSelect(el.id); onDragStart(e, el.id); }}
+      // In the editor each item is a Tab stop named "Table 1, 8 seats":
+      // focusing it selects it, the arrow keys move it, and R / Delete act on
+      // it. A click focuses it too, so those keys work after a mouse select.
+      {...(readOnly ? {} : {
+        role: "button",
+        tabIndex: 0,
+        "aria-label": floorPlanItemName(el, (t) => kindName(t, customPalette)),
+        "aria-describedby": hintId,
+        "data-el-id": el.id,
+        onFocus: () => onSelect(el.id),
+        onKeyDown: (e: React.KeyboardEvent) => {
+          const d = NUDGE_KEYS[e.key];
+          if (!d || e.target !== e.currentTarget) return;
+          e.preventDefault();
+          onNudge?.(el.id, d[0], d[1], e.shiftKey);
+        },
+      })}
+      onMouseDown={(e) => {
+        onSelect(el.id); onDragStart(e, el.id);
+        if (!readOnly) (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+      }}
       style={{
         position: "absolute",
         left: el.x, top: el.y, width: el.width, height: el.height,
@@ -275,6 +310,7 @@ export default function FloorPlanEditor({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
+  const hintId = useId();
 
   // Escape closes the share dialog and the templates dropdown.
   useEscapeKey(showShareDialog, () => setShowShareDialog(false));
@@ -297,6 +333,21 @@ export default function FloorPlanEditor({
     if (!el) return;
     dragRef.current = { id, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y };
   }, [readOnly]);
+
+  // ── Move the focused element with the arrow keys (one grid square, or 1px
+  // with Snap off; Shift for five) ────────────────────────────────────────
+  const handleNudge = useCallback((id: string, dx: number, dy: number, big: boolean) => {
+    if (readOnly) return;
+    const step = (snapToGrid ? GRID : 1) * (big ? 5 : 1);
+    setCanvasData(prev => ({
+      ...prev,
+      elements: prev.elements.map(el => el.id !== id ? el : {
+        ...el,
+        x: Math.min(Math.max(0, snap(el.x + dx * step)), Math.max(0, prev.width - el.width)),
+        y: Math.min(Math.max(0, snap(el.y + dy * step)), Math.max(0, prev.height - el.height)),
+      }),
+    }));
+  }, [readOnly, snapToGrid, snap]);
 
   // ── Resize element (corner handles) ───────────────────────────────────────
   const handleResizeStart = useCallback((e: React.MouseEvent, id: string, corner: string) => {
@@ -393,6 +444,12 @@ export default function FloorPlanEditor({
     setSelected(newEl.id);
   }, [canvasData.width, canvasData.height, snap]);
 
+  // Click / Enter / Space on a palette item: add it at the middle of the plan.
+  const addFromPalette = (item: typeof PALETTE[0] | CustomPaletteItem) => {
+    addItem(item.type, item, true);
+    toast.success(`Added "${item.label}"`);
+  };
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const type = e.dataTransfer.getData("fp-type");
@@ -415,6 +472,9 @@ export default function FloorPlanEditor({
     };
     setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
     setSelected(newEl.id);
+    // Delete / R act only while the plan has focus: give it focus, as a
+    // click on an item does.
+    canvasRef.current?.focus({ preventScroll: true });
   }, [zoom, snap, customPalette]);
 
   // ── Selected element ─────────────────────────────────────────────────────
@@ -449,7 +509,12 @@ export default function FloorPlanEditor({
       const el = prev.elements.find(x => x.id === selected);
       if (!el) return prev;
       const copy: FPElement = { ...el, id: `${el.type}-${Date.now()}`, x: el.x + GRID, y: el.y + GRID };
-      setTimeout(() => setSelected(copy.id), 0);
+      setTimeout(() => {
+        setSelected(copy.id);
+        // Keyboard: move focus to the copy, so the arrows move what's selected.
+        const c = canvasRef.current;
+        if (c && c.contains(document.activeElement)) c.querySelector<HTMLElement>(`[data-el-id="${CSS.escape(copy.id)}"]`)?.focus();
+      }, 0);
       return { ...prev, elements: [...prev.elements, copy] };
     });
   }, [selected]);
@@ -502,12 +567,20 @@ export default function FloorPlanEditor({
   };
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  // Delete / Backspace / R act only while the plan itself (the canvas or one
+  // of its items) has focus: Backspace on "Zoom in" used to delete the
+  // selected table, and R fired from any button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSelected(); return; }
-      if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
-      if (e.key === "r" || e.key === "R") rotateSelected();
+      const onPlan = !!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target);
+      if (onPlan && (e.key === "Delete" || e.key === "Backspace") && selected) {
+        e.preventDefault();
+        deleteSelected();
+        canvasRef.current?.focus({ preventScroll: true }); // not lost to <body>
+      }
+      if (onPlan && (e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey && !e.altKey) rotateSelected();
       if (e.key === "Escape") setSelected(null);
     };
     window.addEventListener("keydown", onKey);
@@ -601,6 +674,7 @@ export default function FloorPlanEditor({
   };
 
   const totalSeats = canvasData.elements.reduce((sum, el) => sum + (el.seats ?? 0), 0);
+  const planSummary = summarizeFloorPlan(canvasData.elements, t => kindName(t, customPalette));
   const tableCount = canvasData.elements.filter(el => el.type.includes("table")).length;
 
   return (
@@ -631,17 +705,24 @@ export default function FloorPlanEditor({
           {sidebarTab === "elements" && (
             <>
               <div className="px-3 py-1.5 border-b border-border flex-shrink-0">
-                <p className="text-[10px] text-ink/65">Drag onto canvas</p>
+                <p className="text-[10px] text-ink/65">Click to add, or drag onto canvas</p>
               </div>
               <div className="flex-1 overflow-y-auto py-1">
+                {/* Buttons as well as drag sources: a click, Enter or Space adds
+                    the item at the middle of the plan. (A <div role=button>,
+                    not a <button>, so dragging works the same in every browser.) */}
                 {PALETTE.map(item => (
                   <div
                     key={item.type}
                     draggable
                     onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => addFromPalette(item)}
+                    onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); addFromPalette(item); } }}
                     className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
                   >
-                    <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
+                    <span aria-hidden="true" style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
                     <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate">{item.label}</span>
                   </div>
                 ))}
@@ -657,14 +738,18 @@ export default function FloorPlanEditor({
                         key={item.type}
                         draggable
                         onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
+                        onClick={() => addFromPalette(item)}
                         className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
                       >
-                        <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.round ? "●" : "▬"}</span>
-                        <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
+                        <span aria-hidden="true" style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.round ? "●" : "▬"}</span>
+                        {/* The name is the keyboard button (the row also holds Remove). */}
+                        <span role="button" tabIndex={0}
+                          onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); addFromPalette(item); } }}
+                          className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
                         <button
                           type="button"
                           aria-label="Remove custom item"
-                          onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
+                          onClick={e => { e.stopPropagation(); setCustomPalette(prev => prev.filter(p => p.type !== item.type)); }}
                           className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-ink/65 hover:text-red-400 transition-all flex-shrink-0"
                         >
                           <X className="w-2.5 h-2.5" />
@@ -956,6 +1041,10 @@ export default function FloorPlanEditor({
           <div style={{ padding: "24px", minWidth: canvasData.width * zoom + 48, minHeight: canvasData.height * zoom + 48 }}>
             <div
               ref={canvasRef}
+              tabIndex={readOnly ? undefined : -1}
+              {...(readOnly
+                ? { role: "img", "aria-label": `Floor plan: ${planSummary.headline}. The items are listed below.` }
+                : { role: "group", "aria-label": "Floor plan" })}
               onDragOver={e => e.preventDefault()}
               onDrop={readOnly ? undefined : handleDrop}
               onClick={e => { if (e.target === canvasRef.current) setSelected(null); }}
@@ -995,13 +1084,25 @@ export default function FloorPlanEditor({
                   onDragStart={readOnly ? () => {} : handleDragStart}
                   onResizeStart={handleResizeStart}
                   onRotateStart={handleRotateStart}
+                  onNudge={handleNudge}
                   readOnly={readOnly}
                   customPalette={customPalette}
+                  hintId={hintId}
                 />
               ))}
             </div>
           </div>
         </div>
+        {readOnly ? (
+          // The plan in words, for anyone who can't see the canvas.
+          <div className="sr-only">
+            <h2>On this floor plan</h2>
+            <p>{planSummary.headline}</p>
+            {planSummary.lines.length > 0 && <ul>{planSummary.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+          </div>
+        ) : (
+          <p id={hintId} className="sr-only">Arrow keys move it (Shift for bigger steps), R rotates, Delete removes, Escape deselects.</p>
+        )}
       </div>
 
       {/* ── Right properties panel ─────────────────────────────────────── */}
@@ -1115,7 +1216,7 @@ export default function FloorPlanEditor({
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                 </div>
-                <p className="font-dm text-[10px] text-ink/65 mt-2">Del=delete, R=rotate, Esc=deselect</p>
+                <p className="font-dm text-[10px] text-ink/65 mt-2">Arrows=move, Del=delete, R=rotate, Esc=deselect</p>
               </div>
             </div>
           )}
