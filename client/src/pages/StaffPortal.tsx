@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { safeHtml } from "@/lib/safeHtml";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -11,6 +11,7 @@ import { currency } from "@/lib/money";
 import NowNext from "@/components/NowNext";
 import { groupDrinks } from "@shared/drinkGroups";
 import { venueBrand } from "@shared/brand";
+import { staffLinkContentKey } from "@shared/staffLinkContent";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -62,20 +63,23 @@ export default function StaffPortal() {
     { enabled: !!token, retry: false, refetchInterval: 30000 }
   );
 
-  // Keep the embedded BEO document live: the query polls every 30s and, thanks
-  // to react-query structural sharing, `data` only changes identity when the
-  // content actually changed — so we reload the BEO iframe only on real edits.
+  // Keep the embedded BEO document live: the query polls every 30s, and the
+  // BEO iframe reloads only when what staff see has really changed. Keyed on
+  // the content, not on `data` itself: `data` got a new identity on every poll
+  // (see staffLinkContentKey), so the BEO reloaded and scrolled back to the
+  // top every 30 seconds while someone was reading it.
+  const contentKey = useMemo(() => staffLinkContentKey(data), [data]);
   const [beoNonce, setBeoNonce] = useState(0);
   // Nothing on screen told a screen-reader user that the manager just edited
   // the runsheet mid-shift — the content silently swapped underneath them.
-  // `data` only changes identity on a REAL content change (structural sharing),
-  // so advance the iframe nonce then, skip the very first load (nothing was
-  // edited yet), and give each announcement a distinct string (a timestamp) so
-  // aria-live re-reads it — an identical repeated string is not re-announced.
+  // On a real content change, advance the iframe nonce, skip the very first
+  // load (nothing was edited yet), and give each announcement a distinct
+  // string (a timestamp) so aria-live re-reads it — an identical repeated
+  // string is not re-announced.
   const hasLoadedOnce = useRef(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
   useEffect(() => {
-    if (!data) return;
+    if (!contentKey) return;
     setBeoNonce(n => n + 1);
     if (!hasLoadedOnce.current) {
       hasLoadedOnce.current = true;
@@ -83,7 +87,7 @@ export default function StaffPortal() {
     }
     const at = new Date().toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" });
     setLiveAnnouncement(`Runsheet updated at ${at}`);
-  }, [data]);
+  }, [contentKey]);
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
