@@ -1177,6 +1177,18 @@ export default function Dashboard() {
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const bulkDeleteCancelRef = useRef<HTMLButtonElement>(null);
+  // The floating bulk toolbar goes with the selection: after a delete (also
+  // when its confirm was closed while "Deleting…"), or CLEAR. When focus was
+  // on it, put it on More actions, where the selection started, not <body>.
+  const bulkBarHadFocus = useRef(false);
+  const bulkBarRef = React.useCallback((el: HTMLDivElement | null) => {
+    if (el) return () => { if (el.contains(document.activeElement)) bulkBarHadFocus.current = true; };
+  }, []);
+  React.useLayoutEffect(() => {
+    if (!bulkBarHadFocus.current) return;
+    bulkBarHadFocus.current = false;
+    if (!document.activeElement || document.activeElement === document.body) document.getElementById('leads-more-actions')?.focus();
+  });
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Overview calendar: start at this week (default) or show the whole month.
@@ -4563,7 +4575,7 @@ export default function Dashboard() {
 
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                <div ref={bulkBarRef} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
