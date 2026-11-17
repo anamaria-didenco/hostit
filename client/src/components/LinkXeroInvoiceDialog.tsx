@@ -139,7 +139,7 @@ export function LinkXeroInvoiceDialog({ onClose, lockedBookingId }: { onClose: (
               </p>
               <div className="relative mb-3">
                 <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
-                <input className={`${FIELD} w-full pl-9`} placeholder="Search by name, number or reference" aria-label="Search invoices"
+                <input className={`${FIELD} w-full pl-9`} placeholder="Search by name, number or reference" aria-label="Search invoices" data-search-box
                   value={search} onChange={e => setSearch(e.target.value)} />
               </div>
 
