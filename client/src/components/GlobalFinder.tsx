@@ -162,7 +162,7 @@ export default function GlobalFinder({
             onChange={e => setQuery(e.target.value)}
             onKeyDown={onInputKey}
             placeholder={isStaff ? "Search events by name or space…" : "Search name, email, phone or company…"}
-            autoComplete="off" autoCorrect="off" spellCheck={false}
+            autoComplete="off" autoCorrect="off" spellCheck={false} data-search-box
             className="flex-1 h-11 px-1 rounded-sm bg-transparent font-dm text-sm text-ink placeholder:text-ink/50 focus:outline-none"
           />
           <kbd className="hidden sm:inline font-dm text-[12px] text-ink/60 border border-gray-200 rounded px-1.5 py-0.5">ESC</kbd>

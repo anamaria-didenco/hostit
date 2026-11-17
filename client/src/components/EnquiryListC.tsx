@@ -10,6 +10,7 @@ import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
 import MovedNote from "@/components/MovedNote";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { ChevronDown, Check } from "lucide-react";
 
@@ -245,6 +246,18 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
+  // Opening a quick reply brings it into view and, when it was opened from the
+  // keyboard, puts the cursor in the reply box. A click or tap leaves focus on
+  // Reply, as before.
+  const replyPanelRef = React.useRef<HTMLDivElement>(null);
+  const replyBoxRef = React.useRef<HTMLTextAreaElement>(null);
+  const focusReplyBox = React.useRef(false);
+  React.useEffect(() => {
+    if (replyId == null) return;
+    replyPanelRef.current?.scrollIntoView({ block: "nearest" });
+    if (focusReplyBox.current) replyBoxRef.current?.focus({ preventScroll: true });
+    focusReplyBox.current = false;
+  }, [replyId]);
   // A just-moved row keeps its place in the tab it was moved from, even though
   // its new status no longer matches it. We remember which tab each move was
   // pinned to; the pin drops when the parent clears the mark (undo, or a
@@ -354,6 +367,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   React.useEffect(() => {
     onRowsChange?.(rows.map((r) => r.lead.id));
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
+  // focus on that row (or the next one) instead of dropping it to the page.
+  // When the last one goes, the tab it was on ("Needs reply 0").
+  const rowsRef = React.useRef<HTMLDivElement>(null);
+  const tabRef = React.useRef<HTMLButtonElement>(null);
+  useFocusKeeper(rowsRef, tabRef);
 
   const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
@@ -373,6 +392,16 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     setDraft(resolveTemplate(tpl.body, lead, venueName));
   };
 
+  // A template chip replaces the reply. If the reply has been typed into (it is no
+  // longer the current template's text), ask first: it used to vanish silently.
+  const pickTemplate = (lead: any, tpl: (typeof STARTER_TEMPLATES)[number]) => {
+    const current = STARTER_TEMPLATES.find((t) => t.name === tplName);
+    const typed = !!draft.trim() && (!current || draft !== resolveTemplate(current.body, lead, venueName));
+    if (typed && !window.confirm(`Replace what you've typed with "${tpl.name}"?`)) return;
+    setTplName(tpl.name);
+    setDraft(resolveTemplate(tpl.body, lead, venueName));
+  };
+
   const doSend = (lead: any) => {
     if (!draft.trim()) return;
     const tpl = STARTER_TEMPLATES.find((t) => t.name === tplName) ?? STARTER_TEMPLATES[0];
@@ -381,7 +410,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background">
+    <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
         {/* Summary strip — the four numbers that say where the pipeline
             stands; each one jumps to its tab. Confirmed is the headline cell. */}
@@ -413,7 +442,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
               const on = tab === t.id;
               return (
-                <button key={t.id} onClick={() => { setTab(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
                   aria-pressed={on}
                   className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
@@ -510,7 +539,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         )}
 
         {/* Rows */}
-        <div className="flex flex-col gap-2">
+        <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
             <div className="py-12 text-center font-sans text-sm text-muted-foreground">
               {activeFilters > 0 ? (
@@ -542,15 +571,17 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
             const onAction = (e: React.MouseEvent) => {
               e.stopPropagation();
+              // detail 0 = Enter/Space (a click or tap has 1 or more).
+              focusReplyBox.current = e.detail === 0;
               if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
             };
 
             const unread = lead.status === "new" && !lead.readAt;
 
             return (
-              <React.Fragment key={lead.id}>
+              <div key={lead.id} className="flex flex-col gap-2">
               {showHead && (
-                <div className={`flex items-center gap-3 ${idx === 0 ? "" : "mt-4"}`}>
+                <div className={`flex items-center gap-3 ${idx === 0 ? "" : "mt-2"}`}>
                   <h2 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] flex-shrink-0" style={{ color: tone.fg }}>{TONE_TITLE[signal.tone]}</h2>
                   <span className="h-[1.5px] flex-1" style={{ background: signal.tone === "red" ? tone.fg : "var(--border)" }} />
                   <span className="font-sans text-[12px] text-muted-foreground flex-shrink-0">{groupCount}</span>
@@ -562,9 +593,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               <div className="rounded-[8px] overflow-hidden border-[1.5px] transition-shadow hover:shadow-md"
                 style={{ background: selected || replying ? "var(--accent)" : "var(--card)", borderColor: selected || replying ? "var(--primary)" : "var(--border)" }}>
                 {/* Desktop: one dense signal-first row */}
-                <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                  aria-current={selected ? "true" : undefined}
-                  onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                {/* A click anywhere opens it; for the keyboard the name is the
+                    button, so Reply isn't nested inside another button. */}
+                <div onClick={() => onOpen(lead)}
                   className="hidden md:grid gap-4 items-center px-4 py-3 cursor-pointer md:grid-cols-[150px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[150px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.8fr)_104px]">
                   {/* Fixed-width signal and action columns, so the name and date
                       columns line up from row to row whatever the signal says. */}
@@ -580,13 +611,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     <span aria-hidden className="w-[34px] h-[34px] rounded-full flex-shrink-0 flex items-center justify-center font-sans text-[12px] font-bold"
                       style={{ background: selected ? "var(--card)" : "var(--accent)", color: "var(--primary)" }}>{initials(lead)}</span>
                     <div className="min-w-0">
-                      <div className={`font-sans text-[15px] truncate text-foreground ${unread ? "font-bold" : "font-semibold"}`}>{lead.firstName} {lead.lastName}</div>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
+                        aria-current={selected ? "true" : undefined}
+                        className={`block max-w-full min-w-0 truncate text-left font-sans text-[15px] text-foreground ${unread ? "font-bold" : "font-semibold"}`}>{lead.firstName} {lead.lastName}</button>
                       {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
                       <div className="font-sans text-[12px] text-muted-foreground mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                     </div>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-sans text-[14px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                    <div className="font-sans text-[14px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                     {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
                   </div>
                   <div className="min-w-0 hidden lg:block">
@@ -594,6 +627,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <button onClick={onAction}
                     className="inline-flex items-center justify-center gap-1.5 h-9 w-full px-3 rounded-[6px] font-sans text-[13px] font-bold whitespace-nowrap border-[1.5px] transition-colors hover:border-primary"
+                    aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                     style={action.primary
                       ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                       : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
@@ -604,7 +638,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 {/* Mobile: a stacked card — signal + budget, then name, sub, then date + action */}
                 <div className="md:hidden">
                   <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter") onOpen(lead); }}
+                    onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
                     className="px-3.5 pt-3 pb-2.5 cursor-pointer">
                     <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0" style={{ color: tone.fg }}>
@@ -623,11 +657,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                   <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t border-border">
                     <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-sans text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#8a5f18" : "var(--foreground)" }}>{dateStr}</div>
+                      <div className="font-sans text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                       {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
                     </div>
                     <button onClick={onAction}
                       className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[6px] font-sans text-[14px] font-bold whitespace-nowrap border-[1.5px] flex-shrink-0"
+                      aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
                       style={action.primary
                         ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                         : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
@@ -647,7 +682,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
                 {/* Inline quick reply */}
                 {replying && (
-                  <div className="border-t border-border px-3.5 pt-3 pb-3.5" style={{ background: "var(--card)" }}>
+                  <div ref={replyPanelRef} className="border-t border-border px-3.5 pt-3 pb-3.5" style={{ background: "var(--card)" }}>
                     <div className="flex items-center gap-1.5 flex-wrap mb-2">
                       <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
                       {(QUICK_FOR[signal.group] ?? []).map((name) => {
@@ -655,7 +690,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                         const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
                         if (!tpl) return null;
                         return (
-                          <button key={name} onClick={() => { setTplName(name); setDraft(resolveTemplate(tpl.body, lead, venueName)); }}
+                          <button key={name} aria-pressed={on} onClick={() => pickTemplate(lead, tpl)}
                             className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
                             style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
                             {name}
@@ -663,7 +698,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                         );
                       })}
                     </div>
-                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
+                    <textarea ref={replyBoxRef} aria-label={`Reply to ${[lead.firstName, lead.lastName].filter(Boolean).join(" ")}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
                       className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
                       style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
                     <div className="mt-2 flex items-center justify-end gap-2">
@@ -678,7 +713,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   </div>
                 )}
               </div>
-              </React.Fragment>
+              </div>
             );
           })}
         </div>

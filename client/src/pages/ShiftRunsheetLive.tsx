@@ -165,12 +165,12 @@ export default function ShiftRunsheetLive() {
 
   if (!sr) {
     return (
-      <div className="min-h-screen bg-linen flex items-center justify-center px-4">
+      <main className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-stone-600">SHIFT RUNSHEET NOT FOUND</p>
+          <h1 className="font-bebas tracking-widest text-2xl text-stone-600">SHIFT RUNSHEET NOT FOUND</h1>
           <p className="font-dm text-sm text-stone-600 mt-2">This link may be invalid or has been removed.</p>
         </div>
-      </div>
+      </main>
     );
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_FORM_FIELDS, mergeFormFields } from "@shared/formFields";
+import { DEFAULT_FORM_FIELDS, formFieldNames, mergeFormFields } from "@shared/formFields";
 
 /**
  * The bug these guard: a venue's saved form config REPLACED the defaults, so
@@ -87,5 +87,35 @@ describe("qualifying fields", () => {
       { id: "budget", label: "Approximate Budget (NZD)", type: "number", required: false, visible: true, isDefault: true },
     ];
     expect(mergeFormFields(explicit as any).find(f => f.id === "budget")!.visible).toBe(true);
+  });
+});
+
+describe("form builder control names (formFieldNames)", () => {
+  const custom = (id: string, label: string) => ({ id, label, type: "text" as const, required: false, visible: true, isDefault: false });
+
+  it("names fields by their label, and a cleared default field by its default label", () => {
+    const fields = [{ ...DEFAULT_FORM_FIELDS[0], label: "Given name" }, { ...DEFAULT_FORM_FIELDS[1], label: "" }, custom("custom_1", "Dietary needs ")];
+    expect(formFieldNames(fields)).toEqual([
+      { name: "Given name", labelBox: "Label for the First Name field" },
+      { name: "Last Name", labelBox: "Label for the Last Name field" },
+      { name: "Dietary needs", labelBox: "Label for the Dietary needs field" },
+    ]);
+  });
+
+  it("gives a cleared custom field a name of its own: capitalised, no double spaces, unique", () => {
+    const fields = [...DEFAULT_FORM_FIELDS, custom("custom_1", "Parking"), custom("custom_2", ""), custom("custom_3", "  ")];
+    const names = formFieldNames(fields);
+    expect(names.slice(-2)).toEqual([
+      { name: "Custom field 2", labelBox: "Label for Custom field 2" },
+      { name: "Custom field 3", labelBox: "Label for Custom field 3" },
+    ]);
+    const all = names.flatMap(n => [n.name, n.labelBox]);
+    expect(all.every(n => /^[A-Z]/.test(n) && !/\s{2}/.test(n) && n === n.trim())).toBe(true);
+    expect(new Set(names.map(n => n.name)).size).toBe(names.length);
+  });
+
+  it("doesn't reuse a name another field already has", () => {
+    const names = formFieldNames([custom("custom_1", "Custom field 2"), custom("custom_2", "")]);
+    expect(names.map(n => n.name)).toEqual(["Custom field 2", "Custom field 3"]);
   });
 });

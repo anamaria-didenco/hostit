@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil, Plus, Trash2, X, Check, Wifi, WifiOff } from "lucide-react";
+import { tickAnnouncement } from "@shared/focusReturn";
 
 const LS_KEY = "vf_staff_name";
 
@@ -106,6 +107,8 @@ export default function DailyChecklistLive() {
   const [editingName, setEditingName] = useState(!staffName);
   const [nameInput, setNameInput] = useState(staffName);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  // Said politely after each tick ("Checked: Turn on coffee machine").
+  const [tickNote, setTickNote] = useState("");
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newText, setNewText] = useState("");
@@ -161,8 +164,10 @@ export default function DailyChecklistLive() {
   }
 
   function handleToggle(itemId: number, currentChecked: boolean) {
-    if (!token) return;
+    if (!token || pendingItemId === itemId) return;
     const newChecked = !currentChecked;
+    const text = checklist?.items?.find(it => it.id === itemId)?.text ?? "";
+    setTickNote(tickAnnouncement(text, newChecked));
     setOptimistic(prev => ({ ...prev, [itemId]: newChecked }));
     setPendingItemId(itemId);
     toggleMutation.mutate({ token, itemId, checked: newChecked, checkedBy: newChecked ? (staffName || undefined) : undefined });
@@ -202,12 +207,12 @@ export default function DailyChecklistLive() {
 
   if (!checklist) {
     return (
-      <div className="min-h-screen bg-linen flex items-center justify-center px-4">
+      <main className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</p>
+          <h1 className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</h1>
           <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid or has been removed.</p>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -234,6 +239,9 @@ export default function DailyChecklistLive() {
 
   return (
     <div className="min-h-screen bg-linen pb-32">
+      {/* Each tick is read out. While it saves the item is aria-disabled, not
+          disabled, so keyboard focus stays on it instead of dropping to the page. */}
+      <p className="sr-only" aria-live="polite">{tickNote}</p>
       <header>
       {venueLogoUrl && (
         <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
@@ -370,17 +378,17 @@ export default function DailyChecklistLive() {
                 {/* Checkbox area */}
                 <button
                   onClick={() => handleToggle(item.id, isChecked)}
-                  disabled={pendingItemId === item.id}
+                  aria-disabled={pendingItemId === item.id}
                   role="checkbox"
                   aria-checked={isChecked}
-                  className={`flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-colors disabled:opacity-60 ${
+                  className={`flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-colors aria-disabled:opacity-60 ${
                     isChecked ? "active:bg-forest/10" : "hover:bg-stone-50 active:bg-stone-100"
                   }`}
                 >
                   <div className="mt-0.5 flex-shrink-0">
                     {isChecked
                       ? <CheckSquare className="w-5 h-5 text-forest" />
-                      : <Square className="w-5 h-5 text-stone-300" />
+                      : <Square className="w-5 h-5 text-stone-500" />
                     }
                   </div>
                   <div className="flex-1 min-w-0">
@@ -405,10 +413,10 @@ export default function DailyChecklistLive() {
                   <button
                     onClick={() => { setConfirmDeleteId(null); startEdit(item); }}
                     className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors border-b border-stone-100"
-                    aria-label="Edit item"
+                    aria-label={`Edit item: ${item.text}`}
                     title="Edit item"
                   >
-                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                    <Pencil className="w-3.5 h-3.5 text-stone-500 [button:hover>&]:text-[#2f5488]" aria-hidden="true" />
                   </button>
                   {isConfirmDelete ? (
                     <button
@@ -424,10 +432,10 @@ export default function DailyChecklistLive() {
                     <button
                       onClick={() => setConfirmDeleteId(item.id)}
                       className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors"
-                      aria-label="Delete item"
+                      aria-label={`Delete item: ${item.text}`}
                       title="Delete item"
                     >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <Trash2 className="w-3.5 h-3.5 text-stone-500 [button:hover>&]:text-red-400" aria-hidden="true" />
                     </button>
                   )}
                 </div>

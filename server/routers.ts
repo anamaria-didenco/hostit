@@ -20,6 +20,7 @@ import { zonedDayBoundUtc } from "@shared/tz";
 import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/proposalTotals";
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
+import { venueUpdateErrors } from "@shared/settingsValidation";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -303,6 +304,12 @@ export const appRouter = router({
         beoPrintHide: z.string().max(500).optional(),
         staffBriefingSubject: z.string().optional(),
         staffBriefingBody: z.string().optional(),
+      }).superRefine((input, zctx) => {
+        // Settings pages check these at the field; refuse them here too, so no
+        // save path can store an empty venue name or a malformed address.
+        for (const [key, message] of Object.entries(venueUpdateErrors(input))) {
+          zctx.addIssue({ code: "custom", path: [key], message });
+        }
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -2293,7 +2300,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     create: protectedProcedure
       .input(z.object({
         leadId: z.number(),
-        title: z.string().min(1),
+        // The same rule as update: a title of only spaces is no title.
+        title: z.string().trim().min(1),
         introMessage: z.string().optional(),
         eventDate: z.string().optional(),
         eventEndDate: z.string().optional(),
@@ -2306,10 +2314,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           total: z.number(),
         })).optional(),
         subtotalNzd: z.number().optional(),
-        taxPercent: z.number().optional(),
+        taxPercent: z.number().min(0).max(100).optional(),
         taxNzd: z.number().optional(),
         totalNzd: z.number().optional(),
-        depositPercent: z.number().optional(),
+        depositPercent: z.number().min(0).max(100).optional(),
         depositNzd: z.number().optional(),
         termsAndConditions: z.string().optional(),
         internalNotes: z.string().optional(),
@@ -2510,7 +2518,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        title: z.string().optional(),
+        // As on create: a saved proposal's title could be cleared and saved.
+        title: z.string().trim().min(1).optional(),
         introMessage: z.string().optional(),
         lineItems: z.array(z.object({
           description: z.string(),
@@ -2521,10 +2530,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Still accepted from older browsers but ignored: the money is worked
         // out here from the lines, GST % and deposit %.
         subtotalNzd: z.number().optional(),
-        taxPercent: z.number().optional(),
+        taxPercent: z.number().min(0).max(100).optional(),
         taxNzd: z.number().optional(),
         totalNzd: z.number().optional(),
-        depositPercent: z.number().optional(),
+        depositPercent: z.number().min(0).max(100).optional(),
         depositNzd: z.number().optional(),
         termsAndConditions: z.string().optional(),
         spaceName: z.string().optional(),
@@ -3003,6 +3012,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         billingNote: z.string().nullable().optional(),
         // The user has seen the date-clash warning and chosen to go ahead.
         allowClash: z.boolean().optional(),
+        // Sent by the run sheet builder when the guest count is typed there:
+        // that sheet takes the new count as the builder's own save, not as
+        // "changed somewhere else" (server/runsheetGuests.ts).
+        runsheetEditor: z.object({ runsheetId: z.number().int(), editorId: z.string().max(64), expectedVersion: z.number().int().optional() }).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -3010,7 +3023,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const { id, allowClash, ...rest } = input;
+        const { id, allowClash, runsheetEditor, ...rest } = input;
         // Double-booking guard: moving a live event to a new date, time or
         // space — or bringing a cancelled one back — checks the calendar.
         if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
@@ -3146,7 +3159,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         let foodRescale: import('./runsheetGuests').FoodRescale | undefined;
         if (rest.guestCount !== undefined) {
           const { syncRunsheetGuests } = await import('./runsheetGuests');
-          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount);
+          foodRescale = await syncRunsheetGuests(db, ctx.user.id, { bookingId: id }, guestsBefore, rest.guestCount, runsheetEditor);
           if (guestsBefore !== rest.guestCount) runsheetTouched = true;
         }
         // New space → the event's run sheets too, but only copies that still
@@ -5118,7 +5131,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const items = await db.select().from(runsheetItems)
           .where(eq(runsheetItems.runsheetId, input.id))
           .orderBy(runsheetItems.sortOrder);
-        return { ...sheet, items };
+        // Each attachment says whether its PDF is still on the server, so the
+        // builder can ask for a re-upload instead of showing a dead link.
+        const { withFileStatus } = await import('./uploadFiles');
+        return { ...sheet, attachments: withFileStatus(sheet.attachments), items };
       }),
 
     // The open builder polls this to notice another save (someone else, or
@@ -5611,8 +5627,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { getDb } = await import('./db');
         const { runsheets } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
-        const fs = await import('fs');
-        const path = await import('path');
+        const { uploadExists } = await import('./uploadFiles');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [rs] = await db.select().from(runsheets)
@@ -5620,10 +5635,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!rs) throw new Error('Runsheet not found');
         // Confirm the file actually exists on disk in /uploads — this
         // closes the loop between /api/upload-pdf and the DB record.
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-        const filename = input.url.replace(/^\/uploads\//, '');
-        const filePath = path.join(uploadsDir, filename);
-        if (!filePath.startsWith(uploadsDir + path.sep) || !fs.existsSync(filePath)) {
+        if (!uploadExists(input.url)) {
           throw new Error('Attachment file not found — please re-upload');
         }
         const current = Array.isArray(rs.attachments) ? rs.attachments : [];
@@ -9240,6 +9252,7 @@ Return ONLY valid JSON.`;
         // <img onerror=…> etc. and run script on the app origin for anyone
         // opening the shared link.
         const { cleanRichHtml } = await import('./sanitizeHtml');
+        const { staffLinkAttachments } = await import('./uploadFiles');
         // Only what the staff page shows. The link needs no login, so the
         // runsheet's cost lines, client email, linked proposal and internal
         // ids stay out of it.
@@ -9249,7 +9262,9 @@ Return ONLY valid JSON.`;
           eventDate: r.eventDate, eventStartTime: r.eventStartTime, eventEndTime: r.eventEndTime,
           eventType: r.eventType, guestCount: r.guestCount, venueName: r.venueName, spaceName: r.spaceName,
           venueArea: r.venueArea, setupSummary: r.setupSummary, dietaries: r.dietaries, kitchenNotes: r.kitchenNotes,
-          drinksData: r.drinksData, fnbColumns: r.fnbColumns, attachments: r.attachments,
+          drinksData: r.drinksData, fnbColumns: r.fnbColumns,
+          // PDFs the venue attached: only ones still on the server.
+          attachments: staffLinkAttachments(r.attachments),
           notes: cleanRichHtml(r.notes),
           venueSetup: cleanRichHtml(r.venueSetup),
           footerText: cleanRichHtml(r.footerText),

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { onArrowChoose } from "@/lib/rovingKeys";
 import { Plus, KeyRound, Trash2 } from "lucide-react";
 
 /**
@@ -68,8 +69,9 @@ export function AccountLoginsSection() {
       {showForm && (
         <div className="p-5 border-b border-gold/20 bg-linen/40 space-y-3">
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
+            <label htmlFor="account-login-name" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">NAME *</label>
             <input
+              id="account-login-name"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Sarah Jones"
@@ -77,8 +79,9 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL *</label>
+            <label htmlFor="account-login-email" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">EMAIL *</label>
             <input
+              id="account-login-email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -88,8 +91,9 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
+            <label htmlFor="account-login-password" className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
             <input
+              id="account-login-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -101,12 +105,13 @@ export function AccountLoginsSection() {
           </div>
           <div>
             <span className="font-bebas tracking-widest text-[11px] text-ink/65 block mb-1">ACCESS LEVEL</span>
-            <div className="flex gap-1.5" role="radiogroup" aria-label="Access level">
-              <button type="button" role="radio" aria-checked={isStaff} onClick={() => setIsStaff(true)}
+            {/* One Tab stop; the arrow keys switch between the two, as radio buttons do. */}
+            <div className="flex gap-1.5" role="radiogroup" aria-label="Access level" onKeyDown={onArrowChoose}>
+              <button type="button" role="radio" aria-checked={isStaff} tabIndex={isStaff ? 0 : -1} onClick={() => setIsStaff(true)}
                 className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
                 STAFF · EVENTS &amp; RUNSHEETS
               </button>
-              <button type="button" role="radio" aria-checked={!isStaff} onClick={() => setIsStaff(false)}
+              <button type="button" role="radio" aria-checked={!isStaff} tabIndex={!isStaff ? 0 : -1} onClick={() => setIsStaff(false)}
                 className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${!isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
                 FULL ACCESS
               </button>
@@ -179,6 +184,7 @@ export function AccountLoginsSection() {
                     value={resetPassword}
                     onChange={e => setResetPassword(e.target.value)}
                     placeholder="New password (min 8 chars)"
+                    aria-label={`New password for ${login.name || login.email}`}
                     autoComplete="new-password"
                     className="flex-1 border border-gold/30 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                     autoFocus

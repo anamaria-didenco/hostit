@@ -38,14 +38,19 @@ export function userFacingMessage(error: TRPCError): string {
   if (error.code === "INTERNAL_SERVER_ERROR" && isDatabaseError(error)) {
     return "That couldn't be saved. Please check what you entered and try again.";
   }
-  const issues = (error.cause as { issues?: { path?: PropertyKey[]; message?: string; code?: string; maximum?: unknown }[] } | undefined)?.issues;
+  const issues = (error.cause as { issues?: { path?: PropertyKey[]; message?: string; code?: string; maximum?: unknown; minimum?: unknown; origin?: string }[] } | undefined)?.issues;
   if (error.code === "BAD_REQUEST" && Array.isArray(issues) && issues.length) {
     const first = issues[0];
     const key = String(first.path?.[first.path.length - 1] ?? "");
     const field = FIELD_LABELS[key] ?? (key ? key.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) : "A field");
-    if (first.code === "too_big" && first.maximum !== undefined) return `${field} is too long (${first.maximum} characters at most).`;
-    if (first.code === "too_small") return `${field} is required.`;
-    return `${field}: ${first.message ?? "is not valid"}.`;
+    // A number over or under its limit is not a length or a missing value.
+    const isNumber = first.origin === "number" || first.origin === "bigint";
+    if (first.code === "too_big" && first.maximum !== undefined) return isNumber ? `${field} must be ${first.maximum} or less.` : `${field} is too long (${first.maximum} characters at most).`;
+    if (first.code === "too_small") return isNumber && first.minimum !== undefined ? `${field} must be ${first.minimum} or more.` : `${field} is required.`;
+    const message = first.message ?? "is not valid";
+    // No full stop after an example address ("like https://yourvenue.co.nz"): it would read as part of it.
+    const lastWord = message.split(/\s+/).pop() ?? "";
+    return `${field}: ${message}${/[.!?]$/.test(message) || /[.@/]/.test(lastWord) ? "" : "."}`;
   }
   return error.message;
 }

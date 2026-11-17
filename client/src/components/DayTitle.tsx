@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /** YYYY-MM-DD from LOCAL date parts — a calendar day, never shifted by UTC. */
 export function ymdLocal(d: Date): string {
@@ -20,12 +20,13 @@ export function useDayTitles(around: Date, enabled = true): Map<string, string> 
   return useMemo(() => new Map((data ?? []).map(n => [n.date, n.title])), [data]);
 }
 
-/** The title under a date. Click it to edit (unless read-only). */
-export function DayTitleText({ title, onEdit, className = "" }: { title?: string; onEdit?: () => void; className?: string }) {
+/** The title under a date. Click it to edit (unless read-only). `tabIndex`
+ *  lets the month grid keep it out of the Tab order on days without focus. */
+export function DayTitleText({ title, onEdit, className = "", tabIndex }: { title?: string; onEdit?: () => void; className?: string; tabIndex?: number }) {
   if (!title) return null;
   const cls = `block w-full text-left font-dm text-[12px] font-semibold italic leading-tight text-[#7a5a12] break-words ${className}`;
   return onEdit ? (
-    <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} className={`${cls} hover:underline`} title="Edit the title for this day">
+    <button type="button" tabIndex={tabIndex} onClick={e => { e.stopPropagation(); onEdit(); }} className={`${cls} hover:underline`} title="Edit the title for this day">
       {title}
     </button>
   ) : (
@@ -34,14 +35,15 @@ export function DayTitleText({ title, onEdit, className = "" }: { title?: string
 }
 
 /** Small "add a title" button, shown on hover beside the date. */
-export function DayTitleAddButton({ dateLabel, onClick }: { dateLabel: string; onClick: () => void }) {
+export function DayTitleAddButton({ dateLabel, onClick, tabIndex }: { dateLabel: string; onClick: () => void; tabIndex?: number }) {
   return (
     <button
       type="button"
+      tabIndex={tabIndex}
       onClick={e => { e.stopPropagation(); onClick(); }}
       // Desktop only: phone cells are too narrow for a second icon, so on a
       // phone the title is added from the day view instead.
-      className="hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+      className="hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
       aria-label={`Add a title for ${dateLabel}`}
       title="Add a title for this day (not an event)">
       <Tag className="w-3 h-3 text-[#7a5a12]" />
@@ -62,15 +64,14 @@ export function DayTitleModal({ date, current, onClose }: { date: string | null;
     onError: e => toast.error(e.message || "Couldn't save the day title"),
   });
   useEffect(() => { setValue(current ?? ""); }, [date, current]);
-  useEscapeKey(!!date && !save.isPending, onClose);
   if (!date) return null;
   const [y, m, d] = date.split("-").map(Number);
   const label = new Date(y, m - 1, d).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const submit = (title: string) => save.mutate({ date, title });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4" onClick={() => !save.isPending && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="day-title-h" className="bg-white w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+    <DialogShell onClose={() => { if (!save.isPending) onClose(); }} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
+      <DialogShellContent aria-labelledby="day-title-h" className="bg-white w-full max-w-md shadow-2xl">
         <div className="bg-forest px-5 py-4 flex items-center justify-between">
           <div>
             <div id="day-title-h" className="font-bebas tracking-widest text-cream text-base">TITLE FOR THIS DAY</div>
@@ -106,7 +107,7 @@ export function DayTitleModal({ date, current, onClose }: { date: string | null;
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }

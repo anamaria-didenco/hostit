@@ -106,3 +106,16 @@ export function withStartTime(v: Date | string | null | undefined, hhmm: string 
   const [y, mo, day] = eventDayKey(d, tz).split("-").map(Number);
   return zonedWallTimeToDate(y, mo, day, Number(m[1]), Number(m[2]), tz);
 }
+
+/**
+ * Sort comparator: soonest event first, undated events last. Takes a Date or a
+ * date string alike. Event dates reach the browser as Date objects (superjson),
+ * so comparing them as text (`a.localeCompare(b)`) threw and crashed the page.
+ */
+export function compareEventDates(a: Date | string | null | undefined, b: Date | string | null | undefined): number {
+  const ta = a ? new Date(a).getTime() : NaN;
+  const tb = b ? new Date(b).getTime() : NaN;
+  const sa = Number.isFinite(ta) ? ta : Infinity;
+  const sb = Number.isFinite(tb) ? tb : Infinity;
+  return sa === sb ? 0 : sa < sb ? -1 : 1;
+}

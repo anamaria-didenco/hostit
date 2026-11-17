@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -53,11 +53,11 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  // Close on Escape and focus the first field on open — basic dialog manners
-  // the modal was missing.
-  useEscapeKey(true, onClose);
-  useEffect(() => { firstFieldRef.current?.focus(); }, []);
+  // The form is swapped for "You're on the list": focus its heading, so it is
+  // read out and the next Tab is Done (focus used to drop to the page).
+  useEffect(() => { if (submitted) doneHeadingRef.current?.focus(); }, [submitted]);
 
   const joinMutation = trpc.waitlist.join.useMutation({
     onSuccess: () => setSubmitted(true),
@@ -72,14 +72,12 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const fieldLabel = "block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(22,20,15,0.5)] p-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
+    <DialogShell onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(22,20,15,0.5)] p-4">
+      <DialogShellContent
+        initialFocus={firstFieldRef}
         aria-labelledby="waitlist-title"
         className="bg-card rounded-lg border-[1.5px] border-input w-full max-w-md p-8 relative"
         style={{ boxShadow: "0 8px 40px rgba(0,0,0,.16)" }}
-        onClick={e => e.stopPropagation()}
       >
         <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
           <X className="w-5 h-5" />
@@ -90,7 +88,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
             <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
-            <h3 id="waitlist-title" className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
+            <h3 id="waitlist-title" ref={doneHeadingRef} tabIndex={-1} className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Thanks for your interest in VenueFlow. We'll be in touch as soon as your spot is ready — keep an eye on your inbox.
             </p>
@@ -106,20 +104,21 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className={fieldLabel}>Your name <span className="text-destructive">*</span></label>
-                <Input ref={firstFieldRef} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
+                <label htmlFor="waitlist-name" className={fieldLabel}>Your name <span className="text-destructive">*</span></label>
+                <Input id="waitlist-name" ref={firstFieldRef} type="text" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
               </div>
               <div>
-                <label className={fieldLabel}>Email <span className="text-destructive">*</span></label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@yourvenue.co.nz" required />
+                <label htmlFor="waitlist-email" className={fieldLabel}>Email <span className="text-destructive">*</span></label>
+                <Input id="waitlist-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@yourvenue.co.nz" required />
               </div>
               <div>
-                <label className={fieldLabel}>Venue name</label>
-                <Input type="text" value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="The Grand Room, Auckland" />
+                <label htmlFor="waitlist-venue" className={fieldLabel}>Venue name</label>
+                <Input id="waitlist-venue" type="text" autoComplete="organization" value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="The Grand Room, Auckland" />
               </div>
               <div>
-                <label className={fieldLabel}>Anything else? <span className="text-[#7e7466] normal-case font-normal tracking-normal">(optional)</span></label>
+                <label htmlFor="waitlist-message" className={fieldLabel}>Anything else? <span className="text-[#7e7466] normal-case font-normal tracking-normal">(optional)</span></label>
                 <textarea
+                  id="waitlist-message"
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   placeholder="Tell us a bit about your venue or what you're looking for..."
@@ -129,12 +128,17 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
               </div>
 
               {joinMutation.error && (
-                <p className="text-destructive text-xs">{joinMutation.error.message}</p>
+                <p role="alert" className="text-destructive text-xs">{joinMutation.error.message}</p>
+              )}
+              {/* Join stays disabled until both are filled: say so. */}
+              {(!name.trim() || !email.trim()) && (
+                <p id="waitlist-submit-hint" className="text-muted-foreground text-xs">Add your name and email to join.</p>
               )}
 
               <Button
                 type="submit"
                 disabled={joinMutation.isPending || !name.trim() || !email.trim()}
+                aria-describedby={!name.trim() || !email.trim() ? "waitlist-submit-hint" : undefined}
                 className="w-full"
               >
                 {joinMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <>Join the waitlist <ArrowRight className="w-4 h-4" /></>}
@@ -142,8 +146,8 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
             </form>
           </>
         )}
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }
 
@@ -182,13 +186,16 @@ export default function Home() {
               </Button>
             ) : (
               <>
-                <a href={getLoginUrl()}>
-                  <Button variant="paper">Sign in</Button>
-                </a>
+                {/* One link styled as a button (a link round a button was two Tab stops). */}
+                <Button asChild variant="paper">
+                  <a href={getLoginUrl()}>Sign in</a>
+                </Button>
                 <Button asChild variant="paper" className="hidden sm:inline-flex">
                   <Link href="/signup">Sign up</Link>
                 </Button>
-                <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap">
+                {/* Under 360px (a phone at 400% zoom) the header can't fit both
+                    buttons; the same "Join the waitlist" is the hero's first button. */}
+                <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap max-[360px]:hidden">
                   <span className="sm:hidden">Waitlist</span>
                   <span className="hidden sm:inline">Join waitlist</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -226,9 +233,10 @@ export default function Home() {
                 <Button size="lg" onClick={() => setShowWaitlist(true)}>
                   Join the waitlist <ArrowRight className="w-[18px] h-[18px]" />
                 </Button>
-                <a href={getLoginUrl()}>
-                  <Button size="lg" variant="outline">Watch a demo</Button>
-                </a>
+                {/* Said "Watch a demo" but there is no demo yet: it goes to sign-in. */}
+                <Button asChild size="lg" variant="outline">
+                  <a href={getLoginUrl()}>Sign in</a>
+                </Button>
               </div>
               <div className="inline-flex items-center justify-center gap-2 mt-7 text-[12.5px] text-[#7e7466]">
                 <span className="text-primary inline-flex"><Check className="w-[15px] h-[15px]" /></span>
@@ -341,8 +349,10 @@ export default function Home() {
           <img src="/logo-full.png" alt="VenueFlow" className="h-[22px] w-auto" />
           <p className="text-[12.5px] text-[#7e7466]">© {new Date().getFullYear()} VenueFlowHQ · New Zealand's Venue Management Platform</p>
           <div className="flex gap-[22px]">
+            {/* Plain text until these pages exist: as links to "#" they were Tab
+                stops (and links to screen readers) that went nowhere. */}
             {["Privacy", "Terms", "Contact"].map(item => (
-              <a key={item} href="#" className="text-[12.5px] text-muted-foreground hover:text-foreground transition-colors">{item}</a>
+              <span key={item} className="text-[12.5px] text-muted-foreground">{item}</span>
             ))}
           </div>
         </div>

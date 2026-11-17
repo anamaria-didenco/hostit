@@ -244,7 +244,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       setDirty(false);
     } catch (e: any) {
       if (req !== loadReq.current) return;
-      toast.error(e?.message || "Couldn't load that draft from Xero — try again.", { duration: 10000 });
+      toast.error(e?.message || "Couldn't load that draft from Xero — try again.");
       setEditingId(null);
       setReplacing(null);
     } finally {

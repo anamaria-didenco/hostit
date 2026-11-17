@@ -1,6 +1,6 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { X, MapPin } from "lucide-react";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /**
  * Asked when an enquiry with no space is moved to Confirmed / Booked / Tentative.
@@ -9,7 +9,7 @@ import { X, MapPin } from "lucide-react";
  * change. Spaces are stored as a comma-joined list, like the Space field.
  * Sits above the event drawer (z 9999) and its popovers.
  */
-export default function ConfirmSpaceDialog({ name, statusLabel, spaces, onConfirm, onCancel, pending }: {
+export default function ConfirmSpaceDialog({ name, statusLabel, spaces, onConfirm, onCancel, pending, returnFocus }: {
   /** Client name, for context. */
   name?: string;
   /** What the enquiry is being moved to, e.g. "Booked". */
@@ -18,31 +18,23 @@ export default function ConfirmSpaceDialog({ name, statusLabel, spaces, onConfir
   onConfirm: (spaceName: string) => void;
   onCancel: () => void;
   pending?: boolean;
+  /** Where focus goes on close when the control that opened it has gone (e.g. the drawer's Status menu). */
+  returnFocus?: () => HTMLElement | null;
 }) {
   const [picked, setPicked] = React.useState<string[]>([]);
   const firstRef = React.useRef<HTMLInputElement>(null);
   const list = spaces ?? [];
   const names = list.map(s => s.name);
 
-  React.useEffect(() => { firstRef.current?.focus(); }, []);
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onCancel(); }
-    };
-    // Capture phase, so the drawer underneath doesn't also close on Escape.
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onCancel]);
-
   const toggle = (n: string) => setPicked(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n]);
   // Keep the venue's own space order, whatever order they were ticked in.
   const value = names.filter(n => picked.includes(n)).join(", ");
   const allPicked = names.length > 0 && names.every(n => picked.includes(n));
 
-  return createPortal(
-    <div className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-space-title"
+  // Escape closes only this, not the drawer underneath (Radix marks the key handled).
+  return (
+    <DialogShell onClose={onCancel} className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+      <DialogShellContent aria-labelledby="confirm-space-title" initialFocus={firstRef} returnFocus={returnFocus}
         className="bg-cream border-2 border-forest w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="bg-forest-dark px-5 py-3.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -93,8 +85,7 @@ export default function ConfirmSpaceDialog({ name, statusLabel, spaces, onConfir
             </button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body
+      </DialogShellContent>
+    </DialogShell>
   );
 }

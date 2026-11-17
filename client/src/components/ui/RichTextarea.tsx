@@ -7,6 +7,8 @@ interface RichTextareaProps {
   placeholder?: string;
   className?: string;
   minHeight?: string;
+  /** id of the visible heading that names this field. */
+  labelledBy?: string;
 }
 
 // Two semantic marks instead of a free colour picker and a font-size menu.
@@ -18,8 +20,9 @@ interface RichTextareaProps {
 const MARK_HIGHLIGHT = '#f7efdd'; // amber tint — "look at this"
 const MARK_ALERT = '#b3261e';     // editorial red — "this matters"
 
-export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px' }: RichTextareaProps) {
+export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px', labelledBy }: RichTextareaProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   // Toolbars stay collapsed until the field is being edited. Three of these
   // render on one page; permanently-visible chrome for all of them was most of
   // what made the builder feel cluttered.
@@ -57,6 +60,9 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
       // preventDefault keeps focus inside the editor, so the toolbar doesn't
       // collapse out from under the click and the selection survives.
       onMouseDown={e => { e.preventDefault(); onClick(); }}
+      // Not a Tab stop: the toolbar only exists while the editor has focus,
+      // so tabbing onto it took it away (focus fell to the page).
+      tabIndex={-1}
       title={label}
       aria-label={label}
       className="inline-flex items-center gap-1 min-h-[44px] px-2.5 font-dm text-xs rounded-sm border border-transparent text-ink/70 hover:border-gold/40 hover:text-ink transition-colors"
@@ -66,7 +72,7 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
   );
 
   return (
-    <div className={`border border-gold/30 bg-white rounded-none ${className}`}>
+    <div ref={wrapRef} className={`border border-gold/30 bg-white rounded-none ${className}`}>
       {/* Toolbar — on focus only. A one-line resting strip keeps the field's
           height stable so the page doesn't jump when you click into it. */}
       {focused ? (
@@ -99,12 +105,19 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
         contentEditable
         role="textbox"
         aria-multiline="true"
-        aria-label={placeholder}
+        aria-label={labelledBy ? undefined : placeholder}
+        aria-labelledby={labelledBy}
+        aria-placeholder={labelledBy ? placeholder : undefined}
         tabIndex={0}
         suppressContentEditableWarning
         onInput={handleInput}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        // Collapse once focus has landed on the next control. Removing the
+        // toolbar during the blur itself, while focus is on no element, made a
+        // pop-up's focus trap pull focus back to the pop-up and lose the Tab.
+        onBlur={() => setTimeout(() => {
+          if (!wrapRef.current?.contains(document.activeElement)) setFocused(false);
+        }, 0)}
         data-placeholder={placeholder}
         className="px-3 py-2.5 font-dm text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-forest/40 vf-rich-editor"
         style={{ minHeight }}
