@@ -185,7 +185,8 @@ export default function EmbedDocs() {
                 </div>
               </div>
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-1">
+                {/* Copy is a 24px-tall target (it was 30x16). */}
+                <div className="flex items-center justify-between mb-1 [&>button]:min-h-6 [&>button]:min-w-11">
                   <span className="text-xs font-semibold text-gray-600">Your embed code</span>
                   <button onClick={() => { navigator.clipboard?.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
                     className="text-xs font-semibold text-[#2f5488] hover:underline">{copied ? "Copied!" : "Copy"}</button>

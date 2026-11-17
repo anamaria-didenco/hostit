@@ -844,7 +844,8 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
     <div className={`border rounded-md p-2.5 bg-white ${invalid ? "border-amber-500 ring-1 ring-amber-500/30" : "border-gold/30"}`}>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5">
         {spaces.map((s: any) => (
-          <label key={s.id} className="flex items-center gap-1.5 cursor-pointer text-xs font-dm text-ink/80 hover:text-ink">
+          // The whole label is the tap target: 44px tall on a phone, 24px with a mouse.
+          <label key={s.id} className="flex items-center gap-1.5 min-h-[44px] md:min-h-[24px] cursor-pointer text-xs font-dm text-ink/80 hover:text-ink">
             <input type="checkbox" checked={selected.includes(s.name)} onChange={() => toggle(s.name)} className="accent-forest w-3.5 h-3.5" />
             {s.name}
           </label>
