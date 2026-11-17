@@ -1,11 +1,13 @@
 /**
  * A proposal's GST and deposit are percentages: 250% GST used to be accepted and
  * priced the proposal at several times its real total. The builder now stops it
- * at the field, and the server refuses it too.
+ * at the field, and the server refuses it too. The same for a cleared title on
+ * a proposal that is already saved.
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
+import { userFacingMessage } from "./_core/trpc";
 import { getDb } from "./db";
 import { leadActivity, leads, proposals, venueNotifications } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
@@ -47,5 +49,20 @@ describe("proposal GST and deposit stay within 0-100% (DB)", async () => {
     await expect(owner.proposals.update({ id: p!.id, taxPercent: 250 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(owner.proposals.update({ id: p!.id, depositPercent: -5 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(owner.proposals.update({ id: p!.id, taxPercent: 0, depositPercent: 100 })).resolves.toBeTruthy();
+  });
+
+  run("refuses to clear a saved proposal's title", async () => {
+    const lead = await owner.leads.submit({ ownerId: 1, firstName: "Title", lastName: "Check", email: `title-${Date.now()}@example.com`, eventType: "Birthday", eventDate: "2027-03-13", guestCount: 20 });
+    made.leads.push(lead.id);
+    const p = await owner.proposals.create({ leadId: lead.id, title: "Birthday Proposal" });
+    made.proposals.push(p!.id);
+
+    const err = await owner.proposals.update({ id: p!.id, title: "" }).catch(e => e);
+    expect(err).toMatchObject({ code: "BAD_REQUEST" });
+    expect(userFacingMessage(err)).toBe("Title is required.");
+    await expect(owner.proposals.update({ id: p!.id, title: "   " })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await owner.proposals.update({ id: p!.id, title: "Birthday Dinner" });
+    const [row] = await db!.select({ title: proposals.title }).from(proposals).where(inArray(proposals.id, [p!.id]));
+    expect(row.title).toBe("Birthday Dinner");
   });
 });

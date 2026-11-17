@@ -2517,7 +2517,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        title: z.string().optional(),
+        // As on create: a saved proposal's title could be cleared and saved.
+        title: z.string().trim().min(1).optional(),
         introMessage: z.string().optional(),
         lineItems: z.array(z.object({
           description: z.string(),

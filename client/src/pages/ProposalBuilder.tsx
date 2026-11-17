@@ -540,17 +540,20 @@ export default function ProposalBuilder() {
   const taxError = percentError(taxPercent, "GST");
   const depositError = percentError(depositPercent, "Deposit");
   const moneyError = taxError ?? depositError;
-  // A draft whose title was cleared used to autosave with no title.
+  // A cleared title used to save (by autosave, or Save Changes on a saved proposal).
   const titleMissing = !title.trim() ? "Give the proposal a title." : null;
-  useEffect(() => { markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError); });
+  useEffect(() => {
+    markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError);
+    markInvalid(document.getElementById("pb-title"), "pb-title-error", !!titleMissing && !locked);
+  });
 
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
   const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
-    if (opts.auto && !locked && titleMissing) return null;
-    if (!locked && moneyError) {
+    const formError = locked ? null : titleMissing ?? moneyError;
+    if (formError) {
       if (!opts.auto) {
-        toast.error(moneyError);
-        (taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
+        toast.error(formError);
+        (titleMissing ? document.getElementById("pb-title") : taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
       }
       return null;
     }
@@ -634,8 +637,8 @@ export default function ProposalBuilder() {
   const saveState: { label: string; hint: string; cls: string } | null =
     locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-gray-500" }
     : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-gray-500" }
-    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-red-700" }
     : dirty && titleMissing ? { label: "Not saved", hint: titleMissing, cls: "text-red-700" }
+    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-red-700" }
     : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-red-700" }
     : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-amber-700" }
     : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-sage-dark" }
@@ -769,6 +772,7 @@ export default function ProposalBuilder() {
                 <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
                 <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
+                {titleMissing && !locked && <p id="pb-title-error" className="font-dm text-xs text-red-700 mt-1">{titleMissing}</p>}
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
