@@ -131,10 +131,12 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
         >
           CANCEL
         </button>
+        {/* aria-disabled, not disabled: a disabled button drops keyboard
+            focus to the top of the page while it saves. */}
         <button
-          onClick={submit}
-          disabled={pending}
-          className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burg-dark transition-colors disabled:opacity-50"
+          onClick={() => { if (!pending) submit(); }}
+          aria-disabled={pending || undefined}
+          className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burg-dark transition-colors aria-disabled:opacity-50 aria-disabled:pointer-events-none"
         >
           {pending ? pendingLabel : submitLabel}
         </button>
