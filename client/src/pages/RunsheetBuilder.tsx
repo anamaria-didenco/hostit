@@ -5987,6 +5987,10 @@ export default function RunsheetBuilder() {
                   <div className="space-y-2">
                     {(staffLinks ?? []).map((link: any) => {
                       const url = `${window.location.origin}/staff/${link.token}`;
+                      // A link saved without a label was read out as "the
+                      // null link"; name it a staff link instead.
+                      const label = link.label?.trim();
+                      const linkName = label || 'staff';
                       return (
                         <div key={link.id} className="flex items-center gap-2 bg-linen border border-gold/20 px-3 py-2">
                           <Key className="w-3.5 h-3.5 text-gold shrink-0" />
@@ -6004,8 +6008,8 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }}
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
-                            title={`Copy the ${link.label} link`}
-                            aria-label={`Copy the ${link.label} link`}
+                            title={`Copy the ${linkName} link`}
+                            aria-label={`Copy the ${linkName} link`}
                           >
                             <Clipboard className="w-4 h-4" aria-hidden />
                           </button>
@@ -6014,8 +6018,8 @@ export default function RunsheetBuilder() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
-                            title={`Open the ${link.label} link in a new tab`}
-                            aria-label={`Open the ${link.label} link in a new tab`}
+                            title={`Open the ${linkName} link in a new tab`}
+                            aria-label={`Open the ${linkName} link in a new tab`}
                           >
                             <ExternalLink className="w-4 h-4" aria-hidden />
                           </a>
@@ -6030,7 +6034,7 @@ export default function RunsheetBuilder() {
                             }}
                             className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/75"
                             title="Email the staff briefing (runsheet link + PDF)"
-                            aria-label={`Email the ${link.label} briefing to staff`}
+                            aria-label={label ? `Email the ${label} briefing to staff` : 'Email the briefing to staff'}
                           >
                             <Mail className="w-4 h-4" aria-hidden />
                           </button>
@@ -6043,7 +6047,7 @@ export default function RunsheetBuilder() {
                               <button
                                 onClick={() => { deleteStaffLinkMutation.mutate({ id: link.id }); setConfirmDeleteLinkId(null); }}
                                 className="min-h-[44px] px-2.5 rounded-sm font-dm text-xs font-semibold bg-[#b3261e] text-white hover:bg-[#8f1e18] transition-colors"
-                                aria-label={`Confirm deleting the ${link.label} link`}
+                                aria-label={`Confirm deleting the ${linkName} link`}
                               >
                                 Delete link
                               </button>
@@ -6058,8 +6062,8 @@ export default function RunsheetBuilder() {
                             <button
                               onClick={() => setConfirmDeleteLinkId(link.id)}
                               className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/75 hover:bg-[#b3261e]/10 hover:text-[#b3261e] transition-colors"
-                              title={`Delete the ${link.label} link`}
-                              aria-label={`Delete the ${link.label} link`}
+                              title={`Delete the ${linkName} link`}
+                              aria-label={`Delete the ${linkName} link`}
                             >
                               <Trash2 className="w-4 h-4" aria-hidden />
                             </button>
