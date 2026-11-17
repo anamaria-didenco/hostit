@@ -172,7 +172,9 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
       // In the editor each item is a Tab stop named "Table 1, 8 seats":
       // focusing it selects it (Enter or Space selects it again after
       // Escape), and the arrows, R and Delete act on the selected item. A
-      // click or tap focuses it too, without a focus ring.
+      // click or tap focuses it too, without a focus ring: on mousedown (in
+      // the capture phase, so a press on a handle counts), which a touch
+      // pan that starts on the item doesn't send, unlike pointerdown.
       {...(readOnly ? {} : {
         role: "button",
         tabIndex: 0,
@@ -180,7 +182,7 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
         "aria-describedby": hintId,
         "data-el-id": el.id,
         onFocus: () => onSelect(el.id),
-        onPointerDown: (e: React.PointerEvent) => focusQuietly(e.currentTarget),
+        onMouseDownCapture: (e: React.MouseEvent) => focusQuietly(e.currentTarget),
         onKeyDown: (e: React.KeyboardEvent) => {
           if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onSelect(el.id); }
         },
