@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useState } from "react";
+import { createElement as h, Fragment, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { TRPCClientError } from "@trpc/client";
@@ -17,7 +17,13 @@ import { getLoginUrl } from "@/const";
  *
  * The notice is its own element on <body>, not a toast: it has to work over an
  * open dialog (a toast can't be clicked behind a modal's overlay), so it sits
- * above the overlay and its clicks don't count as "outside" the dialog.
+ * above the overlay and its clicks don't count as "outside" the dialog. A dialog
+ * keeps keyboard focus inside itself, so the sign-in link is also put at the end
+ * of the dialog that has focus, shown when it is tabbed to.
+ *
+ * While the page is kept, useAuth keeps the person who was signed in (see
+ * keptMe), so a fresh "who is signed in?" check can't swap the page for the
+ * sign-in card. Coming back to the tab, or any save working, checks again.
  */
 
 const SIGNED_OUT_FLAG = "vf-signed-out";
@@ -25,6 +31,7 @@ const SIGNED_OUT_FLAG = "vf-signed-out";
 let typedOnPage = false;
 let hadSession = false;
 let noticeShown = false;
+let lastMe: { user?: unknown } | null = null;
 const failedQueries = new Set<string>();
 type NoticeState = "signed-out" | "signed-in-again" | null;
 let notice: NoticeState = null;
@@ -32,6 +39,32 @@ const noticeListeners = new Set<(n: NoticeState) => void>();
 function setNotice(n: NoticeState) {
   notice = n;
   noticeListeners.forEach(l => l(n));
+}
+const keptListeners = new Set<() => void>();
+function setKeeping(on: boolean) {
+  noticeShown = on;
+  keptListeners.forEach(l => l());
+}
+
+/** The signed-in answer to keep showing while a signed-out page is kept (null otherwise). For useSyncExternalStore. */
+export function keptMe(): { user?: unknown } | null {
+  return noticeShown ? lastMe : null;
+}
+export function subscribeKeptMe(listener: () => void) {
+  keptListeners.add(listener);
+  return () => { keptListeners.delete(listener); };
+}
+/** Signing out on purpose: stop keeping the page. */
+export function endKeptPage() {
+  if (!noticeShown) return;
+  setKeeping(false);
+  failedQueries.clear();
+  setNotice(null);
+}
+
+function isAuthMe(queryKey: readonly unknown[]): boolean {
+  const key = queryKey[0];
+  return Array.isArray(key) && key[0] === "auth" && key[1] === "me";
 }
 
 function isEditable(t: EventTarget | null): boolean {
@@ -46,7 +79,7 @@ function isUnauthorized(error: unknown): boolean {
 function handleUnauthorized() {
   if (signedOutAction({ typedOnPage, publicPage: isPublicClientPath(window.location.pathname) }) === "keep-page") {
     if (noticeShown) return;
-    noticeShown = true;
+    setKeeping(true);
     setNotice("signed-out");
     return;
   }
@@ -60,6 +93,13 @@ function handleUnauthorized() {
 export function watchForSignOut(queryClient: QueryClient) {
   document.addEventListener("input", e => { if (isEditable(e.target)) typedOnPage = true; }, true);
 
+  // Ask the server again: after signing in in another tab and coming back, or after a save worked.
+  const recheck = () => {
+    if (noticeShown) queryClient.invalidateQueries({ predicate: q => isAuthMe(q.queryKey) });
+  };
+  window.addEventListener("focus", recheck);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") recheck(); });
+
   queryClient.getQueryCache().subscribe(event => {
     if (event.type !== "updated") return;
     const { query } = event;
@@ -71,8 +111,12 @@ export function watchForSignOut(queryClient: QueryClient) {
       }
       console.error("[API Query Error]", error);
     } else if (event.action.type === "success") {
-      const key = query.queryKey[0];
-      if (Array.isArray(key) && key[0] === "auth" && key[1] === "me" && (query.state.data as any)?.user) hadSession = true;
+      const me = query.state.data as { user?: unknown } | undefined;
+      if (isAuthMe(query.queryKey) && me?.user) {
+        hadSession = true;
+        lastMe = me;
+        signedInAgain();
+      }
       if (failedQueries.delete(query.queryHash)) signedInAgain();
     }
   });
@@ -84,7 +128,8 @@ export function watchForSignOut(queryClient: QueryClient) {
       if (isUnauthorized(error)) handleUnauthorized();
       console.error("[API Mutation Error]", error);
     } else if (event.action.type === "success") {
-      signedInAgain();
+      // Some requests work signed out too, so check rather than assume.
+      recheck();
     }
   });
 }
@@ -92,7 +137,7 @@ export function watchForSignOut(queryClient: QueryClient) {
 /** A request that needs a session worked again (signed in in the other tab): say so. */
 function signedInAgain() {
   if (!noticeShown) return;
-  noticeShown = false;
+  setKeeping(false);
   failedQueries.clear();
   setNotice("signed-in-again");
   setTimeout(() => { if (notice === "signed-in-again") setNotice(null); }, 8000);
@@ -113,6 +158,29 @@ export function SignedOutNotice() {
   return null;
 }
 
+/** The open dialog that has keyboard focus (it keeps focus inside itself), or null. */
+function focusedDialog(): HTMLElement | null {
+  const active = document.activeElement;
+  const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
+  for (let i = dialogs.length - 1; i >= 0; i--) if (active && dialogs[i].contains(active)) return dialogs[i];
+  return null;
+}
+
+/** Follows which dialog has focus while `on`, as dialogs open and close. */
+function useFocusedDialog(on: boolean): HTMLElement | null {
+  const [dialog, setDialog] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!on) { setDialog(null); return; }
+    const update = () => setDialog(focusedDialog());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
+    document.addEventListener("focusin", update);
+    return () => { observer.disconnect(); document.removeEventListener("focusin", update); };
+  }, [on]);
+  return dialog;
+}
+
 /** The "you've been signed out" notice, mounted once beside the app. */
 export function SignedOutBanner() {
   const [state, setState] = useState<NoticeState>(notice);
@@ -120,9 +188,10 @@ export function SignedOutBanner() {
     noticeListeners.add(setState);
     return () => { noticeListeners.delete(setState); };
   }, []);
-  if (!state) return null;
   const signedOut = state === "signed-out";
-  return createPortal(
+  const dialog = useFocusedDialog(signedOut);
+  if (!state) return null;
+  const banner = createPortal(
     h("div", {
       role: "alert",
       // Over any dialog overlay, clickable even while a modal makes the page inert to the pointer,
@@ -141,4 +210,13 @@ export function SignedOutBanner() {
     ),
     document.body,
   );
+  if (!signedOut || !dialog) return banner;
+  // Tab or Shift+Tab inside the dialog reaches this; it shows while focused.
+  return h(Fragment, null, banner, createPortal(
+    h("a", {
+      href: getLoginUrl(), target: "_blank", rel: "noopener",
+      className: "sr-only focus:not-sr-only focus:block focus:px-3 focus:py-2 focus:bg-white focus:border-2 focus:border-red-700 font-dm text-sm font-semibold text-forest underline",
+    }, "Signed out: sign in again (opens a new tab)"),
+    dialog,
+  ));
 }

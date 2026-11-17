@@ -12,3 +12,14 @@ export function signedOutAction(opts: { typedOnPage: boolean; publicPage: boolea
   return opts.typedOnPage && !opts.publicPage ? "keep-page" : "go-to-sign-in";
 }
 
+
+/**
+ * Who the app shows as signed in. While a signed-out page is being kept, any part
+ * of the app that checks who is signed in again gets "nobody", and the dashboard
+ * would swap the whole page for its sign-in card, losing what was typed. So until
+ * they sign in again (or sign out on purpose) the page keeps the person it had;
+ * its requests still fail until then.
+ */
+export function meWhileKept<T extends { user?: unknown }>(fetched: T | undefined, kept: T | null): T | undefined {
+  return kept && !fetched?.user ? kept : fetched;
+}
