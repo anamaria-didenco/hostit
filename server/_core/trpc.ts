@@ -48,7 +48,9 @@ export function userFacingMessage(error: TRPCError): string {
     if (first.code === "too_big" && first.maximum !== undefined) return isNumber ? `${field} must be ${first.maximum} or less.` : `${field} is too long (${first.maximum} characters at most).`;
     if (first.code === "too_small") return isNumber && first.minimum !== undefined ? `${field} must be ${first.minimum} or more.` : `${field} is required.`;
     const message = first.message ?? "is not valid";
-    return `${field}: ${message}${/[.!?]$/.test(message) ? "" : "."}`;
+    // No full stop after an example address ("like https://yourvenue.co.nz"): it would read as part of it.
+    const lastWord = message.split(/\s+/).pop() ?? "";
+    return `${field}: ${message}${/[.!?]$/.test(message) || /[.@/]/.test(lastWord) ? "" : "."}`;
   }
   return error.message;
 }

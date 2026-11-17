@@ -102,6 +102,13 @@ describe("venue.update refuses the same values (any save path)", () => {
     expect(userFacingMessage(err)).toBe("Name: Enter your venue's name. It is the heading of your enquiry form.");
   });
 
+  it("a message ending in an example address gets no full stop after it", async () => {
+    const err = await owner.venue.update({ website: "not a site" }).catch(e => e);
+    expect(userFacingMessage(err)).toBe("Website: Enter a web address like https://yourvenue.co.nz");
+    const email = await owner.venue.update({ smtpFromEmail: "bad address" }).catch(e => e);
+    expect(userFacingMessage(email)).toBe("Smtp From Email: Enter an email address like you@yourvenue.co.nz");
+  });
+
   it("a bad mail server is refused too", async () => {
     const err = await owner.venue.update({ smtpHost: "not a host!!" }).catch(e => e);
     expect(err.code).toBe("BAD_REQUEST");
