@@ -1324,6 +1324,14 @@ export default function Dashboard() {
   // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const showEmailModalRef = useRef(false);
+  // Phone: the drawer's close (X) sits right on top of the top bar's Sign out,
+  // so the second tap of a double tap on X signed the user out. Sign out
+  // ignores taps for a moment after a drawer closes.
+  const drawerClosedAt = useRef(0);
+  useEffect(() => {
+    if (!selectedBooking) return;
+    return () => { drawerClosedAt.current = Date.now(); };
+  }, [selectedBooking?.id]);
   useEffect(() => {
     if (!selectedBooking) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -3823,7 +3831,7 @@ export default function Dashboard() {
           <div className="hidden md:flex w-8 h-8 rounded-full bg-sage-green items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
-          <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
+          <button onClick={() => { if (Date.now() - drawerClosedAt.current > 800) void handleSignOut(); }} aria-label="Sign out" title="Sign out"
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
             <LogOut className="w-4 h-4 text-gray-500" aria-hidden="true" />
           </button>
