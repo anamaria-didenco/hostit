@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 import { proposalMoney, clientLineText, isEmptyLine } from "@shared/proposalTotals";
 import { isPackageLine } from "@shared/proposalPackages";
 import { venueBrand } from "@shared/brand";
+import { pageTitle } from "@shared/pageTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface LineItem {
   description: string;
@@ -178,6 +180,9 @@ export default function ProposalView() {
     link.id = id; link.rel = "stylesheet"; link.href = brand.fontLink;
     document.head.appendChild(link);
   }, [venue, brand.fontLink]);
+  // "Proposal · Corporate · The Harbour Room": a client with several tabs open
+  // can tell this one apart.
+  useDocumentTitle(data?.proposal ? pageTitle(["Proposal", data.proposal.title, venue?.name], null) : null);
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: T.bg }}>
@@ -186,12 +191,12 @@ export default function ProposalView() {
   );
 
   if (!data?.proposal) return (
-    <div className="min-h-screen flex items-center justify-center text-center px-4" style={{ backgroundColor: T.bg }}>
+    <main className="min-h-screen flex items-center justify-center text-center px-4" style={{ backgroundColor: T.bg }}>
       <div>
-        <div className="text-4xl font-bold mb-4" style={{ color: T.ink, fontFamily: 'serif' }}>Proposal Not Found</div>
+        <h1 className="text-4xl font-bold mb-4" style={{ color: T.ink, fontFamily: 'serif' }}>Proposal Not Found</h1>
         <p style={{ color: T.stone }}>This proposal link may have expired or is invalid.</p>
       </div>
-    </div>
+    </main>
   );
 
   const { proposal } = data;
@@ -575,15 +580,24 @@ export default function ProposalView() {
         {/* CTA */}
         {canRespond && (
           <div className="p-6 mb-8 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
-            <h3 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h3>
-            <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
+            <h2 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h2>
+            <p id="proposal-cta-note" className="font-inter text-sm mb-5" style={{ color: T.stone }}>
               Accept this proposal to confirm your booking.
               {menuOptions.length > 0
                 ? (chosenOption ? <> With the {chosenOption.name} menu, a deposit of {currency(chosenOption.deposit)} NZD secures your date.</> : <> Choose your menu above first.</>)
                 : Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => setShowAccept(true)}
+              <Button onClick={() => {
+                  // No menu picked yet: take the client to the choice instead of
+                  // opening a confirm step that can only say "go back and pick one".
+                  if (menuOptions.length > 0 && !chosenOption) {
+                    document.querySelector<HTMLInputElement>('input[name="menu-choice"]')?.focus();
+                    return;
+                  }
+                  setShowAccept(true);
+                }}
+                aria-describedby="proposal-cta-note"
                 className="flex-1 min-w-0 font-bebas tracking-widest rounded-none h-12 text-base gap-2"
                 style={{ backgroundColor: T.header, color: T.headerText }}>
                 <CheckCircle className="w-5 h-5" /> ACCEPT & BOOK
@@ -621,6 +635,7 @@ export default function ProposalView() {
             </div>
           </DialogHeader>
           <div className="space-y-4">
+            <DialogDescription asChild>
             <p className="font-inter text-sm" style={{ color: T.stone }}>
               By confirming, you're booking this event as set out in the proposal{chosenOption ? <>, with the <b>{chosenOption.name}</b> menu ({currency(chosenOption.total)} incl. GST)</> : ""}.
               {chosenOption
@@ -628,6 +643,7 @@ export default function ProposalView() {
                 : menuOptions.length === 0 && Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
               {" "}The venue team is told straight away and will be in touch about the next steps.
             </p>
+            </DialogDescription>
             <div>
               <label htmlFor="accept-message" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>MESSAGE TO VENUE (OPTIONAL)</label>
               <Textarea id="accept-message" value={clientMessage} onChange={e => setClientMessage(e.target.value)}
@@ -657,9 +673,11 @@ export default function ProposalView() {
             </div>
           </DialogHeader>
           <div className="space-y-4">
+            <DialogDescription asChild>
             <p className="font-inter text-sm" style={{ color: T.stone }}>
               The venue team will be told. If you're happy to, let them know why — it's optional.
             </p>
+            </DialogDescription>
             <div>
               <label htmlFor="decline-reason" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>REASON (OPTIONAL)</label>
               <Textarea id="decline-reason" value={clientMessage} onChange={e => setClientMessage(e.target.value)}
