@@ -106,20 +106,21 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className={fieldLabel}>Your name <span className="text-destructive">*</span></label>
-                <Input ref={firstFieldRef} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
+                <label htmlFor="waitlist-name" className={fieldLabel}>Your name <span className="text-destructive">*</span></label>
+                <Input id="waitlist-name" ref={firstFieldRef} type="text" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
               </div>
               <div>
-                <label className={fieldLabel}>Email <span className="text-destructive">*</span></label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@yourvenue.co.nz" required />
+                <label htmlFor="waitlist-email" className={fieldLabel}>Email <span className="text-destructive">*</span></label>
+                <Input id="waitlist-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@yourvenue.co.nz" required />
               </div>
               <div>
-                <label className={fieldLabel}>Venue name</label>
-                <Input type="text" value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="The Grand Room, Auckland" />
+                <label htmlFor="waitlist-venue" className={fieldLabel}>Venue name</label>
+                <Input id="waitlist-venue" type="text" autoComplete="organization" value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="The Grand Room, Auckland" />
               </div>
               <div>
-                <label className={fieldLabel}>Anything else? <span className="text-[#7e7466] normal-case font-normal tracking-normal">(optional)</span></label>
+                <label htmlFor="waitlist-message" className={fieldLabel}>Anything else? <span className="text-[#7e7466] normal-case font-normal tracking-normal">(optional)</span></label>
                 <textarea
+                  id="waitlist-message"
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   placeholder="Tell us a bit about your venue or what you're looking for..."
@@ -129,12 +130,17 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
               </div>
 
               {joinMutation.error && (
-                <p className="text-destructive text-xs">{joinMutation.error.message}</p>
+                <p role="alert" className="text-destructive text-xs">{joinMutation.error.message}</p>
+              )}
+              {/* Join stays disabled until both are filled: say so. */}
+              {(!name.trim() || !email.trim()) && (
+                <p id="waitlist-submit-hint" className="text-muted-foreground text-xs">Add your name and email to join.</p>
               )}
 
               <Button
                 type="submit"
                 disabled={joinMutation.isPending || !name.trim() || !email.trim()}
+                aria-describedby={!name.trim() || !email.trim() ? "waitlist-submit-hint" : undefined}
                 className="w-full"
               >
                 {joinMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <>Join the waitlist <ArrowRight className="w-4 h-4" /></>}
@@ -182,9 +188,10 @@ export default function Home() {
               </Button>
             ) : (
               <>
-                <a href={getLoginUrl()}>
-                  <Button variant="paper">Sign in</Button>
-                </a>
+                {/* One link styled as a button (a link round a button was two Tab stops). */}
+                <Button asChild variant="paper">
+                  <a href={getLoginUrl()}>Sign in</a>
+                </Button>
                 <Button asChild variant="paper" className="hidden sm:inline-flex">
                   <Link href="/signup">Sign up</Link>
                 </Button>
@@ -226,9 +233,10 @@ export default function Home() {
                 <Button size="lg" onClick={() => setShowWaitlist(true)}>
                   Join the waitlist <ArrowRight className="w-[18px] h-[18px]" />
                 </Button>
-                <a href={getLoginUrl()}>
-                  <Button size="lg" variant="outline">Watch a demo</Button>
-                </a>
+                {/* Said "Watch a demo" but there is no demo yet: it goes to sign-in. */}
+                <Button asChild size="lg" variant="outline">
+                  <a href={getLoginUrl()}>Sign in</a>
+                </Button>
               </div>
               <div className="inline-flex items-center justify-center gap-2 mt-7 text-[12.5px] text-[#7e7466]">
                 <span className="text-primary inline-flex"><Check className="w-[15px] h-[15px]" /></span>
