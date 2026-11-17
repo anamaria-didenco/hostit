@@ -1,14 +1,47 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "next-themes";
-import { toast, Toaster as Sonner, type ToasterProps } from "sonner";
+import { toast, useSonner, Toaster as Sonner, type ToasterProps } from "sonner";
 
 // An error has to be read (and often acted on) before it goes, so error toasts
 // stay until the close button dismisses them (WCAG 2.2.1). Patched once here
 // rather than at each of the few hundred toast.error() calls; other toasts keep
-// their timing.
+// their timing, and so does an error whose call gives its own duration.
 const showError = toast.error;
-toast.error = ((message, data) => showError(message, { ...data, duration: Infinity })) as typeof toast.error;
+toast.error = ((message, data) => showError(message, { ...data, duration: data?.duration ?? Infinity })) as typeof toast.error;
+
+// Toasts sit at the bottom of the screen, where some pages keep a bar fixed (the
+// phone tab bar, a checklist's footer). An error toast now stays until it is
+// closed, so lift the stack above any such bar instead of covering its buttons.
+// Bars come and go with the route or a drawer, so this is re-measured while
+// toasts are showing.
+function useBottomBarClearance(showing: boolean) {
+  const [clearance, setClearance] = useState(0);
+  useEffect(() => {
+    if (!showing) return;
+    const measure = () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      // Where the stack sits: full width up to Sonner's 600px breakpoint, else the bottom-right corner.
+      const xs = w <= 600 ? [16, w / 2, w - 16] : [w - 372, w - 200, w - 32];
+      let top = h;
+      for (const x of xs) {
+        for (const y of [h - 2, h - 32]) {
+          let el = document.elementsFromPoint(x, y).find(e => !e.closest("[data-sonner-toaster]")) ?? null;
+          while (el && el !== document.body && !/^(fixed|sticky)$/.test(getComputedStyle(el).position)) el = el.parentElement;
+          if (!el || el === document.body || getComputedStyle(el).bottom === "auto") continue;
+          const r = el.getBoundingClientRect();
+          // A bar, not a drawer or overlay that fills the screen.
+          if (r.bottom >= h - 40 && r.height <= h / 2) top = Math.min(top, r.top);
+        }
+      }
+      setClearance(Math.max(0, Math.round(h - top)));
+    };
+    measure();
+    const timer = window.setInterval(measure, 400);
+    return () => window.clearInterval(timer);
+  }, [showing]);
+  return clearance;
+}
 
 // Sonner pauses its timers while the pointer is over the stack (it "expands"),
 // but not while keyboard focus is inside a toast, so a toast could vanish under
@@ -38,6 +71,7 @@ function useFocusPausesToasts() {
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
   useFocusPausesToasts();
+  const clearance = useBottomBarClearance(useSonner().toasts.length > 0);
 
   // Portalled to <body>, after #root: the enquiry / event drawer makes #root
   // inert while it is open, which silenced every toast raised from the drawer
@@ -50,6 +84,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       closeButton
       duration={4000}
+      // Sonner's own 24px / 16px from the bottom, plus any bar's height.
+      offset={{ bottom: 24 + clearance }}
+      mobileOffset={{ bottom: 16 + clearance }}
       style={
         {
           "--normal-bg": "var(--popover)",
