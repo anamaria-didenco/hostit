@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -53,11 +53,11 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  // Close on Escape and focus the first field on open — basic dialog manners
-  // the modal was missing.
-  useEscapeKey(true, onClose);
-  useEffect(() => { firstFieldRef.current?.focus(); }, []);
+  // The form is swapped for "You're on the list": focus its heading, so it is
+  // read out and the next Tab is Done (focus used to drop to the page).
+  useEffect(() => { if (submitted) doneHeadingRef.current?.focus(); }, [submitted]);
 
   const joinMutation = trpc.waitlist.join.useMutation({
     onSuccess: () => setSubmitted(true),
@@ -72,14 +72,12 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const fieldLabel = "block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(22,20,15,0.5)] p-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
+    <DialogShell onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(22,20,15,0.5)] p-4">
+      <DialogShellContent
+        initialFocus={firstFieldRef}
         aria-labelledby="waitlist-title"
         className="bg-card rounded-lg border-[1.5px] border-input w-full max-w-md p-8 relative"
         style={{ boxShadow: "0 8px 40px rgba(0,0,0,.16)" }}
-        onClick={e => e.stopPropagation()}
       >
         <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
           <X className="w-5 h-5" />
@@ -90,7 +88,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
             <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
-            <h3 id="waitlist-title" className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
+            <h3 id="waitlist-title" ref={doneHeadingRef} tabIndex={-1} className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Thanks for your interest in VenueFlow. We'll be in touch as soon as your spot is ready — keep an eye on your inbox.
             </p>
@@ -142,8 +140,8 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
             </form>
           </>
         )}
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }
 
