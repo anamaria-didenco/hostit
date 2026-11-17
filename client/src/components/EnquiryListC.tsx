@@ -11,6 +11,79 @@ import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
 import MovedNote from "@/components/MovedNote";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { ChevronDown, Check } from "lucide-react";
+
+// ── Filters ─────────────────────────────────────────────────────────────────
+// A filter bar inside the list: event date, event type, space, party size,
+// plus Unread / Date clash toggles. Tab counts follow the filters, so the
+// numbers always match what you'll see.
+type WhenFilter = "any" | "month" | "3m" | "later" | "nodate";
+type SizeFilter = "any" | "s" | "m" | "l";
+interface Filters { when: WhenFilter; types: string[]; spaces: string[]; size: SizeFilter; unread: boolean; clash: boolean }
+const NO_FILTERS: Filters = { when: "any", types: [], spaces: [], size: "any", unread: false, clash: false };
+const WHEN_OPTS: { id: WhenFilter; label: string }[] = [
+  { id: "any", label: "Any date" }, { id: "month", label: "This month" }, { id: "3m", label: "Next 3 months" },
+  { id: "later", label: "Later than 3 months" }, { id: "nodate", label: "No date yet" },
+];
+const SIZE_OPTS: { id: SizeFilter; label: string }[] = [
+  { id: "any", label: "Any size" }, { id: "s", label: "Under 30" }, { id: "m", label: "30–80" }, { id: "l", label: "Over 80" },
+];
+const FILTERS_KEY = "vf.enquiryFilters.v1";
+
+function matchesWhen(lead: any, when: WhenFilter, nowMs: number): boolean {
+  if (when === "any") return true;
+  if (!lead.eventDate) return when === "nodate";
+  if (when === "nodate") return false;
+  const t = new Date(lead.eventDate).getTime();
+  const now = new Date(nowMs);
+  if (when === "month") return new Date(t).getFullYear() === now.getFullYear() && new Date(t).getMonth() === now.getMonth();
+  const in3m = new Date(now); in3m.setMonth(in3m.getMonth() + 3);
+  if (when === "3m") return t >= now.setHours(0, 0, 0, 0) && t < in3m.getTime();
+  return t >= in3m.getTime();
+}
+function matchesSize(lead: any, size: SizeFilter): boolean {
+  if (size === "any") return true;
+  const g = Number(lead.guestCount) || 0;
+  if (!g) return false;
+  return size === "s" ? g < 30 : size === "m" ? g >= 30 && g <= 80 : g > 80;
+}
+
+/** Distinct values of a lead field, most common first, with counts. */
+function optionsOf(leads: any[], key: string): { value: string; count: number }[] {
+  const m = new Map<string, number>();
+  for (const l of leads) { const v = String(l?.[key] ?? "").trim(); if (v) m.set(v, (m.get(v) ?? 0) + 1); }
+  return Array.from(m, ([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+}
+
+/** A filter pill that opens a small menu. Blue when it's narrowing the list. */
+function FilterPill({ label, active, children }: { label: string; active: boolean; children: React.ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button"
+          className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-[6px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${active ? "border-primary bg-accent text-primary" : "border-input bg-card text-foreground hover:border-primary"}`}>
+          {label}<ChevronDown className="w-3.5 h-3.5 opacity-70" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={4} className="w-60 p-1.5 bg-card border border-border shadow-lg">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+function MenuOption({ on, onClick, label, count }: { on: boolean; onClick: () => void; label: string; count?: number }) {
+  return (
+    <button type="button" role="menuitemcheckbox" aria-checked={on} onClick={onClick}
+      className="w-full flex items-center gap-2 px-2 h-9 rounded-[4px] text-left font-sans text-[13px] text-foreground hover:bg-accent">
+      <span className={`w-4 h-4 rounded-[4px] border-[1.5px] flex items-center justify-center flex-shrink-0 ${on ? "bg-primary border-primary text-primary-foreground" : "border-input"}`}>
+        {on && <Check className="w-3 h-3" strokeWidth={3} aria-hidden />}
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      {count != null && <span className="text-[12px] text-muted-foreground">{count}</span>}
+    </button>
+  );
+}
 
 /**
  * The Option-C enquiries list: one signal-first list where every row leads with
@@ -43,6 +116,8 @@ export interface EnquiryListCProps {
   movedRows?: Record<number, { from: string; to: string; at: number }>;
   onUndoMove?: (id: number) => void;
   undoPendingId?: number | null;
+  /** The enquiry open in the drawer, highlighted in the list. */
+  selectedId?: number | null;
 }
 
 const TONE: Record<SignalTone, { fg: string; bg: string }> = {
@@ -62,11 +137,29 @@ const SORTS: { id: SortKey; label: string; note: string }[] = [
   { id: "event", label: "Event date: soonest", note: "Soonest event first" },
 ];
 
-const HEX = /^#[0-9a-f]{6}$/i;
-/** A status colour (#rrggbb) at a given alpha, for a light fill. Falls back to
- *  transparent if the venue's swatch isn't a plain hex value. */
-function tint(hex: string, alpha: string): string {
-  return HEX.test(hex) ? `${hex}${alpha}` : "transparent";
+/** Section heads for the "Most urgent" order: rows are grouped by the tone of
+ *  their signal, so urgency is said once per group instead of once per row. */
+const TONE_ORDER: SignalTone[] = ["red", "amber", "blue", "green", "gray"];
+const TONE_TITLE: Record<SignalTone, string> = {
+  red: "Overdue", amber: "Needs attention", blue: "In progress", green: "Confirmed", gray: "Other",
+};
+
+const DAY_MS = 86_400_000;
+/** How far off the event is: "today", "in 5 days", "in 16 wks", "in 14 mths". */
+function untilLabel(d: Date, nowMs: number): string | null {
+  const a = new Date(d); a.setHours(0, 0, 0, 0);
+  const b = new Date(nowMs); b.setHours(0, 0, 0, 0);
+  const days = Math.round((a.getTime() - b.getTime()) / DAY_MS);
+  if (days < 0) return null;
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days < 14) return `in ${days} days`;
+  if (days < 120) return `in ${Math.round(days / 7)} wks`;
+  return `in ${Math.round(days / 30.4)} mths`;
+}
+
+function initials(lead: any): string {
+  return `${(lead.firstName ?? "").trim().charAt(0)}${(lead.lastName ?? "").trim().charAt(0)}`.toUpperCase() || "?";
 }
 
 /** When the enquiry came in, in venue time: "Mon 2 Nov, 9:14am". */
@@ -142,7 +235,7 @@ function moneyRange(lead: any): string {
 }
 
 export default function EnquiryListC(props: EnquiryListCProps) {
-  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
+  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId, selectedId } = props;
   // null = not chosen yet: open on the first tab that has something in it,
   // rather than an empty "Needs reply 0" while follow-ups are due.
   const [pickedTab, setTab] = React.useState<ListTab | null>(null);
@@ -185,18 +278,44 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     return { lead, signal };
   }), [leads, nowMs, replyStatus, clashMap, isPartial]);
 
+  // Filters — remembered between visits on this device.
+  const [filters, setFiltersRaw] = React.useState<Filters>(() => {
+    try { return { ...NO_FILTERS, ...JSON.parse(localStorage.getItem(FILTERS_KEY) ?? "{}") }; } catch { return NO_FILTERS; }
+  });
+  const setFilters = (f: Filters) => {
+    setFiltersRaw(f);
+    try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)); } catch { /* private mode */ }
+  };
+  const typeOpts = React.useMemo(() => optionsOf(leads, "eventType"), [leads]);
+  const spaceOpts = React.useMemo(() => optionsOf(leads, "spaceName"), [leads]);
+  const activeFilters = (filters.when !== "any" ? 1 : 0) + (filters.size !== "any" ? 1 : 0)
+    + (filters.types.length ? 1 : 0) + (filters.spaces.length ? 1 : 0) + (filters.unread ? 1 : 0) + (filters.clash ? 1 : 0);
+  const toggleIn = (list: string[], v: string) => list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+  const pillLabel = (base: string, picked: string[]) =>
+    picked.length === 0 ? base : picked.length === 1 ? picked[0] : `${picked[0]} +${picked.length - 1}`;
+
+  const filtered = React.useMemo(() => enriched.filter(({ lead }) =>
+    matchesWhen(lead, filters.when, nowMs)
+    && matchesSize(lead, filters.size)
+    && (!filters.types.length || filters.types.includes(String(lead.eventType ?? "").trim()))
+    && (!filters.spaces.length || filters.spaces.includes(String(lead.spaceName ?? "").trim()))
+    && (!filters.unread || (lead.status === "new" && !lead.readAt))
+    && (!filters.clash || (clashMap?.[lead.id]?.length ?? 0) > 0),
+  ), [enriched, filters, nowMs, clashMap]);
+
   const isPassed = React.useCallback((lead: any) => leadDatePassed(lead, nowMs), [nowMs]);
 
   const counts = React.useMemo(() => {
-    const c: Record<string, number> = { reply: 0, followup: 0, confirmed: 0, all: 0, passed: 0 };
-    for (const { lead, signal } of enriched) {
+    const c: Record<string, number> = { reply: 0, followup: 0, confirmed: 0, all: 0, passed: 0, overdue: 0 };
+    for (const { lead, signal } of filtered) {
       if (signal.group !== "closed") c.all++;
       if (signal.group in c) c[signal.group]++;
+      if (signal.group === "followup" && signal.tone === "red") c.overdue++;
       // Not the ones a client has just written to: those need a reply first.
       if (signal.group === "progress" && isPassed(lead)) c.passed++;
     }
     return c;
-  }, [enriched, isPassed]);
+  }, [filtered, isPassed]);
 
   const defaultTab: ListTab = counts.reply ? "reply" : counts.followup ? "followup" : "all";
   const tab: ListTab = pickedTab ?? defaultTab;
@@ -223,7 +342,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   }, [movedRows, tab]);
 
   const rows = React.useMemo(() => {
-    const picked = enriched.filter(({ lead, signal }) =>
+    const picked = filtered.filter(({ lead, signal }) =>
       pinnedMoves.get(lead.id) === tab ? true
       : tab === "passed" ? signal.group === "progress" && isPassed(lead)
       : tab === "all" ? signal.group !== "closed" : signal.group === tab);
@@ -232,8 +351,13 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     if (sortBy === "newest") return picked.sort((a, b) => cameIn(b.lead) - cameIn(a.lead));
     if (sortBy === "oldest") return picked.sort((a, b) => cameIn(a.lead) - cameIn(b.lead));
     if (sortBy === "event") return picked.sort((a, b) => eventAt(a.lead) - eventAt(b.lead));
-    return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
-  }, [enriched, tab, isPassed, pinnedMoves, sortBy]);
+    // Most urgent: by tone first (red, amber, …) so rows of a kind sit together
+    // under one section head, then by the signal's own urgency within it.
+    const rank = (t: SignalTone) => TONE_ORDER.indexOf(t);
+    return picked.sort((a, b) => rank(a.signal.tone) - rank(b.signal.tone) || b.signal.sortKey - a.signal.sortKey);
+  }, [filtered, tab, isPassed, pinnedMoves, sortBy]);
+
+  const grouped = sortBy === "urgent" && new Set(rows.map((r) => r.signal.tone)).size > 1;
 
   // Leaving the "Date passed" tab (or emptying it) cancels a pending confirm.
   React.useEffect(() => { setConfirmClose(false); }, [tab, counts.passed]);
@@ -288,6 +412,28 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
+        {/* Summary strip — the four numbers that say where the pipeline
+            stands; each one jumps to its tab. Confirmed is the headline cell. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 rounded-[8px] border-[1.5px] border-border bg-card overflow-hidden">
+          {([
+            { id: "reply" as ListTab, label: "Needs reply", n: counts.reply,
+              note: counts.reply ? "waiting on you" : "Inbox clear", noteColor: counts.reply ? "#c0392b" : "#3f7350" },
+            { id: "followup" as ListTab, label: "Follow-ups due", n: counts.followup,
+              note: counts.overdue ? `${counts.overdue} overdue` : "none overdue", noteColor: counts.overdue ? "#c0392b" : undefined },
+            { id: "all" as ListTab, label: "Open enquiries", n: counts.all, note: "not yet booked or closed" },
+            { id: "confirmed" as ListTab, label: "Confirmed", n: counts.confirmed, note: "booked in", inv: true },
+          ]).map((c, i) => (
+            <button key={c.id} type="button" onClick={() => { setTab(c.id); setReplyId(null); }}
+              aria-label={`${c.label}: ${c.n}. Show these.`}
+              className={`text-left px-4 py-3 flex flex-col gap-0.5 transition-colors ${c.inv ? "bg-primary text-primary-foreground hover:brightness-110" : "hover:bg-accent/60"} ${i % 2 === 0 ? "border-r-[1.5px] border-border" : "md:border-r-[1.5px] md:border-border"} ${i < 2 ? "border-b-[1.5px] border-border md:border-b-0" : ""} ${i === 3 ? "md:border-r-0" : ""}`}>
+              <span className={`font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] ${c.inv ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{c.label}</span>
+              <span className="font-sans text-[26px] leading-tight font-semibold">{c.n}</span>
+              <span className={`font-sans text-[12px] font-semibold ${c.inv ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                style={!c.inv && c.noteColor ? { color: c.noteColor } : undefined}>{c.note}</span>
+            </button>
+          ))}
+        </div>
+
         {/* View tabs */}
         <div className="flex items-end justify-between gap-4 flex-wrap">
           {/* One line of tabs that scrolls sideways on a phone, rather than
@@ -307,10 +453,57 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             })}
           </div>
         </div>
+        {/* Filter bar — one row of pills; scrolls sideways on a phone. */}
+        <div className="flex items-center gap-2 max-w-full overflow-x-auto pb-0.5" role="group" aria-label="Filter enquiries">
+          <FilterPill label={WHEN_OPTS.find((o) => o.id === filters.when)!.label} active={filters.when !== "any"}>
+            {WHEN_OPTS.map((o) => (
+              <MenuOption key={o.id} label={o.label} on={filters.when === o.id} onClick={() => setFilters({ ...filters, when: o.id })} />
+            ))}
+          </FilterPill>
+          {typeOpts.length > 0 && (
+            <FilterPill label={pillLabel("Event type", filters.types)} active={filters.types.length > 0}>
+              <div className="max-h-72 overflow-y-auto">
+                {typeOpts.map((o) => (
+                  <MenuOption key={o.value} label={o.value} count={o.count} on={filters.types.includes(o.value)}
+                    onClick={() => setFilters({ ...filters, types: toggleIn(filters.types, o.value) })} />
+                ))}
+              </div>
+            </FilterPill>
+          )}
+          {spaceOpts.length > 0 && (
+            <FilterPill label={pillLabel("Space", filters.spaces)} active={filters.spaces.length > 0}>
+              {spaceOpts.map((o) => (
+                <MenuOption key={o.value} label={o.value} count={o.count} on={filters.spaces.includes(o.value)}
+                  onClick={() => setFilters({ ...filters, spaces: toggleIn(filters.spaces, o.value) })} />
+              ))}
+            </FilterPill>
+          )}
+          <FilterPill label={filters.size === "any" ? "Guests" : `${SIZE_OPTS.find((o) => o.id === filters.size)!.label} guests`} active={filters.size !== "any"}>
+            {SIZE_OPTS.map((o) => (
+              <MenuOption key={o.id} label={o.label} on={filters.size === o.id} onClick={() => setFilters({ ...filters, size: o.id })} />
+            ))}
+          </FilterPill>
+          <span className="w-px h-6 bg-border flex-shrink-0" aria-hidden />
+          {([["unread", "Unread"], ["clash", "Date clash"]] as const).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={filters[k]} onClick={() => setFilters({ ...filters, [k]: !filters[k] })}
+              className={`h-9 px-3 rounded-full border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${filters[k] ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card text-foreground hover:border-primary"}`}>
+              {label}
+            </button>
+          ))}
+          {activeFilters > 0 && (
+            <button type="button" onClick={() => setFilters(NO_FILTERS)}
+              className="h-9 px-2 font-sans text-[13px] font-semibold text-primary underline-offset-2 hover:underline whitespace-nowrap">
+              Clear {activeFilters === 1 ? "filter" : `all ${activeFilters}`}
+            </button>
+          )}
+        </div>
+
         {rows.length > 0 && (
           <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
             <div className="font-sans text-[13px] text-muted-foreground">
-              {sortBy === "urgent" ? summary : SORTS.find((s) => s.id === sortBy)?.note}
+              {activeFilters > 0
+                ? `Showing ${rows.length} of ${enriched.filter(({ lead, signal }) => tab === "all" ? signal.group !== "closed" : tab === "passed" ? signal.group === "progress" && isPassed(lead) : signal.group === tab).length} · filtered`
+                : sortBy === "urgent" ? summary : SORTS.find((s) => s.id === sortBy)?.note}
             </div>
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
               Sort by
@@ -348,9 +541,20 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         {/* Rows */}
         <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
-            <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
-          ) : rows.map(({ lead, signal }) => {
+            <div className="py-12 text-center font-sans text-sm text-muted-foreground">
+              {activeFilters > 0 ? (
+                <>Nothing matches these filters.{" "}
+                  <button type="button" onClick={() => setFilters(NO_FILTERS)} className="font-semibold text-primary hover:underline">Clear filters</button>
+                </>
+              ) : emptyText}
+            </div>
+          ) : rows.map(({ lead, signal }, idx) => {
             const tone = TONE[signal.tone];
+            // A section head where the tone changes, in the "Most urgent" order
+            // only, and only when the tab holds more than one kind of row.
+            const showHead = grouped && (idx === 0 || rows[idx - 1].signal.tone !== signal.tone);
+            const groupCount = showHead ? rows.filter((r) => r.signal.tone === signal.tone).length : 0;
+            const selected = selectedId === lead.id;
             const action = enquiryAction(signal.group);
             const si = statusInfo(lead.status);
             const replying = replyId === lead.id;
@@ -360,6 +564,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               : (lead as any).dateFlexible ? "Date TBC" : "No date";
             const whenStr = [
               lead.eventDate ? new Date(lead.eventDate).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : null,
+              lead.eventDate ? untilLabel(new Date(lead.eventDate), nowMs) : null,
               lead.guestCount ? `${lead.guestCount} guests` : null,
               dateClash ? "date clash" : null,
             ].filter(Boolean).join(" · ");
@@ -371,41 +576,50 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
             };
 
+            const unread = lead.status === "new" && !lead.readAt;
+
             return (
-              <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
-                {/* The whole box is filled with the enquiry's status colour: a
-                    light tint, with a solid border in the same colour. A brand-new
-                    enquiry is the one that needs you, so its tint is the strongest. */}
-                {/* Desktop: one dense signal-first row. A click anywhere opens
-                    it; for the keyboard the name is the button, so Reply isn't
-                    nested inside another button (Enter on Reply used to open
-                    the drawer too). */}
+              <div key={lead.id} className="flex flex-col gap-2">
+              {showHead && (
+                <div className={`flex items-center gap-3 ${idx === 0 ? "" : "mt-2"}`}>
+                  <h2 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] flex-shrink-0" style={{ color: tone.fg }}>{TONE_TITLE[signal.tone]}</h2>
+                  <span className="h-[1.5px] flex-1" style={{ background: signal.tone === "red" ? tone.fg : "var(--border)" }} />
+                  <span className="font-sans text-[12px] text-muted-foreground flex-shrink-0">{groupCount}</span>
+                </div>
+              )}
+              {/* White rows: urgency is the dot + label in the first column and
+                  the section head above, not a fill on every row. The open
+                  enquiry (or one being replied to) is tinted blue. */}
+              <div className="rounded-[8px] overflow-hidden border-[1.5px] transition-shadow hover:shadow-md"
+                style={{ background: selected || replying ? "var(--accent)" : "var(--card)", borderColor: selected || replying ? "var(--primary)" : "var(--border)" }}>
+                {/* Desktop: one dense signal-first row */}
+                {/* A click anywhere opens it; for the keyboard the name is the
+                    button, so Reply isn't nested inside another button. */}
                 <div onClick={() => onOpen(lead)}
-                  className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
+                  className="hidden md:grid gap-4 items-center px-4 py-3 cursor-pointer md:grid-cols-[150px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[150px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.8fr)_104px]">
                   {/* Fixed-width signal and action columns, so the name and date
-                      columns line up from row to row whatever the chip says. */}
-                  <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-xs font-bold whitespace-nowrap justify-self-start max-w-full overflow-hidden text-ellipsis"
-                    style={{ background: tone.bg, color: tone.fg }}>
-                    <Icon name={signal.icon} />{signal.text}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 min-w-0">
+                      columns line up from row to row whatever the signal says. */}
+                  <div className="min-w-0 flex flex-col gap-1">
+                    <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: tone.fg }}>
+                      <span className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: tone.fg }} aria-hidden />{signal.text}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-sans text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: si.dot }} aria-hidden />{si.label}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex items-center gap-3">
+                    <span aria-hidden className="w-[34px] h-[34px] rounded-full flex-shrink-0 flex items-center justify-center font-sans text-[12px] font-bold"
+                      style={{ background: selected ? "var(--card)" : "var(--accent)", color: "var(--primary)" }}>{initials(lead)}</span>
+                    <div className="min-w-0">
                       <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
-                        className="min-w-0 truncate text-left font-serif text-[16.5px] font-semibold">
-                      <span className="font-serif text-[16.5px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
-                      </button>
-                      {/* Status in plain ink: the dot carries the status colour; the
-                          chip on the left already carries the urgency colour. */}
-                      <span className="inline-flex items-center gap-1.5 font-sans text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
-                      </span>
+                        aria-current={selected ? "true" : undefined}
+                        className={`block max-w-full min-w-0 truncate text-left font-sans text-[15px] text-foreground ${unread ? "font-bold" : "font-semibold"}`}>{lead.firstName} {lead.lastName}</button>
+                      {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
+                      <div className="font-sans text-[12px] text-muted-foreground mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                     </div>
-                    {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
+                    <div className="font-sans text-[14px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                     {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
                   </div>
                   <div className="min-w-0 hidden lg:block">
@@ -427,24 +641,23 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
                     className="px-3.5 pt-3 pb-2.5 cursor-pointer">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-[12px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
-                        style={{ background: tone.bg, color: tone.fg }}>
-                        <Icon name={signal.icon} />{signal.text}
+                      <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0" style={{ color: tone.fg }}>
+                        <span className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: tone.fg }} aria-hidden />{signal.text}
                       </span>
                       <span className="font-sans text-[12px] text-muted-foreground whitespace-nowrap flex-shrink-0">{budgetRangeLabel(lead.budgetRange) ?? ""}</span>
                     </div>
                     <div className="mt-2 flex items-baseline gap-2 min-w-0">
-                      <span className="font-serif text-[19px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
+                      <span className={`font-sans text-[18px] truncate text-foreground ${unread ? "font-bold" : "font-semibold"}`}>{lead.firstName} {lead.lastName}</span>
                       <span className="inline-flex items-center gap-1.5 font-sans text-[12px] font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
                       </span>
                     </div>
                     {sub && <div className="font-sans text-[13.5px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5">Came in {fmtCameIn(lead.createdAt)}</div>
+                    <div className="font-sans text-[12.5px] text-muted-foreground mt-0.5">Came in {fmtCameIn(lead.createdAt)}</div>
                   </div>
-                  <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
+                  <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t border-border">
                     <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
+                      <div className="font-sans text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
                       {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
                     </div>
                     <button onClick={onAction}
@@ -469,7 +682,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
                 {/* Inline quick reply */}
                 {replying && (
-                  <div ref={replyPanelRef} className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
+                  <div ref={replyPanelRef} className="border-t border-border px-3.5 pt-3 pb-3.5" style={{ background: "var(--card)" }}>
                     <div className="flex items-center gap-1.5 flex-wrap mb-2">
                       <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
                       {(QUICK_FOR[signal.group] ?? []).map((name) => {
@@ -499,6 +712,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     </div>
                   </div>
                 )}
+              </div>
               </div>
             );
           })}

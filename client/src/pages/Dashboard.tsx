@@ -4704,6 +4704,7 @@ export default function Dashboard() {
                       }}
                       sending={sendEmail.isPending}
                       onRowsChange={setEnquiryOrder}
+                      selectedId={selectedBooking?._isLead ? selectedBooking.id : null}
                       // Keep a just-moved row in place with "Moved to … · Undo"
                       // instead of it vanishing from the tab it no longer matches.
                       movedRows={movedRows}
