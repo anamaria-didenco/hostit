@@ -46,6 +46,7 @@ import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@share
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 import { isVenueSiteOrigin, originOf } from "@shared/adAttribution";
 import { venueBrand } from "@shared/brand";
+import { stepAnnouncement } from "@shared/focusReturn";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
@@ -922,6 +923,22 @@ export default function LeadForm() {
     postToParent({ type: "vf-step-changed", step: embedStep });
   }, [isEmbed, embedStep]);
 
+  // Focus follows the form. The button just pressed (SUBMIT, NEXT, BACK) is
+  // gone afterwards, which dropped focus to the top of the page: go to
+  // "Enquiry Received!", or to the new step's title (read out; the next Tab
+  // is its first field). Headings, not fields, so no phone keyboard pops up.
+  const successHeadingRef = useRef<HTMLElement | null>(null);
+  const stepHeadingRef = useRef<HTMLElement | null>(null);
+  const setSuccessHeading = (el: HTMLElement | null) => { successHeadingRef.current = el; };
+  const setStepHeading = (el: HTMLElement | null) => { stepHeadingRef.current = el; };
+  const focusKey = `${submitted ? "done" : "form"}-${embedStep}`;
+  const lastFocusKey = useRef(focusKey);
+  useEffect(() => {
+    if (lastFocusKey.current === focusKey) return;
+    lastFocusKey.current = focusKey;
+    (submitted ? successHeadingRef.current : stepHeadingRef.current)?.focus();
+  }, [focusKey, submitted]);
+
   // Save the in-progress draft on every change. form's initial value was
   // already seeded from the draft (readDraft(), above) so this never races
   // with — or clobbers — the restore.
@@ -1619,7 +1636,7 @@ export default function LeadForm() {
         {submitted ? (
           <div role="status" className="text-center py-10 px-4">
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
-            <p className="font-semibold text-gray-800 text-sm mb-1" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</p>
+            <p ref={setSuccessHeading} tabIndex={-1} className="font-semibold text-gray-800 text-sm mb-1" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</p>
             <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
             {inboxNote && <p className="text-xs text-gray-600 leading-snug mt-1">{inboxNote}</p>}
             {renderWalkthroughStep('sm')}
@@ -1720,6 +1737,8 @@ export default function LeadForm() {
           </div>
         ) : (
           <>
+            {/* The step circles are only colour: the step's title, for screen readers. */}
+            <h2 ref={setStepHeading} tabIndex={-1} className="sr-only">{stepAnnouncement(embedStep, steps)}</h2>
             {/* Progress steps */}
             <div className="flex items-start justify-center gap-1 px-4 pt-3 pb-1">
               {steps.map((label, i) => {
@@ -1935,7 +1954,7 @@ export default function LeadForm() {
         {submitted ? (
           <div role="status" className="rounded-lg border border-gray-100 shadow-sm p-10 text-center" style={{ backgroundColor: formCardBg }}>
             <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: formButtonColor }} />
-            <h2 className="text-3xl font-bold mb-3 text-gray-800" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</h2>
+            <h2 ref={setSuccessHeading} tabIndex={-1} className="text-3xl font-bold mb-3 text-gray-800" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</h2>
             <p className="text-gray-500 mb-2">
               {successMsg.replace('{venueName}', venueName)}
             </p>

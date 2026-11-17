@@ -159,6 +159,10 @@ export default function ProposalView() {
     // answered, not ready yet), so show them as they are.
     onError: (e) => toast.error(e.message || "Something went wrong. Please try again."),
   });
+  // After Confirm / Decline the dialog and the buttons that opened it are
+  // gone: put focus on the answer banner, so it is read out and in view.
+  const [answerHeading, setAnswerHeading] = useState<HTMLDivElement | null>(null);
+  useEffect(() => { if (responded) answerHeading?.focus(); }, [responded, answerHeading]);
 
   const venue = data?.venue;
   // The venue's Brand Pack (accent colour, fonts, logo) leads; the theme only
@@ -294,7 +298,7 @@ export default function ProposalView() {
           <div className="p-5 mb-6 flex items-center gap-4 rounded-sm" style={{ backgroundColor: '#f0fdf4', border: `2px solid #86efac` }}>
             <CheckCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#16a34a' }} />
             <div>
-              <div className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>You're booked in</div>
+              <div ref={setAnswerHeading} tabIndex={-1} className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>You're booked in</div>
               <p className="font-inter text-sm mt-0.5" style={{ color: '#166534' }}>
                 {responded
                   ? `Thank you for accepting. We've let the venue team know${confirmationEmailed ? " and emailed you a confirmation" : ""} — they'll be in touch about the next steps.`
@@ -307,7 +311,7 @@ export default function ProposalView() {
           <div className="p-5 mb-6 flex items-center gap-4 rounded-sm" style={{ backgroundColor: '#fef2f2', border: `2px solid #fca5a5` }}>
             <XCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#dc2626' }} />
             <div>
-              <div className="font-playfair text-xl font-bold" style={{ color: '#b91c1c' }}>Proposal Declined</div>
+              <div ref={setAnswerHeading} tabIndex={-1} className="font-playfair text-xl font-bold" style={{ color: '#b91c1c' }}>Proposal Declined</div>
               <p className="font-inter text-sm mt-0.5" style={{ color: '#991b1b' }}>You've declined this proposal and the venue team has been told. Thanks for letting us know.</p>
             </div>
           </div>
@@ -614,7 +618,10 @@ export default function ProposalView() {
 
       {/* Accept Dialog */}
       <Dialog open={showAccept} onOpenChange={(o) => { setShowAccept(o); if (!o) setClientMessage(""); }}>
-        <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
+        <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}
+          // Start on CONFIRM BOOKING (its only button besides the X), not the
+          // optional message box, which is one Shift+Tab away.
+          onOpenAutoFocus={e => { const b = (e.currentTarget as HTMLElement).querySelector<HTMLButtonElement>('button:not([data-slot="dialog-close"]):not(:disabled)'); if (b) { e.preventDefault(); b.focus(); } }}>
           <DialogHeader>
             <div className="-mx-6 -mt-6 p-5 mb-4" style={{ backgroundColor: T.header }}>
               <DialogTitle className="font-bebas text-xl tracking-widest" style={{ color: T.headerText }}>CONFIRM YOUR BOOKING</DialogTitle>
