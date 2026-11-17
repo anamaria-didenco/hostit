@@ -17,10 +17,16 @@ export function onArrowChoose(e: KeyboardEvent<HTMLElement>) {
   const next = nextIndexForKey(e.key, index, items.length);
   if (next === null) return;
   e.preventDefault();
+  const group = e.currentTarget;
   const el = items[next];
-  el.focus();
   const chosen = el.getAttribute("aria-checked") === "true" || el.getAttribute("aria-selected") === "true";
-  if (!chosen) el.click();
+  el.focus();
+  if (!chosen) {
+    el.click();
+    // A newly shown tab panel may autofocus one of its fields once it renders; arrow
+    // keys keep focus on the options, as with native tabs and radio buttons.
+    requestAnimationFrame(() => { if (el.isConnected && !group.contains(document.activeElement)) el.focus(); });
+  }
 }
 
 /**

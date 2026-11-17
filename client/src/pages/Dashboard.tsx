@@ -4300,12 +4300,12 @@ export default function Dashboard() {
                   <div role="group" aria-label="Enquiries view" className="flex border border-gold/30 rounded-lg overflow-hidden">
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
                       title="List view" aria-pressed={leadViewMode !== "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <List className="w-3.5 h-3.5" /> LIST
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
                       title="Board view" aria-pressed={leadViewMode === "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <Columns className="w-3.5 h-3.5" /> BOARD
                     </button>
                   </div>
@@ -5022,7 +5022,7 @@ export default function Dashboard() {
                       <button key={v}
                         onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                         className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
-                          calendarView === v ? 'bg-forest-dark text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]' : 'text-ink/60 hover:bg-linen'
+                          calendarView === v ? 'bg-forest-dark text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/60 hover:bg-linen'
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
@@ -5043,7 +5043,7 @@ export default function Dashboard() {
                     <button key={v}
                       onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                       className={`font-bebas tracking-widest text-xs py-2 border border-gold/30 -ml-px first:ml-0 transition-colors ${
-                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]' : 'text-ink/70 hover:bg-linen'
+                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/70 hover:bg-linen'
                       }`}>{v.toUpperCase()}</button>
                   ))}
                 </div>
@@ -7672,20 +7672,20 @@ export default function Dashboard() {
                             <button type="button" disabled={i === 0}
                               aria-label={`Move ${field.label} up`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
-                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveUp className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" disabled={i === formFields.length - 1}
                               aria-label={`Move ${field.label} down`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
-                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveDown className="w-3.5 h-3.5" />
                             </button>
                             {!field.isDefault && (
                               <button type="button"
                                 aria-label="Delete field"
                                 onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
-                                className="text-ink/65 hover:text-red-500 transition-colors p-0.5">
+                                className="text-ink/65 hover:text-red-500 transition-colors p-[5px]">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
