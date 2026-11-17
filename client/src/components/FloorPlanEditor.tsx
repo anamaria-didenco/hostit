@@ -124,7 +124,7 @@ function kindName(type: string, customPalette: CustomPaletteItem[]) {
 // Focus an item (or the plan) after a click, tap or drop, so the keys act on
 // it, without drawing the keyboard focus ring: its selection outline already
 // shows which item it is. The ring is back next time it gets focus from the
-// keyboard. Focus that moves on from it (after Delete or Ctrl+D) stays quiet.
+// keyboard. Focus that moves on to a copy (Ctrl+D) stays quiet.
 function focusQuietly(el: Element | null | undefined) {
   if (!(el instanceof HTMLElement)) return;
   el.dataset.quietFocus = "";
@@ -133,6 +133,17 @@ function focusQuietly(el: Element | null | undefined) {
   el.focus({ preventScroll: true });
 }
 const hasQuietFocus = () => document.activeElement instanceof HTMLElement && "quietFocus" in document.activeElement.dataset;
+// Quiet focus leans on the selection outline. Once the focused item isn't the
+// selected one (Escape, a handle drag let go over the plan), or focus is on the
+// plan itself (after Delete), the focus ring has to show instead.
+function unquietUnlessSelected(selected: string | null) {
+  const a = document.activeElement;
+  if (!(a instanceof HTMLElement) || !("quietFocus" in a.dataset)) return;
+  const id = a.getAttribute("data-el-id");
+  if (id && id === selected) return;
+  delete a.dataset.quietFocus;
+  a.style.removeProperty("outline");
+}
 
 // ─── Render a single element on the canvas ───────────────────────────────────
 const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette, hintId }: {
@@ -286,6 +297,7 @@ export default function FloorPlanEditor({
   // Phones: the palette is tucked away until asked for (it is always visible from md up).
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => { unquietUnlessSelected(selected); }, [selected]);
   const [zoom, setZoom] = useState(1);
   const [tool] = useState<"select">("select");
   const [showGrid, setShowGrid] = useState(true);
@@ -592,10 +604,9 @@ export default function FloorPlanEditor({
       if (act?.kind === "delete") {
         e.preventDefault();
         const onIt = document.activeElement?.getAttribute("data-el-id") === act.id;
-        const quiet = hasQuietFocus();
         deleteSelected();
         // The deleted item had focus: keep it on the plan, not lost to <body>.
-        if (onIt && canvas) { if (quiet) focusQuietly(canvas); else canvas.focus({ preventScroll: true }); }
+        if (onIt && canvas) canvas.focus({ preventScroll: true });
       }
       if (act?.kind === "rotate") rotateSelected();
       if (e.key === "Escape") setSelected(null);
