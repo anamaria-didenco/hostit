@@ -56,9 +56,12 @@ export default function StaffAttachments({
               href={att.url!}
               target="_blank"
               rel="noopener noreferrer"
+              // Phone: Now & Next pins the allergy banner and its tabs to the
+              // bottom of the screen below sm. The scroll margin keeps a link
+              // that gets keyboard focus clear of that bar instead of under it.
               className={
                 phone
-                  ? "flex items-center gap-3 px-4 py-3 min-h-[52px] hover:bg-linen/50"
+                  ? "flex items-center gap-3 px-4 py-3 min-h-[52px] hover:bg-linen/50 scroll-mb-48 sm:scroll-mb-0"
                   : "flex items-center gap-3 px-5 py-3 hover:bg-linen/50 transition-colors"
               }
             >
