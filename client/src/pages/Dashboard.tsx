@@ -95,7 +95,7 @@ import { leadMatchesSearch } from "@/lib/leadSearch";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
-import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
+import { formFieldNames, mergeFormFields, type FormFieldDef } from "@shared/formFields";
 import { LockOpen } from "lucide-react";
 import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidation";
 import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
@@ -7647,11 +7647,10 @@ export default function Dashboard() {
                         <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70">TYPE</div>
                         <div className="col-span-3"></div>
                       </div>
-                      {formFields.map((field, i) => {
+                      {formFields.map((field, i, all) => {
                         // Each switch says which field it changes and whether it is on: there were
                         // 15 identical "Toggle field visibility" buttons with no state.
-                        const defaultLabel = DEFAULT_FORM_FIELDS.find(d => d.id === field.id)?.label;
-                        const fieldName = field.label.trim() || defaultLabel || 'this field';
+                        const { name: fieldName, labelBox } = formFieldNames(all)[i];
                         return (
                         <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
                           {/* Visible toggle */}
@@ -7676,7 +7675,7 @@ export default function Dashboard() {
                           {/* Label */}
                           <div className="col-span-5">
                             <input type="text" value={field.label}
-                              aria-label={`Label for the ${defaultLabel ?? field.label} field`}
+                              aria-label={labelBox}
                               onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
                               className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
                           </div>

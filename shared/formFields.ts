@@ -98,3 +98,26 @@ export function mergeFormFields(stored: unknown): FormFieldDef[] {
   if (guests) { guests.visible = true; guests.required = true; }
   return base;
 }
+
+/**
+ * What the form builder calls each field in its control names ("Show First Name
+ * on form", "Delete Dietary needs") and the name of its label box. A custom
+ * field whose label has been cleared is "Custom field 2" (its place among the
+ * custom fields): it was "this field", so names started lower-case, the label
+ * box read "Label for the  field", and two cleared fields shared every name.
+ */
+export function formFieldNames(fields: FormFieldDef[]): { name: string; labelBox: string }[] {
+  const taken = new Set(fields.map(f => f.label.trim().toLowerCase()).filter(Boolean));
+  let custom = 0;
+  return fields.map(field => {
+    const label = field.label.trim();
+    const defaultLabel = DEFAULT_FORM_FIELDS.find(d => d.id === field.id)?.label;
+    if (defaultLabel) return { name: label || defaultLabel, labelBox: `Label for the ${defaultLabel} field` };
+    custom++;
+    if (label) return { name: label, labelBox: `Label for the ${label} field` };
+    let n = custom;
+    while (taken.has(`custom field ${n}`)) n++;
+    taken.add(`custom field ${n}`);
+    return { name: `Custom field ${n}`, labelBox: `Label for Custom field ${n}` };
+  });
+}
