@@ -1309,11 +1309,15 @@
 /* Short screens: a laptop zoomed to 200-400%, or a phone on its side. The
    Enquiries and Calendar tabs fill the screen with a fixed header and scroll
    only the list underneath, and at 256px tall that list had 0px left. Below
-   480px tall the whole page scrolls instead. */
+   480px tall the whole page scrolls instead. Only a list stacked in a column
+   stops filling the pane (flex: none, so it takes its content's height); one
+   that sits in a row (the Enquiries list) keeps its share of the width, or
+   it would grow to its widest line and push Sort and Reply off the screen. */
 @media (max-height: 480px) {
   #vf-main { overflow-y: auto !important; }
   #vf-main .vf-pane { height: auto !important; overflow: visible !important; }
-  #vf-main .vf-pane-scroll { flex: none !important; min-height: 0 !important; overflow: visible !important; }
+  #vf-main .vf-pane-scroll { min-width: 0 !important; min-height: 0 !important; overflow: visible !important; }
+  #vf-main .flex-col > .vf-pane-scroll { flex: none !important; }
 }
 
 /* Skip-to-content link — visually hidden until focused. */
