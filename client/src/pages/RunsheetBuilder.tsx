@@ -40,6 +40,8 @@ import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import { isOncePerEvent } from "@shared/nowNext";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
+import { moveAnnouncement, moveInList } from "@shared/listOrder";
+import { EVENT_CHECKLIST_CATEGORIES, eventChecklistCategoryLabel } from "@shared/eventChecklistEdit";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -480,6 +482,9 @@ type ParsedRunsheetData = {
 // The independently-autosaving parts of the document. Every one of them has to
 // report clean before the header may claim the runsheet is saved.
 type SaveChannel = 'core' | 'doc' | 'food' | 'dietaries' | 'columns';
+
+// The event checklist's per-item buttons: 32px with a mouse, 44px on a touch screen.
+const CHECKLIST_ICON_BTN = "flex-shrink-0 inline-flex items-center justify-center w-8 h-8 pointer-coarse:w-11 pointer-coarse:h-11 rounded-sm text-ink/75 hover:text-forest hover:bg-linen transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest";
 
 export default function RunsheetBuilder() {
   const [location, navigate] = useLocation();
@@ -1222,6 +1227,87 @@ export default function RunsheetBuilder() {
   });
 
   const saveChecklistItems = trpc.checklists.saveItemsForRunsheet.useMutation();
+
+  // ─── Editing the event checklist: an item's words and category, its place,
+  // the list's name. Each is one change made on the server to the list as it
+  // is now (a whole-list save could undo a tick a staff member just made from
+  // their link), and the saved list comes back, their ticks included.
+  const [editingChecklistItem, setEditingChecklistItem] = useState<string | null>(null);
+  const [checklistEdit, setChecklistEdit] = useState<{ text: string; category: string }>({ text: "", category: "other" });
+  const [renamingChecklist, setRenamingChecklist] = useState(false);
+  const [checklistNameDraft, setChecklistNameDraft] = useState("");
+  const [checklistMoveNote, setChecklistMoveNote] = useState("");
+  // Keyboard focus after an edit closes or an item moves: back to the button
+  // that started it (the row is re-drawn, and focus would drop to the top).
+  const checklistFocusTargets = useRef(new Map<string, HTMLElement>());
+  const checklistFocusRef = (key: string) => (el: HTMLElement | null) => { if (el) checklistFocusTargets.current.set(key, el); else checklistFocusTargets.current.delete(key); };
+  const [checklistRefocus, setChecklistRefocus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!checklistRefocus) return;
+    const el = checklistFocusTargets.current.get(checklistRefocus);
+    if (!el) return;
+    el.focus();
+    setChecklistRefocus(null);
+  });
+  const applySavedChecklist = (r: { items: unknown; name: string | null }) => {
+    setChecklistItems((r.items ?? []) as any);
+    setChecklistInstance((inst: any) => inst ? { ...inst, name: r.name, items: r.items } : inst);
+  };
+  const closeChecklistItemEdit = (itemId: string) => { setEditingChecklistItem(null); setChecklistRefocus(`edit-${itemId}`); };
+  const editChecklistItemMut = trpc.checklists.editItemForRunsheet.useMutation({
+    onSuccess: (r, vars) => { applySavedChecklist(r); closeChecklistItemEdit(vars.itemId); toast.success("Checklist item saved"); },
+    onError: (err) => {
+      if (err.data?.code === "CONFLICT") {
+        // Deleted meanwhile (on another screen): show the list as it is now.
+        toast.error(err.message);
+        setEditingChecklistItem(null);
+        if (sheetId) getOrCreateChecklist.mutate({ runsheetId: sheetId });
+        return;
+      }
+      toast.error("Couldn't save the item — please try again.");
+    },
+  });
+  const reorderChecklistMut = trpc.checklists.reorderItemsForRunsheet.useMutation({
+    onSuccess: r => applySavedChecklist(r),
+    onError: () => toast.error("Couldn't move the item — please try again."),
+  });
+  const renameChecklistMut = trpc.checklists.renameForRunsheet.useMutation({
+    onSuccess: r => { applySavedChecklist(r); setRenamingChecklist(false); setChecklistRefocus("rename"); toast.success("Checklist renamed"); },
+    onError: () => toast.error("Couldn't rename the checklist — please try again."),
+  });
+  function startChecklistItemEdit(item: { id: string; text: string; category: string }) {
+    setRenamingChecklist(false);
+    setChecklistEdit({ text: item.text, category: item.category || "other" });
+    setEditingChecklistItem(item.id);
+  }
+  function saveChecklistItemEdit(item: { id: string; text: string; category: string }) {
+    if (!sheetId || editChecklistItemMut.isPending) return;
+    const text = checklistEdit.text.trim();
+    if (!text) { toast.error("An item needs some words."); return; }
+    const category = checklistEdit.category !== (item.category || "other") && (EVENT_CHECKLIST_CATEGORIES as readonly string[]).includes(checklistEdit.category)
+      ? checklistEdit.category as (typeof EVENT_CHECKLIST_CATEGORIES)[number] : undefined;
+    editChecklistItemMut.mutate({ runsheetId: sheetId, itemId: item.id, text: text !== item.text ? text : undefined, category });
+  }
+  function moveChecklistItem(itemId: string, delta: -1 | 1) {
+    if (!sheetId) return;
+    const ids = checklistItems.map(i => i.id);
+    const next = moveInList(ids, itemId, delta);
+    if (next.every((id, i) => id === ids[i])) return;
+    // Show the new order at once; the server's copy follows.
+    setChecklistItems(next.map(id => checklistItems.find(i => i.id === id)!));
+    reorderChecklistMut.mutate({ runsheetId: sheetId, ids: next });
+    const pos = next.indexOf(itemId);
+    setChecklistMoveNote(moveAnnouncement(checklistItems.find(i => i.id === itemId)?.text ?? "", pos + 1, next.length));
+    // Stay on the same button; at the top / bottom, the other one.
+    const atEnd = delta === -1 ? pos === 0 : pos === next.length - 1;
+    setChecklistRefocus(`${atEnd ? (delta === -1 ? "down" : "up") : (delta === -1 ? "up" : "down")}-${itemId}`);
+  }
+  function saveChecklistName() {
+    if (!sheetId || renameChecklistMut.isPending) return;
+    const name = checklistNameDraft.trim();
+    if (!name) { toast.error("Give the checklist a name."); return; }
+    renameChecklistMut.mutate({ runsheetId: sheetId, name });
+  }
 
   // ─── AI Smart Paste for Event Checklist ──────────────────────────────────
   const [showChecklistPaste, setShowChecklistPaste] = useState(false);
@@ -5668,6 +5754,47 @@ export default function RunsheetBuilder() {
               </div>
             </div>
 
+            {/* The list's name: the title on /checklist and the staff link. */}
+            {sheetId && checklistInstance && (
+              <div className="px-5 py-2 border-b border-gold/20 no-print">
+                {renamingChecklist ? (
+                  <div
+                    role="group" aria-label="Rename checklist"
+                    className="flex flex-wrap items-end gap-2"
+                    onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setRenamingChecklist(false); setChecklistRefocus('rename'); } }}
+                  >
+                    <div className="flex-1 min-w-[12rem]">
+                      <label htmlFor="rb-checklist-name" className="font-bebas text-[11px] tracking-widest text-ink/75 block mb-1">CHECKLIST NAME (THE STAFF LINK'S TITLE)</label>
+                      <Input id="rb-checklist-name" autoFocus value={checklistNameDraft} onChange={e => setChecklistNameDraft(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveChecklistName(); } }}
+                        className="rounded-sm border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 pointer-coarse:h-11" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={saveChecklistName} aria-disabled={renameChecklistMut.isPending || undefined}
+                        className="bg-forest text-white font-bebas tracking-widest text-xs px-4 min-h-[36px] pointer-coarse:min-h-[44px] rounded-sm hover:bg-forest/90 aria-disabled:opacity-50">
+                        {renameChecklistMut.isPending ? 'SAVING...' : 'SAVE'}
+                      </button>
+                      <button type="button" onClick={() => { setRenamingChecklist(false); setChecklistRefocus('rename'); }}
+                        className="border border-ink/20 font-bebas tracking-widest text-xs px-4 min-h-[36px] pointer-coarse:min-h-[44px] rounded-sm text-ink/80 hover:text-ink">
+                        CANCEL
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-dm text-xs text-ink/75">Staff link title:</span>
+                    <span className="font-dm text-sm text-ink break-words min-w-0">{checklistInstance.name}</span>
+                    <button type="button" ref={checklistFocusRef('rename')}
+                      onClick={() => { setEditingChecklistItem(null); setChecklistNameDraft(checklistInstance.name ?? ''); setRenamingChecklist(true); }}
+                      aria-label={`Rename checklist: ${checklistInstance.name ?? ''}`}
+                      className="inline-flex items-center gap-1 px-2 min-h-[32px] pointer-coarse:min-h-[44px] font-bebas tracking-widest text-xs text-forest hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest">
+                      <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> RENAME
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Progress bar */}
             <div className="h-1 bg-gold/20">
               <div
@@ -5676,18 +5803,58 @@ export default function RunsheetBuilder() {
               />
             </div>
 
+            <p className="sr-only" role="status" aria-live="polite">{checklistMoveNote}</p>
             <div className="divide-y divide-gold/20">
-              {checklistItems.map(item => (
+              {checklistItems.map((item, itemIndex) => (
                 <div key={item.id} className="px-5 py-3 group hover:bg-linen/50 transition-colors">
-                  <div className="flex items-center gap-3">
+                  {editingChecklistItem === item.id ? (
+                    <div
+                      role="group" aria-label={`Edit item: ${item.text}`}
+                      className="space-y-2 no-print"
+                      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); closeChecklistItemEdit(item.id); } }}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_12rem] gap-2">
+                        <div>
+                          <label htmlFor={`rb-cl-text-${item.id}`} className="font-bebas text-[11px] tracking-widest text-ink/75 block mb-1">ITEM</label>
+                          <Input id={`rb-cl-text-${item.id}`} autoFocus value={checklistEdit.text}
+                            onChange={e => setChecklistEdit(v => ({ ...v, text: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveChecklistItemEdit(item); } }}
+                            className="rounded-sm border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 pointer-coarse:h-11" />
+                        </div>
+                        <div>
+                          <label htmlFor={`rb-cl-cat-${item.id}`} className="font-bebas text-[11px] tracking-widest text-ink/75 block mb-1">CATEGORY</label>
+                          <select id={`rb-cl-cat-${item.id}`} value={checklistEdit.category}
+                            onChange={e => setChecklistEdit(v => ({ ...v, category: e.target.value }))}
+                            className="w-full h-9 pointer-coarse:h-11 border border-gold/30 rounded-sm bg-white px-2 font-dm text-sm focus:outline-none focus:border-forest">
+                            {/* A category from an older template still shows as itself. */}
+                            {[...EVENT_CHECKLIST_CATEGORIES, ...((EVENT_CHECKLIST_CATEGORIES as readonly string[]).includes(item.category || 'other') ? [] : [item.category])].map(c => (
+                              <option key={c} value={c}>{eventChecklistCategoryLabel(c)}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => saveChecklistItemEdit(item)} aria-disabled={editChecklistItemMut.isPending || undefined}
+                          className="bg-forest text-white font-bebas tracking-widest text-xs px-4 min-h-[36px] pointer-coarse:min-h-[44px] rounded-sm hover:bg-forest/90 aria-disabled:opacity-50">
+                          {editChecklistItemMut.isPending ? 'SAVING...' : 'SAVE'}
+                        </button>
+                        <button type="button" onClick={() => closeChecklistItemEdit(item.id)}
+                          className="border border-ink/20 font-bebas tracking-widest text-xs px-4 min-h-[36px] pointer-coarse:min-h-[44px] rounded-sm text-ink/80 hover:text-ink">
+                          CANCEL
+                        </button>
+                      </div>
+                    </div>
+                  ) : (<>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <button
                       onClick={() => toggleChecklistItem(item.id)}
-                      aria-label="Toggle checklist item"
-                      className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/75 hover:text-ink'}`}
+                      aria-label={`Done: ${item.text}`}
+                      aria-pressed={item.checked}
+                      className={`flex-shrink-0 inline-flex items-center justify-center w-8 h-8 -mx-1.5 pointer-coarse:w-11 pointer-coarse:h-11 transition-colors ${item.checked ? 'text-forest' : 'text-ink/75 hover:text-ink'}`}
                     >
-                      {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                      {item.checked ? <CheckSquare className="w-5 h-5" aria-hidden="true" /> : <Square className="w-5 h-5" aria-hidden="true" />}
                     </button>
-                    <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/75' : 'text-ink'}`}>
+                    <span className={`flex-1 min-w-[8rem] break-words font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/75' : 'text-ink'}`}>
                       {item.text}
                     </span>
                     <span className={`font-bebas tracking-widest text-[11px] rounded-[3px] px-2 py-0.5 ${
@@ -5701,23 +5868,52 @@ export default function RunsheetBuilder() {
                     }`}>
                       {item.category}
                     </span>
-                    <button
-                      onClick={() => { setPendingChecklistPhotoId(item.id); checklistPhotoInputRef.current?.click(); }}
-                      disabled={checklistPhotoUploading === item.id}
-                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-forest'}`}
-                      title={item.imageUrl ? 'Replace reference photo' : 'Add a reference photo for staff'}
-                    >
-                      {checklistPhotoUploading === item.id
-                        ? <RefreshCw className="w-4 h-4 animate-spin" />
-                        : <Camera className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={() => removeChecklistItem(item.id)}
-                      aria-label="Remove checklist item"
-                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/75 hover:text-red-500 transition-all flex-shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {/* Always shown (not only on hover), so they can be found and
+                        reached by keyboard and touch. */}
+                    <div className="flex items-center gap-0.5 ml-auto no-print">
+                      {sheetId && checklistInstance && (<>
+                        {/* aria-disabled, not disabled: the top item's Up keeps focus if it's on it. */}
+                        <button type="button" ref={checklistFocusRef(`up-${item.id}`)}
+                          onClick={() => { if (itemIndex > 0) moveChecklistItem(item.id, -1); }}
+                          aria-label={`Move up: ${item.text}`} aria-disabled={itemIndex === 0 || undefined} title="Move up"
+                          className={`${CHECKLIST_ICON_BTN} aria-disabled:opacity-40 aria-disabled:cursor-default`}>
+                          <MoveUp className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                        <button type="button" ref={checklistFocusRef(`down-${item.id}`)}
+                          onClick={() => { if (itemIndex < checklistItems.length - 1) moveChecklistItem(item.id, 1); }}
+                          aria-label={`Move down: ${item.text}`} aria-disabled={itemIndex === checklistItems.length - 1 || undefined} title="Move down"
+                          className={`${CHECKLIST_ICON_BTN} aria-disabled:opacity-40 aria-disabled:cursor-default`}>
+                          <MoveDown className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                        <button type="button" ref={checklistFocusRef(`edit-${item.id}`)}
+                          onClick={() => startChecklistItemEdit(item)}
+                          aria-label={`Edit item: ${item.text}`} title="Edit the item and its category"
+                          className={CHECKLIST_ICON_BTN}>
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                      </>)}
+                      <button
+                        type="button"
+                        onClick={() => { setPendingChecklistPhotoId(item.id); checklistPhotoInputRef.current?.click(); }}
+                        disabled={checklistPhotoUploading === item.id}
+                        aria-label={`${item.imageUrl ? 'Replace reference photo' : 'Add a reference photo'}: ${item.text}`}
+                        className={`${CHECKLIST_ICON_BTN} ${item.imageUrl ? '!text-forest' : ''}`}
+                        title={item.imageUrl ? 'Replace reference photo' : 'Add a reference photo for staff'}
+                      >
+                        {checklistPhotoUploading === item.id
+                          ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                          : <Camera className="w-4 h-4" aria-hidden="true" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeChecklistItem(item.id)}
+                        aria-label={`Remove checklist item: ${item.text}`}
+                        title="Remove item"
+                        className={`${CHECKLIST_ICON_BTN} hover:!text-red-700`}
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                   {item.imageUrl && (
                     <div className="mt-2 ml-8 flex items-start gap-2">
@@ -5733,6 +5929,7 @@ export default function RunsheetBuilder() {
                       </button>
                     </div>
                   )}
+                  </>)}
                 </div>
               ))}
             </div>
