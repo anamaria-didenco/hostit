@@ -9680,7 +9680,7 @@ Return ONLY valid JSON.`;
         if (!checklist) return null;
         const items = await db.select().from(dailyChecklistItems)
           .where(eq(dailyChecklistItems.checklistId, input.id))
-          .orderBy(asc(dailyChecklistItems.sortOrder));
+          .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
         return { ...checklist, items };
       }),
 
@@ -9698,7 +9698,7 @@ Return ONLY valid JSON.`;
         if (!checklist) return null;
         const items = await db.select().from(dailyChecklistItems)
           .where(eq(dailyChecklistItems.checklistId, checklist.id))
-          .orderBy(asc(dailyChecklistItems.sortOrder));
+          .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
         const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name })
           .from(venueSettings).where(eq(venueSettings.ownerId, checklist.ownerId)).limit(1);
         return { ...checklist, items, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null };
@@ -9783,10 +9783,11 @@ Return ONLY valid JSON.`;
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        category: z.string().optional(),
-        assignedDate: z.string().nullable().optional(),
+        name: z.string().trim().min(1, 'Give the checklist a name').max(255).optional(),
+        description: z.string().max(2000).optional(),
+        category: z.string().max(50).optional(),
+        // yyyy-mm-dd, or null to clear it.
+        assignedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -9915,6 +9916,35 @@ Return ONLY valid JSON.`;
         const { id, ...rest } = input;
         await db.update(dailyChecklistItems).set(rest)
           .where(and(eq(dailyChecklistItems.id, id), eq(dailyChecklistItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    // Put a checklist's items in this order (the up / down buttons). Items
+    // added or removed meanwhile (the staff link can add) are kept / ignored.
+    reorderItems: protectedProcedure
+      .input(z.object({ checklistId: z.number(), ids: z.array(z.number()).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ dailyChecklist: input.checklistId }, ctx.user.id);
+        const { getDb } = await import('./db');
+        const { dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const { applyOrder } = await import('@shared/listOrder');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.transaction(async (tx) => {
+          const rows = await tx.select({ id: dailyChecklistItems.id, sortOrder: dailyChecklistItems.sortOrder })
+            .from(dailyChecklistItems)
+            .where(and(eq(dailyChecklistItems.checklistId, input.checklistId), eq(dailyChecklistItems.ownerId, ctx.user.id)))
+            .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
+          const order = applyOrder(rows.map(r => r.id), input.ids);
+          const was = new Map(rows.map(r => [r.id, r.sortOrder]));
+          for (const [i, id] of order.entries()) {
+            if (was.get(id) === i) continue;
+            await tx.update(dailyChecklistItems).set({ sortOrder: i })
+              .where(and(eq(dailyChecklistItems.id, id), eq(dailyChecklistItems.checklistId, input.checklistId)));
+          }
+        });
         return { success: true };
       }),
 
