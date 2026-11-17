@@ -162,7 +162,7 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
     <div
       // In the editor each item is a Tab stop named "Table 1, 8 seats":
       // focusing it selects it, the arrow keys move it, and R / Delete act on
-      // it. A click focuses it too, so those keys work after a mouse select.
+      // it.
       {...(readOnly ? {} : {
         role: "button",
         tabIndex: 0,
@@ -177,10 +177,7 @@ const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDrag
           onNudge?.(el.id, d[0], d[1], e.shiftKey);
         },
       })}
-      onMouseDown={(e) => {
-        onSelect(el.id); onDragStart(e, el.id);
-        if (!readOnly) (e.currentTarget as HTMLElement).focus({ preventScroll: true });
-      }}
+      onMouseDown={(e) => { onSelect(el.id); onDragStart(e, el.id); }}
       style={{
         position: "absolute",
         left: el.x, top: el.y, width: el.width, height: el.height,
@@ -308,6 +305,7 @@ export default function FloorPlanEditor({
   const resizeRef = useRef<{ id: string; corner: string; startX: number; startY: number; origX: number; origY: number; origW: number; origH: number } | null>(null);
   const rotateRef = useRef<{ id: string; cx: number; cy: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pointerOnPlan = useRef(false);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
   const hintId = useId();
@@ -472,9 +470,7 @@ export default function FloorPlanEditor({
     };
     setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
     setSelected(newEl.id);
-    // Delete / R act only while the plan has focus: give it focus, as a
-    // click on an item does.
-    canvasRef.current?.focus({ preventScroll: true });
+    pointerOnPlan.current = true; // Delete / R act on the dropped item, as before
   }, [zoom, snap, customPalette]);
 
   // ── Selected element ─────────────────────────────────────────────────────
@@ -567,18 +563,29 @@ export default function FloorPlanEditor({
   };
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
-  // Delete / Backspace / R act only while the plan itself (the canvas or one
-  // of its items) has focus: Backspace on "Zoom in" used to delete the
-  // selected table, and R fired from any button.
+  // Delete / Backspace / R act only on the plan itself: while the canvas or
+  // one of its items has focus, or straight after a mouse click (or drop) on
+  // the plan, until the next click or Tab elsewhere. Backspace on "Zoom in"
+  // used to delete the selected table, and R fired from any button. (A click
+  // doesn't move focus, so mouse users get no keyboard focus ring.)
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => { pointerOnPlan.current = !!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target); };
+    const onFocusIn = (e: FocusEvent) => { if (!(canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target))) pointerOnPlan.current = false; };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("focusin", onFocusIn);
+    return () => { document.removeEventListener("pointerdown", onDown, true); document.removeEventListener("focusin", onFocusIn); };
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSelected(); return; }
-      const onPlan = !!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target);
+      const onPlan = pointerOnPlan.current || (!!canvasRef.current && e.target instanceof Node && canvasRef.current.contains(e.target));
       if (onPlan && (e.key === "Delete" || e.key === "Backspace") && selected) {
         e.preventDefault();
+        const hadFocus = !!canvasRef.current?.contains(document.activeElement);
         deleteSelected();
-        canvasRef.current?.focus({ preventScroll: true }); // not lost to <body>
+        // The deleted item had focus: keep it on the plan, not lost to <body>.
+        if (hadFocus) canvasRef.current?.focus({ preventScroll: true });
       }
       if (onPlan && (e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey && !e.altKey) rotateSelected();
       if (e.key === "Escape") setSelected(null);
