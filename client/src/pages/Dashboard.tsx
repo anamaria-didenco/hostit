@@ -69,6 +69,7 @@ import { leadNeedsReply } from "@shared/needsReply";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { contrastRatio, readableOn } from "@shared/contrast";
 import { monthGridTarget, monthGridDefaultDay, inShownMonth, monthCellLabel, friendlyDay, statusWords } from "@shared/monthGrid";
+import { statusBandFontSize } from "@shared/statusBandFit";
 import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
 import { enquirySignal } from "@shared/enquirySignal";
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
@@ -3725,8 +3726,8 @@ export default function Dashboard() {
                                       {(b.guestCount || b.spaceName) && (
                                         <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      {/* Tracking and padding sized so CONTACTED / CONFIRMED fit on one line at 1280px+; narrower, a long word wraps rather than being cut off. */}
-                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`font-bebas !tracking-wide [overflow-wrap:anywhere] text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 px-1 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      {/* The status wraps only at spaces: on a narrow chip its text shrinks (11px down to 7px) and the side padding drops to 2px, just enough for the longest word to fit (shared/statusBandFit.ts). */}
+                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] ${statusBandStyle(b.status, false, b.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(b.status).label, '2 * var(--bp)') }}>{getStatusInfo(b.status).label.toUpperCase()}</span></div>
                                     </div>
                                     {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
@@ -3745,7 +3746,7 @@ export default function Dashboard() {
                                       {l.guestCount && (
                                         <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
                                       )}
-                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`font-bebas !tracking-wide [overflow-wrap:anywhere] text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 px-1 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}>{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(l.status).label, '2 * var(--bp)') }}>{getStatusInfo(l.status).label.toUpperCase()}</span></div>
                                     </div>
                                     {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
                                   </button>
