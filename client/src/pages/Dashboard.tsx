@@ -65,6 +65,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
+import { composeDraftKey, composeDraftSlot, type ComposeDraftKey } from "@shared/composeDraft";
 import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { contrastRatio, readableOn } from "@shared/contrast";
@@ -2987,31 +2988,36 @@ export default function Dashboard() {
   );
   useEffect(() => { if (!showEmailModal) setPickedTemplate(null); }, [showEmailModal]);
   // Typed text in the composer is not thrown away. Closing it without sending
-  // (Escape, the close button, Cancel) keeps the draft for that client, and it
-  // comes back the next time the composer opens for them; a template only
-  // replaces typed text after asking. Escape used to reset it to the template.
-  const composeDraft = useRef<{ to: unknown; subject: string; body: string } | null>(null);
+  // (Escape, the close button, Cancel) keeps the draft for that enquiry (and the
+  // email thread it replies in), and it comes back the next time the composer
+  // opens for it; a template only replaces typed text after asking. Escape used
+  // to reset it to the template. Kept per enquiry and thread, not per email
+  // address: one client's two events must not swap drafts, and a reply and a
+  // new email each keep their own (shared/composeDraft.ts).
+  const composeDrafts = useRef(new Map<string, { subject: string; body: string }>());
   const composeBaseline = useRef(""); // the body as opened, or as last filled from a template
-  const composeTo = useRef<unknown>(null);
+  const composeTo = useRef<ComposeDraftKey>(composeDraftKey(null, null));
   const composeWasOpen = useRef(false);
   const composeTyped = () => !!emailForm.body.trim() && emailForm.body !== composeBaseline.current;
   // A kept draft is typing to keep if the session ends (see lib/sessionExpiry).
-  useEffect(() => holdTyping("compose-draft", () => !!composeDraft.current), []);
+  useEffect(() => holdTyping("compose-draft", () => composeDrafts.current.size > 0), []);
   useEffect(() => {
     if (showEmailModal) {
       composeWasOpen.current = true;
-      composeTo.current = selectedLead?.email || selectedLead?.id || null;
+      composeTo.current = composeDraftKey(selectedLead?.id, emailThread);
       composeBaseline.current = emailForm.body;
-      const d = composeDraft.current;
-      if (d && composeTo.current != null && d.to === composeTo.current) {
+      const slot = composeDraftSlot(composeTo.current);
+      const d = slot ? composeDrafts.current.get(slot) : undefined;
+      if (d) {
         // Opened with Reply: the typed text comes back, under the reply's subject (it is sent in that thread).
         setEmailForm({ subject: emailThread ? emailForm.subject : d.subject, body: d.body });
         toast.info(`Your unsent email${selectedLead?.firstName ? ` to ${selectedLead.firstName}` : ""} is back.`);
       }
     } else if (composeWasOpen.current) {
       composeWasOpen.current = false;
-      if (composeTyped()) composeDraft.current = { to: composeTo.current, subject: emailForm.subject, body: emailForm.body };
-      else if (composeDraft.current?.to === composeTo.current) composeDraft.current = null;
+      const slot = composeDraftSlot(composeTo.current);
+      if (slot && composeTyped()) composeDrafts.current.set(slot, { subject: emailForm.subject, body: emailForm.body });
+      else if (slot) composeDrafts.current.delete(slot);
     }
   }, [showEmailModal]);
   const addStarterTemplates = trpc.templates.addStarters.useMutation({
@@ -4119,7 +4125,7 @@ export default function Dashboard() {
               {item.icon}
               <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
               {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-700 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -6412,7 +6418,7 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DETAILS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
-                        <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
+                        <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-700">*</span></label>
                         <Input id="vs-venue-name" autoComplete="organization" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                         {venueErrors["vs-venue-name"] && <p id="vs-venue-name-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-venue-name"]}</p>}
