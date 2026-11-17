@@ -255,6 +255,7 @@
       var narrow = window.matchMedia(NARROW_QUERY).matches;
       backdrop.style.display = narrow ? "block" : "none";
       if (narrow) panel.setAttribute("aria-modal", "true"); else panel.removeAttribute("aria-modal");
+      setPageInert(narrow);
       panel.style.display = "block";
       bubble.style.display = "none";
       bubble.setAttribute("aria-expanded", "true");
@@ -271,11 +272,30 @@
       iframe.focus();
       try { if (iframe.contentWindow) iframe.contentWindow.focus(); } catch (e) { /* not reachable */ }
     }
+    // The bottom sheet covers the page with a backdrop and says it is modal,
+    // so the page behind is made inert while it is open: Tab past the form's
+    // last control no longer lands on links hidden under the backdrop. Only
+    // what this script marked is unmarked on close.
+    var madeInert = [];
+    function setPageInert(on) {
+      var i;
+      for (i = 0; i < madeInert.length; i++) madeInert[i].removeAttribute("inert");
+      madeInert = [];
+      if (!on) return;
+      var kids = document.body.children;
+      for (i = 0; i < kids.length; i++) {
+        var el = kids[i];
+        if (el === panel || el === backdrop || el === bubble || el.hasAttribute("inert")) continue;
+        el.setAttribute("inert", "");
+        madeInert.push(el);
+      }
+    }
     function close() {
       var active = document.activeElement;
       var focusWasInside = !active || active === document.body || panel.contains(active);
       panel.style.display = "none";
       backdrop.style.display = "none";
+      setPageInert(false);
       bubble.style.display = "flex";
       bubble.setAttribute("aria-expanded", "false");
       isOpen = false;

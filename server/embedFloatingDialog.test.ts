@@ -39,6 +39,7 @@ class FakeEl {
   }
   setAttribute(k: string, v: string) { this.attrs[k] = String(v); }
   getAttribute(k: string) { return k in this.attrs ? this.attrs[k] : null; }
+  hasAttribute(k: string) { return k in this.attrs; }
   removeAttribute(k: string) { delete this.attrs[k]; }
   appendChild(c: FakeEl) { c.parentNode = this; this.children.push(c); return c; }
   insertBefore(c: FakeEl) { return this.appendChild(c); }
@@ -78,6 +79,10 @@ class FakeDoc {
 
 function load({ narrow = false } = {}) {
   const document = new FakeDoc();
+  // The venue's own page: a link, and a part it had already made inert.
+  const hostLink = document.body.appendChild(document.createElement("a"));
+  const hostInert = document.body.appendChild(document.createElement("div"));
+  hostInert.setAttribute("inert", "");
   const winListeners: Record<string, Listener[]> = {};
   const window: any = {
     location: { href: "https://harbour-room.example/contact", search: "", origin: "https://harbour-room.example", pathname: "/contact" },
@@ -86,12 +91,12 @@ function load({ narrow = false } = {}) {
   };
   const code = readFileSync(path.resolve(import.meta.dirname, "../client/public/embed.js"), "utf8");
   vm.runInNewContext(code, { window, document, console, URL, URLSearchParams });
-  const [backdrop, panel, bubble] = document.body.children;
+  const [backdrop, panel, bubble] = document.body.children.slice(2);
   const iframe = panel.children[0];
   const message = (data: any) => {
     for (const fn of winListeners.message ?? []) fn({ source: iframe.contentWindow, origin: "https://venueflowhq.com", data });
   };
-  return { document, backdrop, panel, bubble, iframe, message };
+  return { document, backdrop, panel, bubble, iframe, message, hostLink, hostInert };
 }
 
 describe("embed.js floating widget as a dialog", () => {
@@ -169,5 +174,30 @@ describe("embed.js floating widget as a dialog", () => {
     phone.bubble.dispatch("click");
     expect(phone.backdrop.style.display).toBe("block");
     expect(phone.panel.getAttribute("aria-modal")).toBe("true");
+  });
+
+  it("as the bottom sheet, makes the page behind inert until it closes", () => {
+    // aria-modal alone left Tab free to walk onto links under the backdrop.
+    const { document, backdrop, panel, bubble, hostLink, hostInert, message } = load({ narrow: true });
+    bubble.dispatch("click");
+    expect(hostLink.hasAttribute("inert")).toBe(true);
+    expect(hostInert.hasAttribute("inert")).toBe(true);
+    for (const own of [backdrop, panel, bubble]) expect(own.hasAttribute("inert")).toBe(false);
+    document.keydown("Escape");
+    expect(hostLink.hasAttribute("inert")).toBe(false);
+    // What the venue had made inert itself stays that way.
+    expect(hostInert.hasAttribute("inert")).toBe(true);
+    // The same when the form closes itself (its × or Escape inside it).
+    bubble.dispatch("click");
+    expect(hostLink.hasAttribute("inert")).toBe(true);
+    message({ type: "vf-close-widget" });
+    expect(hostLink.hasAttribute("inert")).toBe(false);
+    expect(hostInert.hasAttribute("inert")).toBe(true);
+  });
+
+  it("as the corner panel, leaves the page behind usable", () => {
+    const { bubble, hostLink } = load();
+    bubble.dispatch("click");
+    expect(hostLink.hasAttribute("inert")).toBe(false);
   });
 });
