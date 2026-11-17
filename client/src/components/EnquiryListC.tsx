@@ -152,8 +152,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
-  // Opening a quick reply brings it into view and, unless it was a finger tap
-  // (the phone keyboard would cover Send), puts the cursor in the reply box.
+  // Opening a quick reply brings it into view and, when it was opened from the
+  // keyboard, puts the cursor in the reply box. A click or tap leaves focus on
+  // Reply, as before.
   const replyPanelRef = React.useRef<HTMLDivElement>(null);
   const replyBoxRef = React.useRef<HTMLTextAreaElement>(null);
   const focusReplyBox = React.useRef(false);
@@ -348,8 +349,8 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
             const onAction = (e: React.MouseEvent) => {
               e.stopPropagation();
-              // detail 0 = Enter/Space; a coarse pointer = a finger tap.
-              focusReplyBox.current = e.detail === 0 || !window.matchMedia?.("(pointer: coarse)").matches;
+              // detail 0 = Enter/Space (a click or tap has 1 or more).
+              focusReplyBox.current = e.detail === 0;
               if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
             };
 
