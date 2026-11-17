@@ -141,8 +141,8 @@ export default function EmbedDocs() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900" style={{ fontFamily: "system-ui, sans-serif" }}>
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+    <main className="min-h-screen bg-gray-50 text-gray-900" style={{ fontFamily: "system-ui, sans-serif" }}>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
         <header className="mb-8">
           <div className="text-xs font-bold uppercase tracking-widest text-[#2f5488] mb-1">VenueFlowHQ</div>
           <h1 className="text-3xl font-bold tracking-tight">Embed the enquiry form</h1>
@@ -254,7 +254,7 @@ export default function EmbedDocs() {
         </section>
 
         <footer className="text-xs text-gray-400 border-t border-gray-200 pt-6">© {new Date().getFullYear()} VenueFlowHQ</footer>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
