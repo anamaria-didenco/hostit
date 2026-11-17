@@ -249,6 +249,16 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     setDraft(resolveTemplate(tpl.body, lead, venueName));
   };
 
+  // A template chip replaces the reply. If the reply has been typed into (it is no
+  // longer the current template's text), ask first: it used to vanish silently.
+  const pickTemplate = (lead: any, tpl: (typeof STARTER_TEMPLATES)[number]) => {
+    const current = STARTER_TEMPLATES.find((t) => t.name === tplName);
+    const typed = !!draft.trim() && (!current || draft !== resolveTemplate(current.body, lead, venueName));
+    if (typed && !window.confirm(`Replace what you've typed with "${tpl.name}"?`)) return;
+    setTplName(tpl.name);
+    setDraft(resolveTemplate(tpl.body, lead, venueName));
+  };
+
   const doSend = (lead: any) => {
     if (!draft.trim()) return;
     const tpl = STARTER_TEMPLATES.find((t) => t.name === tplName) ?? STARTER_TEMPLATES[0];
@@ -439,7 +449,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                         const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
                         if (!tpl) return null;
                         return (
-                          <button key={name} onClick={() => { setTplName(name); setDraft(resolveTemplate(tpl.body, lead, venueName)); }}
+                          <button key={name} aria-pressed={on} onClick={() => pickTemplate(lead, tpl)}
                             className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
                             style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
                             {name}

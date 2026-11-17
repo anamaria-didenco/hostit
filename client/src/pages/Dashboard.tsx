@@ -2795,6 +2795,31 @@ export default function Dashboard() {
     { enabled: showEmailModal && !!selectedLead?.id },
   );
   useEffect(() => { if (!showEmailModal) setPickedTemplate(null); }, [showEmailModal]);
+  // Typed text in the composer is not thrown away. Closing it without sending
+  // (Escape, the close button, Cancel) keeps the draft for that client, and it
+  // comes back the next time the composer opens for them; a template only
+  // replaces typed text after asking. Escape used to reset it to the template.
+  const composeDraft = useRef<{ to: unknown; subject: string; body: string } | null>(null);
+  const composeBaseline = useRef(""); // the body as opened, or as last filled from a template
+  const composeTo = useRef<unknown>(null);
+  const composeWasOpen = useRef(false);
+  const composeTyped = () => !!emailForm.body.trim() && emailForm.body !== composeBaseline.current;
+  useEffect(() => {
+    if (showEmailModal) {
+      composeWasOpen.current = true;
+      composeTo.current = selectedLead?.email || selectedLead?.id || null;
+      composeBaseline.current = emailForm.body;
+      const d = composeDraft.current;
+      if (d && composeTo.current != null && d.to === composeTo.current) {
+        setEmailForm({ subject: d.subject, body: d.body });
+        toast.info(`Your unsent email${selectedLead?.firstName ? ` to ${selectedLead.firstName}` : ""} is back.`);
+      }
+    } else if (composeWasOpen.current) {
+      composeWasOpen.current = false;
+      if (composeTyped()) composeDraft.current = { to: composeTo.current, subject: emailForm.subject, body: emailForm.body };
+      else if (composeDraft.current?.to === composeTo.current) composeDraft.current = null;
+    }
+  }, [showEmailModal]);
   const addStarterTemplates = trpc.templates.addStarters.useMutation({
     onSuccess: (r) => { utils.templates.list.invalidate(); toast.success(r.added > 0 ? `Added ${r.added} starter templates` : 'You already have the starter templates'); },
     onError: (e) => toast.error(e.message || "Couldn't add the starter templates"),
@@ -4657,6 +4682,7 @@ export default function Dashboard() {
                             aria-pressed={pickedTemplate?.id === t.id}
                             title={t.subject}
                             onClick={async () => {
+                              if (composeTyped() && !window.confirm(`Replace what you've typed with the "${t.name}" template?`)) return;
                               // The drawer opens this modal with a cut-down lead (name +
                               // email), so fill the rest from the loaded enquiry.
                               const full: any = (allLeads ?? []).find((x: any) => x?.id === selectedLead?.id);
@@ -4667,9 +4693,11 @@ export default function Dashboard() {
                                 try { links = await utils.leads.getTemplateLinks.fetch({ leadId: selectedLead.id }); } catch { links = undefined; }
                               }
                               const leadVars = { ...lead, holdUntil: links?.holdUntil ?? (lead as any).holdUntil };
+                              const body = substituteTemplateVars(t.body, leadVars, venue, links);
+                              composeBaseline.current = body;
                               setEmailForm({
                                 subject: substituteTemplateVars(t.subject, leadVars, venue, links),
-                                body: substituteTemplateVars(t.body, leadVars, venue, links),
+                                body,
                               });
                               setPickedTemplate({ id: t.id, blanks: blankTemplateVars(`${t.subject}\n${t.body}`, leadVars, venue, links) });
                             }}
@@ -5367,6 +5395,7 @@ export default function Dashboard() {
                     {/* Upcoming-only toggle */}
                     <button
                       onClick={() => setEventTablePrefs({ upcomingOnly: !eventTablePrefs.upcomingOnly })}
+                      aria-pressed={eventTablePrefs.upcomingOnly}
                       className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.upcomingOnly ? "border-sage-green bg-sage-green/10 text-sage-dark font-semibold" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
                       title="Show only upcoming events (today and future)"
                     >
@@ -5377,6 +5406,7 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => setEventStatusFilterOpen(o => !o)}
+                        aria-expanded={eventStatusFilterOpen} aria-controls="calendar-list-status-filter"
                         className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.hideStatuses.length > 0 ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
                         title="Filter by status"
                       >
@@ -5395,7 +5425,6 @@ export default function Dashboard() {
                             <span className="font-bebas tracking-widest text-[11px] text-ink/65">HIDE STATUSES</span>
                             {eventTablePrefs.hideStatuses.length > 0 && (
                               <button
-                      aria-pressed={eventTablePrefs.upcomingOnly}
                                 onClick={() => setEventTablePrefs({ hideStatuses: [] })}
                                 className="text-[12px] font-dm text-forest hover:underline">
                                 SHOW ALL
@@ -5406,7 +5435,6 @@ export default function Dashboard() {
                             <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer select-none">
                               <input
                                 type="checkbox"
-                        aria-expanded={eventStatusFilterOpen} aria-controls="calendar-list-status-filter"
                                 checked={eventTablePrefs.hideStatuses.includes(s.key)}
                                 onChange={() => setEventTablePrefs({
                                   hideStatuses: eventTablePrefs.hideStatuses.includes(s.key)
@@ -5433,6 +5461,7 @@ export default function Dashboard() {
                     </Select>
                     <button
                       onClick={() => setEventTablePrefs({ sortDir: eventSortDir === 'asc' ? 'desc' : 'asc' })}
+                      aria-label={eventSortDir === 'asc' ? 'Sorted ascending: sort descending' : 'Sorted descending: sort ascending'}
                       className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                       title={eventSortDir === 'asc' ? 'Ascending' : 'Descending'}
                     >
@@ -5461,7 +5490,6 @@ export default function Dashboard() {
                             r.company ?? '',
                             r.space ?? '',
                             (r.notes ?? r.message ?? '').replace(/[\r\n,]/g, ' '),
-                      aria-label={eventSortDir === 'asc' ? 'Sorted ascending: sort descending' : 'Sorted descending: sort ascending'}
                             r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-NZ') : '',
                             attribution?.label ?? '',
                             clickId,
@@ -11511,10 +11539,12 @@ export default function Dashboard() {
               hiding "manual" behind a button inside the paste panel. */}
           <div role="tablist" aria-label="How to add this enquiry" onKeyDown={onArrowChoose} className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
             <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => chooseEnquiryMode(true)}
+              id={`${addEnquiryFormId}-tab-paste`} aria-controls={enquiryPasteMode ? `${addEnquiryFormId}-panel-paste` : undefined} tabIndex={enquiryPasteMode ? 0 : -1}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               SMART PASTE
             </button>
             <button type="button" role="tab" aria-selected={!enquiryPasteMode} onClick={() => chooseEnquiryMode(false)}
+              id={`${addEnquiryFormId}-tab-manual`} aria-controls={!enquiryPasteMode ? `${addEnquiryFormId}-panel-manual` : undefined} tabIndex={!enquiryPasteMode ? 0 : -1}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${!enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               ENTER MANUALLY
             </button>
@@ -11539,12 +11569,10 @@ export default function Dashboard() {
                   value={enquiryPasteText}
                   onPaste={e => {
                     const text = e.clipboardData.getData('text');
-              id={`${addEnquiryFormId}-tab-paste`} aria-controls={enquiryPasteMode ? `${addEnquiryFormId}-panel-paste` : undefined} tabIndex={enquiryPasteMode ? 0 : -1}
                     e.preventDefault();
                     setEnquiryPasteText(text);
                   }}
                   onChange={e => setEnquiryPasteText(e.target.value)}
-              id={`${addEnquiryFormId}-tab-manual`} aria-controls={!enquiryPasteMode ? `${addEnquiryFormId}-panel-manual` : undefined} tabIndex={!enquiryPasteMode ? 0 : -1}
                   placeholder={"Paste a client email, message or booking request here...\n\nExamples:\n• \"Hi, I'm looking to book a wedding for 80 guests on 14 September...\"\n• A forwarded email from a client\n• A booking brief or inquiry form response"}
                   className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/65"
                   style={{ minHeight: 140 }}
