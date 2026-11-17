@@ -3640,7 +3640,7 @@ export default function Dashboard() {
                               >
                                 <div className="flex items-center justify-between mb-0.5">
                                   <span aria-hidden={muted ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                    isToday ? 'vf-today w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}{day === 1 && isOverflow && overviewRolling ? <span className="hidden sm:inline"> {adjNextMonthDate.toLocaleDateString('en-NZ', { month: 'short' })}</span> : null}</span>
                                   {!muted && (
                                     <span className="flex items-center">
@@ -5099,7 +5099,7 @@ export default function Dashboard() {
                             } : undefined}>
                             <div className="flex items-center justify-between">
                             <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
+                              isToday ? 'vf-today bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {editDayTitle && !isOverflow && !dayTitles.get(dateStr) && (
                               <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
