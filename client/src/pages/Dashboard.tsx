@@ -3990,7 +3990,7 @@ export default function Dashboard() {
                         <Settings className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" sideOffset={4} className="bg-white border border-border shadow-lg p-3 w-52">
+                    <PopoverContent align="end" sideOffset={4} aria-label="Customise overview: show or hide cards" className="bg-white border border-border shadow-lg p-3 w-52">
                       <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
                       {allStats.map(s => (
                         <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
@@ -9715,7 +9715,7 @@ export default function Dashboard() {
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" sideOffset={4} className="z-[10001] w-60 bg-white border border-border shadow-lg p-1.5">
+                    <PopoverContent align="end" sideOffset={4} aria-label="More actions: cancel or delete" className="z-[10001] w-60 bg-white border border-border shadow-lg p-1.5">
                       <button onClick={cancelSelectedEvent}
                         className="w-full flex items-start gap-2 px-2 py-2 rounded hover:bg-amber-50 text-left">
                         <Ban className="w-3.5 h-3.5 mt-0.5 text-amber-800 flex-shrink-0" />
