@@ -17,6 +17,8 @@ import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } fr
 import { toLocalDateInput } from "@/lib/dateTime";
 import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNameFromLine, withoutDuplicatePackageLines } from "@shared/proposalPackages";
 import { isProposalLocked, proposalMoney } from "@shared/proposalTotals";
+import { percentError } from "@shared/settingsValidation";
+import { markInvalid } from "@/lib/fieldErrorAria";
 
 // Unsaved work is kept on this device until it's saved, so a reload, a closed
 // tab or a Back press doesn't lose a long proposal. Storage can be blocked
@@ -73,8 +75,6 @@ export default function ProposalBuilder() {
   const { data: spaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user });
 
   const [title, setTitle] = useState("Event Proposal");
-  // Shown at the field: an empty title was only a passing toast ("Title is required.").
-  const [titleError, setTitleError] = useState("");
   const [introMessage, setIntroMessage] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [guestCount, setGuestCount] = useState("");
@@ -536,15 +536,30 @@ export default function ProposalBuilder() {
     onError: (e) => toast.error(e.message || "Couldn't send the proposal"),
   });
 
+  // GST or a deposit outside 0-100% (a typed 250) used to save and price the proposal.
+  const taxError = percentError(taxPercent, "GST");
+  const depositError = percentError(depositPercent, "Deposit");
+  const moneyError = taxError ?? depositError;
+  // A cleared title used to save (by autosave, or Save Changes on a saved proposal).
+  // It is said at the field (role=alert), not only in a passing toast.
+  const titleMissing = !title.trim() ? "Give the proposal a title." : null;
+  const showTitleError = !!titleMissing && !locked;
+  useEffect(() => { markInvalid(document.querySelector("#pb-deposit-row input"), "pb-deposit-error", !!depositError); });
+
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
   const handleSave = async (opts: { quiet?: boolean; auto?: boolean } = {}): Promise<any | null> => {
-    if (!leadId) { toast.error("No enquiry selected"); return null; }
-    if (locked) return null;
-    if (!opts.auto && !title.trim()) {
-      setTitleError("Give the proposal a title.");
-      document.getElementById("pb-title")?.focus();
+    const formError = locked ? null : titleMissing ?? moneyError;
+    if (formError) {
+      if (!opts.auto) {
+        // The error is also shown at the field, so the toast needn't stay until closed
+        // (and an empty title has no toast: its role=alert message says it).
+        if (!titleMissing) toast.error(formError, { id: "proposal-form-invalid", duration: 4000 });
+        (titleMissing ? document.getElementById("pb-title") : taxError ? document.getElementById("pb-gst") : document.querySelector<HTMLElement>("#pb-deposit-row input"))?.focus();
+      }
       return null;
     }
+    if (!leadId) { toast.error("No enquiry selected"); return null; }
+    if (locked) return null;
     const formAtSave = formSnapshot;
     const drinksAtSave = drinksSnapshot;
     const keyAtSave = localKey;
@@ -623,6 +638,8 @@ export default function ProposalBuilder() {
   const saveState: { label: string; hint: string; cls: string } | null =
     locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-gray-500" }
     : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-gray-500" }
+    : dirty && titleMissing ? { label: "Not saved", hint: titleMissing, cls: "text-red-700" }
+    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-red-700" }
     : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-red-700" }
     : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-amber-700" }
     : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-sage-dark" }
@@ -754,10 +771,10 @@ export default function ProposalBuilder() {
             <div className="space-y-3">
               <div>
                 <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
-                <Input id="pb-title" value={title} onChange={e => { setTitle(e.target.value); setTitleError(""); }}
-                  aria-required="true" aria-invalid={titleError ? true : undefined} aria-describedby={titleError ? "pb-title-error" : undefined}
+                <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
+                  aria-required="true" aria-invalid={showTitleError || undefined} aria-describedby={showTitleError ? "pb-title-error" : undefined}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
-                {titleError && <p id="pb-title-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{titleError}</p>}
+                {showTitleError && <p id="pb-title-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{titleMissing}</p>}
               </div>
               <div>
                 <label htmlFor="pb-intro" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
@@ -980,12 +997,14 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">GST</span>
-                  <Input aria-label="GST percentage" type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                  <Input id="pb-gst" aria-label="GST percentage" type="number" min={0} max={100} value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                    aria-invalid={taxError ? true : undefined} aria-describedby={taxError ? "pb-gst-error" : undefined}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
                 <span>{menuOptions.length ? "" : currency(taxAmount)}</span>
               </div>
+              {taxError && <p id="pb-gst-error" className="font-dm text-xs text-red-700 -mt-1">{taxError}</p>}
               {menuOptions.length ? (
                 <div className="border-t-2 border-border pt-2 space-y-2">
                   <div className="font-bebas text-xs tracking-widest text-muted-foreground">CLIENT CHOOSES ONE MENU</div>
@@ -1005,15 +1024,16 @@ export default function ProposalBuilder() {
                 <span className="text-primary">{currency(total)}</span>
               </div>
               )}
-              <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
+              <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input aria-label="Deposit required (percentage)" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit required (percentage)" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
                 <span className="font-alfa text-lg text-ink">{menuOptions.length ? <span className="font-dm text-xs text-muted-foreground">per menu, above</span> : currency(deposit)}</span>
               </div>
+              {depositError && <p id="pb-deposit-error" className="font-dm text-xs text-red-700 -mt-1">{depositError}</p>}
             </div>
           </div>
 

@@ -20,6 +20,7 @@ import { zonedDayBoundUtc } from "@shared/tz";
 import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/proposalTotals";
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
+import { venueUpdateErrors } from "@shared/settingsValidation";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -303,6 +304,12 @@ export const appRouter = router({
         beoPrintHide: z.string().max(500).optional(),
         staffBriefingSubject: z.string().optional(),
         staffBriefingBody: z.string().optional(),
+      }).superRefine((input, zctx) => {
+        // Settings pages check these at the field; refuse them here too, so no
+        // save path can store an empty venue name or a malformed address.
+        for (const [key, message] of Object.entries(venueUpdateErrors(input))) {
+          zctx.addIssue({ code: "custom", path: [key], message });
+        }
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -2293,7 +2300,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     create: protectedProcedure
       .input(z.object({
         leadId: z.number(),
-        title: z.string().min(1),
+        // The same rule as update: a title of only spaces is no title.
+        title: z.string().trim().min(1),
         introMessage: z.string().optional(),
         eventDate: z.string().optional(),
         eventEndDate: z.string().optional(),
@@ -2306,10 +2314,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           total: z.number(),
         })).optional(),
         subtotalNzd: z.number().optional(),
-        taxPercent: z.number().optional(),
+        taxPercent: z.number().min(0).max(100).optional(),
         taxNzd: z.number().optional(),
         totalNzd: z.number().optional(),
-        depositPercent: z.number().optional(),
+        depositPercent: z.number().min(0).max(100).optional(),
         depositNzd: z.number().optional(),
         termsAndConditions: z.string().optional(),
         internalNotes: z.string().optional(),
@@ -2510,7 +2518,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        title: z.string().optional(),
+        // As on create: a saved proposal's title could be cleared and saved.
+        title: z.string().trim().min(1).optional(),
         introMessage: z.string().optional(),
         lineItems: z.array(z.object({
           description: z.string(),
@@ -2521,10 +2530,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Still accepted from older browsers but ignored: the money is worked
         // out here from the lines, GST % and deposit %.
         subtotalNzd: z.number().optional(),
-        taxPercent: z.number().optional(),
+        taxPercent: z.number().min(0).max(100).optional(),
         taxNzd: z.number().optional(),
         totalNzd: z.number().optional(),
-        depositPercent: z.number().optional(),
+        depositPercent: z.number().min(0).max(100).optional(),
         depositNzd: z.number().optional(),
         termsAndConditions: z.string().optional(),
         spaceName: z.string().optional(),

@@ -1,7 +1,9 @@
 import { getLoginUrl } from "@/const";
+import { endKeptPage, keptMe, subscribeKeptMe } from "@/lib/sessionExpiry";
 import { trpc } from "@/lib/trpc";
+import { meWhileKept } from "@shared/sessionExpiry";
 import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -17,6 +19,8 @@ export function useAuth(options?: UseAuthOptions) {
     retry: false,
     refetchOnWindowFocus: false,
   });
+  // Signed out while typing: keep showing the person until they sign in again (lib/sessionExpiry).
+  const kept = useSyncExternalStore(subscribeKeptMe, keptMe) as NonNullable<typeof meQuery.data> | null;
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -25,6 +29,7 @@ export function useAuth(options?: UseAuthOptions) {
   });
 
   const logout = useCallback(async () => {
+    endKeptPage();
     try {
       await logoutMutation.mutateAsync();
     } catch (error: unknown) {
@@ -42,7 +47,7 @@ export function useAuth(options?: UseAuthOptions) {
   }, [logoutMutation, utils]);
 
   const state = useMemo(() => {
-    const data = meQuery.data;
+    const data = meWhileKept(meQuery.data, kept);
     const user = data?.user ?? null;
     const isTeamMember = data?.isTeamMember ?? false;
     const isStaff = data?.isStaff ?? false;
@@ -65,6 +70,7 @@ export function useAuth(options?: UseAuthOptions) {
     };
   }, [
     meQuery.data,
+    kept,
     meQuery.error,
     meQuery.isLoading,
     logoutMutation.error,

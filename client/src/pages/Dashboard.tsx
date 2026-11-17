@@ -100,7 +100,12 @@ import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcu
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
-import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
+import { formFieldNames, mergeFormFields, type FormFieldDef } from "@shared/formFields";
+import { LockOpen } from "lucide-react";
+import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidation";
+import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
+import { closeMenuOnEscape, onArrowChoose } from "@/lib/rovingKeys";
+import { holdTyping } from "@/lib/sessionExpiry";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1008,7 +1013,9 @@ export default function Dashboard() {
       }
     };
     document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    const onKey = (e: KeyboardEvent) => closeMenuOnEscape(e, actionsMenuRef.current, () => setActionsMenuOpen(false));
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, [actionsMenuOpen]);
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
   // Enquiries whose status was just changed inline: kept in the list, marked
@@ -1181,7 +1188,9 @@ export default function Dashboard() {
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const onKey = (e: KeyboardEvent) => closeMenuOnEscape(e, eventStatusFilterRef.current, () => setEventStatusFilterOpen(false));
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("keydown", onKey); };
   }, [eventStatusFilterOpen]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
@@ -1869,7 +1878,7 @@ export default function Dashboard() {
     onError: () => toast.error('Failed to remove payment'),
   });
   const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: ymdInTz(Date.now()), notes: '' });
-  const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched } = trpc.venue.get.useQuery(
+  const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched, isError: venueSettingsError, isFetching: venueSettingsFetching } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
@@ -2977,6 +2986,34 @@ export default function Dashboard() {
     { enabled: showEmailModal && !!selectedLead?.id },
   );
   useEffect(() => { if (!showEmailModal) setPickedTemplate(null); }, [showEmailModal]);
+  // Typed text in the composer is not thrown away. Closing it without sending
+  // (Escape, the close button, Cancel) keeps the draft for that client, and it
+  // comes back the next time the composer opens for them; a template only
+  // replaces typed text after asking. Escape used to reset it to the template.
+  const composeDraft = useRef<{ to: unknown; subject: string; body: string } | null>(null);
+  const composeBaseline = useRef(""); // the body as opened, or as last filled from a template
+  const composeTo = useRef<unknown>(null);
+  const composeWasOpen = useRef(false);
+  const composeTyped = () => !!emailForm.body.trim() && emailForm.body !== composeBaseline.current;
+  // A kept draft is typing to keep if the session ends (see lib/sessionExpiry).
+  useEffect(() => holdTyping("compose-draft", () => !!composeDraft.current), []);
+  useEffect(() => {
+    if (showEmailModal) {
+      composeWasOpen.current = true;
+      composeTo.current = selectedLead?.email || selectedLead?.id || null;
+      composeBaseline.current = emailForm.body;
+      const d = composeDraft.current;
+      if (d && composeTo.current != null && d.to === composeTo.current) {
+        // Opened with Reply: the typed text comes back, under the reply's subject (it is sent in that thread).
+        setEmailForm({ subject: emailThread ? emailForm.subject : d.subject, body: d.body });
+        toast.info(`Your unsent email${selectedLead?.firstName ? ` to ${selectedLead.firstName}` : ""} is back.`);
+      }
+    } else if (composeWasOpen.current) {
+      composeWasOpen.current = false;
+      if (composeTyped()) composeDraft.current = { to: composeTo.current, subject: emailForm.subject, body: emailForm.body };
+      else if (composeDraft.current?.to === composeTo.current) composeDraft.current = null;
+    }
+  }, [showEmailModal]);
   const addStarterTemplates = trpc.templates.addStarters.useMutation({
     onSuccess: (r) => { utils.templates.list.invalidate(); toast.success(r.added > 0 ? `Added ${r.added} starter templates` : 'You already have the starter templates'); },
     onError: (e) => toast.error(e.message || "Couldn't add the starter templates"),
@@ -3335,6 +3372,21 @@ export default function Dashboard() {
   };
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
+  // Typos caught at the field before saving (an empty venue name, a malformed
+  // website, notification email or mail server used to save with "Settings saved!").
+  const VENUE_DETAIL_FIELDS = ["vs-venue-name", "vs-website", "vs-notification-email"] as const;
+  const SMTP_FIELDS = ["smtpHost", "smtpPort", "smtpFromEmail"] as const;
+  const [venueErrors, setVenueErrors] = useState<Record<string, string>>({});
+  const [smtpErrors, setSmtpErrors] = useState<Record<string, string>>({});
+  const smtpFormRef = useRef<HTMLFormElement | null>(null);
+  useFieldErrorAria(venueErrors, VENUE_DETAIL_FIELDS);
+  useFieldErrorAria(smtpErrors, SMTP_FIELDS, smtpFormRef);
+  // Once a field has been flagged, its message goes as soon as it is fixed.
+  useEffect(() => {
+    if (!settingsForm || !Object.keys(venueErrors).length) return;
+    const now = venueDetailsErrors(settingsForm);
+    setVenueErrors(prev => Object.fromEntries(Object.keys(prev).filter(k => now[k]).map(k => [k, now[k]])));
+  }, [settingsForm?.name, settingsForm?.website, settingsForm?.notificationEmail]);
   // Embed customiser (Settings → enquiry form): per-embed font/colour overrides
   const [embedAccent, setEmbedAccent] = useState("");   // hex w/o # — "" = use saved branding
   const [embedFont, setEmbedFont] = useState("");        // Google Font family — "" = use saved
@@ -4500,15 +4552,15 @@ export default function Dashboard() {
 
                   {/* View toggle: one responsive List (table on desktop, cards
                       on mobile) ↔ Board (kanban). */}
-                  <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                  <div role="group" aria-label="Enquiries view" className="flex border border-gold/30 rounded-lg overflow-hidden">
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
-                      title="List view"
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      title="List view" aria-pressed={leadViewMode !== "kanban"}
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <List className="w-3.5 h-3.5" /> LIST
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
-                      title="Board view"
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      title="Board view" aria-pressed={leadViewMode === "kanban"}
+                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                       <Columns className="w-3.5 h-3.5" /> BOARD
                     </button>
                   </div>
@@ -4547,12 +4599,12 @@ export default function Dashboard() {
                     ) : (
                       <div className="relative" ref={actionsMenuRef}>
                         <button id="leads-more-actions" onClick={() => setActionsMenuOpen(o => !o)}
-                          title="More actions" aria-label="More actions"
+                          title="More actions" aria-label="More actions" aria-expanded={actionsMenuOpen} aria-controls="enquiry-more-actions"
                           className={`h-8 w-8 flex items-center justify-center border rounded-lg transition-colors ${actionsMenuOpen ? 'border-gold text-ink bg-gold/5' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                         {actionsMenuOpen && (
-                          <div className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
+                          <div id="enquiry-more-actions" className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
                             <button onClick={() => { setShowCsvImport(true); setActionsMenuOpen(false); }}
                               className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
@@ -4578,7 +4630,7 @@ export default function Dashboard() {
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
-                        aria-label="Search enquiries"
+                        aria-label="Search enquiries" data-search-box
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
                     {(teamList ?? []).length > 0 && (
@@ -4896,6 +4948,7 @@ export default function Dashboard() {
                             aria-pressed={pickedTemplate?.id === t.id}
                             title={t.subject}
                             onClick={async () => {
+                              if (composeTyped() && !window.confirm(`Replace what you've typed with the "${t.name}" template?`)) return;
                               // The drawer opens this modal with a cut-down lead (name +
                               // email), so fill the rest from the loaded enquiry.
                               const full: any = (allLeads ?? []).find((x: any) => x?.id === selectedLead?.id);
@@ -4906,9 +4959,11 @@ export default function Dashboard() {
                                 try { links = await utils.leads.getTemplateLinks.fetch({ leadId: selectedLead.id }); } catch { links = undefined; }
                               }
                               const leadVars = { ...lead, holdUntil: links?.holdUntil ?? (lead as any).holdUntil };
+                              const body = substituteTemplateVars(t.body, leadVars, venue, links);
+                              composeBaseline.current = body;
                               setEmailForm({
                                 subject: substituteTemplateVars(t.subject, leadVars, venue, links),
-                                body: substituteTemplateVars(t.body, leadVars, venue, links),
+                                body,
                               });
                               setPickedTemplate({ id: t.id, blanks: blankTemplateVars(`${t.subject}\n${t.body}`, leadVars, venue, links) });
                             }}
@@ -5250,12 +5305,12 @@ export default function Dashboard() {
                     </Popover>
                   </div>
                   {/* Desktop-only view switcher on row 1 */}
-                  <div className="hidden md:flex border border-gold/30">
+                  <div role="group" aria-label="Calendar view" className="hidden md:flex border border-gold/30">
                     {(["month","week","day","list"] as const).map(v => (
                       <button key={v}
-                        onClick={() => setCalendarView(v)}
+                        onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                         className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
-                          calendarView === v ? 'bg-forest-dark text-cream' : 'text-ink/60 hover:bg-linen'
+                          calendarView === v ? 'bg-forest-dark text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/60 hover:bg-linen'
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
@@ -5271,12 +5326,12 @@ export default function Dashboard() {
                     className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronRight className="w-5 h-5" /></button>
                 </div>
                 {/* Row 3 (mobile only): View switcher full-width */}
-                <div className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
+                <div role="group" aria-label="Calendar view" className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
-                      onClick={() => setCalendarView(v)}
+                      onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
                       className={`font-bebas tracking-widest text-xs py-2 border border-gold/30 -ml-px first:ml-0 transition-colors ${
-                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark' : 'text-ink/70 hover:bg-linen'
+                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/70 hover:bg-linen'
                       }`}>{v.toUpperCase()}</button>
                   ))}
                 </div>
@@ -5675,6 +5730,7 @@ export default function Dashboard() {
                     {/* Upcoming-only toggle */}
                     <button
                       onClick={() => setEventTablePrefs({ upcomingOnly: !eventTablePrefs.upcomingOnly })}
+                      aria-pressed={eventTablePrefs.upcomingOnly}
                       className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.upcomingOnly ? "border-sage-green bg-sage-green/10 text-sage-dark font-semibold" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
                       title="Show only upcoming events (today and future)"
                     >
@@ -5685,6 +5741,7 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => setEventStatusFilterOpen(o => !o)}
+                        aria-expanded={eventStatusFilterOpen} aria-controls="calendar-list-status-filter"
                         className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.hideStatuses.length > 0 ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
                         title="Filter by status"
                       >
@@ -5698,7 +5755,7 @@ export default function Dashboard() {
                         <ChevronDown className="w-3 h-3 opacity-60" />
                       </button>
                       {eventStatusFilterOpen && (
-                        <div className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                        <div id="calendar-list-status-filter" role="group" aria-label="Hide statuses" className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
                             <span className="font-bebas tracking-widest text-[11px] text-ink/65">HIDE STATUSES</span>
                             {eventTablePrefs.hideStatuses.length > 0 && (
@@ -5739,6 +5796,7 @@ export default function Dashboard() {
                     </Select>
                     <button
                       onClick={() => setEventTablePrefs({ sortDir: eventSortDir === 'asc' ? 'desc' : 'asc' })}
+                      aria-label={eventSortDir === 'asc' ? 'Sorted ascending: sort descending' : 'Sorted descending: sort ascending'}
                       className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                       title={eventSortDir === 'asc' ? 'Ascending' : 'Descending'}
                     >
@@ -6330,7 +6388,7 @@ export default function Dashboard() {
                   { id: 'profile', label: 'Profile & Branding' },
                   { id: 'spaces', label: 'Spaces' },
                 ] as const).map(s => (
-                  <button key={s.id} onClick={() => setVenueSettingsSection(s.id)}
+                  <button key={s.id} onClick={() => setVenueSettingsSection(s.id)} aria-pressed={venueSettingsSection === s.id}
                     className={`font-bebas tracking-widest text-sm px-4 md:px-5 py-2.5 border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
                       venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                     }`}>
@@ -6341,7 +6399,13 @@ export default function Dashboard() {
 
               {/* ── BASIC DETAILS SECTION ── */}
               {venueSettingsSection === "details" && settingsForm && (
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  const errors = venueDetailsErrors(settingsForm);
+                  setVenueErrors(errors);
+                  if (Object.keys(errors).length) { focusFirstError(errors, VENUE_DETAIL_FIELDS); return; }
+                  updateSettings.mutate(settingsForm);
+                }} className="space-y-6">
 
                   {/* ── Venue Details ── */}
                   <div className="dante-card p-4 md:p-6">
@@ -6351,6 +6415,7 @@ export default function Dashboard() {
                         <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
                         <Input id="vs-venue-name" autoComplete="organization" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-venue-name"] && <p id="vs-venue-name-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-venue-name"]}</p>}
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-internal-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
@@ -6361,11 +6426,13 @@ export default function Dashboard() {
                         <label htmlFor="vs-website" className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
                         <Input id="vs-website" inputMode="url" autoComplete="url" value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
                           placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-website"] && <p id="vs-website-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-website"]}</p>}
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-notification-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
                         <Input id="vs-notification-email" type="text" inputMode="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-notification-email"] && <p id="vs-notification-email-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-notification-email"]}</p>}
                         <p className="font-dm text-xs text-sage/60 mt-1">Where new enquiry notifications are sent. Add multiple addresses separated by commas — every address gets a copy. Requires SMTP configured in Settings → Email.</p>
                       </div>
                     </div>
@@ -6575,7 +6642,20 @@ export default function Dashboard() {
 
               {/* ── PROFILE & BRANDING SECTION ── */}
               {venueSettingsSection === "profile" && settingsForm && (
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  // This saves the whole venue form, Basic Details included, so check those too
+                  // and take the owner to the field that needs fixing.
+                  const errors = venueDetailsErrors(settingsForm);
+                  if (Object.keys(errors).length) {
+                    setVenueErrors(errors);
+                    setVenueSettingsSection("details");
+                    toast.error("Not saved. Something in Basic Details needs fixing first.", { id: "venue-details-invalid", duration: 4000 });
+                    setTimeout(() => focusFirstError(errors, VENUE_DETAIL_FIELDS), 0);
+                    return;
+                  }
+                  updateSettings.mutate(settingsForm);
+                }} className="space-y-6">
 
                   {/* ── Banner Image ── */}
                   <div className="dante-card p-6">
@@ -6867,9 +6947,15 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <form onSubmit={e => {
+                <form ref={smtpFormRef} onInput={e => {
+                  const name = (e.target as HTMLInputElement).name;
+                  if (smtpErrors[name]) setSmtpErrors(({ [name]: _fixed, ...rest }) => rest);
+                }} onSubmit={e => {
                   e.preventDefault();
                   const fd = new FormData(e.currentTarget);
+                  const errors = smtpSettingsErrors({ smtpHost: fd.get('smtpHost') as string, smtpPort: fd.get('smtpPort') as string, smtpFromEmail: fd.get('smtpFromEmail') as string });
+                  setSmtpErrors(errors);
+                  if (Object.keys(errors).length) { focusFirstError(errors, SMTP_FIELDS, smtpFormRef); return; }
                   updateSettings.mutate({
                     smtpHost: fd.get('smtpHost') as string || undefined,
                     smtpPort: fd.get('smtpPort') ? parseInt(fd.get('smtpPort') as string) : undefined,
@@ -6884,11 +6970,13 @@ export default function Dashboard() {
                     <label htmlFor="smtp-host" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
                     <Input id="smtp-host" name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpHost && <p id="smtpHost-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpHost}</p>}
                   </div>
                   <div>
                     <label htmlFor="smtp-port" className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
                     <Input id="smtp-port" name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpPort && <p id="smtpPort-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpPort}</p>}
                   </div>
                   <div>
                     <label htmlFor="smtp-user" className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
@@ -6909,6 +6997,7 @@ export default function Dashboard() {
                     <label htmlFor="smtp-from-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
                     <Input id="smtp-from-email" name="smtpFromEmail" inputMode="email" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpFromEmail && <p id="smtpFromEmail-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpFromEmail}</p>}
                   </div>
                   <div className="md:col-span-2 flex items-center gap-3">
                     <input type="checkbox" name="smtpSecure" id="smtpSecure" defaultChecked={(venueSettings?.smtpSecure ?? 0) === 1}
@@ -7307,11 +7396,11 @@ export default function Dashboard() {
 
                       {/* Snippet tab */}
                       <div className="flex gap-1 mb-3">
-                        <button type="button" onClick={() => setEmbedSnippetTab("script")}
+                        <button type="button" onClick={() => setEmbedSnippetTab("script")} aria-pressed={embedSnippetTab === "script"}
                           className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "script" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
                           One line (recommended)
                         </button>
-                        <button type="button" onClick={() => setEmbedSnippetTab("iframe")}
+                        <button type="button" onClick={() => setEmbedSnippetTab("iframe")} aria-pressed={embedSnippetTab === "iframe"}
                           className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "iframe" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
                           Advanced (iframe)
                         </button>
@@ -7897,29 +7986,35 @@ export default function Dashboard() {
                         <div className="col-span-2 font-bebas text-[11px] tracking-widest text-ink/70">TYPE</div>
                         <div className="col-span-3"></div>
                       </div>
-                      {formFields.map((field, i) => (
-                        <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
+                      {formFields.map((field, i, all) => {
+                        // Each switch says which field it changes and whether it is on: there were
+                        // 15 identical "Toggle field visibility" buttons with no state.
+                        const { name: fieldName, labelBox } = formFieldNames(all)[i];
+                        return (
+                        <div key={field.id} data-form-field={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
                           {/* Visible toggle */}
                           <div className="col-span-1">
-                            <button type="button" aria-label="Toggle field visibility" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
-                              className={`${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
+                            <button type="button" role="switch" aria-checked={field.visible} aria-label={`Show ${fieldName} on form`}
+                              title={field.visible ? 'Shown on the form' : 'Hidden from the form'}
+                              onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
+                              className={`inline-flex items-center justify-center w-7 h-7 -ml-1.5 ${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
                               {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </button>
                           </div>
-                          {/* Required toggle */}
+                          {/* Required toggle: a closed lock when required, an open one when not (it was colour alone). */}
                           <div className="col-span-1">
-                            <button type="button"
-                              aria-label="Toggle field required"
+                            <button type="button" role="switch" aria-checked={field.required} aria-label={`${fieldName} required`}
+                              title={field.required ? 'Required' : 'Optional'}
                               disabled={field.id === 'firstName' || field.id === 'email'}
                               onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, required: !f.required } : f) : prev)}
-                              className={`${field.required ? 'text-amber-500' : 'text-ink/20'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
-                              <Lock className="w-3.5 h-3.5" />
+                              className={`inline-flex items-center justify-center w-7 h-7 -ml-1.5 ${field.required ? 'text-amber-700' : 'text-ink/65'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
+                              {field.required ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                           {/* Label */}
                           <div className="col-span-5">
                             <input type="text" value={field.label}
-                              aria-label={`Label for the ${field.type} field`}
+                              aria-label={labelBox}
                               onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
                               className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
                           </div>
@@ -7930,28 +8025,35 @@ export default function Dashboard() {
                           {/* Actions */}
                           <div className="col-span-3 flex items-center gap-1 justify-end">
                             <button type="button" disabled={i === 0}
-                              aria-label={`Move ${field.label} up`}
+                              aria-label={`Move ${fieldName} up`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
-                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveUp className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" disabled={i === formFields.length - 1}
-                              aria-label={`Move ${field.label} down`}
+                              aria-label={`Move ${fieldName} down`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
-                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-[5px]">
                               <MoveDown className="w-3.5 h-3.5" />
                             </button>
                             {!field.isDefault && (
                               <button type="button"
-                                aria-label="Delete field"
-                                onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
-                                className="text-ink/65 hover:text-red-500 transition-colors p-0.5">
+                                aria-label={`Delete ${fieldName}`}
+                                onClick={e => {
+                                  // Focus goes to the next field, else the one before, else adding a field (it fell to the page).
+                                  const card = e.currentTarget.closest('.dante-card');
+                                  const next = all[i + 1] ?? all[i - 1];
+                                  setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev);
+                                  requestAnimationFrame(() => card?.querySelector<HTMLElement>(next ? `[data-form-field="${CSS.escape(next.id)}"] button` : 'input[aria-label="New field label"]')?.focus());
+                                }}
+                                className="text-ink/65 hover:text-red-500 transition-colors p-[5px]">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   {/* Add custom field */}
@@ -9284,7 +9386,7 @@ export default function Dashboard() {
                 {/* Type tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
                   {(['food','drink'] as const).map(t => (
-                    <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }}
+                    <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }} aria-pressed={catalogActiveType === t}
                       className={`font-bebas tracking-widest text-sm px-6 py-2.5 border-b-2 transition-colors ${
                         catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                       }`}>
@@ -9776,8 +9878,10 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-500 mb-6">Define the pipeline stages your enquiries move through. Rename, reorder, add or remove stages to match your workflow.</p>
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
                   <StatusManager
-                    initialStatuses={parseCustomStatuses((venueSettings as any)?.customStatuses)}
+                    venueSettings={venueSettings as any}
                     onSaved={() => refetchSettings()}
+                    loadFailed={venueSettingsError && !venueSettingsFetching}
+                    onRetry={() => refetchSettings()}
                   />
                 </div>
               </div>
@@ -11821,12 +11925,14 @@ export default function Dashboard() {
 
           {/* Mode switch — makes the two ways to add explicit, instead of
               hiding "manual" behind a button inside the paste panel. */}
-          <div role="tablist" aria-label="How to add this enquiry" className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
+          <div role="tablist" aria-label="How to add this enquiry" onKeyDown={onArrowChoose} className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
             <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => chooseEnquiryMode(true)}
+              id={`${addEnquiryFormId}-tab-paste`} aria-controls={enquiryPasteMode ? `${addEnquiryFormId}-panel-paste` : undefined} tabIndex={enquiryPasteMode ? 0 : -1}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               SMART PASTE
             </button>
             <button type="button" role="tab" aria-selected={!enquiryPasteMode} onClick={() => chooseEnquiryMode(false)}
+              id={`${addEnquiryFormId}-tab-manual`} aria-controls={!enquiryPasteMode ? `${addEnquiryFormId}-panel-manual` : undefined} tabIndex={!enquiryPasteMode ? 0 : -1}
               className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${!enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
               ENTER MANUALLY
             </button>
@@ -11834,7 +11940,7 @@ export default function Dashboard() {
 
           {/* ── Smart Paste panel ── */}
           {enquiryPasteMode ? (
-            <div className="space-y-3">
+            <div className="space-y-3" role="tabpanel" id={`${addEnquiryFormId}-panel-paste`} aria-labelledby={`${addEnquiryFormId}-tab-paste`}>
               <div className="bg-forest/5 border border-forest/20 p-3 sm:p-4">
                 {/* The tab above and the dialog subtitle already say this on a
                     phone, so the in-panel title only shows from sm up; it stays
@@ -11879,7 +11985,7 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <form onSubmit={e => {
+            <form role="tabpanel" id={`${addEnquiryFormId}-panel-manual`} aria-labelledby={`${addEnquiryFormId}-tab-manual`} onSubmit={e => {
               e.preventDefault();
               if (createEnquiry.isPending) return;
               // A space is only needed once it's a live event (the server

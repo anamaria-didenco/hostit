@@ -716,6 +716,7 @@ export default function FloorPlanEditor({
             <button
               type="button"
               onClick={() => setSidebarTab("inventory")}
+              aria-pressed={sidebarTab === "inventory"}
               className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/65 hover:text-ink/70"}`}
             >
               INVENTORY
@@ -723,6 +724,7 @@ export default function FloorPlanEditor({
             <button
               type="button"
               onClick={() => setSidebarTab("elements")}
+              aria-pressed={sidebarTab === "elements"}
               className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/65 hover:text-ink/70"}`}
             >
               ELEMENTS

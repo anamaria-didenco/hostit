@@ -663,6 +663,7 @@ function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: a
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              aria-pressed={activeTab === tab.id}
               className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-gold text-amber-700'

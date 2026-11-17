@@ -88,6 +88,7 @@ export default function StaffLinks() {
           onChange={e => setFilter(e.target.value)}
           placeholder="Search by event, venue or label…"
           aria-label="Search staff portal links by event, venue or label"
+          data-search-box
           className="w-full mb-5 rounded-sm border border-gold/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest text-sm h-10 px-3 bg-white font-dm"
         />
 

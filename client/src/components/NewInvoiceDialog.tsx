@@ -148,7 +148,7 @@ export function NewInvoiceDialog({ onClose, onCreated }: { onClose: () => void; 
                   <>
                     <div className="relative">
                       <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
-                      <input className={`${FIELD} w-full pl-9`} placeholder="Search enquiries by name, email or event…"
+                      <input className={`${FIELD} w-full pl-9`} placeholder="Search enquiries by name, email or event…" data-search-box
                         value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
                     </div>
                     <div className="border border-stone-200 rounded-md divide-y divide-stone-100 max-h-48 overflow-y-auto">
