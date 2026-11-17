@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -46,7 +47,6 @@ import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@share
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 import { isVenueSiteOrigin, originOf } from "@shared/adAttribution";
 import { venueBrand } from "@shared/brand";
-import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
