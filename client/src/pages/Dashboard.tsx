@@ -7504,7 +7504,7 @@ export default function Dashboard() {
                                 const newImgs = imgs.filter((_, j) => j !== i);
                                 setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
                               }}
-                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity">
                               <X className="w-3 h-3" />
                             </button>
                           </div>
@@ -8983,7 +8983,7 @@ export default function Dashboard() {
                             onClick={() => setCatalogActiveCategoryId(cat.id)}>
                             <span className={`font-dm text-sm truncate ${ catalogActiveCategoryId === cat.id ? 'text-forest font-semibold' : 'text-ink/70' }`}>{cat.name}</span>
                             <button aria-label="Delete category" onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
-                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         ))}
@@ -9386,16 +9386,16 @@ export default function Dashboard() {
                                         allergens: item.allergens ?? undefined,
                                       })}
                                       title="Duplicate item"
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-sage hover:text-ink transition-opacity">
                                       <Copy className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Edit item" onClick={() => {
                                       setEditingCatalogItemId(item.id);
                                       setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
                                       setShowCatalogItemForm(true);
-                                    }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
+                                    }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
                                       <Edit2 className="w-3.5 h-3.5" /></button>
                                     <button aria-label="Delete item" onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                                       <Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
@@ -10671,7 +10671,7 @@ export default function Dashboard() {
                               <div className="font-cormorant font-semibold text-sm text-ink">{currency(Number(p.amount))}</div>
                               <div className="font-dm text-[12px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
-                            <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                            <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>

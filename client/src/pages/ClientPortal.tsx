@@ -510,7 +510,7 @@ function UploadsSection({ T, token, uploads, onChanged }: { T: Theme; token: str
                     <div className="px-2 py-1.5 text-xs truncate" style={{ color: T.ink }}>{u.filename}</div>
                   </a>
                   <button onClick={() => rm.mutate({ token, uploadId: u.id })} aria-label={`Remove ${u.filename}`}
-                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/55 text-white text-sm leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">×</button>
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/55 text-white text-sm leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">×</button>
                 </li>
               );
             })}
