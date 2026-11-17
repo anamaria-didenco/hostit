@@ -1,15 +1,16 @@
-import React, { useId, useRef, useState } from "react";
+import React, { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { Link } from "wouter";
-import { Plus, CheckCircle2, Circle, Trash2, Calendar, ChevronDown, Flag, Pencil, Inbox, CalendarCheck, UserRound } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AssigneeSelect, TaskLinkPicker, useCompleteTask, type TaskLink } from "@/components/taskParts";
+import { Plus, CheckCircle2, Circle, Trash2, Calendar, Pencil, Inbox, CalendarCheck, UserRound } from "lucide-react";
+import { useCompleteTask } from "@/components/taskParts";
+import { TaskForm, EMPTY_TASK_FORM, dueDateMs, taskFormValuesOf, type TaskFormValues } from "@/components/TaskForm";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
-import { normaliseTaskPriority } from "@shared/taskFields";
+import { normaliseTaskPriority, taskDuePrefix, taskDueState } from "@shared/taskFields";
+
+// The form is shared with the Tasks box on an enquiry / event.
+export { TaskForm } from "@/components/TaskForm";
 
 const FILTERS = [
   { key: "all", label: "All Active" },
@@ -26,141 +27,6 @@ const PRIORITY_COLORS: Record<string, string> = {
   normal: "text-blue-700 bg-blue-50 border-blue-200",
   low: "text-gray-600 bg-gray-50 border-gray-200",
 };
-
-type TaskFormValues = {
-  title: string;
-  description: string;
-  dueDate: string; // yyyy-mm-dd, "" for none
-  priority: "low" | "normal" | "high";
-  assignedTo: string; // a name, "" for unassigned
-  link: TaskLink | null; // the enquiry or event this is about
-};
-
-const EMPTY_FORM: TaskFormValues = { title: "", description: "", dueDate: "", priority: "normal", assignedTo: "", link: null };
-
-// The enquiry or event a listed task is about (an enquiry wins if it has both).
-function linkOf(task: any): TaskLink | null {
-  if (task.linkedLeadId != null && task.leadName) return { kind: "lead", id: task.linkedLeadId, name: task.leadName };
-  if (task.linkedBookingId != null && task.bookingName) return { kind: "booking", id: task.linkedBookingId, name: task.bookingName };
-  return null;
-}
-
-// A stored due date as the date input's yyyy-mm-dd (local day).
-function dueDateInput(ms: number | null | undefined): string {
-  if (!ms) return "";
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// The new-task form, also used to edit a task in place.
-function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubmit, onCancel, className = "mb-6" }: {
-  heading: string;
-  className?: string;
-  initial: TaskFormValues;
-  submitLabel: string;
-  pendingLabel: string;
-  pending: boolean;
-  onSubmit: (values: TaskFormValues) => void;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState<TaskFormValues>(initial);
-  // Shown at the field (it was only a 4-second toast, with nothing marked).
-  const [titleError, setTitleError] = useState("");
-  const titleRef = useRef<HTMLInputElement>(null);
-  const fid = useId();
-  const submit = () => {
-    if (!form.title.trim()) {
-      setTitleError("Give the task a title.");
-      titleRef.current?.focus();
-      return;
-    }
-    onSubmit(form);
-  };
-  return (
-    <div className={`dante-card p-5 space-y-3 ${className}`}>
-      <h2 className="font-bebas tracking-widest text-xs text-sage">{heading}</h2>
-      <div>
-        <label htmlFor={`${fid}-title`} className="font-bebas text-xs tracking-widest text-sage block mb-1">TITLE *</label>
-        <Input
-          id={`${fid}-title`}
-          ref={titleRef}
-          value={form.title}
-          onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setTitleError(""); }}
-          placeholder="e.g. Send proposal to Sarah"
-          aria-required="true"
-          aria-invalid={titleError ? true : undefined}
-          aria-describedby={titleError ? `${fid}-title-error` : undefined}
-          className="rounded-none border-gold/30 focus-visible:ring-0 focus-visible:border-burgundy"
-          onKeyDown={e => e.key === "Enter" && submit()}
-        />
-        {titleError && <p id={`${fid}-title-error`} role="alert" className="font-dm text-xs text-red-700 mt-1">{titleError}</p>}
-      </div>
-      <div>
-        <label htmlFor={`${fid}-description`} className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-        <Textarea
-          id={`${fid}-description`}
-          value={form.description}
-          onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-          placeholder="Optional notes..."
-          rows={2}
-          className="rounded-none border-gold/30 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm"
-        />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={`${fid}-due`} className="font-bebas text-xs tracking-widest text-sage block mb-1">DUE DATE</label>
-          <input
-            id={`${fid}-due`}
-            type="date"
-            value={form.dueDate}
-            onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-            className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-burgundy"
-          />
-        </div>
-        <div>
-          <label htmlFor={`${fid}-priority`} className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
-          <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v as any }))}>
-            <SelectTrigger id={`${fid}-priority`} className="rounded-none border-gold/30 focus:ring-0 focus:border-burgundy">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="task-assignee" className="font-bebas text-xs tracking-widest text-sage block mb-1">ASSIGN TO</label>
-          <AssigneeSelect id="task-assignee" value={form.assignedTo} onChange={v => setForm(f => ({ ...f, assignedTo: v }))} />
-        </div>
-        <div>
-          <span className="font-bebas text-xs tracking-widest text-sage block mb-1">LINK TO (OPTIONAL)</span>
-          <TaskLinkPicker value={form.link} onChange={link => setForm(f => ({ ...f, link }))} />
-        </div>
-      </div>
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={onCancel}
-          className="border border-border font-bebas tracking-widest text-xs px-4 py-2 text-ink/60 hover:text-ink transition-colors"
-        >
-          CANCEL
-        </button>
-        {/* aria-disabled, not disabled: a disabled button drops keyboard
-            focus to the top of the page while it saves. */}
-        <button
-          onClick={() => { if (!pending) submit(); }}
-          aria-disabled={pending || undefined}
-          className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burg-dark transition-colors aria-disabled:opacity-50 aria-disabled:pointer-events-none"
-        >
-          {pending ? pendingLabel : submitLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } = {}) {
   // A staff login is read-only server-side, so write controls (new/edit/
@@ -183,6 +49,15 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
     if (formWasOpen.current && !showForm && (!document.activeElement || document.activeElement === document.body)) newTaskRef.current?.focus();
     formWasOpen.current = showForm;
   }, [showForm]);
+  // After an edit is saved or cancelled (Escape too): back to that task's Edit button.
+  const editButtons = React.useRef(new Map<number, HTMLButtonElement>());
+  const [refocusEdit, setRefocusEdit] = useState<number | null>(null);
+  React.useEffect(() => {
+    if (refocusEdit == null || editing) return;
+    editButtons.current.get(refocusEdit)?.focus();
+    setRefocusEdit(null);
+  }, [refocusEdit, editing, taskList]);
+  const closeEdit = () => { if (editing) setRefocusEdit(editing.id); setEditing(null); };
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
@@ -194,9 +69,9 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
   });
 
   const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      refetch();
-      setEditing(null);
+    onSuccess: async () => {
+      await refetch();
+      closeEdit();
       toast.success("Task updated");
     },
     onError: () => toast.error("Failed to update task"),
@@ -214,7 +89,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
     createTask.mutate({
       title: form.title,
       description: form.description || undefined,
-      dueDate: form.dueDate ? new Date(form.dueDate).getTime() : undefined,
+      dueDate: form.dueDate ? dueDateMs(form.dueDate) : undefined,
       priority: form.priority,
       assignedTo: form.assignedTo || undefined,
       linkedLeadId: form.link?.kind === "lead" ? form.link.id : undefined,
@@ -231,7 +106,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
       // Only re-save the date when it changed, so an automated task keeps
       // its exact due time.
       dueDate: form.dueDate === editing.initial.dueDate ? undefined
-        : form.dueDate ? new Date(form.dueDate).getTime() : null,
+        : form.dueDate ? dueDateMs(form.dueDate) : null,
       priority: form.priority,
       assignedTo: form.assignedTo.trim() || null,
       // Only re-link when it changed (a task made by a rule can be linked to
@@ -242,8 +117,6 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
       }),
     });
   };
-
-  const now = Date.now();
 
   return (
     // Same page frame as the other staff pages (full width, same padding, header
@@ -272,7 +145,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
         <TaskForm
           className="max-w-3xl mb-6"
           heading="NEW TASK"
-          initial={EMPTY_FORM}
+          initial={EMPTY_TASK_FORM}
           submitLabel="CREATE TASK"
           pendingLabel="CREATING..."
           pending={createTask.isPending}
@@ -309,8 +182,11 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
       ) : (
         <div ref={listRef} className="space-y-2 max-w-3xl">
           {taskList.map((task: any) => {
-            const isOverdue = !task.completed && task.dueDate && task.dueDate < now;
-            const isDueToday = !task.completed && task.dueDate && new Date(task.dueDate).toDateString() === new Date().toDateString();
+            // The same wording as the Tasks box on an enquiry / event: due
+            // today all day, overdue from the next day.
+            const due = !task.completed && task.dueDate ? taskDueState(task.dueDate) : null;
+            const isOverdue = due === "overdue";
+            const isDueToday = due === "today";
             if (editing && editing.id === task.id) {
               return (
                 <TaskForm
@@ -321,7 +197,9 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                   pendingLabel="SAVING..."
                   pending={updateTask.isPending}
                   onSubmit={handleUpdate}
-                  onCancel={() => setEditing(null)}
+                  onCancel={closeEdit}
+                  ariaLabel={`Edit task: ${task.title}`}
+                  autoFocusTitle
                   className=""
                 />
               );
@@ -363,7 +241,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                       isOverdue ? "text-red-700" : isDueToday ? "text-amber-800" : "text-sage"
                     }`}>
                       <Calendar className="w-3 h-3" />
-                      {isOverdue ? "Overdue — " : isDueToday ? "Due today — " : "Due "}
+                      {taskDuePrefix(due ?? "later")}
                       {new Date(task.dueDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
                     </div>
                   )}
@@ -393,20 +271,9 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
                   <button
                     onClick={() => {
                       setShowForm(false);
-                      setEditing({
-                        id: task.id,
-                        initial: {
-                          title: task.title,
-                          description: task.description ?? "",
-                          dueDate: dueDateInput(task.dueDate),
-                          // An older task can hold another word ("medium"):
-                          // it opened with an empty Priority box and couldn't be saved.
-                          priority: normaliseTaskPriority(task.priority),
-                          assignedTo: task.assignedTo ?? "",
-                          link: linkOf(task),
-                        },
-                      });
+                      setEditing({ id: task.id, initial: taskFormValuesOf(task) });
                     }}
+                    ref={el => { if (el) editButtons.current.set(task.id, el); else editButtons.current.delete(task.id); }}
                     className="flex-shrink-0 -m-2 p-2.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-burgundy hover:bg-linen focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                     title="Edit task"
                     aria-label={`Edit task: ${task.title}`}
