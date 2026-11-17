@@ -97,6 +97,8 @@ import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
 import { LockOpen } from "lucide-react";
+import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidation";
+import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -3147,6 +3149,21 @@ export default function Dashboard() {
   };
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
+  // Typos caught at the field before saving (an empty venue name, a malformed
+  // website, notification email or mail server used to save with "Settings saved!").
+  const VENUE_DETAIL_FIELDS = ["vs-venue-name", "vs-website", "vs-notification-email"] as const;
+  const SMTP_FIELDS = ["smtpHost", "smtpPort", "smtpFromEmail"] as const;
+  const [venueErrors, setVenueErrors] = useState<Record<string, string>>({});
+  const [smtpErrors, setSmtpErrors] = useState<Record<string, string>>({});
+  const smtpFormRef = useRef<HTMLFormElement | null>(null);
+  useFieldErrorAria(venueErrors, VENUE_DETAIL_FIELDS);
+  useFieldErrorAria(smtpErrors, SMTP_FIELDS, smtpFormRef);
+  // Once a field has been flagged, its message goes as soon as it is fixed.
+  useEffect(() => {
+    if (!settingsForm || !Object.keys(venueErrors).length) return;
+    const now = venueDetailsErrors(settingsForm);
+    setVenueErrors(prev => Object.fromEntries(Object.keys(prev).filter(k => now[k]).map(k => [k, now[k]])));
+  }, [settingsForm?.name, settingsForm?.website, settingsForm?.notificationEmail]);
   // Embed customiser (Settings → enquiry form): per-embed font/colour overrides
   const [embedAccent, setEmbedAccent] = useState("");   // hex w/o # — "" = use saved branding
   const [embedFont, setEmbedFont] = useState("");        // Google Font family — "" = use saved
@@ -6010,7 +6027,13 @@ export default function Dashboard() {
 
               {/* ── BASIC DETAILS SECTION ── */}
               {venueSettingsSection === "details" && settingsForm && (
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  const errors = venueDetailsErrors(settingsForm);
+                  setVenueErrors(errors);
+                  if (Object.keys(errors).length) { focusFirstError(errors, VENUE_DETAIL_FIELDS); return; }
+                  updateSettings.mutate(settingsForm);
+                }} className="space-y-6">
 
                   {/* ── Venue Details ── */}
                   <div className="dante-card p-4 md:p-6">
@@ -6020,6 +6043,7 @@ export default function Dashboard() {
                         <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
                         <Input id="vs-venue-name" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-venue-name"] && <p id="vs-venue-name-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-venue-name"]}</p>}
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-internal-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
@@ -6030,11 +6054,13 @@ export default function Dashboard() {
                         <label htmlFor="vs-website" className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
                         <Input id="vs-website" value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
                           placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-website"] && <p id="vs-website-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-website"]}</p>}
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-notification-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
                         <Input id="vs-notification-email" type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        {venueErrors["vs-notification-email"] && <p id="vs-notification-email-error" className="font-dm text-xs text-red-700 mt-1">{venueErrors["vs-notification-email"]}</p>}
                         <p className="font-dm text-xs text-sage/60 mt-1">Where new enquiry notifications are sent. Add multiple addresses separated by commas — every address gets a copy. Requires SMTP configured in Settings → Email.</p>
                       </div>
                     </div>
@@ -6536,9 +6562,15 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <form onSubmit={e => {
+                <form ref={smtpFormRef} onInput={e => {
+                  const name = (e.target as HTMLInputElement).name;
+                  if (smtpErrors[name]) setSmtpErrors(({ [name]: _fixed, ...rest }) => rest);
+                }} onSubmit={e => {
                   e.preventDefault();
                   const fd = new FormData(e.currentTarget);
+                  const errors = smtpSettingsErrors({ smtpHost: fd.get('smtpHost') as string, smtpPort: fd.get('smtpPort') as string, smtpFromEmail: fd.get('smtpFromEmail') as string });
+                  setSmtpErrors(errors);
+                  if (Object.keys(errors).length) { focusFirstError(errors, SMTP_FIELDS, smtpFormRef); return; }
                   updateSettings.mutate({
                     smtpHost: fd.get('smtpHost') as string || undefined,
                     smtpPort: fd.get('smtpPort') ? parseInt(fd.get('smtpPort') as string) : undefined,
@@ -6553,11 +6585,13 @@ export default function Dashboard() {
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
                     <Input name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpHost && <p id="smtpHost-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpHost}</p>}
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
                     <Input name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpPort && <p id="smtpPort-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpPort}</p>}
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
@@ -6578,6 +6612,7 @@ export default function Dashboard() {
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
                     <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="you@yourvenue.co.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    {smtpErrors.smtpFromEmail && <p id="smtpFromEmail-error" className="font-dm text-xs text-red-700 mt-1">{smtpErrors.smtpFromEmail}</p>}
                   </div>
                   <div className="md:col-span-2 flex items-center gap-3">
                     <input type="checkbox" name="smtpSecure" id="smtpSecure" defaultChecked={(venueSettings?.smtpSecure ?? 0) === 1}
