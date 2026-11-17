@@ -65,6 +65,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
+import { allShownSelected, keepShown } from "@shared/bulkSelection";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { inkOnAccent } from "@shared/brand";
 import { enquirySignal } from "@shared/enquirySignal";
@@ -1189,6 +1190,10 @@ export default function Dashboard() {
     bulkBarHadFocus.current = false;
     if (!document.activeElement || document.activeElement === document.body) document.getElementById('leads-more-actions')?.focus();
   });
+  // A selection is only ever of rows on screen (enquiryOrder is what the list
+  // shows): a tab, search or filter change drops the ones it takes away, so a
+  // bulk Delete or Set status can't reach an enquiry that isn't shown.
+  React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, enquiryOrder)); }, [enquiryOrder]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Overview calendar: start at this week (default) or show the whole month.
@@ -4370,13 +4375,14 @@ export default function Dashboard() {
                 {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
                   <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
-                {/* Bulk select all bar */}
-                {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
+                {/* Bulk select all bar: selects the rows the list shows (its own
+                    tabs filter them too), not the wider filteredLeads. */}
+                {bulkSelectMode && leadsSubTab !== "winback" && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox"
-                        checked={selectedLeadIds.size === filteredLeads.length}
-                        onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())}
+                        checked={allShownSelected(selectedLeadIds, enquiryOrder)}
+                        onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(enquiryOrder) : new Set())}
                         className="w-4 h-4 accent-forest cursor-pointer" />
                       <span className="font-bebas text-xs tracking-widest text-ink/70">
                         {selectedLeadIds.size > 0 ? `${selectedLeadIds.size} SELECTED` : 'SELECT ALL'}
