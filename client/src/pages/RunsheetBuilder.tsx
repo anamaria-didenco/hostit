@@ -24,11 +24,11 @@ import {
   Loader2, Check, AlertTriangle, Info,
 } from "lucide-react";
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLoginUrl } from "@/const";
@@ -114,7 +114,10 @@ function StageChip({ stage }: { stage: { label: string; settled: boolean } }) {
   );
 }
 
-function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
+// The grip is a keyboard control too (Space to pick up, arrows to move, Space
+// to drop — dnd-kit's KeyboardSensor) and shows while focused. With nothing
+// to reorder it is left out of the Tab order, where it was a dead stop.
+function SortableSection({ id, label, reorderable = true, children }: { id: string; label: string; reorderable?: boolean; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -128,10 +131,11 @@ function SortableSection({ id, children }: { id: string; children: React.ReactNo
       <div
         {...attributes}
         {...listeners}
-        className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 transition-opacity"
+        {...(reorderable ? { "aria-label": `Reorder ${label}` } : { tabIndex: -1, "aria-hidden": true })}
+        className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 focus-visible:opacity-100 transition-opacity"
         title="Drag to reorder"
       >
-        <GripVertical className="w-3.5 h-3.5 text-ink/75" />
+        <GripVertical className="w-3.5 h-3.5 text-ink/75" aria-hidden />
       </div>
       {children}
     </div>
@@ -656,7 +660,10 @@ export default function RunsheetBuilder() {
       return next;
     });
   }
-  const sectionSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sectionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   function handleSectionDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -3667,7 +3674,7 @@ export default function RunsheetBuilder() {
               const isHidden = hiddenSections.has(sectionId);
 
               if (sectionId === 'setup') return (
-                <SortableSection key="setup" id="setup">
+                <SortableSection key="setup" id="setup" label="Venue setup" reorderable={sectionOrder.length > 1}>
                   <div id="rb-setup" data-print-section="setup" className={`dante-card mb-6 scroll-mt-[120px] md:scroll-mt-[140px] print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
@@ -3764,7 +3771,7 @@ export default function RunsheetBuilder() {
               if (sectionId === 'dietary') return null;
               // (legacy block kept below but unreachable; renderable if needed in future)
               if (false && sectionId === 'dietary') return (
-                <SortableSection key="dietary" id="dietary">
+                <SortableSection key="dietary" id="dietary" label="Dietary requirements" reorderable={sectionOrder.length > 1}>
                   <div className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
@@ -4108,15 +4115,22 @@ export default function RunsheetBuilder() {
                               type="time"
                               value={item.time}
                               onChange={e => updateItemField(idx, "time", e.target.value)}
-                              aria-label="Start time"
+                              aria-label={`Start time for ${item.title || 'this moment'}`}
                               title="Click to set the time"
                               // The input is transparent (the styled 12-hour time
                               // shows behind it), so the native clock icon is
-                              // hidden — open the picker explicitly on click/focus
-                              // so the field is actually selectable on desktop.
+                              // hidden — open the picker explicitly on click so
+                              // the field is actually selectable on desktop. Not
+                              // on focus: the open picker swallowed Tab, so a
+                              // keyboard couldn't get past the timeline. From the
+                              // keyboard the field shows itself instead (type the
+                              // time, or Enter for the picker); a click keeps the
+                              // styled time showing, as before.
                               onClick={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
-                              onFocus={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); try { (e.currentTarget as any).showPicker?.(); } catch {} } }}
+                              onPointerDown={e => { e.currentTarget.dataset.pointer = ''; }}
+                              onBlur={e => { delete e.currentTarget.dataset.pointer; }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer bg-white text-ink font-dm text-sm rounded-sm [&:focus:not([data-pointer])]:opacity-100"
                             />
                           </div>
                           <div className="hidden print:block font-serif text-base font-semibold tracking-[-0.01em] whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
@@ -5089,7 +5103,7 @@ export default function RunsheetBuilder() {
                       );
                     });
                     return (
-                      <SortableSection id={course} key={course}>
+                      <SortableSection id={course} key={course} label={`course ${course}`} reorderable={displayedFoodCourses.length > 1}>
                       <div>
                         {/* Editable course header with rename + delete. The drag
                             grip (from SortableSection) appears on hover at the left. */}
