@@ -4,7 +4,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
 import { leads, bookings, runsheets, fnbItems, venueSettings } from "../drizzle/schema";
-import { startTimeOf, zonedWallTimeToDate } from "@shared/eventDate";
+import { DEFAULT_VENUE_TZ, eventDayKey, startTimeOf, zonedWallTimeToDate } from "@shared/eventDate";
 
 /**
  * Edit-conflict protection and the start-time check, through the real
@@ -119,5 +119,52 @@ d("run sheet edit conflicts (DB)", () => {
     await caller.runsheets.alignStartTime({ runsheetId: rsId, keep: "event" });
     const [rs] = await db.select().from(runsheets).where(eq(runsheets.id, rsId));
     expect(rs.eventStartTime).toBe("17:45");
+  });
+
+  it("a guest count typed in the builder is that builder's own change, not someone else's", async () => {
+    const v = (await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-a" }))!.version;
+    // Tab A types 60: the builder mirrors it onto the event straight away
+    // (which reaches the run sheet too), then autosaves the sheet itself.
+    await caller.bookings.update({ id: bookingId, guestCount: 60, runsheetEditor: { runsheetId: rsId, editorId: "tab-a", expectedVersion: v } });
+    expect(await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-a" })).toMatchObject({ mine: true });
+    // Its autosave, still based on the version it loaded, goes through…
+    await caller.runsheets.update({ id: rsId, guestCount: 60, expectedVersion: v, editorId: "tab-a" });
+    const [row] = await (await getDb())!.select().from(runsheets).where(eq(runsheets.id, rsId));
+    expect(row.guestCount).toBe(60);
+    // …and another tab open on the sheet still hears about the change.
+    expect(await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-b" })).toMatchObject({ mine: false });
+  });
+
+  it("still warns the builder about a guest change when someone else saved first", async () => {
+    const v = (await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-a" }))!.version;
+    await caller.runsheets.update({ id: rsId, notes: "B's note", expectedVersion: v, editorId: "tab-b" });
+    await caller.bookings.update({ id: bookingId, guestCount: 70, runsheetEditor: { runsheetId: rsId, editorId: "tab-a", expectedVersion: v } });
+    expect(await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-a" })).toMatchObject({ mine: false });
+    await expect(caller.runsheets.update({ id: rsId, notes: "A's note", expectedVersion: v, editorId: "tab-a" }))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    const [row] = await (await getDb())!.select().from(runsheets).where(eq(runsheets.id, rsId));
+    expect(row.notes).toBe("B's note");
+  });
+
+  it("a guest count changed on the event page still counts as a change elsewhere", async () => {
+    const before = (await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-b" }))!.version;
+    await caller.bookings.update({ id: bookingId, guestCount: 80 });
+    const after = (await caller.runsheets.versionCheck({ id: rsId, editorId: "tab-b" }))!;
+    expect(after).toMatchObject({ version: before + 1, mine: false });
+  });
+
+  it("saving the date the builder shows back (Keep mine) leaves the event on its day", async () => {
+    const db = (await getDb())!;
+    // 7 am in Auckland is the evening before in UTC, so a browser outside NZ
+    // used to show (and save back) the day before. The builder now shows the
+    // venue's day, and saving that day keeps the event's day and time.
+    const morning = zonedWallTimeToDate(2099, 3, 7, 7, 0, "Pacific/Auckland");
+    await db.update(bookings).set({ eventDate: morning }).where(eq(bookings.id, bookingId));
+    await db.update(runsheets).set({ eventDate: morning }).where(eq(runsheets.id, rsId));
+    const shown = eventDayKey(morning, DEFAULT_VENUE_TZ);
+    expect(shown).toBe("2099-03-07");
+    await caller.runsheets.update({ id: rsId, eventDate: shown });
+    const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(b.eventDate.toISOString()).toBe(morning.toISOString());
   });
 });

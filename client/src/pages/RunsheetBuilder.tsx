@@ -39,6 +39,7 @@ import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import { isOncePerEvent } from "@shared/nowNext";
+import { DEFAULT_VENUE_TZ, eventDayKey } from "@shared/eventDate";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -475,6 +476,12 @@ export default function RunsheetBuilder() {
     if (typeof v === 'number') versionRef.current = Math.max(versionRef.current ?? 0, v);
   };
   const isConflict = (e: unknown) => (e as { data?: { code?: string } } | undefined)?.data?.code === 'CONFLICT';
+  // Sent with a change this page makes to the event that also reaches this
+  // sheet (the guest count), so the server counts it as this page's own save
+  // instead of telling this page "someone else changed this run sheet".
+  const ownSheetEditor = () => (sheetId
+    ? { runsheetEditor: { runsheetId: sheetId, editorId: editorIdRef.current, expectedVersion: versionRef.current ?? undefined } }
+    : {});
 
   // ── "NOW" indicator for live service ──────────────────────────────────────
   // Updates every 30s. Lets the timeline highlight the currently-active item
@@ -1749,7 +1756,7 @@ export default function RunsheetBuilder() {
       // Only push a real number; an empty field must not null the booking's pax.
       if (!v.trim() || !Number.isFinite(n) || n < 0) return;
       if (moneyBooking && Number(moneyBooking.guestCount ?? NaN) === n) return;
-      syncGuestCount.mutate({ id: effectiveBookingId, guestCount: n } as any);
+      syncGuestCount.mutate({ id: effectiveBookingId, guestCount: n, ...ownSheetEditor() } as any);
     }, 800);
   };
   // Floor plans
@@ -1942,7 +1949,7 @@ export default function RunsheetBuilder() {
       hydratedSheetRef.current = (existing as any).id;
       versionRef.current = (existing as any).version ?? 0;
       setTitle(existing.title);
-      setEventDate(existing.eventDate ? new Date(existing.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(existing.eventDate, DEFAULT_VENUE_TZ));
       setVenueName(existing.venueName ?? "");
       setSpaceName(existing.spaceName ?? "");
       setGuestCount(existing.guestCount ? String(existing.guestCount) : "");
@@ -2026,7 +2033,7 @@ export default function RunsheetBuilder() {
     // Only seed main fields if we're creating fresh (no existing runsheet)
     if (!sheetId) {
       setTitle(`${lead.firstName} ${lead.lastName ?? ""} — ${lead.eventType ?? "Event"}`);
-      setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(lead.eventDate, DEFAULT_VENUE_TZ));
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
       // Map spaceId → space name so the venue/space dropdown is pre-selected
@@ -2045,7 +2052,7 @@ export default function RunsheetBuilder() {
   // Auto-populate from linked proposal
   useEffect(() => {
     if (linkedProposal && !sheetId) {
-      if (linkedProposal.eventDate) setEventDate(new Date(linkedProposal.eventDate).toLocaleDateString("en-CA"));
+      if (linkedProposal.eventDate) setEventDate(eventDayKey(linkedProposal.eventDate, DEFAULT_VENUE_TZ));
       if (linkedProposal.guestCount) setGuestCount(String(linkedProposal.guestCount));
       if (linkedProposal.spaceName) setSpaceName(linkedProposal.spaceName);
     }
@@ -2055,7 +2062,7 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (booking && !sheetId) {
       setTitle(`${booking.firstName} ${booking.lastName ?? ''} — ${booking.eventType ?? 'Event'}`.trim());
-      setEventDate(booking.eventDate ? new Date(booking.eventDate).toLocaleDateString("en-CA") : "");
+      setEventDate(eventDayKey(booking.eventDate, DEFAULT_VENUE_TZ));
       setGuestCount(booking.guestCount ? String(booking.guestCount) : "");
       setEventType(booking.eventType ?? "");
       setContactName(`${booking.firstName} ${booking.lastName ?? ""}`.trim());
@@ -3527,7 +3534,7 @@ export default function RunsheetBuilder() {
                     <strong>Guest numbers don't match.</strong> This runsheet says {sheetPax}, but the event (calendar, dashboard, Payments) says {Number(eventPax)}.
                   </span>
                   <span className="flex gap-2">
-                    <button type="button" onClick={() => syncGuestCount.mutate({ id: effectiveBookingId, guestCount: sheetPax } as any)}
+                    <button type="button" onClick={() => syncGuestCount.mutate({ id: effectiveBookingId, guestCount: sheetPax, ...ownSheetEditor() } as any)}
                       className="font-bebas tracking-widest text-[11px] border border-forest/40 text-forest px-2 py-1 hover:bg-forest/5">
                       USE {sheetPax} EVERYWHERE
                     </button>
