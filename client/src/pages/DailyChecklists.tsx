@@ -430,9 +430,9 @@ export default function DailyChecklists() {
                                 </div>
                                 <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
                                   <button aria-label={item.photoUrl ? "Replace photo" : "Add photo"} onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  {item.photoUrl && <button aria-label="Remove photo" onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#83745b] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
-                                  <button aria-label="Edit item" onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  <button aria-label="Delete item" onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#83745b] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  {item.photoUrl && <button aria-label={`Remove photo: ${item.text}`} onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#83745b] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
+                                  <button aria-label={`Edit item: ${item.text}`} onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  <button aria-label={`Delete item: ${item.text}`} onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#83745b] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
                                 </div>
                               </div>
                             )}
