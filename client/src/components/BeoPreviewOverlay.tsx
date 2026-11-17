@@ -1,6 +1,7 @@
 import React from "react";
 import { Download, ExternalLink, X } from "lucide-react";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
+import { DialogShell, DialogShellContent } from "@/components/ui/dialog";
 
 /**
  * In-app BEO preview: the same HTML the Runsheet Builder shows, opened over the
@@ -12,6 +13,8 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
   const [loaded, setLoaded] = React.useState(false);
   const closeRef = React.useRef<HTMLButtonElement>(null);
   const frameRef = React.useRef<HTMLIFrameElement>(null);
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
   // Jump chips: the BEO tags its main sections with ids; show a chip for each
   // one that's actually on this event's sheet (hidden sections, or events with
   // no menu or dietaries, simply get no chip). Same-origin iframe, so we can
@@ -25,6 +28,17 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
     try {
       const d = frameRef.current?.contentDocument;
       setAnchors(BEO_SECTIONS.filter(([id]) => d?.getElementById(id)).map(([id, label]) => ({ id, label })));
+      // Keys pressed inside the sheet never reach this page: Escape there closes
+      // too, and Tab (the sheet has nothing to Tab to) carries on round the
+      // dialog's buttons instead of bouncing back to the last one.
+      d?.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { e.preventDefault(); onCloseRef.current(); return; }
+        if (e.key !== 'Tab' || d.querySelector('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')) return;
+        const box = frameRef.current?.closest('[role="dialog"]');
+        const stops = box ? Array.from(box.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')).filter(el => el.offsetParent !== null) : [];
+        const next = e.shiftKey ? stops[stops.length - 1] : stops[0];
+        if (next) { e.preventDefault(); next.focus(); }
+      });
     } catch { /* cross-origin or blocked: just no chips */ }
   };
   const jumpTo = (id: string | null) => {
@@ -41,15 +55,13 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
     };
     // Capture phase so we win over the side panel's own Escape handler.
     window.addEventListener('keydown', onKey, true);
-    closeRef.current?.focus();
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
   const btn = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-cream/40 text-cream hover:bg-cream/10 transition-colors font-bebas tracking-widest text-xs";
   return (
-    <div className="fixed inset-0 z-[10001] flex items-stretch md:items-center justify-center bg-black/60 md:p-6" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={`BEO preview for ${name}`}
-        className="bg-cream w-full md:max-w-5xl h-full md:h-[92vh] flex flex-col shadow-2xl overflow-hidden md:rounded-md"
-        onClick={e => e.stopPropagation()}>
+    <DialogShell onClose={onClose} className="fixed inset-0 z-[10001] flex items-stretch md:items-center justify-center bg-black/60 md:p-6">
+      <DialogShellContent aria-label={`BEO preview for ${name}`} initialFocus={closeRef}
+        className="bg-cream w-full md:max-w-5xl h-full md:h-[92vh] flex flex-col shadow-2xl overflow-hidden md:rounded-md">
         <div className="bg-forest-dark px-4 py-3 flex items-center gap-2 flex-wrap">
           <div className="min-w-0 mr-auto">
             <div className="font-bebas tracking-widest text-[10px] text-cream">BEO PREVIEW</div>
@@ -85,7 +97,7 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
           <iframe ref={frameRef} title={`BEO for ${name}`} src={beoUrl(bookingId, { format: 'html', nonce })}
             onLoad={onFrameLoad} className="absolute inset-0 w-full h-full border-0" />
         </div>
-      </div>
-    </div>
+      </DialogShellContent>
+    </DialogShell>
   );
 }

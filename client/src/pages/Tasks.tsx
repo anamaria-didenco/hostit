@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AssigneeSelect, TaskLinkPicker, useCompleteTask, type TaskLink } from "@/components/taskParts";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 const FILTERS = [
   { key: "all", label: "All Active" },
@@ -130,10 +131,12 @@ function TaskForm({ heading, initial, submitLabel, pendingLabel, pending, onSubm
         >
           CANCEL
         </button>
+        {/* aria-disabled, not disabled: a disabled button drops keyboard
+            focus to the top of the page while it saves. */}
         <button
-          onClick={submit}
-          disabled={pending}
-          className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burg-dark transition-colors disabled:opacity-50"
+          onClick={() => { if (!pending) submit(); }}
+          aria-disabled={pending || undefined}
+          className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burg-dark transition-colors aria-disabled:opacity-50 aria-disabled:pointer-events-none"
         >
           {pending ? pendingLabel : submitLabel}
         </button>
@@ -151,6 +154,18 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
   const [editing, setEditing] = useState<{ id: number; initial: TaskFormValues } | null>(null);
 
   const { data: taskList, refetch } = trpc.tasks.list.useQuery({ filter });
+
+  // Keyboard focus after a task is completed, deleted or edited (the control
+  // goes away): the task now in that place. After the new-task form closes:
+  // NEW TASK. It used to drop to the top of the page.
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const newTaskRef = React.useRef<HTMLButtonElement>(null);
+  useFocusKeeper(listRef, newTaskRef);
+  const formWasOpen = React.useRef(showForm);
+  React.useEffect(() => {
+    if (formWasOpen.current && !showForm && (!document.activeElement || document.activeElement === document.body)) newTaskRef.current?.focus();
+    formWasOpen.current = showForm;
+  }, [showForm]);
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
@@ -225,6 +240,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
         </div>
         {!isStaff && (
           <button
+            ref={newTaskRef}
             onClick={() => setShowForm(v => !v)}
             className="vf-btn vf-btn-primary"
           >
@@ -274,7 +290,7 @@ export default function Tasks({ initialFilter }: { initialFilter?: "overdue" } =
           </p>
         </div>
       ) : (
-        <div className="space-y-2 max-w-3xl">
+        <div ref={listRef} className="space-y-2 max-w-3xl">
           {taskList.map((task: any) => {
             const isOverdue = !task.completed && task.dueDate && task.dueDate < now;
             const isDueToday = !task.completed && task.dueDate && new Date(task.dueDate).toDateString() === new Date().toDateString();

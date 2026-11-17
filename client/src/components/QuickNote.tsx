@@ -66,11 +66,13 @@ export default function QuickNote({ leadId, className = "" }: { leadId: number; 
           placeholder="e.g. Rang back, wants a quote by Friday"
           className="flex-1 min-w-0 border border-gold/30 bg-white px-2.5 py-2 text-sm font-dm text-ink focus:outline-none focus:border-forest resize-none"
         />
+        {/* aria-disabled, not disabled: the box empties as the note saves, and
+            a disabled button drops keyboard focus to the top of the page. */}
         <button
           type="button"
           onClick={submit}
-          disabled={!text.trim() || add.isPending}
-          className="flex-shrink-0 min-h-[44px] px-4 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs disabled:opacity-40">
+          aria-disabled={!text.trim() || add.isPending}
+          className="flex-shrink-0 min-h-[44px] px-4 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs aria-disabled:opacity-40 aria-disabled:pointer-events-none">
           {add.isPending ? "ADDING…" : "ADD"}
         </button>
       </div>

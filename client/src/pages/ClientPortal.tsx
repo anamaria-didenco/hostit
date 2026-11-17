@@ -377,8 +377,15 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
   const [diet, setDiet] = useState<Dietary[]>(details?.dietaries?.length ? details.dietaries : []);
   const [notes, setNotes] = useState(details?.notes ?? "");
 
+  // After "Send to venue" the form is replaced by the sent note: focus it
+  // (once it shows), rather than letting focus drop to the top of the page.
+  const [sentNote, setSentNote] = useState<HTMLDivElement | null>(null);
+  const [focusSent, setFocusSent] = useState(false);
+  useEffect(() => {
+    if (focusSent && sentNote) { setFocusSent(false); sentNote.focus(); }
+  }, [focusSent, sentNote]);
   const submit = trpc.portal.submitDetails.useMutation({
-    onSuccess: () => { toast.success("Thanks — your venue has your details."); setEditing(false); onSaved(); },
+    onSuccess: () => { toast.success("Thanks — your venue has your details."); setFocusSent(true); setEditing(false); onSaved(); },
     onError: (e) => toast.error(e.message || "We couldn't save that. Please try again."),
   });
   const addDiet = () => setDiet(d => [...d, { name: "", count: 1, notes: "" }]);
@@ -403,7 +410,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
 
       {details?.submittedAt && !editing ? (
         <div className="px-6 py-4 text-sm space-y-2">
-          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-green-800 text-sm">
+          <div ref={setSentNote} tabIndex={-1} className="rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-green-800 text-sm">
             Sent to your venue on {new Date(details.submittedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}. You can update it any time before the event.
           </div>
           {details.finalGuestCount != null && <div><span style={{ color: T.stone }}>Final guest count: </span><span className="font-semibold">{details.finalGuestCount}</span></div>}

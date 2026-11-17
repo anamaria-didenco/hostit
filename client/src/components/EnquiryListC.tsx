@@ -10,6 +10,7 @@ import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
 import MovedNote from "@/components/MovedNote";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
  * The Option-C enquiries list: one signal-first list where every row leads with
@@ -230,6 +231,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   React.useEffect(() => {
     onRowsChange?.(rows.map((r) => r.lead.id));
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
+  // focus on that row (or the next one) instead of dropping it to the page.
+  // When the last one goes, the tab it was on ("Needs reply 0").
+  const rowsRef = React.useRef<HTMLDivElement>(null);
+  const tabRef = React.useRef<HTMLButtonElement>(null);
+  useFocusKeeper(rowsRef, tabRef);
 
   const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
@@ -267,7 +274,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
               const on = tab === t.id;
               return (
-                <button key={t.id} onClick={() => { setTab(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
                   aria-pressed={on}
                   className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
@@ -317,7 +324,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         )}
 
         {/* Rows */}
-        <div className="flex flex-col gap-2">
+        <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
             <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
           ) : rows.map(({ lead, signal }) => {

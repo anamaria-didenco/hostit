@@ -8,7 +8,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogShell, DialogShellContent, DialogTitle, openerOfClosingDialog } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
@@ -25,7 +25,6 @@ import { showCascadedToast } from "@/lib/cascadedToast";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime, fmtTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
 import { SinceLastVisit } from "@/components/SinceLastVisit";
 import { SpaceAvailability } from "@/components/SpaceAvailability";
@@ -66,6 +65,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { DEFAULT_PROPOSAL_TEMPLATE, PROPOSAL_SCALAR_TOKENS, PROPOSAL_BLOCK_TOKENS } from "@shared/proposalTemplate";
 import { leadFollowUpState, leadDatePassed, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
 import { leadNeedsReply } from "@shared/needsReply";
+import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
 import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel, renderSignatureHtml } from "@shared/emailSignatures";
 import { inkOnAccent } from "@shared/brand";
 import { enquirySignal } from "@shared/enquirySignal";
@@ -1177,6 +1177,81 @@ export default function Dashboard() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const bulkDeleteCancelRef = useRef<HTMLButtonElement>(null);
+  // The floating bulk toolbar goes with the selection: after a delete (also
+  // when its confirm was closed while "Deleting…"), or CLEAR. When focus was
+  // on it, put it on More actions, where the selection started, not <body>.
+  const bulkBarHadFocus = useRef(false);
+  // Below xl the bar wraps (about 230px tall on a phone) and sat over the
+  // list's last rows with no way to scroll them clear: while it's up, the
+  // list stops where the bar starts.
+  const enquiryContentRef = useRef<HTMLDivElement>(null);
+  const [bulkBarCover, setBulkBarCover] = useState(0);
+  const bulkBarRef = React.useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const measure = () => {
+      const area = enquiryContentRef.current;
+      const wraps = window.matchMedia('(max-width: 1279.98px)').matches;
+      if (!area || !wraps) { setBulkBarCover(0); return; }
+      // Usually the list scrolls inside the area, which ends where the screen does.
+      // On a short screen the whole page may scroll instead, and the area then grows
+      // with its padding, so measuring the area would add to the last measure on
+      // every resize (a phone's address bar showing or hiding). There, measure up to
+      // the bottom of what scrolls.
+      let scroller: HTMLElement | null = null;
+      for (let a = area.parentElement; a; a = a.parentElement) {
+        const o = getComputedStyle(a).overflowY;
+        if (o === 'auto' || o === 'scroll') { scroller = a; break; }
+      }
+      let bottom: number;
+      if (scroller) {
+        bottom = Math.min(scroller.getBoundingClientRect().bottom, window.innerHeight);
+      } else {
+        // Measured without the padding this sets: where the bar covers the whole
+        // list (a small phone), the padding outgrows the area, and measuring with
+        // it would add to the last measure on every resize. Taking it off can
+        // pull the page's scroll back, so that is put back too.
+        const padNow = area.style.paddingBottom;
+        const page = document.scrollingElement;
+        const scrolled = page?.scrollTop ?? 0;
+        area.style.paddingBottom = '0px';
+        bottom = area.getBoundingClientRect().bottom;
+        area.style.paddingBottom = padNow;
+        if (page && page.scrollTop !== scrolled) page.scrollTop = scrolled;
+      }
+      setBulkBarCover(Math.max(0, Math.round(bottom - el.getBoundingClientRect().top)));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect(); window.removeEventListener('resize', measure); setBulkBarCover(0);
+      if (el.contains(document.activeElement)) bulkBarHadFocus.current = true;
+    };
+  }, []);
+  React.useLayoutEffect(() => {
+    if (!bulkBarHadFocus.current) return;
+    bulkBarHadFocus.current = false;
+    if (!document.activeElement || document.activeElement === document.body) document.getElementById('leads-more-actions')?.focus();
+  });
+  // "Select multiple" goes with its menu and More actions turns into CANCEL:
+  // focus goes on to SELECT ALL (CANCEL when no rows are listed), not <body>.
+  // CANCEL turns back into More actions, so focus goes there.
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const bulkCancelRef = useRef<HTMLButtonElement>(null);
+  const bulkModeFocus = useRef(false);
+  React.useLayoutEffect(() => {
+    if (!bulkModeFocus.current) return;
+    bulkModeFocus.current = false;
+    if (bulkSelectMode) (selectAllRef.current ?? bulkCancelRef.current)?.focus();
+    else document.getElementById('leads-more-actions')?.focus();
+  }, [bulkSelectMode]);
+  // A selection is only ever of rows on screen (enquiryOrder is what the list
+  // shows): a tab, search or filter change drops the ones it takes away, so a
+  // bulk Delete or Set status can't reach an enquiry that isn't shown. Win
+  // back and the Board replace the list, so nothing stays selected there.
+  const selectable = selectableIds(enquiryOrder, leadViewMode, leadsSubTab);
+  React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, selectable)); }, [selectable]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Overview calendar: start at this week (default) or show the whole month.
@@ -1323,7 +1398,10 @@ export default function Dashboard() {
   const showEmailModalRef = useRef(false);
   useEffect(() => {
     if (!selectedBooking) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focused = document.activeElement as HTMLElement | null;
+    // Opened from a pop-up as it closes (a lead picked in the Ctrl+K finder):
+    // give focus back to what opened that pop-up.
+    const previouslyFocused = openerOfClosingDialog(focused) ?? focused;
     const appRoot = document.getElementById("root");
     appRoot?.setAttribute("inert", "");
 
@@ -1351,11 +1429,16 @@ export default function Dashboard() {
         return;
       }
       if (e.key !== "Tab") return;
+      // A pop-up opened over the panel (Why lost?, Record payment, Compose…)
+      // keeps Tab to itself: the panel's loop only runs while focus is in it.
+      const active = document.activeElement;
+      if (active && active !== document.body && !drawerRef.current?.contains(active)) return;
       const focusable = getFocusable();
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      // On open the panel itself has focus: Shift+Tab from there wraps too.
+      if (e.shiftKey && (active === first || active === drawerRef.current)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -1369,7 +1452,10 @@ export default function Dashboard() {
       document.removeEventListener("keydown", onKey);
       clearTimeout(t);
       appRoot?.removeAttribute("inert");
-      previouslyFocused?.focus?.();
+      // Opened from a link (?leadId=) or from a row that has since gone: land
+      // on the page's main area rather than dropping focus to <body>.
+      if (previouslyFocused?.isConnected && previouslyFocused !== document.body) previouslyFocused.focus?.();
+      else document.getElementById("vf-main")?.focus({ preventScroll: true });
     };
   }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
@@ -2296,6 +2382,10 @@ export default function Dashboard() {
   // Moving an enquiry with no space to Booked / Confirmed / Tentative asks for
   // the space right there (ConfirmSpaceDialog), then carries on with the change.
   const [spacePrompt, setSpacePrompt] = useState<null | { vars: UpdateStatusVars; name?: string; prior?: string }>(null);
+  // Read by the drawer's Status menu as it closes: when picking a status opened
+  // one of these, the menu must not pull focus back to itself (behind the pop-up).
+  const statusPromptOpenRef = useRef(false);
+  statusPromptOpenRef.current = !!(lostPrompt || spacePrompt);
   const updateStatus = {
     ...updateStatusMut,
     mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
@@ -2817,15 +2907,14 @@ export default function Dashboard() {
 
   // Escape-to-close for the custom modal/drawer overlays. Each mirrors the
   // setter the modal's own close button calls; the hook only binds while open.
-  useEscapeKey(showEmailModal, () => setShowEmailModal(false));
-  useEscapeKey(showBulkDeleteConfirm, () => setShowBulkDeleteConfirm(false));
-  useEscapeKey(showWeeklyModal, () => {
+  // (The weekly briefing and bulk delete modals close on Escape through their Radix shells.)
+  const closeWeeklyModal = () => {
     setShowWeeklyModal(false);
     setWeeklyEventsData(null);
     setWeeklySubject('');
     setWeeklyBody('');
     setWeeklyExtraEmails('');
-  });
+  };
 
   // ── Saved BEO / briefing email recipients (Settings → BEO Email Recipients) ──
   const staffEmailList = trpc.staffEmails.list.useQuery(undefined, { enabled: settingsSubTab === "staff-emails" });
@@ -3978,7 +4067,7 @@ export default function Dashboard() {
                         <Settings className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" sideOffset={4} className="bg-white border border-border shadow-lg p-3 w-52">
+                    <PopoverContent align="end" sideOffset={4} aria-label="Customise overview: show or hide cards" className="bg-white border border-border shadow-lg p-3 w-52">
                       <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
                       {allStats.map(s => (
                         <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
@@ -4289,13 +4378,13 @@ export default function Dashboard() {
                       </button>
                     )}
                     {bulkSelectMode && leadViewMode !== "kanban" ? (
-                      <button onClick={() => { setBulkSelectMode(false); setSelectedLeadIds(new Set()); }}
+                      <button ref={bulkCancelRef} onClick={() => { bulkModeFocus.current = true; setBulkSelectMode(false); setSelectedLeadIds(new Set()); }}
                         className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border rounded-lg transition-colors bg-forest text-cream border-forest">
                         CANCEL
                       </button>
                     ) : (
                       <div className="relative" ref={actionsMenuRef}>
-                        <button onClick={() => setActionsMenuOpen(o => !o)}
+                        <button id="leads-more-actions" onClick={() => setActionsMenuOpen(o => !o)}
                           title="More actions" aria-label="More actions"
                           className={`h-8 w-8 flex items-center justify-center border rounded-lg transition-colors ${actionsMenuOpen ? 'border-gold text-ink bg-gold/5' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
                           <MoreHorizontal className="w-4 h-4" />
@@ -4307,7 +4396,7 @@ export default function Dashboard() {
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
                             </button>
                             {leadViewMode !== "kanban" && (
-                              <button onClick={() => { setBulkSelectMode(true); setSelectedLeadIds(new Set()); setActionsMenuOpen(false); }}
+                              <button onClick={() => { bulkModeFocus.current = true; setBulkSelectMode(true); setSelectedLeadIds(new Set()); setActionsMenuOpen(false); }}
                                 className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                                 <CheckSquare className="w-3.5 h-3.5 text-ink/60" /> Select multiple
                               </button>
@@ -4344,13 +4433,14 @@ export default function Dashboard() {
                 {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
                   <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
-                {/* Bulk select all bar */}
-                {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
+                {/* Bulk select all bar: selects the rows the list shows (its own
+                    tabs filter them too), not the wider filteredLeads. */}
+                {bulkSelectMode && leadsSubTab !== "winback" && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox"
-                        checked={selectedLeadIds.size === filteredLeads.length}
-                        onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())}
+                      <input type="checkbox" ref={selectAllRef}
+                        checked={allShownSelected(selectedLeadIds, enquiryOrder)}
+                        onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(enquiryOrder) : new Set())}
                         className="w-4 h-4 accent-forest cursor-pointer" />
                       <span className="font-bebas text-xs tracking-widest text-ink/70">
                         {selectedLeadIds.size > 0 ? `${selectedLeadIds.size} SELECTED` : 'SELECT ALL'}
@@ -4361,7 +4451,7 @@ export default function Dashboard() {
               </div>
 
               {/* ── CONTENT AREA ──────────────────────────────────────────────── */}
-              <div className="flex flex-1 overflow-hidden">
+              <div ref={enquiryContentRef} className="flex flex-1 overflow-hidden" style={bulkBarCover ? { paddingBottom: bulkBarCover } : undefined}>
 
                 {/* ── WIN BACK ──────────────────────────────────────── */}
                 {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
@@ -4549,14 +4639,21 @@ export default function Dashboard() {
 
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                // On phones and tablets it ran off both sides, CLEAR and DELETE
+                // out of reach: below xl (iPad landscape and zoomed windows too)
+                // it fits the screen and wraps, and on phones it sits above the
+                // tab bar. Desktop (1280px and up) is as it was.
+                <div ref={bulkBarRef} data-toast-clear className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex max-xl:flex-wrap max-xl:w-max max-xl:max-w-[calc(100vw-2rem)] items-center gap-3 max-xl:gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
-                  <div className="flex items-center gap-1.5">
+                  {/* aria-disabled, not disabled, while it saves: focus stays on the
+                      button, so it can move to More actions when the bar goes. */}
+                  <div className={`flex max-xl:flex-wrap items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
                     {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => {
+                          if (bulkUpdateStatus.isPending) return;
                           if (['booked','confirmed','tentative'].includes(s.key)) {
                             const ids = Array.from(selectedLeadIds);
                             const missing = (allLeads ?? []).filter((l: any) => ids.includes(l.id) && !l.spaceName?.trim()).length;
@@ -4567,7 +4664,7 @@ export default function Dashboard() {
                           }
                           bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any });
                         }}
-                        disabled={bulkUpdateStatus.isPending}
+                        aria-disabled={bulkUpdateStatus.isPending || undefined}
                         className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
                         style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
                         {s.label}
@@ -4605,9 +4702,9 @@ export default function Dashboard() {
           {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
           {/* Portalled to <body>: the event drawer makes #root inert while it is
               open, and the composer can now open over the drawer. */}
-          {showEmailModal && selectedLead && createPortal(
-            <div className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div role="dialog" aria-modal="true" aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
+          {showEmailModal && selectedLead && (
+            <DialogShell onClose={() => setShowEmailModal(false)} className="fixed inset-0 z-[10040] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <DialogShellContent closeOnOutsideClick={false} aria-label="Compose email" className="bg-cream border-2 border-forest w-full max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl">
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
@@ -4826,9 +4923,9 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
-          , document.body)}
+              </DialogShellContent>
+            </DialogShell>
+          )}
           {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
@@ -9680,7 +9777,7 @@ export default function Dashboard() {
                   <SelectTrigger id="drawer-status" className="h-8 text-xs rounded-sm border-gold/30 flex-1">
                     <SelectValue placeholder="Set status" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent onCloseAutoFocus={e => { if (statusPromptOpenRef.current) e.preventDefault(); }}>
                     {selectedBooking._isLead
                       ? pipelineStages.map(s => (
                           <SelectItem key={s.key} value={s.key} className="text-xs">{s.label}</SelectItem>
@@ -9703,7 +9800,7 @@ export default function Dashboard() {
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" sideOffset={4} className="z-[10001] w-60 bg-white border border-border shadow-lg p-1.5">
+                    <PopoverContent align="end" sideOffset={4} aria-label="More actions: cancel or delete" className="z-[10001] w-60 bg-white border border-border shadow-lg p-1.5">
                       <button onClick={cancelSelectedEvent}
                         className="w-full flex items-start gap-2 px-2 py-2 rounded hover:bg-amber-50 text-left">
                         <Ban className="w-3.5 h-3.5 mt-0.5 text-amber-800 flex-shrink-0" />
@@ -11191,36 +11288,41 @@ export default function Dashboard() {
 
       {/* Bulk Delete Confirmation */}
       {lostPrompt && (
-        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost}
+          returnFocus={() => document.getElementById(lostPrompt.bulkIds ? 'leads-more-actions' : 'drawer-status')} />
       )}
       {spacePrompt && (
         <ConfirmSpaceDialog name={spacePrompt.name} spaces={spaces as any}
           statusLabel={pipelineStages.find(s => s.key === spacePrompt.vars.status)?.label ?? spacePrompt.vars.status}
-          onConfirm={confirmSpace} onCancel={cancelSpace} />
+          onConfirm={confirmSpace} onCancel={cancelSpace} returnFocus={() => document.getElementById('drawer-status')} />
       )}
 
+      {/* Opens on Cancel, the safe choice. After the delete, the toolbar that
+          opened it has gone: focus goes to More actions, where it started. */}
       {showBulkDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
+        <DialogShell onClose={() => setShowBulkDeleteConfirm(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <DialogShellContent closeOnOutsideClick={false} aria-labelledby="bulk-delete-title" initialFocus={bulkDeleteCancelRef}
+            returnFocus={() => document.getElementById('leads-more-actions')} className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 id="bulk-delete-title" className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
             <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected records and all their activity history. This cannot be undone.</p>
             <div className="flex gap-3 justify-end">
               <button
+                ref={bulkDeleteCancelRef}
                 onClick={() => setShowBulkDeleteConfirm(false)}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg"
               >
                 Cancel
               </button>
               <button
-                onClick={() => bulkDelete.mutate({ ids: Array.from(selectedLeadIds) })}
-                disabled={bulkDelete.isPending}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg disabled:opacity-50 transition-colors"
+                onClick={() => { if (!bulkDelete.isPending) bulkDelete.mutate({ ids: Array.from(selectedLeadIds) }); }}
+                aria-disabled={bulkDelete.isPending || undefined}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-700 hover:bg-red-800 rounded-lg aria-disabled:opacity-50 aria-disabled:pointer-events-none transition-colors"
               >
                 {bulkDelete.isPending ? 'Deleting…' : `Delete ${selectedLeadIds.size}`}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogShellContent>
+        </DialogShell>
       )}
 
       {/* CSV Import Modal */}
@@ -11235,8 +11337,8 @@ export default function Dashboard() {
       <PrintWeekModal open={showPrintWeek} onClose={() => setShowPrintWeek(false)} initialDate={calDate} />
       <DayTitleModal date={editingDayTitle} current={editingDayTitle ? dayTitles.get(editingDayTitle) : undefined} onClose={() => setEditingDayTitle(null)} />
       {showWeeklyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
+        <DialogShell onClose={closeWeeklyModal} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
+          <DialogShellContent closeOnOutsideClick={false} aria-label="Email staff briefing, weekly" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
             {/* Header */}
             <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
@@ -11441,8 +11543,8 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </DialogShellContent>
+        </DialogShell>
       )}
 
       {/* Add Enquiry Modal */}
@@ -11517,6 +11619,7 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
+              if (createEnquiry.isPending) return;
               // A space is only needed once it's a live event (the server
               // enforces the same rule); an enquiry can be logged without one.
               if (addEnquiryNeedsSpace && !addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Pick an event space — confirmed events need one.'); return; }
@@ -11645,8 +11748,10 @@ export default function Dashboard() {
                 <Textarea id={`${addEnquiryFormId}-message`} value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
                   rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
               </div>
-              <button type="submit" disabled={createEnquiry.isPending}
-                className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
+              {/* aria-disabled, not disabled: focus stays here while it saves, so
+                  the new enquiry's panel gives it back to ADD ENQUIRY on close. */}
+              <button type="submit" aria-disabled={createEnquiry.isPending || undefined}
+                className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream aria-disabled:opacity-50 aria-disabled:pointer-events-none">
                 {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
               </button>
             </form>
