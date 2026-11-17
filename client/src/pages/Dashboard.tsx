@@ -2811,7 +2811,8 @@ export default function Dashboard() {
       composeBaseline.current = emailForm.body;
       const d = composeDraft.current;
       if (d && composeTo.current != null && d.to === composeTo.current) {
-        setEmailForm({ subject: d.subject, body: d.body });
+        // Opened with Reply: the typed text comes back, under the reply's subject (it is sent in that thread).
+        setEmailForm({ subject: emailThread ? emailForm.subject : d.subject, body: d.body });
         toast.info(`Your unsent email${selectedLead?.firstName ? ` to ${selectedLead.firstName}` : ""} is back.`);
       }
     } else if (composeWasOpen.current) {
