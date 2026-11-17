@@ -1351,11 +1351,16 @@ export default function Dashboard() {
         return;
       }
       if (e.key !== "Tab") return;
+      // A pop-up opened over the panel (Why lost?, Record payment, Compose…)
+      // keeps Tab to itself: the panel's loop only runs while focus is in it.
+      const active = document.activeElement;
+      if (active && active !== document.body && !drawerRef.current?.contains(active)) return;
       const focusable = getFocusable();
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      // On open the panel itself has focus: Shift+Tab from there wraps too.
+      if (e.shiftKey && (active === first || active === drawerRef.current)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -1369,7 +1374,10 @@ export default function Dashboard() {
       document.removeEventListener("keydown", onKey);
       clearTimeout(t);
       appRoot?.removeAttribute("inert");
-      previouslyFocused?.focus?.();
+      // Opened from a link (?leadId=) or from a row that has since gone: land
+      // on the page's main area rather than dropping focus to <body>.
+      if (previouslyFocused?.isConnected && previouslyFocused !== document.body) previouslyFocused.focus?.();
+      else document.getElementById("vf-main")?.focus({ preventScroll: true });
     };
   }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
