@@ -13,7 +13,7 @@ import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { DRINK_GROUPS, DRINK_GROUP_LABEL, drinkGroupOf, groupDrinks } from "@shared/drinkGroups";
 import { eventBalance, isFoodBeverageCost } from "@shared/eventBilling";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -141,6 +141,59 @@ function SortableSection({ id, label, reorderable = true, children }: { id: stri
     </div>
   );
 }
+
+// ── Pop-ups ────────────────────────────────────────────────────────────
+// Every pop-up on this page sits on Radix Dialog, so focus moves into it and
+// stays there, Escape closes it, and the page behind is hidden from screen
+// readers. Each is named by its own visible heading (wrap it in
+// <RsDialogTitle asChild>) and keeps its own look: `overlayClassName` is the
+// backdrop, `className` the panel. Radix only returns focus to its own
+// trigger buttons, which these pop-ups don't use, so focus goes back here to
+// whatever had it when the pop-up opened — or `returnFocus` when that has
+// gone (a menu item, say).
+function RsDialog({ onClose, overlayClassName, className, closeOnOutsideClick = false, closeOnEscape = true, focusDialog = false, returnFocus, role, describedBy, children }: {
+  onClose: () => void;
+  overlayClassName: string;
+  className: string;
+  closeOnOutsideClick?: boolean;
+  closeOnEscape?: boolean;
+  /** Focus the panel itself rather than its first control — for a pop-up
+   *  that can open while someone is typing, so a keystroke can't press a
+   *  button by accident. */
+  focusDialog?: boolean;
+  returnFocus?: React.RefObject<HTMLElement | null>;
+  role?: "dialog" | "alertdialog";
+  describedBy?: string;
+  children: React.ReactNode;
+}) {
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  return (
+    <DialogPrimitive.Root open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className={overlayClassName}>
+          <DialogPrimitive.Content
+            ref={panelRef}
+            role={role}
+            aria-describedby={describedBy}
+            className={className}
+            onOpenAutoFocus={focusDialog ? e => { e.preventDefault(); panelRef.current?.focus(); } : undefined}
+            onCloseAutoFocus={e => {
+              e.preventDefault();
+              const back = opener && opener !== document.body && opener.isConnected ? opener : returnFocus?.current;
+              back?.focus();
+            }}
+            onEscapeKeyDown={closeOnEscape ? undefined : e => e.preventDefault()}
+            onPointerDownOutside={closeOnOutsideClick ? undefined : e => e.preventDefault()}
+          >
+            {children}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+const RsDialogTitle = DialogPrimitive.Title;
 
 const CATEGORIES = [
   { value: "setup", label: "Setup", color: "bg-blue-100 text-blue-700" },
@@ -813,6 +866,8 @@ export default function RunsheetBuilder() {
   // BEO HTML so there's one source of truth for the printed document.
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  // Where focus goes back to when the BEO preview (opened from this menu) closes.
+  const exportMenuButtonRef = useRef<HTMLButtonElement>(null);
   // Quick-jump rail replaces the six tabs: every section is always on the
   // page; the rail scrolls to it and highlights where you are.
   // Rail order MUST match page order — the rail is pinned from the top of the
@@ -1844,16 +1899,8 @@ export default function RunsheetBuilder() {
   // Which staff link the user is currently emailing (drives the modal).
   const [emailingLink, setEmailingLink] = useState<{ id: number; token: string; label: string } | null>(null);
 
-  // Escape-to-close for the custom modal overlays. Each mirrors the setter the
-  // modal's own close button calls; the hook only binds a listener while open.
-  useEscapeKey(beoPreviewOpen, () => setBeoPreviewOpen(false));
-  useEscapeKey(showPasteImport, () => setShowPasteImport(false));
-  useEscapeKey(showDietaryManager, () => setShowDietaryManager(false));
-  useEscapeKey(showSetupManager, () => setShowSetupManager(false));
-  useEscapeKey(showCatalogSelector, () => setShowCatalogSelector(false));
-  useEscapeKey(showFnbPaste, () => setShowFnbPaste(false));
-  useEscapeKey(showChecklistPaste, () => setShowChecklistPaste(false));
-  useEscapeKey(emailingLink !== null, () => { if (!sendingStaffEmail) setEmailingLink(null); });
+  // Escape closes each pop-up through RsDialog (Radix), calling the same
+  // setter as the pop-up's own close button.
   // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [extraEmails, setExtraEmails] = useState("");
@@ -2970,6 +3017,7 @@ export default function RunsheetBuilder() {
           {/* ── Consolidated Export menu ────────────────────────────────── */}
           <div className="relative">
             <button
+              ref={exportMenuButtonRef}
               onClick={() => setExportMenuOpen(v => !v)}
               aria-expanded={exportMenuOpen}
               aria-haspopup="menu"
@@ -6674,17 +6722,18 @@ export default function RunsheetBuilder() {
 
       {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
       {beoPreviewOpen && effectiveBookingId && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print">
+        <RsDialog onClose={() => setBeoPreviewOpen(false)} returnFocus={exportMenuButtonRef} describedBy="rs-beo-preview-desc"
+          overlayClassName="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print" className="flex-1 min-h-0 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 bg-forest text-cream shadow-lg shrink-0">
             <div className="flex items-center gap-2.5">
               <Eye className="w-5 h-5 text-gold shrink-0" />
               <div>
-                <div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div>
-                <div className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div></RsDialogTitle>
+                <div id="rs-beo-preview-desc" className="font-dm text-xs text-cream/85 mt-0.5">This is exactly what will print. Choose what to include on the left.</div>
               </div>
             </div>
-            <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/85 hover:text-gold p-1.5 transition-colors" title="Close">
+            <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/85 hover:text-gold p-1.5 transition-colors" title="Close" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -6762,21 +6811,21 @@ export default function RunsheetBuilder() {
               </button>
             </div>
           </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowPasteImport(false)} describedBy="rs-paste-import-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest shrink-0">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div></RsDialogTitle>
+                <div id="rs-paste-import-desc" className="font-dm text-white/85 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div>
               </div>
-              <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors">
-                <span className="text-2xl leading-none">&times;</span>
+              <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors" aria-label="Close">
+                <span className="text-2xl leading-none" aria-hidden>&times;</span>
               </button>
             </div>
 
@@ -6976,17 +7025,19 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── EDIT CONFLICT ─────────────────────────────────────────────────── */}
+      {/* No Escape or click-away: closing it without a choice would leave
+          saving stopped with nothing on screen to say so. It opens while
+          someone may be typing, so focus goes to the dialog, not a button. */}
       {conflict && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="alertdialog" aria-modal="true" aria-labelledby="rs-conflict-title" aria-describedby="rs-conflict-body" className="bg-white w-full max-w-md shadow-2xl">
+        <RsDialog onClose={() => {}} role="alertdialog" describedBy="rs-conflict-body" closeOnEscape={false} focusDialog
+          overlayClassName="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gold/50 bg-forest">
               <AlertTriangle className="w-4 h-4 text-cream" />
-              <span id="rs-conflict-title" className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span>
+              <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">SOMEONE ELSE CHANGED THIS RUN SHEET</span></RsDialogTitle>
             </div>
             <div id="rs-conflict-body" className="p-5 space-y-3 font-dm text-sm text-ink">
               <p>It was saved somewhere else while you had it open — by someone else, or in another tab. Saving stopped here so neither of you loses work.</p>
@@ -7000,25 +7051,24 @@ export default function RunsheetBuilder() {
                 LOAD THE LATEST
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── DIETARY OPTIONS MANAGER MODAL ────────────────────────────────── */}
       {showDietaryManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-md shadow-2xl">
+        <RsDialog onClose={() => setShowDietaryManager(false)} describedBy="rs-dietary-manager-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
                 <Leaf className="w-4 h-4 text-cream" />
-                <span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span>
+                <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowDietaryManager(false)} className="text-cream/85 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p>
+              <p id="rs-dietary-manager-desc" className="font-dm text-xs text-ink/80">These options appear as quick-add buttons in the Dietary Requirements section.</p>
               <div className="space-y-2">
                 {editingDietaries.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -7056,25 +7106,24 @@ export default function RunsheetBuilder() {
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE OPTIONS'}
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── SETUP TEMPLATES MANAGER MODAL ─────────────────────────────────── */}
       {showSetupManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl">
+        <RsDialog onClose={() => setShowSetupManager(false)} describedBy="rs-setup-manager-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" className="bg-white w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/50 bg-forest">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-cream" />
-                <span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span>
+                <RsDialogTitle asChild><span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowSetupManager(false)} className="text-cream/85 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p>
+              <p id="rs-setup-manager-desc" className="font-dm text-xs text-ink/80">These templates appear as quick-fill buttons in the Venue Setup section.</p>
               <div className="space-y-2">
                 {editingSetups.map((t, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 border border-gold/50 bg-linen/50">
@@ -7123,25 +7172,24 @@ export default function RunsheetBuilder() {
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE TEMPLATES'}
               </Button>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
       {showCatalogSelector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowCatalogSelector(false)} describedBy="rs-catalogue-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div></RsDialogTitle>
+                <div id="rs-catalogue-desc" className="font-dm text-white/85 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div>
                 {gstInclusive && (
                   <div className="font-dm text-gold text-xs mt-1">This runsheet is set to &ldquo;prices include GST&rdquo; — catalogue prices don&rsquo;t, so check the Costs tab.</div>
                 )}
               </div>
-              <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
-                <span className="text-2xl leading-none">&times;</span>
+              <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors" aria-label="Close">
+                <span className="text-2xl leading-none" aria-hidden>&times;</span>
               </button>
             </div>
 
@@ -7303,21 +7351,20 @@ export default function RunsheetBuilder() {
                 </Button>
               </div>
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
 
       {/* ── AI F&B PASTE MODAL ──────────────────────────────────────────── */}
       {showFnbPaste && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        <RsDialog onClose={() => setShowFnbPaste(false)} describedBy="rs-fnb-paste-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/50 bg-forest">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" /> AI F&B PASTE
-                </div>
-                <div className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
+                <RsDialogTitle asChild><div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" aria-hidden /> AI F&B PASTE
+                </div></RsDialogTitle>
+                <div id="rs-fnb-paste-desc" className="font-dm text-white/85 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
               </div>
               <button aria-label="Close" onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -7442,16 +7489,15 @@ export default function RunsheetBuilder() {
                 </Button>
               )}
             </div>
-          </div>
-        </div>
+        </RsDialog>
       )}
       {showChecklistPaste && (
-        <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" onClick={() => setShowChecklistPaste(false)}>
-          <div role="dialog" aria-modal="true" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <RsDialog onClose={() => setShowChecklistPaste(false)} closeOnOutsideClick
+          overlayClassName="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between flex-wrap gap-y-2 px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold" />
-                <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
+                <RsDialogTitle asChild><h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3></RsDialogTitle>
               </div>
               <button aria-label="Close" onClick={() => setShowChecklistPaste(false)} className="text-ink/75 hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
@@ -7506,8 +7552,7 @@ export default function RunsheetBuilder() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </RsDialog>
       )}
       {/* ── Staff email briefing modal ─────────────────────────────────── */}
       {emailingLink && (() => {
@@ -7590,14 +7635,14 @@ export default function RunsheetBuilder() {
         };
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" onClick={() => !sendingStaffEmail && setEmailingLink(null)}>
-            <div role="dialog" aria-modal="true" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
+          <RsDialog onClose={() => { if (!sendingStaffEmail) setEmailingLink(null); }} closeOnOutsideClick={!sendingStaffEmail} closeOnEscape={!sendingStaffEmail} describedBy="rs-staff-email-desc"
+            overlayClassName="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl">
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between flex-wrap gap-y-2">
                 <div>
-                  <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
-                  <p className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
+                  <RsDialogTitle asChild><h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2></RsDialogTitle>
+                  <p id="rs-staff-email-desc" className="font-dm text-xs text-ink/80 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
                 </div>
-                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/75 hover:text-ink p-1 disabled:opacity-30" title="Close">
+                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/75 hover:text-ink p-1 disabled:opacity-30" title="Close" aria-label="Close">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -7770,8 +7815,7 @@ export default function RunsheetBuilder() {
                   >{sendingStaffEmail ? 'SENDING…' : 'SEND BRIEFING'}</button>
                 </div>
               </div>
-            </div>
-          </div>
+          </RsDialog>
         );
       })()}
       <style>{`
