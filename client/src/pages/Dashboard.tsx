@@ -11536,6 +11536,7 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
+              if (createEnquiry.isPending) return;
               // A space is only needed once it's a live event (the server
               // enforces the same rule); an enquiry can be logged without one.
               if (addEnquiryNeedsSpace && !addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Pick an event space — confirmed events need one.'); return; }
@@ -11664,8 +11665,10 @@ export default function Dashboard() {
                 <Textarea id={`${addEnquiryFormId}-message`} value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
                   rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
               </div>
-              <button type="submit" disabled={createEnquiry.isPending}
-                className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
+              {/* aria-disabled, not disabled: focus stays here while it saves, so
+                  the new enquiry's panel gives it back to ADD ENQUIRY on close. */}
+              <button type="submit" aria-disabled={createEnquiry.isPending || undefined}
+                className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream aria-disabled:opacity-50 aria-disabled:pointer-events-none">
                 {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
               </button>
             </form>
