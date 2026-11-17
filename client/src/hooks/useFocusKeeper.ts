@@ -3,6 +3,14 @@ import { rowToRefocus } from "@shared/focusReturn";
 
 const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// A row can carry a desktop and a phone layout with one of them display:none
+// (and focus() on a hidden element silently does nothing).
+const shown = (el: HTMLElement) => el.getClientRects().length > 0;
+function firstTabbable(row: HTMLElement): HTMLElement | null {
+  if (row.matches(TABBABLE) && shown(row)) return row;
+  return Array.from(row.querySelectorAll<HTMLElement>(TABBABLE)).find(shown) ?? null;
+}
+
 /**
  * Keeps a keyboard user's place in a list when the control they were on goes
  * away: a row leaves after Send / Complete / Delete, an inline form closes on
@@ -27,12 +35,15 @@ export function useFocusKeeper(listRef: RefObject<HTMLElement | null>, fallback?
     };
     // Focus left to nowhere while the element is still there: a click on the
     // page, not a removal. Forget it, so a later refresh doesn't pull focus back.
+    // (A button that went disabled while saving is not a click away: keep it,
+    // so focus comes back when the form it was in closes.)
     const onFocusOut = (e: FocusEvent) => {
       const t = e.target;
       if (e.relatedTarget || !last.current || last.current.el !== t) return;
       setTimeout(() => {
         const a = document.activeElement;
-        if (last.current?.el === t && (t as HTMLElement).isConnected && (!a || a === document.body)) last.current = null;
+        const el = t as HTMLElement;
+        if (last.current?.el === t && el.isConnected && !el.matches(":disabled") && (!a || a === document.body)) last.current = null;
       }, 0);
     };
     document.addEventListener("focusin", onFocusIn);
@@ -54,7 +65,12 @@ export function useFocusKeeper(listRef: RefObject<HTMLElement | null>, fallback?
     const rows = list ? Array.from(list.children) as HTMLElement[] : [];
     const i = rowToRefocus(l.index, rows.length);
     const row = i >= 0 ? rows[i] : null;
-    const target = row ? (row.matches(TABBABLE) ? row : row.querySelector<HTMLElement>(TABBABLE)) : null;
-    (target ?? fallback?.current)?.focus();
+    // The row now in that place, or the fallback when it has nothing to focus
+    // (an empty-list message) or focus didn't take.
+    for (const el of [row ? firstTabbable(row) : null, fallback?.current]) {
+      if (!el) continue;
+      el.focus();
+      if (document.activeElement === el) return;
+    }
   });
 }

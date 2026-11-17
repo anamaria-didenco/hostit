@@ -233,8 +233,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
   // focus on that row (or the next one) instead of dropping it to the page.
+  // When the last one goes, the tab it was on ("Needs reply 0").
   const rowsRef = React.useRef<HTMLDivElement>(null);
-  useFocusKeeper(rowsRef);
+  const tabRef = React.useRef<HTMLButtonElement>(null);
+  useFocusKeeper(rowsRef, tabRef);
 
   const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
     : tab === "followup" ? "Quoted or gone quiet · most overdue first"
@@ -272,7 +274,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
               const on = tab === t.id;
               return (
-                <button key={t.id} onClick={() => { setTab(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
                   aria-pressed={on}
                   className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
