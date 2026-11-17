@@ -5118,7 +5118,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const items = await db.select().from(runsheetItems)
           .where(eq(runsheetItems.runsheetId, input.id))
           .orderBy(runsheetItems.sortOrder);
-        return { ...sheet, items };
+        // Each attachment says whether its PDF is still on the server, so the
+        // builder can ask for a re-upload instead of showing a dead link.
+        const { withFileStatus } = await import('./uploadFiles');
+        return { ...sheet, attachments: withFileStatus(sheet.attachments), items };
       }),
 
     // The open builder polls this to notice another save (someone else, or
@@ -5611,8 +5614,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { getDb } = await import('./db');
         const { runsheets } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
-        const fs = await import('fs');
-        const path = await import('path');
+        const { uploadExists } = await import('./uploadFiles');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [rs] = await db.select().from(runsheets)
@@ -5620,10 +5622,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!rs) throw new Error('Runsheet not found');
         // Confirm the file actually exists on disk in /uploads — this
         // closes the loop between /api/upload-pdf and the DB record.
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-        const filename = input.url.replace(/^\/uploads\//, '');
-        const filePath = path.join(uploadsDir, filename);
-        if (!filePath.startsWith(uploadsDir + path.sep) || !fs.existsSync(filePath)) {
+        if (!uploadExists(input.url)) {
           throw new Error('Attachment file not found — please re-upload');
         }
         const current = Array.isArray(rs.attachments) ? rs.attachments : [];
@@ -9240,6 +9239,7 @@ Return ONLY valid JSON.`;
         // <img onerror=…> etc. and run script on the app origin for anyone
         // opening the shared link.
         const { cleanRichHtml } = await import('./sanitizeHtml');
+        const { staffLinkAttachments } = await import('./uploadFiles');
         // Only what the staff page shows. The link needs no login, so the
         // runsheet's cost lines, client email, linked proposal and internal
         // ids stay out of it.
@@ -9249,7 +9249,9 @@ Return ONLY valid JSON.`;
           eventDate: r.eventDate, eventStartTime: r.eventStartTime, eventEndTime: r.eventEndTime,
           eventType: r.eventType, guestCount: r.guestCount, venueName: r.venueName, spaceName: r.spaceName,
           venueArea: r.venueArea, setupSummary: r.setupSummary, dietaries: r.dietaries, kitchenNotes: r.kitchenNotes,
-          drinksData: r.drinksData, fnbColumns: r.fnbColumns, attachments: r.attachments,
+          drinksData: r.drinksData, fnbColumns: r.fnbColumns,
+          // PDFs the venue attached: only ones still on the server.
+          attachments: staffLinkAttachments(r.attachments),
           notes: cleanRichHtml(r.notes),
           venueSetup: cleanRichHtml(r.venueSetup),
           footerText: cleanRichHtml(r.footerText),
