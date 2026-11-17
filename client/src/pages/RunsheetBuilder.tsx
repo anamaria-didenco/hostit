@@ -4617,7 +4617,7 @@ export default function RunsheetBuilder() {
                         <input
                           value={d.name}
                           onChange={e => updateDietary(idx, "name", e.target.value)}
-                          aria-label="Dietary requirement"
+                          aria-label={`Dietary requirement ${idx + 1}`}
                           className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full"
                         />
                         <input
