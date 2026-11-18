@@ -2,7 +2,7 @@ import React from "react";
 import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
   SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, datePassedCount, describeFilters, isChipOn, isSearching,
-  effectiveView, listRows, quickChips, reviewPassedFilters, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
+  effectiveView, listRows, quickChips, reviewPassedFilters, shownListKey, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
   type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
 } from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
@@ -146,11 +146,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const view = effectiveView(state);
   const filtered = searching || activeCount(state.filters) > 0;
   const today = todayKey(ctx);
-  // The list as shown right now: a key for "the same list".
-  const listKey = `${view}|${JSON.stringify(state.filters)}|${state.q.trim()}`;
+  // The list as shown right now: a key for "the same list" (view, filters,
+  // search and sort).
+  const listKey = shownListKey(state);
   // A just-moved row keeps its place in the list it was moved from, even though
   // its new status no longer matches it. The pin drops when the parent clears
-  // the mark (undo, or any view / filter / search change).
+  // the mark (undo, or any view / filter / search / sort change).
   const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, string>>(new Map());
   React.useEffect(() => {
     const moved = movedRows ?? {};

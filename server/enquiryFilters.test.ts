@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, boardRows, clearFacet, clearFilters, compareRows, dayKeyRange,
   datePassedCount, defaultView, enrichRows, facetCounts, formatMonthRange, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
-  quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
+  quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, shownListKey, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow, type ListState,
 } from "@shared/enquiryFilters";
 import { DEFAULT_STATUSES } from "@shared/enquiryStatuses";
@@ -803,6 +803,21 @@ describe("L. kept rows and the opening view", () => {
       { keepAt: new Map([[320, 2]]) });
     expect(fewAfter.rows.map(r => r.lead.id)).toEqual([300, 310, 320, 330]);
     expect(heads(fewAfter)).toEqual(["No date yet · 1 @3"]);
+  });
+  it("a row kept after a status change goes when the sort changes, as when the view, filters or search do", () => {
+    const base = state({ view: "open", sort: { key: "event", dir: "asc" } });
+    const key = shownListKey(base);
+    expect(shownListKey({ ...base, sort: { key: "event", dir: "desc" } })).not.toBe(key);
+    expect(shownListKey({ ...base, sort: { key: "urgent", dir: "asc" } })).not.toBe(key);
+    expect(shownListKey({ ...base, sort: { key: "came", dir: "desc" } })).not.toBe(key);
+    expect(shownListKey({ ...base, view: "confirmed" })).not.toBe(key);
+    expect(shownListKey({ ...base, filters: withF({ space: [4] }) })).not.toBe(key);
+    expect(shownListKey({ ...base, q: "evans" })).not.toBe(key);
+    // The same list: a fresh but equal state, or spaces around the search.
+    expect(shownListKey({ ...base, filters: clearFilters(), sort: { ...base.sort } })).toBe(key);
+    expect(shownListKey({ ...base, q: "evans " })).toBe(shownListKey({ ...base, q: "evans" }));
+    // Most urgent has one order whichever way round.
+    expect(shownListKey(state({ sort: { key: "urgent", dir: "desc" } }))).toBe(shownListKey(state()));
   });
   it("75. the opening view: reply, else follow-up, else open", () => {
     const c = { reply: 0, followup: 0, open: 0, confirmed: 4, closed: 1, all: 5 };

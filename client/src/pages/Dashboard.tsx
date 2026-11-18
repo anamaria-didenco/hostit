@@ -98,7 +98,7 @@ import MovedNote from "@/components/MovedNote";
 import { useNow } from "@/hooks/useNow";
 import { useEnquiryListState } from "@/hooks/useEnquiryListState";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, listRows, rowNeeds, viewCounts, viewDefaultSort,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, listRows, rowNeeds, shownListKey, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow,
 } from "@shared/enquiryFilters";
 import { ROW_INK, Icon as RowIcon } from "@/components/EnquiryRow";
@@ -3554,10 +3554,12 @@ export default function Dashboard() {
     getAllowed: () => listAllowedRef.current,
   });
   const listState = enquiryList.state;
-  // A just-moved row ("Moved to … · Undo") stays only until the list changes.
+  // A just-moved row ("Moved to … · Undo") stays only until the list changes:
+  // another view, filter, search or sort (shownListKey), the Board or WIN BACK.
+  const keptListKey = shownListKey(listState);
   useEffect(() => {
     setMovedRows(prev => Object.keys(prev).length ? {} : prev);
-  }, [tab, listState.view, enquiryList.filtersKey, listState.q, leadViewMode, showWinBack]);
+  }, [tab, listState.view, keptListKey, leadViewMode, showWinBack]);
   // The badge number: everyone waiting on a reply (Needs reply), not just
   // status New. Definitions: shared/needsToday.ts.
   const replyCount = allLeads ? baseCounts.reply : null;

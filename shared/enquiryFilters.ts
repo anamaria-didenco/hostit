@@ -960,6 +960,12 @@ export function clearFacet(f: EnquiryFilters, facet: keyof EnquiryFilters): Enqu
 }
 export const clearFilters = (): EnquiryFilters => ({ ...EMPTY_FILTERS, status: [], space: [], source: [], needs: [], type: [], guests: [], budget: [], lostReason: [], client: [] });
 export const filtersKey = (f: EnquiryFilters) => JSON.stringify(FACET_ORDER.map(k => f[k]));
+/**
+ * "The same list": the view, filters, search and sort. A row kept on screen
+ * after a status change ("Moved to … · Undo") stays only while this is
+ * unchanged: in another order, the place it was kept at means nothing.
+ */
+export const shownListKey = (s: ListState) => `${effectiveView(s)}|${filtersKey(s.filters)}|${s.q.trim()}|${sortToParam(s.sort)}`;
 
 export interface ChipLabels {
   status?: (key: string) => string;
