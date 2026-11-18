@@ -2,8 +2,8 @@ import React from "react";
 import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
   SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, datePassedCount, describeFilters, isChipOn, isSearching,
-  effectiveView, listRows, quickChips, reviewPassedFilters, shownListKey, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
-  type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
+  effectiveView, listLayout, listRows, quickChips, reviewPassedFilters, shownListKey, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
+  type ChipLabels, type EnquiryFilters, type EnquiryView, type KeptPlace, type ListCtx, type ListLayout, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
 } from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { allShownSelected } from "@shared/bulkSelection";
@@ -44,12 +44,16 @@ export interface EnquiryListCProps {
   isStaff?: boolean;
   /** Reports the ids in the order shown, so the drawer can page prev/next. */
   onRowsChange?: (ids: number[]) => void;
+  /** The list as shown (rows, their groups, headings), so a row whose status
+      changes can be kept where it was (keptPlace). Null while not shown. */
+  layoutRef?: React.MutableRefObject<ListLayout | null>;
   /** Close enquiries whose event date has passed (marks them Lost). */
   onCloseAsLost?: (ids: number[]) => void;
   closing?: boolean;
   /** Enquiries whose status was just changed — kept in place with a "Moved to
-      … · Undo" note instead of vanishing from the view they no longer match. */
-  movedRows?: Record<number, { from: string; to: string; at: number }>;
+      … · Undo" note instead of vanishing from the view they no longer match.
+      `place` is where each was (keptPlace, from layoutRef). */
+  movedRows?: Record<number, { from: string; to: string; place: KeptPlace }>;
   onUndoMove?: (id: number) => void;
   undoPendingId?: number | null;
   /** Names for the empty state ("No confirmed enquiries match Space: Courtyard"). */
@@ -171,9 +175,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   // An unsent quick reply is never hidden by a filter change: its row stays.
   const keepReply = replyId != null && draft.trim() ? replyId : null;
   const result = React.useMemo(() => {
-    const keepAt = new Map<number, number>();
-    for (const [id, key] of pinnedMoves) if (key === listKey && movedRows?.[id]) keepAt.set(id, movedRows[id].at);
-    return listRows(allRows, state, ctx, { alwaysInclude: keepReply != null ? [keepReply] : [], keepAt });
+    const keep = new Map<number, KeptPlace>();
+    for (const [id, key] of pinnedMoves) if (key === listKey && movedRows?.[id]) keep.set(id, movedRows[id].place);
+    return listRows(allRows, state, ctx, { alwaysInclude: keepReply != null ? [keepReply] : [], keep });
   }, [allRows, state, ctx, keepReply, pinnedMoves, listKey, movedRows]);
   const rows = result.rows;
   const dividerAt = React.useMemo(() => new Map(result.dividers.map(d => [d.at, d])), [result.dividers]);
@@ -182,12 +186,16 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   // Leaving the Date passed list (or emptying it) cancels a pending confirm.
   React.useEffect(() => { setConfirmClose(false); }, [passedOnly, rows.length]);
 
-  const { onRowsChange } = props;
+  const { onRowsChange, layoutRef } = props;
   const ids = React.useMemo(() => rows.map((r) => r.lead.id), [rows]);
   const orderKey = ids.join(",");
   React.useEffect(() => {
     onRowsChange?.(ids);
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (layoutRef) layoutRef.current = listLayout(result);
+  }, [layoutRef, result]);
+  React.useEffect(() => () => { if (layoutRef) layoutRef.current = null; }, [layoutRef]);
   // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
   // focus on that row (or the next one) instead of dropping it to the page.
   // When the last one goes, the view it was on ("Needs reply 0").

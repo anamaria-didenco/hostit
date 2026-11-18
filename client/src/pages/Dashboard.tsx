@@ -98,8 +98,8 @@ import MovedNote from "@/components/MovedNote";
 import { useNow } from "@/hooks/useNow";
 import { useEnquiryListState } from "@/hooks/useEnquiryListState";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, listRows, rowNeeds, shownListKey, viewCounts, viewDefaultSort,
-  type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, keptPlace, listRows, rowNeeds, shownListKey, viewCounts, viewDefaultSort,
+  type EnquiryFilters, type EnquiryView, type KeptPlace, type LeadLike, type ListCtx, type ListLayout, type ListRow,
 } from "@shared/enquiryFilters";
 import { ROW_INK, Icon as RowIcon } from "@/components/EnquiryRow";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
@@ -1009,10 +1009,13 @@ export default function Dashboard() {
   // enquiries, last year's clients).
   const [showWinBack, setShowWinBack] = useState(false);
   // Enquiries whose status was just changed inline: kept in the list, marked
-  // "Moved to <Status> · Undo", until the next view / filter / search change.
-  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; at: number }>>({});
+  // "Moved to <Status> · Undo", until the next view / filter / search / sort change.
+  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; place: KeptPlace }>>({});
   const statusPriorRef = useRef<Record<number, string>>({});
-  const statusRowAtRef = useRef<Record<number, number>>({});
+  // Where each row was in the list when its status change was asked for, and
+  // the list as shown (EnquiryListC keeps it up to date).
+  const statusPlaceRef = useRef<Record<number, KeptPlace>>({});
+  const enquiryLayoutRef = useRef<ListLayout | null>(null);
   const undoingRef = useRef<Set<number>>(new Set());
 
   // One responsive enquiry view plus an optional Board. The user toggles only
@@ -2394,9 +2397,9 @@ export default function Dashboard() {
       setMovedRows(prev => {
         if (wasUndo) { if (!prev[variables.id]) return prev; const { [variables.id]: _gone, ...rest } = prev; return rest; }
         // Only a row that was on screen can stay on screen.
-        const at = prev[variables.id]?.at ?? statusRowAtRef.current[variables.id];
-        if (!from || from === variables.status || at === undefined) return prev;
-        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, at } };
+        const place = prev[variables.id]?.place ?? statusPlaceRef.current[variables.id];
+        if (!from || from === variables.status || !place) return prev;
+        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, place } };
       });
       refetchLeads();
       utils.bookings.clashes.invalidate();
@@ -2477,9 +2480,10 @@ export default function Dashboard() {
     mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
       const priorStatus: string | undefined = (allLeads ?? []).find((x: any) => x?.id === vars.id)?.status;
       if (priorStatus) statusPriorRef.current[vars.id] = priorStatus;
-      // Where the row is in the list as shown, so it can stay there ("Moved to … · Undo").
-      const rowAt = enquiryOrder.indexOf(vars.id);
-      if (rowAt >= 0) statusRowAtRef.current[vars.id] = rowAt;
+      // Where the row is in the list as shown (its group, the rows beside it),
+      // so it can stay there ("Moved to … · Undo").
+      const place = keptPlace(enquiryLayoutRef.current, vars.id);
+      if (place) statusPlaceRef.current[vars.id] = place;
       if (vars.status === 'lost' && vars.lostReason === undefined) {
         const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
@@ -4647,6 +4651,7 @@ export default function Dashboard() {
                       }}
                       sending={sendEmail.isPending}
                       onRowsChange={setEnquiryOrder}
+                      layoutRef={enquiryLayoutRef}
                       // Keep a just-moved row in place with "Moved to … · Undo"
                       // instead of it vanishing from the tab it no longer matches.
                       movedRows={movedRows}

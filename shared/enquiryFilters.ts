@@ -608,14 +608,68 @@ export const isSearching = (s: Pick<ListState, "q">) => s.q.trim().length > 0;
 export const effectiveView = (s: Pick<ListState, "q" | "view" | "searchIn">): EnquiryView =>
   isSearching(s) && !s.searchIn ? "all" : s.view;
 
+/** A group heading in the list. */
+export interface ListDivider {
+  /** The row it starts at. */
+  at: number;
+  label: string;
+  /** Rows that belong under it (rows kept after a status change not counted). */
+  count: number;
+  /** The group: a month ("2026-12"), "none" or "past" when sorted by event date. */
+  key: string;
+  /** A shared month heading ("February – July 2027"): its last month in list order. */
+  until?: string;
+}
+
 export interface ListResult {
   rows: ListRow[];
   /** Group headings: the row index each starts at. */
-  dividers: { at: number; label: string; count: number }[];
+  dividers: ListDivider[];
+  /** Each row's group (as ListDivider.key, whether or not it has a heading); null in a list without groups. */
+  groups: (string | null)[];
   /** Rows in the view (and search) that the filters hide. */
   hiddenByFilters: number;
   /** alwaysInclude ids that are only shown because they were asked for. */
   pinnedOutside: number[];
+}
+
+/**
+ * Where a row kept on screen after a status change ("Moved to … · Undo")
+ * goes: in its own group, beside an enquiry it sat next to. Not a row number,
+ * which new enquiries and other moves shift while the row is kept.
+ */
+export interface KeptPlace {
+  /** The group it was in (ListResult.groups). */
+  group: string | null;
+  /** The enquiry just above it in that group, and just below (null: it was the group's first / last). */
+  after: number | null;
+  before: number | null;
+  /** It was nearer the top of its group than the bottom: the end it goes to when both neighbours have left. */
+  nearTop: boolean;
+}
+
+/** The list as shown, enough to say where a row is in it. */
+export interface ListLayout {
+  ids: readonly number[];
+  groups: readonly (string | null)[];
+  /** The rows headings start at. */
+  starts: readonly number[];
+}
+export const listLayout = (res: ListResult): ListLayout =>
+  ({ ids: res.rows.map(r => r.lead.id), groups: res.groups, starts: res.dividers.map(d => d.at) });
+
+/** Where a row shown in this layout stays if its status changes now; null when it isn't shown. */
+export function keptPlace(layout: ListLayout | null | undefined, id: number): KeptPlace | null {
+  const i = layout ? layout.ids.indexOf(id) : -1;
+  if (!layout || i < 0) return null;
+  const lo = Math.max(0, ...layout.starts.filter(at => at <= i));
+  const hi = Math.min(layout.ids.length, ...layout.starts.filter(at => at > i));
+  return {
+    group: layout.groups[i] ?? null,
+    after: i > lo ? layout.ids[i - 1] : null,
+    before: i + 1 < hi ? layout.ids[i + 1] : null,
+    nearTop: i - lo <= hi - 1 - i,
+  };
 }
 
 /** A month holding at least this many rows gets a heading of its own. */
@@ -677,21 +731,21 @@ export function listRows(
   opts: {
     /** Keep these rows even when they no longer match (an unsent quick reply), at their sorted place. */
     alwaysInclude?: readonly number[];
-    /** Keep these rows at a fixed place (a status just changed: "Moved to … · Undo"). */
-    keepAt?: ReadonlyMap<number, number>;
+    /** Keep these rows where they were (a status just changed: "Moved to … · Undo"). See keptPlace. */
+    keep?: ReadonlyMap<number, KeptPlace>;
   } = {},
 ): ListResult {
   const q = s.q.trim();
   const view = effectiveView(s);
   const today = todayKey(ctx);
-  const keepAt = opts.keepAt ?? new Map<number, number>();
+  const keep = opts.keep ?? new Map<number, KeptPlace>();
   const always = new Set(opts.alwaysInclude ?? []);
   let inScope = 0;
   const shown: ListRow[] = [];
   const pinnedOutside: number[] = [];
   const kept: ListRow[] = [];
   for (const r of rows) {
-    if (keepAt.has(r.lead.id)) { kept.push(r); continue; }
+    if (keep.has(r.lead.id)) { kept.push(r); continue; }
     const scoped = inView(view, r) && (!q || leadMatchesSearch(r.lead as any, q));
     if (scoped) inScope++;
     if (scoped && matchesExcept(r, s.filters, ctx, today)) shown.push(r);
@@ -700,17 +754,21 @@ export function listRows(
   const hiddenByFilters = Math.max(0, inScope - (shown.length - pinnedOutside.length));
   const cmp = compareRows(s.sort, ctx);
   let out: ListRow[];
-  let dividers: ListResult["dividers"] = [];
-  /** Whether a row belongs under this heading (month headings only). */
-  let heads: (d: ListResult["dividers"][number], r: ListRow) => boolean = () => false;
-  /** The heading a kept row would need if its own went when it moved (month headings only). */
-  let ownHeading: (r: ListRow) => ListResult["dividers"][number] | null = () => null;
+  let dividers: ListDivider[] = [];
+  /** A row's group (ListResult.groups). */
+  let groupKey: (r: ListRow) => string | null = () => null;
+  /** Whether a group's rows go under this heading. */
+  let covers: (d: ListDivider, key: string) => boolean = (d, key) => d.key === key;
+  /** Whether group a comes before group b in the list. */
+  let groupBefore: (a: string, b: string) => boolean = () => false;
+  /** The heading a group gets back when it has none (its only row is a kept one); null when it goes without. */
+  let headFor: (key: string) => ListDivider | null = () => null;
   if (q && view === "all") {
     out = [];
     PILES.forEach((p, i) => {
       const group = shown.filter(r => pileOf(r) === i).sort(cmp);
       if (!group.length) return;
-      dividers.push({ at: out.length, label: p.label, count: group.length });
+      dividers.push({ at: out.length, label: p.label, count: group.length, key: p.id });
       out.push(...group);
     });
   } else {
@@ -721,10 +779,10 @@ export function listRows(
         if (s.sort.dir === "asc" && r.eventDay < today) return { key: "past", label: "Already happened" };
         return { key: r.eventDay.slice(0, 7), label: formatMonthLong(r.eventDay.slice(0, 7)) };
       };
-      let groups: { key: string; until?: string; divider: ListResult["dividers"][number] }[] = [];
+      let groups: { key: string; until?: string; divider: ListDivider }[] = [];
       out.forEach((r, i) => {
         const g = groupOf(r);
-        if (g.key !== groups[groups.length - 1]?.key) groups.push({ key: g.key, divider: { at: i, label: g.label, count: 0 } });
+        if (g.key !== groups[groups.length - 1]?.key) groups.push({ key: g.key, divider: { at: i, label: g.label, count: 0, key: g.key } });
         groups[groups.length - 1].divider.count++;
       });
       if (groups.length < 2) groups = [];
@@ -737,41 +795,61 @@ export function listRows(
       // next to each other share one heading, and a list sorted latest first
       // whose rows are spread thinly over many months (lost enquiries) has none.
       groups = groupQuietMonths(groups, s.sort.dir);
-      dividers = groups.map(g => g.divider);
-      const span = new Map(groups.map(g => [g.divider, g.until ? [g.key, g.until].sort() : [g.key, g.key]]));
-      heads = (d, r) => {
-        const sp = span.get(d);
-        const key = groupOf(r).key;
-        return !!sp && (key === sp[0] || (isMonthKey(key) && key >= sp[0] && key <= sp[1]));
-      };
+      dividers = groups.map(g => (g.until ? { ...g.divider, key: g.key, until: g.until } : g.divider));
       const monthHeadings = groups.some(g => isMonthKey(g.key));
-      ownHeading = r => {
-        const g = groupOf(r);
-        if (!dividers.length || g.key === month || (isMonthKey(g.key) && !monthHeadings)) return null;
-        const d = { at: 0, label: g.label, count: 0 };
-        span.set(d, [g.key, g.key]);
-        return d;
+      groupKey = r => groupOf(r).key;
+      covers = (d, key) => {
+        const [a, b] = [d.key, d.until ?? d.key].sort();
+        return key === d.key || (isMonthKey(key) && isMonthKey(a) && key >= a && key <= b);
+      };
+      const rank = (k: string) => (isMonthKey(k) ? 0 : k === "none" ? 1 : 2);
+      groupBefore = (a, b) => (rank(a) !== rank(b) ? rank(a) < rank(b) : s.sort.dir === "asc" ? a < b : a > b);
+      // Months without headings (too few rows, or the month the date filter
+      // names) sit above the first heading.
+      headFor = key => {
+        if (!dividers.length || key === month || (isMonthKey(key) && !monthHeadings)) return null;
+        const label = key === "none" ? "No date yet" : key === "past" ? "Already happened" : isMonthKey(key) ? formatMonthLong(key) : null;
+        return label ? { at: 0, label, count: 0, key } : null;
       };
     }
   }
-  // Rows kept in place after a status change go back where they were. A kept
-  // row that lands where a heading starts goes under that heading when it
-  // belongs there (it was the month's first row), else above it (the month
-  // before's last row). When the row was its month's only one, that month's
-  // heading stays above it, counting none.
-  kept.sort((a, b) => (keepAt.get(a.lead.id)! - keepAt.get(b.lead.id)!));
-  for (const r of kept) {
-    const at = Math.min(Math.max(0, keepAt.get(r.lead.id)!), out.length);
+  // Rows kept on screen after a status change go back into the group they
+  // were in, beside an enquiry they sat next to, else at the nearer end of
+  // that group. A row that was its group's only one gets the group's heading
+  // back, counting none. Other rows arriving, leaving or moving meanwhile
+  // don't push a kept row under another heading.
+  const rowGroups = out.map(groupKey);
+  const pending = [...kept];
+  const placeOf = (r: ListRow) => keep.get(r.lead.id)!;
+  const isPending = (id: number | null) => id != null && pending.some(r => r.lead.id === id);
+  while (pending.length) {
+    // One kept beside another kept row goes in after that one.
+    let k = pending.findIndex(r => !isPending(placeOf(r).after) && !isPending(placeOf(r).before));
+    if (k < 0) k = Math.max(0, pending.findIndex(r => !isPending(placeOf(r).after)));
+    const [r] = pending.splice(k, 1);
+    const p = placeOf(r);
+    const g = p.group;
+    // Its group's rows: lo up to (not including) hi.
+    let head = g == null ? null : dividers.find(d => covers(d, g)) ?? null;
+    let lo = 0, hi = out.length;
+    if (head) { lo = head.at; hi = dividers.find(d => d.at > lo)?.at ?? out.length; }
+    else if (g != null && (head = headFor(g))) lo = hi = dividers.find(d => groupBefore(g, d.key))?.at ?? out.length;
+    else if (g != null) hi = dividers[0]?.at ?? out.length;
+    const indexIn = (id: number | null) => {
+      const i = id == null ? -1 : out.findIndex(x => x.lead.id === id);
+      return i >= lo && i < hi ? i : -1;
+    };
+    const a = indexIn(p.after), b = indexIn(p.before);
+    const at = a >= 0 ? a + 1 : b >= 0 ? b : p.nearTop ? lo : hi;
     out.splice(at, 0, r);
-    for (const d of dividers) if (d.at > at || (d.at === at && !heads(d, r))) d.at++;
-    const endsGroup = at === out.length - 1 || dividers.some(d => d.at === at + 1);
-    if (!endsGroup || dividers.some(d => heads(d, r))) continue;
-    const own = ownHeading(r);
-    if (!own) continue;
-    own.at = at;
-    dividers.splice(dividers.filter(d => d.at < at).length, 0, own);
+    rowGroups.splice(at, 0, g);
+    for (const d of dividers) if (d.at > at || (d.at === at && d !== head)) d.at++;
+    if (head && !dividers.includes(head)) {
+      head.at = at;
+      dividers.splice(dividers.filter(d => d.at < at).length, 0, head);
+    }
   }
-  return { rows: out, dividers, hiddenByFilters, pinnedOutside };
+  return { rows: out, dividers, groups: rowGroups, hiddenByFilters, pinnedOutside };
 }
 
 /**

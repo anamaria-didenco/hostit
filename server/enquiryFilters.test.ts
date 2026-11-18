@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, boardRows, clearFacet, clearFilters, compareRows, dayKeyRange,
   datePassedCount, defaultView, enrichRows, facetCounts, formatMonthRange, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
-  quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, shownListKey, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
-  type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow, type ListState,
+  keptPlace, listLayout, quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, shownListKey, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
+  type EnquiryFilters, type EnquiryView, type KeptPlace, type LeadLike, type ListCtx, type ListRow, type ListState,
 } from "@shared/enquiryFilters";
 import { DEFAULT_STATUSES } from "@shared/enquiryStatuses";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
@@ -743,64 +743,170 @@ describe("L. kept rows and the opening view", () => {
     expect(kept.pinnedOutside).toEqual([2]);
   });
   it("a row just moved to another status stays where it was", () => {
-    const rows = rowsOf([lead({ id: 1, status: "new", respondedAt: null, createdAt: ago(5 * DAY) }), lead({ id: 2, status: "booked" }), lead({ id: 3, status: "new", respondedAt: null, createdAt: ago(DAY) })]);
-    const res = listRows(rows, state({ view: "reply" }), ctx, { keepAt: new Map([[2, 1]]) });
+    const rows = rowsOf([lead({ id: 1, status: "new", respondedAt: null, createdAt: ago(5 * DAY) }), lead({ id: 2, status: "new", respondedAt: null, createdAt: ago(3 * DAY) }), lead({ id: 3, status: "new", respondedAt: null, createdAt: ago(DAY) })]);
+    const s = state({ view: "reply" });
+    const place = keptPlace(listLayout(listRows(rows, s, ctx)), 2)!;
+    expect(place).toEqual({ group: null, after: 1, before: 3, nearTop: true });
+    const moved = rows.map(r => (r.lead.id === 2 ? rowsOf([{ ...r.lead, status: "booked" }])[0] : r));
+    const res = listRows(moved, s, ctx, { keep: new Map([[2, place]]) });
     expect(res.rows.map(r => r.lead.id)).toEqual([1, 2, 3]);
+    // A row not shown has no place to keep.
+    expect(keptPlace(listLayout(res), 99)).toBeNull();
+    expect(keptPlace(null, 2)).toBeNull();
   });
+
+  // Five open enquiries in each of November, December and January, soonest first.
+  const monthDay = (m: number, d: number) => (m === 1 ? dateOnly(2027, 1, d) : dateOnly(2026, m, d));
+  const months = () => [11, 12, 1].flatMap((m, i) => [20, 22, 24, 26, 28].map((d, k) => lead({ id: 200 + i * 10 + k, eventDate: monthDay(m, d) })));
+  const soonest = state({ view: "open", sort: { key: "event", dir: "asc" } });
+  const LOST = { status: "lost", lostReason: "price" } as const;
+  /** Change these enquiries' status one after another from the list as shown, as the app does: each stays where it was (keptPlace). */
+  function move(leads: LeadLike[], s: ListState, ids: number[], change: Partial<LeadLike> = LOST) {
+    let now = leads;
+    let res = listRows(rowsOf(now), s, ctx);
+    const keep = new Map<number, KeptPlace>();
+    for (const id of ids) {
+      keep.set(id, keep.get(id) ?? keptPlace(listLayout(res), id)!);
+      now = now.map(l => (l.id === id ? { ...l, ...change } : l));
+      res = listRows(rowsOf(now), s, ctx, { keep });
+    }
+    return { res, keep, leads: now, again: (more: LeadLike[]) => listRows(rowsOf(more), s, ctx, { keep }) };
+  }
+  const heads = (res: ReturnType<typeof listRows>) => res.dividers.map(d => `${d.label} · ${d.count} @${d.at}`);
+  /** Each row's heading, read down the list as a person would. */
+  const under = (res: ReturnType<typeof listRows>) => {
+    const at = new Map(res.dividers.map(d => [d.at, d.label]));
+    let cur = "";
+    return new Map(res.rows.map((r, i) => { cur = at.get(i) ?? cur; return [r.lead.id, cur]; }));
+  };
+
   it("a row just moved stays under its own month heading, first or last in the month", () => {
-    // Five open enquiries in each of November, December and January, soonest first.
-    const day = (m: number, d: number) => (m === 1 ? dateOnly(2027, 1, d) : dateOnly(2026, m, d));
-    const leads = [11, 12, 1].flatMap((m, i) => [20, 22, 24, 26, 28].map((d, k) => lead({ id: 200 + i * 10 + k, eventDate: day(m, d) })));
-    const s = state({ view: "open", sort: { key: "event", dir: "asc" } });
-    const before = listRows(rowsOf(leads), s, ctx);
-    const heads = (res: ReturnType<typeof listRows>) => res.dividers.map(d => `${d.label} @${d.at}`);
-    expect(heads(before)).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
-    const moveToLost = (id: number) => {
-      const at = before.rows.findIndex(r => r.lead.id === id);
-      const after = rowsOf(leads.map(l => (l.id === id ? { ...l, status: "lost", lostReason: "price" } : l)));
-      return listRows(after, s, ctx, { keepAt: new Map([[id, at]]) });
-    };
+    const leads = months();
+    const before = listRows(rowsOf(leads), soonest, ctx);
+    expect(heads(before)).toEqual(["November 2026 · 5 @0", "December 2026 · 5 @5", "January 2027 · 5 @10"]);
+    expect(before.groups.slice(3, 7)).toEqual(["2026-11", "2026-11", "2026-12", "2026-12"]);
     // The first December row (index 5) stays under December.
-    const first = moveToLost(210);
+    const first = move(leads, soonest, [210]).res;
     expect(first.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
-    expect(first.dividers.map(d => `${d.label} · ${d.count} @${d.at}`)).toEqual(["November 2026 · 5 @0", "December 2026 · 4 @5", "January 2027 · 5 @10"]);
+    expect(heads(first)).toEqual(["November 2026 · 5 @0", "December 2026 · 4 @5", "January 2027 · 5 @10"]);
+    expect(first.groups).toEqual(before.groups);
     // The last November row (index 4) stays under November.
-    const last = moveToLost(204);
-    expect(last.dividers.map(d => `${d.label} · ${d.count} @${d.at}`)).toEqual(["November 2026 · 4 @0", "December 2026 · 5 @5", "January 2027 · 5 @10"]);
-    // Both at once, and the very first row of the list.
-    const both = (() => {
-      const after = rowsOf(leads.map(l => ([204, 210].includes(l.id) ? { ...l, status: "lost", lostReason: "price" } : l)));
-      return listRows(after, s, ctx, { keepAt: new Map([[204, 4], [210, 5]]) });
-    })();
-    expect(heads(both)).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
-    expect(heads(moveToLost(200))).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
+    expect(heads(move(leads, soonest, [204]).res)).toEqual(["November 2026 · 4 @0", "December 2026 · 5 @5", "January 2027 · 5 @10"]);
+    // Both, in either order, and the very first row of the list.
+    for (const ids of [[204, 210], [210, 204]]) {
+      const both = move(leads, soonest, ids).res;
+      expect(both.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
+      expect(heads(both)).toEqual(["November 2026 · 4 @0", "December 2026 · 4 @5", "January 2027 · 5 @10"]);
+    }
+    expect(move(leads, soonest, [200]).res.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
+  });
+  it("rows moved one after another, side by side, stay in their order", () => {
+    const leads = months();
+    const before = listRows(rowsOf(leads), soonest, ctx).rows.map(r => r.lead.id);
+    for (const ids of [[210, 211, 212], [212, 211, 210], [211, 210, 212], [214, 220], [220, 214]]) {
+      const { res } = move(leads, soonest, ids);
+      expect(res.rows.map(r => r.lead.id)).toEqual(before);
+      expect(heads(res)).toEqual(["November 2026 · 5 @0", `December 2026 · ${5 - ids.filter(id => id < 220).length} @5`, `January 2027 · ${ids.includes(220) ? 4 : 5} @10`]);
+    }
+  });
+  it("a new enquiry arriving above a moved row doesn't push it under the month before", () => {
+    const leads = months();
+    const moved = move(leads, soonest, [210]);
+    // A new November enquiry comes in (the list refreshes every 30 seconds).
+    const arrived = moved.again([...moved.leads, lead({ id: 290, eventDate: dateOnly(2026, 11, 26) })]);
+    expect(under(arrived).get(210)).toBe("December 2026");
+    expect(arrived.rows.map(r => r.lead.id).slice(4, 8)).toEqual([290, 204, 210, 211]);
+    expect(heads(arrived)).toEqual(["November 2026 · 6 @0", "December 2026 · 4 @6", "January 2027 · 5 @11"]);
+    // One arriving earlier in its own month: the moved row stays just above the row it was above.
+    const sameMonth = moved.again([...moved.leads, lead({ id: 291, eventDate: dateOnly(2026, 12, 1) })]);
+    expect(sameMonth.rows.map(r => r.lead.id).slice(4, 8)).toEqual([204, 291, 210, 211]);
+    expect(under(sameMonth).get(210)).toBe("December 2026");
+    // The last November row moved, then a December enquiry comes in: it stays at November's end.
+    const last = move(leads, soonest, [204]);
+    const later = last.again([...last.leads, lead({ id: 292, eventDate: dateOnly(2026, 12, 1) })]);
+    expect(under(later).get(204)).toBe("November 2026");
+    expect(later.rows.map(r => r.lead.id).slice(3, 7)).toEqual([203, 204, 292, 210]);
+    // Enquiries leaving the list (another device) don't move it either.
+    const gone = moved.again(moved.leads.filter(l => l.id !== 201));
+    expect(under(gone).get(210)).toBe("December 2026");
+    expect(heads(gone)).toEqual(["November 2026 · 4 @0", "December 2026 · 4 @4", "January 2027 · 5 @9"]);
+  });
+  it("when the rows beside it have gone, a moved row goes to the nearer end of its own group", () => {
+    const leads = months();
+    // 212 sat in the middle of December, nearer the top (2 above, 2 below → top).
+    const { keep, leads: now, again } = move(leads, soonest, [212]);
+    expect(keep.get(212)).toEqual({ group: "2026-12", after: 211, before: 213, nearTop: true });
+    const res = again(now.filter(l => l.id !== 211 && l.id !== 213));
+    expect(res.rows.map(r => r.lead.id).slice(4, 8)).toEqual([204, 212, 210, 214]);
+    expect(under(res).get(212)).toBe("December 2026");
+    // 213 sat nearer the bottom: it goes to December's end, above January.
+    const low = move(leads, soonest, [213]);
+    const res2 = low.again(low.leads.filter(l => l.id !== 212 && l.id !== 214));
+    expect(res2.rows.map(r => r.lead.id).slice(5, 9)).toEqual([210, 211, 213, 220]);
+    expect(under(res2).get(213)).toBe("December 2026");
+  });
+  it("a moved row stays under a shared month heading when the months under it change", () => {
+    // November and January busy; February, March and April quiet, sharing one heading.
+    const leads = [
+      ...[19, 20, 21, 22, 23, 24, 25, 26].map((d, k) => lead({ id: 400 + k, eventDate: dateOnly(2026, 11, d) })),
+      ...[8, 9, 10, 11, 12, 13, 14, 15].map((d, k) => lead({ id: 410 + k, eventDate: dateOnly(2027, 1, d) })),
+      lead({ id: 420, eventDate: dateOnly(2027, 2, 6) }), lead({ id: 421, eventDate: dateOnly(2027, 3, 6) }), lead({ id: 422, eventDate: dateOnly(2027, 4, 6) }),
+    ];
+    const before = listRows(rowsOf(leads), soonest, ctx);
+    expect(heads(before)).toEqual(["November 2026 · 8 @0", "January 2027 · 8 @8", "February – April 2027 · 3 @16"]);
+    const moved = move(leads, soonest, [421]);
+    expect(heads(moved.res)).toEqual(["November 2026 · 8 @0", "January 2027 · 8 @8", "February – April 2027 · 2 @16"]);
+    expect(under(moved.res).get(421)).toBe("February – April 2027");
+    // Four more March enquiries arrive: March gets a heading of its own, and the moved row goes under it, first.
+    const busier = moved.again([...moved.leads, ...[10, 14, 18, 22].map((d, k) => lead({ id: 430 + k, eventDate: dateOnly(2027, 3, d) }))]);
+    expect(heads(busier)).toEqual(["November 2026 · 8 @0", "January 2027 · 8 @8", "February 2027 · 1 @16", "March 2027 · 4 @17", "April 2027 · 1 @22"]);
+    expect(under(busier).get(421)).toBe("March 2027");
+    expect(busier.rows[17].lead.id).toBe(421);
+  });
+  it("in a list whose months have no headings, a moved row stays above the first heading or under its own", () => {
+    // Closed, latest first: lost enquiries a month apart (too thin for month headings), two undated.
+    const leads = [
+      ...[10, 9, 8, 7, 6, 5].map((m, k) => lead({ id: 500 + k, status: "lost", lostReason: "price", eventDate: dateOnly(2026, m, 14) })),
+      lead({ id: 510, status: "lost", lostReason: "price", createdAt: ago(3 * DAY) }), lead({ id: 511, status: "lost", lostReason: "price", createdAt: ago(9 * DAY) }),
+    ];
+    const latest = state({ view: "closed", sort: { key: "event", dir: "desc" } });
+    const before = listRows(rowsOf(leads), latest, ctx);
+    expect(heads(before)).toEqual(["No date yet · 2 @6"]);
+    const reopen = { status: "contacted", lostReason: null } as Partial<LeadLike>;
+    // The last dated one, reopened: still last above No date yet, not under it.
+    const last = move(leads, latest, [505], reopen).res;
+    expect(last.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
+    expect(heads(last)).toEqual(["No date yet · 2 @6"]);
+    // The first undated one: still under No date yet.
+    const undated = move(leads, latest, [510], reopen).res;
+    expect(undated.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
+    expect(heads(undated)).toEqual(["No date yet · 1 @6"]);
   });
   it("a row just moved that was its month's only one keeps that month's heading, counting none", () => {
-    const s = state({ view: "open", sort: { key: "event", dir: "asc" } });
     const leads = [
       ...[19, 20, 22, 24, 26, 28].map((d, k) => lead({ id: 300 + k, eventDate: dateOnly(2026, 11, d) })),
       lead({ id: 310, eventDate: dateOnly(2026, 12, 1) }),
       ...[8, 12, 16, 20, 24].map((d, k) => lead({ id: 320 + k, eventDate: dateOnly(2027, 1, d) })),
       lead({ id: 330, eventDate: null }),
     ];
-    const before = listRows(rowsOf(leads), s, ctx);
-    const heads = (res: ReturnType<typeof listRows>) => res.dividers.map(d => `${d.label} · ${d.count} @${d.at}`);
+    const before = listRows(rowsOf(leads), soonest, ctx);
     expect(heads(before)).toEqual(["November 2026 · 6 @0", "December 2026 · 1 @6", "January 2027 · 5 @7", "No date yet · 1 @12"]);
-    const moveToLost = (ids: number[]) => {
-      const after = rowsOf(leads.map(l => (ids.includes(l.id) ? { ...l, status: "lost", lostReason: "price" } : l)));
-      return listRows(after, s, ctx, { keepAt: new Map(ids.map(id => [id, before.rows.findIndex(r => r.lead.id === id)])) });
-    };
     // December's only booking: it stays under December, not November.
-    expect(heads(moveToLost([310]))).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 1 @12"]);
+    expect(heads(move(leads, soonest, [310]).res)).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 1 @12"]);
     // The only undated one, last in the list: it stays under No date yet, not January.
-    expect(heads(moveToLost([330]))).toEqual(["November 2026 · 6 @0", "December 2026 · 1 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
-    expect(heads(moveToLost([310, 330]))).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
+    expect(heads(move(leads, soonest, [330]).res)).toEqual(["November 2026 · 6 @0", "December 2026 · 1 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
+    for (const ids of [[310, 330], [330, 310]]) {
+      expect(heads(move(leads, soonest, ids).res)).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
+    }
+    // A new November enquiry arriving meanwhile doesn't take December's place.
+    const moved = move(leads, soonest, [310]);
+    const arrived = moved.again([...moved.leads, lead({ id: 390, eventDate: dateOnly(2026, 11, 30) })]);
+    expect(heads(arrived)).toEqual(["November 2026 · 7 @0", "December 2026 · 0 @7", "January 2027 · 5 @8", "No date yet · 1 @13"]);
+    expect(arrived.rows[7].lead.id).toBe(310);
     // A list too thin for month headings gets none back.
     const few = leads.filter(l => [300, 310, 320, 330].includes(l.id));
-    const fewBefore = listRows(rowsOf(few), s, ctx);
-    expect(heads(fewBefore)).toEqual(["No date yet · 1 @3"]);
-    const fewAfter = listRows(rowsOf(few.map(l => (l.id === 320 ? { ...l, status: "lost", lostReason: "price" } : l))), s, ctx,
-      { keepAt: new Map([[320, 2]]) });
+    expect(heads(listRows(rowsOf(few), soonest, ctx))).toEqual(["No date yet · 1 @3"]);
+    const fewAfter = move(few, soonest, [320]).res;
     expect(fewAfter.rows.map(r => r.lead.id)).toEqual([300, 310, 320, 330]);
     expect(heads(fewAfter)).toEqual(["No date yet · 1 @3"]);
   });
