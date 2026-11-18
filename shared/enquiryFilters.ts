@@ -618,9 +618,48 @@ export interface ListResult {
   pinnedOutside: number[];
 }
 
-/** Month headings are shown only when they hold at least this many rows each, on average. */
-export const MONTH_HEADING_MIN_AVG = 3;
+/** A month holding at least this many rows gets a heading of its own. */
+export const MONTH_HEADING_MIN_ROWS = 4;
 const isMonthKey = (key: string) => /^\d{4}-\d{2}$/.test(key);
+/** "February – July 2027", or "December 2026 – February 2027" across a new year. Earliest month first. */
+export function formatMonthRange(a: string, b: string): string {
+  const [from, to] = a <= b ? [a, b] : [b, a];
+  if (from === to) return formatMonthLong(from);
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  return `${sameYear ? MONTHS_LONG[Number(from.slice(5, 7)) - 1] : formatMonthLong(from)} – ${formatMonthLong(to)}`;
+}
+/**
+ * Month headings that each group several rows. A month holding at least
+ * MONTH_HEADING_MIN_ROWS keeps its heading; next-door months holding fewer
+ * share one heading ("February – July 2027 · 6"); a quiet month between two
+ * busy ones keeps its own. No month gets a heading (the Event date column
+ * already names it) when the busy months hold no more than half the dated rows
+ * (lost enquiries spread thinly over many months), or when the headings left
+ * would hold fewer than MONTH_HEADING_MIN_ROWS rows each on average. Because
+ * quiet months next to each other share one heading, a few far-off months with
+ * one booking each never take the headings away from the busy months. Other
+ * headings ("No date yet", "Already happened") are left as they are.
+ */
+function groupQuietMonths<G extends { key: string; divider: { at: number; label: string; count: number } }>(groups: G[]): G[] {
+  const isQuiet = (g: G) => isMonthKey(g.key) && g.divider.count < MONTH_HEADING_MIN_ROWS;
+  const months = groups.filter(g => isMonthKey(g.key));
+  const dated = months.reduce((n, g) => n + g.divider.count, 0);
+  const inBusy = months.reduce((n, g) => n + (isQuiet(g) ? 0 : g.divider.count), 0);
+  const noMonths = () => groups.filter(g => !isMonthKey(g.key));
+  if (inBusy * 2 <= dated) return noMonths();
+  const out: G[] = [];
+  for (let i = 0; i < groups.length;) {
+    let j = i;
+    if (isQuiet(groups[i])) while (j + 1 < groups.length && isQuiet(groups[j + 1])) j++;
+    if (j === i) { out.push(groups[i]); i++; continue; }
+    const count = groups.slice(i, j + 1).reduce((n, g) => n + g.divider.count, 0);
+    out.push({ ...groups[i], divider: { at: groups[i].divider.at, label: formatMonthRange(groups[i].key, groups[j].key), count } });
+    i = j + 1;
+  }
+  // A shared heading keeps its first month's key, so this counts every month heading left.
+  if (dated < out.filter(g => isMonthKey(g.key)).length * MONTH_HEADING_MIN_ROWS) return noMonths();
+  return out;
+}
 
 export function listRows(
   rows: readonly ListRow[],
@@ -681,13 +720,10 @@ export function listRows(
       // keeps its heading.
       const month = filterMonth(s.filters.date, today);
       if (month) groups = groups.filter(g => g.key !== month);
-      // Month headings only help when they group several rows. When they would
-      // hold fewer than MONTH_HEADING_MIN_AVG rows each on average (lost
-      // enquiries spread over many months), none is shown: the date column
-      // already names the month. "No date yet" and "Already happened" stay.
-      const months = groups.filter(g => isMonthKey(g.key));
-      const held = months.reduce((n, g) => n + g.divider.count, 0);
-      if (months.length && held / months.length < MONTH_HEADING_MIN_AVG) groups = groups.filter(g => !isMonthKey(g.key));
+      // Month headings only help when they group several rows: quiet months
+      // next to each other share one heading, and a list whose rows are spread
+      // thinly over many months (lost enquiries) has none.
+      groups = groupQuietMonths(groups);
       dividers = groups.map(g => g.divider);
     }
   }

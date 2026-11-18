@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, boardRows, clearFacet, clearFilters, compareRows, dayKeyRange,
-  datePassedCount, defaultView, enrichRows, facetCounts, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
+  datePassedCount, defaultView, enrichRows, facetCounts, formatMonthRange, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
   quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow, type ListState,
 } from "@shared/enquiryFilters";
@@ -276,15 +276,17 @@ describe("D. event-date sort and dividers", () => {
     expect(sorted[0]).toBe(r);
   });
   it("31. dividers: one per upcoming month, then no date, then already happened", () => {
-    // Three rows a month: enough for month headings (MONTH_HEADING_MIN_AVG).
+    // Four rows a month: each month gets its own heading (MONTH_HEADING_MIN_ROWS).
     const busy = [...rows, ...rowsOf([
       lead({ id: 7, lastName: "Nov25", eventDate: dateOnly(2026, 11, 25) }),
+      lead({ id: 10, lastName: "Nov26", eventDate: dateOnly(2026, 11, 26) }),
       lead({ id: 8, lastName: "Feb10", eventDate: dateOnly(2027, 2, 10) }),
       lead({ id: 9, lastName: "Feb20", eventDate: dateOnly(2027, 2, 20) }),
+      lead({ id: 11, lastName: "Feb25", eventDate: dateOnly(2027, 2, 25) }),
     ])];
     const res = listRows(busy, state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(res.dividers.map(d => [d.label, d.count, d.at])).toEqual([
-      ["November 2026", 3, 0], ["February 2027", 3, 3], ["No date yet", 1, 6], ["Already happened", 2, 7],
+      ["November 2026", 4, 0], ["February 2027", 4, 4], ["No date yet", 1, 8], ["Already happened", 2, 9],
     ]);
     const single = listRows(rowsOf([lead({ eventDate: dateOnly(2026, 11, 20) }), lead({ eventDate: dateOnly(2026, 11, 21) })]), state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(single.dividers).toEqual([]);
@@ -293,23 +295,25 @@ describe("D. event-date sort and dividers", () => {
     const nov = rowsOf([
       lead({ id: 21, lastName: "Thu19", status: "booked", eventDate: dateOnly(2026, 11, 19) }),
       lead({ id: 25, lastName: "Sat21", status: "booked", eventDate: dateOnly(2026, 11, 21) }),
+      lead({ id: 28, lastName: "Fri27", status: "booked", eventDate: dateOnly(2026, 11, 27) }),
       lead({ id: 22, lastName: "Sun29", status: "booked", eventDate: dateOnly(2026, 11, 29) }),
       lead({ id: 23, lastName: "Mon2", status: "booked", eventDate: dateOnly(2026, 11, 2) }),
       lead({ id: 24, lastName: "Dec5", status: "booked", eventDate: dateOnly(2026, 12, 5) }),
       lead({ id: 26, lastName: "Dec8", status: "booked", eventDate: dateOnly(2026, 12, 8) }),
       lead({ id: 27, lastName: "Dec15", status: "booked", eventDate: dateOnly(2026, 12, 15) }),
+      lead({ id: 29, lastName: "Dec20", status: "booked", eventDate: dateOnly(2026, 12, 20) }),
     ]);
     const confirmed = (date: EnquiryFilters["date"]) => listRows(nov, state({ view: "confirmed", filters: withF({ date }), sort: { key: "event", dir: "asc" } }), ctx);
     const thisMonth = confirmed({ preset: "this_month" });
-    expect(names(thisMonth.rows)).toEqual(["Thu19", "Sat21", "Sun29", "Mon2"]);
-    expect(thisMonth.dividers.map(d => [d.label, d.count, d.at])).toEqual([["Already happened", 1, 3]]);
+    expect(names(thisMonth.rows)).toEqual(["Thu19", "Sat21", "Fri27", "Sun29", "Mon2"]);
+    expect(thisMonth.dividers.map(d => [d.label, d.count, d.at])).toEqual([["Already happened", 1, 4]]);
     expect(confirmed({ month: "2026-11" }).dividers.map(d => d.label)).toEqual(["Already happened"]);
     // Any other range keeps its month headings.
     expect(confirmed({ preset: "upcoming" }).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026"]);
     expect(confirmed(null).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026", "Already happened"]);
   });
-  it("31c. month headings holding under 3 rows each on average are left out; No date yet and Already happened stay", () => {
-    // November 2, February 1: 1.5 a month.
+  it("31c. no busy month: no month headings; No date yet and Already happened stay", () => {
+    // November 2, February 1.
     const res = listRows(rows, state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(names(res.rows)).toEqual(["Tonight", "Tomorrow", "NextYear", "Undated", "Yesterday", "Old"]);
     expect(res.dividers.map(d => [d.label, d.count, d.at])).toEqual([["No date yet", 1, 3], ["Already happened", 2, 4]]);
@@ -329,16 +333,65 @@ describe("D. event-date sort and dividers", () => {
     // Without the undated one nothing is left to head.
     expect(listRows(lost.slice(0, 5), state({ view: "closed", sort: { key: "event", dir: "desc" } }), ctx).dividers).toEqual([]);
   });
-  it("31e. the line is an average of 3: 2 + 4 keeps the headings, 2 + 3 does not", () => {
-    const month = (id: number, m: number, d: number) => lead({ id, lastName: `M${m}D${d}`, eventDate: dateOnly(2026, m, d) });
-    const desc = { sort: { key: "event" as const, dir: "desc" as const } };
-    const twoFour = rowsOf([month(41, 12, 1), month(42, 12, 2), month(43, 11, 20), month(44, 11, 21), month(45, 11, 22), month(46, 11, 23)]);
-    expect(listRows(twoFour, state(desc), ctx).dividers.map(d => `${d.label} · ${d.count}`)).toEqual(["December 2026 · 2", "November 2026 · 4"]);
-    const twoThree = rowsOf([month(51, 12, 1), month(52, 12, 2), month(53, 11, 20), month(54, 11, 21), month(55, 11, 22)]);
-    expect(listRows(twoThree, state(desc), ctx).dividers).toEqual([]);
+  it("31e. a month of 4 or more keeps its heading; quiet months next to each other share one", () => {
+    const month = (id: number, y: number, m: number, d: number) => lead({ id, lastName: `M${m}D${d}`, status: "booked", eventDate: dateOnly(y, m, d) });
+    const heads = (r: ListRow[], o: Partial<ListState> = {}) =>
+      listRows(r, state({ view: "confirmed", sort: { key: "event", dir: "asc" }, ...o }), ctx).dividers.map(d => `${d.label} · ${d.count} @${d.at}`);
+    const days = (id: number, y: number, m: number, n: number) => Array.from({ length: n }, (_, i) => month(id + i, y, m, 20 + i));
+    // November 5, December 1, January 6: the quiet month between two busy ones keeps its own heading.
+    const between = rowsOf([...days(41, 2026, 11, 5), month(46, 2026, 12, 5), ...days(47, 2027, 1, 6)]);
+    expect(heads(between)).toEqual(["November 2026 · 5 @0", "December 2026 · 1 @5", "January 2027 · 6 @6"]);
+    // November 5, then December 2, January 1, March 1: one heading for the quiet run, across the new year.
+    const tail = rowsOf([...days(51, 2026, 11, 5), ...days(56, 2026, 12, 2), month(58, 2027, 1, 8), month(59, 2027, 3, 3)]);
+    expect(heads(tail)).toEqual(["November 2026 · 5 @0", "December 2026 – March 2027 · 4 @5"]);
+    // Latest first, the range still reads earliest month first.
+    expect(heads(tail, { sort: { key: "event", dir: "desc" } })).toEqual(["December 2026 – March 2027 · 4 @0", "November 2026 · 5 @4"]);
     // Every view follows the same rule (here Open, sorted by event date).
-    expect(listRows(twoThree, state({ view: "open", ...desc }), ctx).dividers).toEqual([]);
-    expect(listRows(twoFour, state({ view: "open", ...desc }), ctx).dividers.length).toBe(2);
+    const open = rowsOf([...days(61, 2026, 11, 6), month(67, 2027, 2, 5), month(68, 2027, 4, 6)].map(l => ({ ...l, status: "contacted" })));
+    expect(heads(open, { view: "open" })).toEqual(["November 2026 · 6 @0", "February – April 2027 · 2 @6"]);
+  });
+  it("31j. headings that would hold under 4 rows each on average are left out", () => {
+    const month = (id: number, y: number, m: number, d: number) => lead({ id, lastName: `M${m}D${d}`, status: "booked", eventDate: dateOnly(y, m, d) });
+    const days = (id: number, y: number, m: number, n: number) => Array.from({ length: n }, (_, i) => month(id + i, y, m, 20 + i));
+    const heads = (r: ListRow[]) => listRows(r, state({ view: "confirmed", sort: { key: "event", dir: "asc" } }), ctx).dividers.map(d => `${d.label} · ${d.count}`);
+    // November 4, December 4, then 3 more over February to May: 11 rows under 3 headings.
+    const short = [...days(121, 2026, 11, 4), ...days(125, 2026, 12, 4), month(129, 2027, 2, 1), month(130, 2027, 3, 1), month(131, 2027, 5, 1)];
+    expect(heads(rowsOf(short))).toEqual([]);
+    // One more in the spring: 12 under 3, and the headings come back.
+    expect(heads(rowsOf([...short, month(132, 2027, 4, 1)]))).toEqual(["November 2026 · 4", "December 2026 · 4", "February – May 2027 · 4"]);
+  });
+  it("31g. Confirmed with a few far-off bookings keeps its busy months' headings as the weeks pass", () => {
+    // The shape of a venue's bookings on 25 Nov: busy months first, then one or two a month.
+    const counts: [number, number, number][] = [[2026, 11, 4], [2026, 12, 7], [2027, 1, 4], [2027, 2, 2], [2027, 3, 1], [2027, 4, 1], [2027, 5, 1], [2027, 7, 1]];
+    let id = 700;
+    const booked = counts.flatMap(([y, m, n]) => Array.from({ length: n }, (_, i) => lead({ id: ++id, status: "booked", eventDate: dateOnly(y, m, m === 11 ? 26 + i : 6 + i) })));
+    const past = Array.from({ length: 5 }, (_, i) => lead({ id: ++id, status: "booked", eventDate: dateOnly(2026, 11, 1 + i) }));
+    const at25 = ctxAt(Date.UTC(2026, 10, 24, 21, 0)); // Wed 25 Nov, 10:00 in Auckland
+    const heads = (leads: LeadLike[], c = at25) => listRows(rowsOf(leads, {}, c), state({ view: "confirmed", sort: { key: "event", dir: "asc" } }), c).dividers.map(d => `${d.label} · ${d.count}`);
+    const expected = ["November 2026 · 4", "December 2026 · 7", "January 2027 · 4", "February – July 2027 · 6", "Already happened · 5"];
+    expect(heads([...booked, ...past])).toEqual(expected);
+    // Two more bookings in two new far-off months only widen the last month heading.
+    const more = [lead({ id: ++id, status: "booked", eventDate: dateOnly(2027, 9, 4) }), lead({ id: ++id, status: "booked", eventDate: dateOnly(2027, 10, 9) })];
+    expect(heads([...booked, ...more, ...past])).toEqual([...expected.slice(0, 3), "February – October 2027 · 8", "Already happened · 5"]);
+    // A week on (2 Dec), November has passed: December and January keep their headings.
+    const at2Dec = ctxAt(Date.UTC(2026, 11, 1, 21, 0));
+    expect(heads([...booked, ...past], at2Dec)).toEqual(["December 2026 · 7", "January 2027 · 4", "February – July 2027 · 6", "Already happened · 9"]);
+  });
+  it("31h. month range wording", () => {
+    expect(formatMonthRange("2027-02", "2027-07")).toBe("February – July 2027");
+    expect(formatMonthRange("2027-07", "2027-02")).toBe("February – July 2027");
+    expect(formatMonthRange("2026-12", "2027-02")).toBe("December 2026 – February 2027");
+    expect(formatMonthRange("2026-12", "2026-12")).toBe("December 2026");
+  });
+  it("31i. rows spread thinly (busy months hold half the rows or fewer): no month headings", () => {
+    const lost = (id: number, y: number, m: number, n: number) =>
+      Array.from({ length: n }, (_, i) => lead({ id: id + i, lastName: `L${m}-${i}`, status: "lost", eventDate: dateOnly(y, m, 1 + i) }));
+    const closed = (r: ListRow[]) => listRows(r, state({ view: "closed", sort: { key: "event", dir: "desc" } }), ctx).dividers.map(d => `${d.label} · ${d.count}`);
+    // Closed's usual shape: three or four lost a month. October 4 of 15: no headings.
+    expect(closed(rowsOf([...lost(80, 2026, 11, 3), ...lost(83, 2026, 10, 4), ...lost(87, 2026, 9, 3), ...lost(90, 2026, 8, 3), ...lost(93, 2026, 7, 2)]))).toEqual([]);
+    // Exactly half in busy months: still none. More than half: headings.
+    expect(closed(rowsOf([...lost(100, 2026, 11, 4), ...lost(104, 2026, 10, 2), ...lost(106, 2026, 9, 2)]))).toEqual([]);
+    expect(closed(rowsOf([...lost(110, 2026, 11, 5), ...lost(115, 2026, 10, 2), ...lost(117, 2026, 9, 2)]))).toEqual(["November 2026 · 5", "September – October 2026 · 4"]);
   });
   it("31f. search keeps its pile headings however few rows each holds", () => {
     const piles = rowsOf([
