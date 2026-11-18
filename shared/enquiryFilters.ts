@@ -618,6 +618,10 @@ export interface ListResult {
   pinnedOutside: number[];
 }
 
+/** Month headings are shown only when they hold at least this many rows each, on average. */
+export const MONTH_HEADING_MIN_AVG = 3;
+const isMonthKey = (key: string) => /^\d{4}-\d{2}$/.test(key);
+
 export function listRows(
   rows: readonly ListRow[],
   s: ListState,
@@ -665,21 +669,26 @@ export function listRows(
         if (s.sort.dir === "asc" && r.eventDay < today) return { key: "past", label: "Already happened" };
         return { key: r.eventDay.slice(0, 7), label: formatMonthLong(r.eventDay.slice(0, 7)) };
       };
-      let cur: string | null = null;
-      const keys: string[] = [];
+      let groups: { key: string; divider: ListResult["dividers"][number] }[] = [];
       out.forEach((r, i) => {
         const g = groupOf(r);
-        if (g.key !== cur) { dividers.push({ at: i, label: g.label, count: 0 }); keys.push(g.key); cur = g.key; }
-        dividers[dividers.length - 1].count++;
+        if (g.key !== groups[groups.length - 1]?.key) groups.push({ key: g.key, divider: { at: i, label: g.label, count: 0 } });
+        groups[groups.length - 1].divider.count++;
       });
-      if (dividers.length < 2) dividers = [];
-      else {
-        // Event date set to one month ("This month"): the chip already names
-        // it, so that month gets no heading of its own. "Already happened"
-        // keeps its heading.
-        const month = filterMonth(s.filters.date, today);
-        if (month) dividers = dividers.filter((_, i) => keys[i] !== month);
-      }
+      if (groups.length < 2) groups = [];
+      // Event date set to one month ("This month"): the chip already names
+      // it, so that month gets no heading of its own. "Already happened"
+      // keeps its heading.
+      const month = filterMonth(s.filters.date, today);
+      if (month) groups = groups.filter(g => g.key !== month);
+      // Month headings only help when they group several rows. When they would
+      // hold fewer than MONTH_HEADING_MIN_AVG rows each on average (lost
+      // enquiries spread over many months), none is shown: the date column
+      // already names the month. "No date yet" and "Already happened" stay.
+      const months = groups.filter(g => isMonthKey(g.key));
+      const held = months.reduce((n, g) => n + g.divider.count, 0);
+      if (months.length && held / months.length < MONTH_HEADING_MIN_AVG) groups = groups.filter(g => !isMonthKey(g.key));
+      dividers = groups.map(g => g.divider);
     }
   }
   // Rows kept in place after a status change go back where they were.

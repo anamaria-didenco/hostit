@@ -276,9 +276,15 @@ describe("D. event-date sort and dividers", () => {
     expect(sorted[0]).toBe(r);
   });
   it("31. dividers: one per upcoming month, then no date, then already happened", () => {
-    const res = listRows(rows, state({ sort: { key: "event", dir: "asc" } }), ctx);
+    // Three rows a month: enough for month headings (MONTH_HEADING_MIN_AVG).
+    const busy = [...rows, ...rowsOf([
+      lead({ id: 7, lastName: "Nov25", eventDate: dateOnly(2026, 11, 25) }),
+      lead({ id: 8, lastName: "Feb10", eventDate: dateOnly(2027, 2, 10) }),
+      lead({ id: 9, lastName: "Feb20", eventDate: dateOnly(2027, 2, 20) }),
+    ])];
+    const res = listRows(busy, state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(res.dividers.map(d => [d.label, d.count, d.at])).toEqual([
-      ["November 2026", 2, 0], ["February 2027", 1, 2], ["No date yet", 1, 3], ["Already happened", 2, 4],
+      ["November 2026", 3, 0], ["February 2027", 3, 3], ["No date yet", 1, 6], ["Already happened", 2, 7],
     ]);
     const single = listRows(rowsOf([lead({ eventDate: dateOnly(2026, 11, 20) }), lead({ eventDate: dateOnly(2026, 11, 21) })]), state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(single.dividers).toEqual([]);
@@ -286,18 +292,61 @@ describe("D. event-date sort and dividers", () => {
   it("31b. Event date set to one month: no heading for that month, Already happened keeps its own", () => {
     const nov = rowsOf([
       lead({ id: 21, lastName: "Thu19", status: "booked", eventDate: dateOnly(2026, 11, 19) }),
+      lead({ id: 25, lastName: "Sat21", status: "booked", eventDate: dateOnly(2026, 11, 21) }),
       lead({ id: 22, lastName: "Sun29", status: "booked", eventDate: dateOnly(2026, 11, 29) }),
       lead({ id: 23, lastName: "Mon2", status: "booked", eventDate: dateOnly(2026, 11, 2) }),
       lead({ id: 24, lastName: "Dec5", status: "booked", eventDate: dateOnly(2026, 12, 5) }),
+      lead({ id: 26, lastName: "Dec8", status: "booked", eventDate: dateOnly(2026, 12, 8) }),
+      lead({ id: 27, lastName: "Dec15", status: "booked", eventDate: dateOnly(2026, 12, 15) }),
     ]);
     const confirmed = (date: EnquiryFilters["date"]) => listRows(nov, state({ view: "confirmed", filters: withF({ date }), sort: { key: "event", dir: "asc" } }), ctx);
     const thisMonth = confirmed({ preset: "this_month" });
-    expect(names(thisMonth.rows)).toEqual(["Thu19", "Sun29", "Mon2"]);
-    expect(thisMonth.dividers.map(d => [d.label, d.count, d.at])).toEqual([["Already happened", 1, 2]]);
+    expect(names(thisMonth.rows)).toEqual(["Thu19", "Sat21", "Sun29", "Mon2"]);
+    expect(thisMonth.dividers.map(d => [d.label, d.count, d.at])).toEqual([["Already happened", 1, 3]]);
     expect(confirmed({ month: "2026-11" }).dividers.map(d => d.label)).toEqual(["Already happened"]);
     // Any other range keeps its month headings.
     expect(confirmed({ preset: "upcoming" }).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026"]);
     expect(confirmed(null).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026", "Already happened"]);
+  });
+  it("31c. month headings holding under 3 rows each on average are left out; No date yet and Already happened stay", () => {
+    // November 2, February 1: 1.5 a month.
+    const res = listRows(rows, state({ sort: { key: "event", dir: "asc" } }), ctx);
+    expect(names(res.rows)).toEqual(["Tonight", "Tomorrow", "NextYear", "Undated", "Yesterday", "Old"]);
+    expect(res.dividers.map(d => [d.label, d.count, d.at])).toEqual([["No date yet", 1, 3], ["Already happened", 2, 4]]);
+  });
+  it("31d. Closed, latest first: lost enquiries spread over many months get no month headings", () => {
+    const lost = rowsOf([
+      lead({ id: 31, lastName: "Feb", status: "lost", eventDate: dateOnly(2027, 2, 6) }),
+      lead({ id: 32, lastName: "Dec", status: "lost", eventDate: dateOnly(2026, 12, 12) }),
+      lead({ id: 33, lastName: "Nov", status: "lost", eventDate: dateOnly(2026, 11, 3) }),
+      lead({ id: 34, lastName: "Oct1", status: "lost", eventDate: dateOnly(2026, 10, 20) }),
+      lead({ id: 35, lastName: "Oct2", status: "lost", eventDate: dateOnly(2026, 10, 9) }),
+      lead({ id: 36, lastName: "Undated", status: "lost", eventDate: null }),
+    ]);
+    const res = listRows(lost, state({ view: "closed", filters: withF({ status: ["lost"] }), sort: { key: "event", dir: "desc" } }), ctx);
+    expect(names(res.rows)).toEqual(["Feb", "Dec", "Nov", "Oct1", "Oct2", "Undated"]);
+    expect(res.dividers.map(d => [d.label, d.count, d.at])).toEqual([["No date yet", 1, 5]]);
+    // Without the undated one nothing is left to head.
+    expect(listRows(lost.slice(0, 5), state({ view: "closed", sort: { key: "event", dir: "desc" } }), ctx).dividers).toEqual([]);
+  });
+  it("31e. the line is an average of 3: 2 + 4 keeps the headings, 2 + 3 does not", () => {
+    const month = (id: number, m: number, d: number) => lead({ id, lastName: `M${m}D${d}`, eventDate: dateOnly(2026, m, d) });
+    const desc = { sort: { key: "event" as const, dir: "desc" as const } };
+    const twoFour = rowsOf([month(41, 12, 1), month(42, 12, 2), month(43, 11, 20), month(44, 11, 21), month(45, 11, 22), month(46, 11, 23)]);
+    expect(listRows(twoFour, state(desc), ctx).dividers.map(d => `${d.label} · ${d.count}`)).toEqual(["December 2026 · 2", "November 2026 · 4"]);
+    const twoThree = rowsOf([month(51, 12, 1), month(52, 12, 2), month(53, 11, 20), month(54, 11, 21), month(55, 11, 22)]);
+    expect(listRows(twoThree, state(desc), ctx).dividers).toEqual([]);
+    // Every view follows the same rule (here Open, sorted by event date).
+    expect(listRows(twoThree, state({ view: "open", ...desc }), ctx).dividers).toEqual([]);
+    expect(listRows(twoFour, state({ view: "open", ...desc }), ctx).dividers.length).toBe(2);
+  });
+  it("31f. search keeps its pile headings however few rows each holds", () => {
+    const piles = rowsOf([
+      lead({ id: 61, lastName: "Pilecheck", status: "booked", eventDate: dateOnly(2026, 12, 1) }),
+      lead({ id: 62, lastName: "Pilecheck", status: "lost", eventDate: dateOnly(2026, 10, 1) }),
+    ]);
+    const res = listRows(piles, state({ q: "pilecheck", sort: { key: "event", dir: "asc" } }), ctx);
+    expect(res.dividers.map(d => `${d.label} · ${d.count}`)).toEqual(["Confirmed · 1", "Closed · 1"]);
   });
   it("32. most urgent has no dividers", () => {
     expect(listRows(rows, state(), ctx).dividers).toEqual([]);
