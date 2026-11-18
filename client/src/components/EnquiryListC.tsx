@@ -183,9 +183,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const rows = result.rows;
   const dividerAt = React.useMemo(() => new Map(result.dividers.map(d => [d.at, d])), [result.dividers]);
   // A heading carries its section's colour where every row under it shares
-  // one: a search's piles their own (In progress none), "Already happened"
-  // grey, and months in Confirmed green and in Closed grey. Months in the
-  // other views mix lanes, so they stay neutral.
+  // one: a search's Confirmed and Closed piles, "Already happened" grey, and
+  // months in Confirmed green and in Closed grey. Needs reply, Follow-up due
+  // and In progress mix lanes, so their headings and months stay neutral.
   const headingLane = (d: ListDivider): Lane => {
     if (d.key === "past") return "grey";
     if (d.key === "none" || /^\d{4}-\d{2}$/.test(d.key)) return view === "confirmed" || view === "closed" ? groupLane(view) : "calm";

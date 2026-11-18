@@ -108,11 +108,13 @@ export function rowLane(row: ListRow, ctx: ListCtx): RowLane {
   }
 }
 
-/** The lane a view tab or a search pile's heading carries ("calm" = none: the view mixes lanes). */
+/**
+ * The lane a view tab or a search pile's heading carries, only where every
+ * row in it shares one. "calm" = none: Needs reply and Follow-up due mix red,
+ * amber and blue rows, so a blue or amber dot there would misname the rest.
+ */
 export function groupLane(id: string): Lane {
   switch (id) {
-    case "reply": return "blue";
-    case "followup": return "amber";
     case "confirmed": return "green";
     case "closed": return "grey";
     default: return "calm";

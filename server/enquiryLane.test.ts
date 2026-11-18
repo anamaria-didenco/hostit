@@ -173,7 +173,7 @@ describe("rowLane", () => {
     expect(lane(partial).lane).toBe("calm");
   });
 
-  it("view tabs: Needs reply blue, Follow-up due amber, Confirmed green, Closed grey; Open and All mix lanes", () => {
-    expect(["reply", "followup", "open", "confirmed", "closed", "all"].map(groupLane)).toEqual(["blue", "amber", "calm", "green", "grey", "calm"]);
+  it("view tabs: Confirmed green, Closed grey; Needs reply, Follow-up due, Open and All mix lanes, so no dot", () => {
+    expect(["reply", "followup", "open", "confirmed", "closed", "all"].map(groupLane)).toEqual(["calm", "calm", "calm", "green", "grey", "calm"]);
   });
 });
