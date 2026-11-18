@@ -5800,20 +5800,22 @@ export default function RunsheetBuilder() {
         {/* ── CHECKLIST SECTION ───────────────────────────────────────────── */}
         <section id="rb-checklist" data-print-section="checklist" className="scroll-mt-[120px] md:scroll-mt-[140px]">
           <div className="dante-card border-t-0 print:shadow-none">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
-              <div className="flex items-center gap-3">
-                <h2 className="font-bebas tracking-widest text-ink/75 text-sm">EVENT CHECKLIST</h2>
-                <span className="font-dm text-xs text-ink/75">{checkedCount} of {checklistItems.length} complete</span>
+            {/* Wraps on narrow screens: the buttons go under the title rather
+                than over the "N of M complete" count. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3 border-b border-gold/20">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+                <h2 className="font-bebas tracking-widest text-ink/75 text-sm whitespace-nowrap">EVENT CHECKLIST</h2>
+                <span className="font-dm text-xs text-ink/75 whitespace-nowrap">{checkedCount} of {checklistItems.length} complete</span>
               </div>
-              <div className="flex items-center gap-2 no-print">
+              <div className="flex flex-wrap items-center gap-2 no-print">
                 {checkedCount === checklistItems.length && checklistItems.length > 0 && (
-                  <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
+                  <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1 whitespace-nowrap">
                     <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
                   </span>
                 )}
                 <button
                   onClick={() => { setShowChecklistPaste(true); setChecklistPasteError(null); }}
-                  className="min-h-[40px] max-md:min-h-[44px] font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 min-h-[44px] hover:bg-gold/5"
+                  className="min-h-[40px] max-md:min-h-[44px] pointer-coarse:min-h-[44px] whitespace-nowrap font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 hover:bg-gold/5"
                   title="Paste a to-do list and AI will turn it into checklist items"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> AI PASTE
@@ -5821,7 +5823,7 @@ export default function RunsheetBuilder() {
                 {fnbItems.some(i => i.course === 'Drinks' && i.dishName?.trim()) && (
                   <button
                     onClick={pullDrinksFromFnb}
-                    className="font-bebas tracking-widest text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                    className="min-h-[40px] max-md:min-h-[44px] pointer-coarse:min-h-[44px] whitespace-nowrap font-bebas tracking-widest text-xs text-ink/80 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 px-3 py-1 hover:bg-forest/5 hover:border-forest/40"
                     title="Add each drink from the F&B sheet as a bar stock item to tick off"
                   >
                     <Wine className="w-3.5 h-3.5" /> PULL BAR DRINKS
@@ -5835,7 +5837,7 @@ export default function RunsheetBuilder() {
                       navigator.clipboard.writeText(url);
                       toast.success('Staff checklist link copied!');
                     }}
-                    className="min-h-[40px] max-md:min-h-[44px] flex items-center gap-1.5 font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/5 px-3 py-1 transition-colors"
+                    className="min-h-[40px] max-md:min-h-[44px] pointer-coarse:min-h-[44px] whitespace-nowrap flex items-center gap-1.5 font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/5 px-3 py-1 transition-colors"
                   >
                     <Share2 className="w-3.5 h-3.5" /> SHARE LINK
                   </button>
