@@ -87,7 +87,11 @@ describe("colour themes", () => {
 });
 
 describe("secondary text on a new-enquiry row", () => {
-  // EnquiryListC fills a "New Enquiry" row with the status blue at alpha 0x2b.
+  // The Enquiries list used to fill a "New Enquiry" row with the status blue
+  // at alpha 0x2b. Rows have no fill now (their colour is the lane band, dot
+  // and words, checked in server/enquiryLane.test.ts, and the status pill, in
+  // server/statusPalette.test.ts), so this no longer guards a painted surface;
+  // it stays as a floor for any light blue wash a theme's muted text meets.
   const tintOver = (bg: string) => composite(parseColor("#2f54882b")!, parseColor(bg)!);
   for (const [name, t] of [[":root", root] as const, ...Object.entries(themes)]) {
     it(`${name}: muted text reads on the tint`, () => {

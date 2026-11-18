@@ -1,110 +1,70 @@
 import React from "react";
+import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
-  Clock, Bell, Hourglass, CornerUpLeft, Send, ArrowRight, CalendarClock,
-  CircleDashed, AlertTriangle, CheckCircle2, MinusCircle, SlidersHorizontal, X,
-} from "lucide-react";
-import {
-  enquirySignal, enquiryAction, type SignalTone, type EnquiryGroup,
-} from "@shared/enquirySignal";
+  SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, datePassedCount, describeFilters, isChipOn, isSearching,
+  effectiveView, listLayout, listRows, quickChips, reviewPassedFilters, shownListKey, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
+  type ChipLabels, type EnquiryFilters, type EnquiryView, type KeptPlace, type ListCtx, type ListDivider, type ListLayout, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
+} from "@shared/enquiryFilters";
+import { groupLane, type Lane } from "@shared/enquiryLane";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
-import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
-import { leadDatePassed } from "@shared/followUp";
+import { allShownSelected } from "@shared/bulkSelection";
 import MovedNote from "@/components/MovedNote";
+import EnquiryRow, { ROW_GRID, ROW_GRID_SELECT, FROM_L, FROM_XL, TABLE_ONLY, CARDS_ONLY, LaneDot, fullName } from "@/components/EnquiryRow";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
- * The Option-C enquiries list: one signal-first list where every row leads with
- * what the enquiry needs from you (a toned chip — "Waiting 2d 1h", "Follow-up
- * overdue", "Gone quiet"), sorted so the most urgent rises to the top, with a
- * context-aware action (Reply / Nudge / Open) and an inline quick-reply.
+ * The Enquiries list: six views (Needs reply, Follow-up due, Open, Confirmed,
+ * Closed, All), each row leading with what the enquiry needs from you, sorted
+ * so the most urgent rises to the top, with Reply / Nudge and an inline quick
+ * reply. The rows, counts, filters and sort all come from
+ * shared/enquiryFilters.ts; the state lives in useEnquiryListState.
+ *
+ * Layout follows the width of the Enquiries column (the @container around
+ * the toolbar and this list), not the window's: a table from 768px (fewer
+ * columns below 992px, Came in from 1148px), two-line cards below 768px. So
+ * at 400% zoom the table turns into cards by itself.
  */
 
-type ReplyStatus = Map<number, { direction: string; at: Date }>;
-
 export interface EnquiryListCProps {
-  leads: any[];
-  nowMs: number;
+  /** Every enquiry, already enriched (enrichRows). */
+  rows: ListRow[];
+  ctx: ListCtx;
+  /** The enquiries have loaded (an empty list means "none", not "not yet"). */
+  loaded?: boolean;
+  state: ListState;
+  onViewChange: (v: EnquiryView) => void;
+  onFiltersChange: (f: EnquiryFilters | ((f: EnquiryFilters) => EnquiryFilters)) => void;
+  onSortChange: (s: ListSort) => void;
   venueName: string;
-  replyStatus: ReplyStatus;
-  clashMap?: Record<number, any[]>;
-  isPartial: (lead: any) => boolean;
   statusInfo: (status: string | null | undefined) => { label: string; dot: string };
+  /** Owner initials on the rows. */
+  teamById?: Map<number, { name: string }>;
   onOpen: (lead: any) => void;
   onSend: (args: { lead: any; subject: string; body: string }) => void;
   sending?: boolean;
   isStaff?: boolean;
   /** Reports the ids in the order shown, so the drawer can page prev/next. */
   onRowsChange?: (ids: number[]) => void;
+  /** The list as shown (rows, their groups, headings), so a row whose status
+      changes can be kept where it was (keptPlace). Null while not shown. */
+  layoutRef?: React.MutableRefObject<ListLayout | null>;
   /** Close enquiries whose event date has passed (marks them Lost). */
   onCloseAsLost?: (ids: number[]) => void;
   closing?: boolean;
   /** Enquiries whose status was just changed — kept in place with a "Moved to
-      … · Undo" note instead of vanishing from the tab they no longer match. */
-  movedRows?: Record<number, { from: string; to: string; at: number }>;
+      … · Undo" note instead of vanishing from the view they no longer match.
+      `place` is where each was (keptPlace, from layoutRef). */
+  movedRows?: Record<number, { from: string; to: string; place: KeptPlace }>;
   onUndoMove?: (id: number) => void;
   undoPendingId?: number | null;
-}
-
-const TONE: Record<SignalTone, { fg: string; bg: string }> = {
-  red: { fg: "#c0392b", bg: "#fbecea" },
-  amber: { fg: "#8a5f18", bg: "#f7efdd" },
-  blue: { fg: "#2f5488", bg: "#e8edf6" },
-  green: { fg: "#3f7350", bg: "#e8f0e6" },
-  gray: { fg: "#6a6256", bg: "#f4efe6" },
-};
-
-/** How the list is ordered. "urgent" is the signal order (default). */
-type SortKey = "urgent" | "newest" | "oldest" | "event";
-const SORTS: { id: SortKey; label: string; note: string }[] = [
-  { id: "urgent", label: "Most urgent", note: "" },
-  { id: "newest", label: "Came in: newest first", note: "Newest enquiries first" },
-  { id: "oldest", label: "Came in: oldest first", note: "Oldest enquiries first" },
-  { id: "event", label: "Event date: soonest", note: "Soonest event first" },
-];
-
-const HEX = /^#[0-9a-f]{6}$/i;
-/** A status colour (#rrggbb) at a given alpha, for a light fill. Falls back to
- *  transparent if the venue's swatch isn't a plain hex value. */
-function tint(hex: string, alpha: string): string {
-  return HEX.test(hex) ? `${hex}${alpha}` : "transparent";
-}
-
-/** When the enquiry came in, in venue time: "Mon 2 Nov, 9:14am". */
-function fmtCameIn(value: unknown): string {
-  const d = value ? new Date(value as any) : null;
-  if (!d || isNaN(d.getTime())) return "";
-  const day = d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" });
-  const time = d.toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" });
-  return `${day}, ${time}`;
-}
-
-const ICON: Record<string, React.ComponentType<any>> = {
-  "circle-check": CheckCircle2, "circle-minus": MinusCircle, "circle-dashed": CircleDashed,
-  "corner-up-left": CornerUpLeft, clock: Clock, bell: Bell, hourglass: Hourglass,
-  "calendar-clock": CalendarClock, "triangle-alert": AlertTriangle, "arrow-right": ArrowRight,
-  send: Send,
-};
-function Icon({ name, size = 13 }: { name: string; size?: number }) {
-  const C = ICON[name] ?? ArrowRight;
-  return <C style={{ width: size, height: size }} strokeWidth={2.2} aria-hidden />;
-}
-
-type ListTab = EnquiryGroup | "all" | "passed";
-
-const TABS: { id: ListTab; label: string }[] = [
-  { id: "reply", label: "Needs reply" },
-  { id: "followup", label: "Follow-up due" },
-  { id: "confirmed", label: "Confirmed" },
-  { id: "all", label: "All" },
-  // Only shown when there's something in it.
-  { id: "passed", label: "Date passed" },
-];
-
-// "Sat, 27 Nov" this year; "Sat, 27 Nov 2027" otherwise — a date without its
-// year is ambiguous once enquiries run into next year.
-function fmtListDate(d: Date, nowMs: number): string {
-  const sameYear = d.getFullYear() === new Date(nowMs).getFullYear();
-  return d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  /** Names for the empty state ("No confirmed enquiries match Space: Courtyard"). */
+  labels?: ChipLabels;
+  /** "Select multiple": a box on each row, and a select-all box in the header. */
+  selectMode?: boolean;
+  selectedIds?: ReadonlySet<number>;
+  onSelectedChange?: (ids: Set<number>) => void;
+  /** The header's select-all box (where focus goes on "Select multiple" on a table). */
+  selectAllRef?: React.Ref<HTMLInputElement>;
 }
 
 /** Resolve the simple placeholders a quick reply can fill client-side; leave
@@ -134,23 +94,44 @@ const QUICK_FOR: Record<string, string[]> = {
   followup: ["Proposal follow-up", "Checking in"],
 };
 
-// Only say something when there is something to say: "No budget given" on
-// every row was noise.
-function moneyRange(lead: any): string {
-  const b = budgetRangeLabel(lead.budgetRange);
-  return b ? `Budget ${b}` : "";
+/** A value that settles: the live count is announced once typing stops. */
+function useSettled<T>(value: T, ms: number): T {
+  const [v, setV] = React.useState(value);
+  React.useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+// The column header's sort buttons. Each says which way it sorts when on.
+const HEAD: { key: SortKey; label: string; cls?: string; right?: boolean }[] = [
+  { key: "urgent", label: "Needs" },
+  { key: "name", label: "Name" },
+  { key: "status", label: "Status" },
+  { key: "event", label: "Event date" },
+  { key: "guests", label: "Guests", cls: FROM_L, right: true },
+  { key: "space", label: "Space", cls: FROM_L },
+  { key: "came", label: "Came in", cls: FROM_XL },
+];
+function headPhrase(key: SortKey, dir: "asc" | "desc"): string {
+  const def = dir === SORT_DEFAULT_DIR[key];
+  switch (key) {
+    case "urgent": return "most urgent first";
+    case "name": case "space": return def ? "A to Z" : "Z to A";
+    case "status": return def ? "in pipeline order" : "in reverse pipeline order";
+    case "event": return dir === "asc" ? "soonest first" : "latest first";
+    case "guests": return dir === "desc" ? "most first" : "fewest first";
+    case "came": return dir === "desc" ? "newest first" : "oldest first";
+  }
 }
 
 export default function EnquiryListC(props: EnquiryListCProps) {
-  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
-  // null = not chosen yet: open on the first tab that has something in it,
-  // rather than an empty "Needs reply 0" while follow-ups are due.
-  const [pickedTab, setTab] = React.useState<ListTab | null>(null);
+  const { rows: allRows, ctx, state, venueName, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
+  const selectMode = !!props.selectMode;
+  const selectedIds = props.selectedIds ?? NO_IDS;
   const [confirmClose, setConfirmClose] = React.useState(false);
   const [replyId, setReplyId] = React.useState<number | null>(null);
-  // Order the list by when enquiries came in, or by event date, so it's easy to
-  // see who to follow up on first. "urgent" keeps the signal-first order.
-  const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
   // Opening a quick reply brings it into view and, when it was opened from the
@@ -165,49 +146,18 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     if (focusReplyBox.current) replyBoxRef.current?.focus({ preventScroll: true });
     focusReplyBox.current = false;
   }, [replyId]);
-  // A just-moved row keeps its place in the tab it was moved from, even though
-  // its new status no longer matches it. We remember which tab each move was
-  // pinned to; the pin drops when the parent clears the mark (undo, or a
-  // search/filter change) so it doesn't leak into other tabs.
-  const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, ListTab>>(new Map());
 
-  const enriched = React.useMemo(() => leads.map((lead) => {
-    const id = lead.id as number;
-    const rs = replyStatus.get(id);
-    const signal = enquirySignal(lead, {
-      nowMs,
-      partial: isPartial(lead),
-      clientRepliedAtMs: rs?.direction === "in" ? rs.at.getTime() : null,
-      hasClash: (clashMap?.[id]?.length ?? 0) > 0,
-      holdUntilMs: lead.holdUntil ? new Date(lead.holdUntil).getTime() : null,
-      eventDateMs: lead.eventDate ? new Date(lead.eventDate).getTime() : null,
-    });
-    return { lead, signal };
-  }), [leads, nowMs, replyStatus, clashMap, isPartial]);
-
-  const isPassed = React.useCallback((lead: any) => leadDatePassed(lead, nowMs), [nowMs]);
-
-  const counts = React.useMemo(() => {
-    const c: Record<string, number> = { reply: 0, followup: 0, confirmed: 0, all: 0, passed: 0 };
-    for (const { lead, signal } of enriched) {
-      if (signal.group !== "closed") c.all++;
-      if (signal.group in c) c[signal.group]++;
-      // Not the ones a client has just written to: those need a reply first.
-      if (signal.group === "progress" && isPassed(lead)) c.passed++;
-    }
-    return c;
-  }, [enriched, isPassed]);
-
-  const defaultTab: ListTab = counts.reply ? "reply" : counts.followup ? "followup" : "all";
-  const tab: ListTab = pickedTab ?? defaultTab;
-  // Settle the opening tab once the list has loaded, so a refetch (a reply
-  // sent, a new enquiry in) doesn't flip the view under you.
-  React.useEffect(() => {
-    if (pickedTab === null && enriched.length > 0) setTab(defaultTab);
-  }, [pickedTab, enriched.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Track which tab each moved row is pinned to, and drop pins the parent has
-  // cleared (undo, or a search/filter change empties movedRows).
+  const searching = isSearching(state);
+  const view = effectiveView(state);
+  const filtered = searching || activeCount(state.filters) > 0;
+  const today = todayKey(ctx);
+  // The list as shown right now: a key for "the same list" (view, filters,
+  // search and sort).
+  const listKey = shownListKey(state);
+  // A just-moved row keeps its place in the list it was moved from, even though
+  // its new status no longer matches it. The pin drops when the parent clears
+  // the mark (undo, or any view / filter / search / sort change).
+  const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, string>>(new Map());
   React.useEffect(() => {
     const moved = movedRows ?? {};
     setPinnedMoves((prev) => {
@@ -216,56 +166,147 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       for (const id of next.keys()) if (!(id in moved)) { next.delete(id); changed = true; }
       for (const key of Object.keys(moved)) {
         const id = Number(key);
-        if (!next.has(id)) { next.set(id, tab); changed = true; }
+        if (!next.has(id)) { next.set(id, listKey); changed = true; }
       }
       return changed ? next : prev;
     });
-  }, [movedRows, tab]);
+  }, [movedRows, listKey]);
 
-  const rows = React.useMemo(() => {
-    const picked = enriched.filter(({ lead, signal }) =>
-      pinnedMoves.get(lead.id) === tab ? true
-      : tab === "passed" ? signal.group === "progress" && isPassed(lead)
-      : tab === "all" ? signal.group !== "closed" : signal.group === tab);
-    const cameIn = (l: any) => new Date(l.createdAt).getTime() || 0;
-    const eventAt = (l: any) => (l.eventDate ? new Date(l.eventDate).getTime() : Infinity);
-    if (sortBy === "newest") return picked.sort((a, b) => cameIn(b.lead) - cameIn(a.lead));
-    if (sortBy === "oldest") return picked.sort((a, b) => cameIn(a.lead) - cameIn(b.lead));
-    if (sortBy === "event") return picked.sort((a, b) => eventAt(a.lead) - eventAt(b.lead));
-    return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
-  }, [enriched, tab, isPassed, pinnedMoves, sortBy]);
+  const counts = React.useMemo(() => viewCounts(allRows, state.filters, state.q, ctx), [allRows, state.filters, state.q, ctx]);
+  // An unsent quick reply is never hidden by a filter change: its row stays.
+  const keepReply = replyId != null && draft.trim() ? replyId : null;
+  const result = React.useMemo(() => {
+    const keep = new Map<number, KeptPlace>();
+    for (const [id, key] of pinnedMoves) if (key === listKey && movedRows?.[id]) keep.set(id, movedRows[id].place);
+    return listRows(allRows, state, ctx, { alwaysInclude: keepReply != null ? [keepReply] : [], keep });
+  }, [allRows, state, ctx, keepReply, pinnedMoves, listKey, movedRows]);
+  const rows = result.rows;
+  const dividerAt = React.useMemo(() => new Map(result.dividers.map(d => [d.at, d])), [result.dividers]);
+  // A heading carries its section's colour where every row under it shares
+  // one: a search's Confirmed and Closed piles, "Already happened" grey, and
+  // months in Confirmed green and in Closed grey. Needs reply, Follow-up due
+  // and In progress mix lanes, so their headings and months stay neutral.
+  const headingLane = (d: ListDivider): Lane => {
+    if (d.key === "past") return "grey";
+    if (d.key === "none" || /^\d{4}-\d{2}$/.test(d.key)) return view === "confirmed" || view === "closed" ? groupLane(view) : "calm";
+    return groupLane(d.key);
+  };
+  const passedOnly = state.filters.needs.length === 1 && state.filters.needs[0] === "passed";
 
-  // Leaving the "Date passed" tab (or emptying it) cancels a pending confirm.
-  React.useEffect(() => { setConfirmClose(false); }, [tab, counts.passed]);
+  // Leaving the Date passed list (or emptying it) cancels a pending confirm.
+  React.useEffect(() => { setConfirmClose(false); }, [passedOnly, rows.length]);
 
-  const { onRowsChange } = props;
-  const orderKey = rows.map((r) => r.lead.id).join(",");
+  const { onRowsChange, layoutRef } = props;
+  const ids = React.useMemo(() => rows.map((r) => r.lead.id), [rows]);
+  const orderKey = ids.join(",");
   React.useEffect(() => {
-    onRowsChange?.(rows.map((r) => r.lead.id));
+    onRowsChange?.(ids);
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (layoutRef) layoutRef.current = listLayout(result);
+  }, [layoutRef, result]);
+  React.useEffect(() => () => { if (layoutRef) layoutRef.current = null; }, [layoutRef]);
   // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
   // focus on that row (or the next one) instead of dropping it to the page.
-  // When the last one goes, the tab it was on ("Needs reply 0").
+  // When the last one goes, the view it was on ("Needs reply 0").
   const rowsRef = React.useRef<HTMLDivElement>(null);
-  const tabRef = React.useRef<HTMLButtonElement>(null);
+  const deskTabRef = React.useRef<HTMLButtonElement | null>(null);
+  const gridTabRef = React.useRef<HTMLButtonElement | null>(null);
+  // The active view button, whichever layout shows (the focus keeper's fallback).
+  const tabRef = React.useMemo(() => ({
+    get current() { return [deskTabRef.current, gridTabRef.current].find(el => !!el && el.getClientRects().length > 0) ?? null; },
+  }), []);
   useFocusKeeper(rowsRef, tabRef);
 
-  const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
-    : tab === "followup" ? "Quoted or gone quiet · most overdue first"
-    : tab === "confirmed" ? "Booked in · soonest event first"
-    : tab === "passed" ? "Still open, but the event date has gone by"
-    : `${counts.all} enquiries`;
-  const emptyText = tab === "reply" ? "Nobody is waiting on a reply."
-    : tab === "followup" ? "No follow-ups due. Everyone's been looked after."
-    : tab === "passed" ? "No enquiries left open past their date."
-    : "Nothing here.";
+  const sortValue = sortToParam(state.sort);
+  const baseCounts = React.useMemo(() => viewCounts(allRows, EMPTY_FILTERS, "", ctx), [allRows, ctx]);
+  const nFilters = activeCount(state.filters);
+  const shownCount = counts[view] ?? 0;
+  const totalCount = baseCounts[view] ?? 0;
+  const summary = summaryText(view, state, shownCount, totalCount);
+  // What a screen reader hears when the table's count changes (once typing stops).
+  const liveText = useSettled(props.loaded === false ? "" : liveCountText(view, state, shownCount, totalCount), 500);
+  const chips = quickChips(view);
+  // Open enquiries left past their date, and forms nobody finished: each gets
+  // a one-line way in, so neither needs a tab of its own. The date-passed
+  // count is of the rows your filters and search show: what "Review them" lists.
+  const passedCount = React.useMemo(() => datePassedCount(allRows, { filters: state.filters, q: state.q }, ctx), [allRows, state.filters, state.q, ctx]);
+  const partialCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "partial").length, [allRows]);
+  const pinnedOutside = React.useMemo(() => new Set(result.pinnedOutside), [result.pinnedOutside]);
+  const showPassed = view === "open" && !passedOnly && passedCount > 0 && props.loaded !== false;
+  // "Review them" goes away once pressed: focus moves on to "Close all N as
+  // Lost" (or, for staff, the view's tab) instead of dropping to the page.
+  const closeNoteId = React.useId();
+  const closeAllRef = React.useRef<HTMLButtonElement>(null);
+  const yesCloseRef = React.useRef<HTMLButtonElement>(null);
+  const focusAfterReview = React.useRef(false);
+  React.useEffect(() => {
+    if (!passedOnly || !focusAfterReview.current) return;
+    focusAfterReview.current = false;
+    (closeAllRef.current ?? tabRef.current)?.focus();
+  }, [passedOnly, tabRef]);
+  // "Close all N as Lost", Cancel and "Yes, close N" take each other's place,
+  // so focus follows to the button that replaced the one pressed. After "Yes",
+  // it waits for the box to change once the closed enquiries leave the list:
+  // then "Close all" if some are left, or the view's tab when the box has gone.
+  const closeFocus = React.useRef<"yes" | "closeAll" | "closed" | null>(null);
+  React.useLayoutEffect(() => {
+    const want = closeFocus.current;
+    if (!want) return;
+    if (want !== "closed") {
+      (want === "yes" ? yesCloseRef.current : closeAllRef.current)?.focus();
+      closeFocus.current = null;
+      return;
+    }
+    if (yesCloseRef.current) return;
+    closeFocus.current = null;
+    const active = document.activeElement;
+    if (!active || active === document.body) (closeAllRef.current ?? tabRef.current)?.focus();
+  });
+  const reviewPassed = (
+    <button type="button" onClick={() => { focusAfterReview.current = true; props.onFiltersChange(reviewPassedFilters); }}
+      className="font-bold text-primary underline underline-offset-[3px] whitespace-nowrap">Review them</button>
+  );
+  const clearAllFilters = () => props.onFiltersChange(() => clearFilters());
 
-  const startReply = (lead: any) => {
-    const names = QUICK_FOR[enquirySignal(lead, { nowMs }).group] ?? [];
+  // ── Select multiple ───────────────────────────────────────────────────────
+  const { onSelectedChange } = props;
+  const anchorRef = React.useRef<number | null>(null);
+  React.useEffect(() => { if (!selectMode) anchorRef.current = null; }, [selectMode]);
+  const idsRef = React.useRef(ids);
+  idsRef.current = ids;
+  const selectedRef = React.useRef(selectedIds);
+  selectedRef.current = selectedIds;
+  const onSelect = React.useCallback((id: number, checked: boolean, shift: boolean) => {
+    const next = new Set(selectedRef.current);
+    const order = idsRef.current;
+    const a = anchorRef.current != null ? order.indexOf(anchorRef.current) : -1;
+    const b = order.indexOf(id);
+    // Shift: every row shown between the last box clicked and this one.
+    if (shift && a >= 0 && b >= 0) {
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) { if (checked) next.add(order[i]); else next.delete(order[i]); }
+    } else if (checked) next.add(id); else next.delete(id);
+    anchorRef.current = id;
+    onSelectedChange?.(next);
+  }, [onSelectedChange]);
+  const allSelected = allShownSelected(selectedIds, ids);
+  const someSelected = !allSelected && ids.some(id => selectedIds.has(id));
+  const headBoxRef = React.useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => { if (headBoxRef.current) headBoxRef.current.indeterminate = someSelected; });
+  const { selectAllRef } = props;
+  const setHeadBox = React.useCallback((el: HTMLInputElement | null) => {
+    headBoxRef.current = el;
+    if (typeof selectAllRef === "function") selectAllRef(el);
+    else if (selectAllRef) (selectAllRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+  }, [selectAllRef]);
+
+  // ── Quick reply ───────────────────────────────────────────────────────────
+  const startReply = (row: ListRow) => {
+    const names = QUICK_FOR[row.signal.group] ?? [];
     const tpl = STARTER_TEMPLATES.find((t) => t.name === names[0]) ?? STARTER_TEMPLATES[0];
-    setReplyId(lead.id);
+    setReplyId(row.lead.id);
     setTplName(tpl.name);
-    setDraft(resolveTemplate(tpl.body, lead, venueName));
+    setDraft(resolveTemplate(tpl.body, row.lead, venueName));
   };
 
   // A template chip replaces the reply. If the reply has been typed into (it is no
@@ -285,59 +326,152 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     setReplyId(null); setDraft("");
   };
 
+  // Reply / Nudge: open (or close) the quick reply under the row.
+  const onAction = (e: React.MouseEvent, row: ListRow) => {
+    // detail 0 = Enter/Space (a click or tap has 1 or more).
+    focusReplyBox.current = e.detail === 0;
+    if (replyId === row.lead.id) setReplyId(null); else startReply(row);
+  };
+
+  // A view change closes an untouched quick reply; one with text stays open
+  // (its row is kept, "Not in this view · kept while you reply").
+  const pickView = (v: EnquiryView) => { props.onViewChange(v); if (keepReply == null) setReplyId(null); };
+
+  const sortSelect = (cls: string) => (
+    <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
+      aria-label="Sort"
+      className={`${cls} rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-semibold text-foreground`}>
+      {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+
+  // A header button: sort by it, or turn it round when it's already on.
+  const sortBy = (key: SortKey) => {
+    const on = state.sort.key === key;
+    if (on && key === "urgent") return;
+    const dir = on ? (state.sort.dir === "asc" ? "desc" : "asc") : SORT_DEFAULT_DIR[key];
+    props.onSortChange({ key, dir });
+  };
+
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
-      <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
-        {/* View tabs */}
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          {/* One line of tabs that scrolls sideways on a phone, rather than
-              wrapping "Follow-up due" and cutting off "Date passed". */}
-          <div className="flex items-center gap-1 border-b border-border/60 -mb-px max-w-full overflow-x-auto">
-            {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
-              const on = tab === t.id;
+      <div className="px-3 md:px-6 pt-2 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
+        {/* View row (wide): "Matching:" while filtering or searching (each
+            count is then what that view would show), the six views, the
+            view's one-click shortcuts, and Sort. A filter bar popover that
+            would cover a shortcut opens below this row (data-view-row,
+            data-quick-chip), so the shortcut stays clickable. */}
+        <div data-view-row className="hidden @min-[768px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
+          {filtered && <span className="pb-2.5 pr-1 font-sans text-[12.5px] font-bold text-muted-foreground">Matching:</span>}
+          <div role="group" aria-label="Enquiry views" className="flex items-end flex-wrap -mb-px">
+            {VIEWS.map((t) => {
+              const on = view === t.id;
               return (
-                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
+                // A 7px lane dot before the views that hold one lane (Open and
+                // All hold every lane): the dotted tabs are the colour key. The
+                // padding is 4px narrower a side than it was, so the dots
+                // don't widen the row.
+                <button key={t.id} ref={on ? deskTabRef : undefined} onClick={() => pickView(t.id)}
                   aria-pressed={on}
-                  className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  className={`relative px-1 @min-[1148px]:px-1.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  {groupLane(t.id) !== "calm" && <LaneDot lane={groupLane(t.id)} size={7} className="mr-1 align-middle" />}
                   {t.label}
-                  {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. */}
+                  {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. A 0 stays full strength too. */}
                   <span className={`ml-1.5 text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
                 </button>
               );
             })}
           </div>
-        </div>
-        {rows.length > 0 && (
-          <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
-            <div className="font-sans text-[13px] text-muted-foreground">
-              {sortBy === "urgent" ? summary : SORTS.find((s) => s.id === sortBy)?.note}
+          {chips.length > 0 && <span aria-hidden="true" className="self-center w-px h-5 bg-border mx-1" />}
+          {chips.length > 0 && (
+            <div role="group" aria-label="Shortcuts" className="self-center flex items-center gap-1.5 flex-wrap py-1">
+              {chips.map(c => <QuickChipButton key={c.id} chip={c} on={isChipOn(state.filters, c)} onClick={() => props.onFiltersChange(f => toggleChip(f, c))} />)}
             </div>
+          )}
+          <div className="ml-auto self-center flex items-center gap-x-4 py-1">
+            {/* Open view: enquiries still open after their date, beside Sort
+                rather than on a line of their own. */}
+            {showPassed && (
+              <p data-passed-note className="inline-flex items-center gap-1.5 whitespace-nowrap font-sans text-[13px] text-foreground">
+                <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                {passedText(passedCount, filtered, "long")}{"\u00a0·"}
+                {reviewPassed}
+              </p>
+            )}
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
-              Sort by
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}
-                className="h-8 rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
-                {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
+              <span className="@max-[1147px]:sr-only">Sort</span>
+              {sortSelect("h-8 max-w-[11.5rem] px-1.5")}
             </label>
           </div>
-        )}
+        </div>
 
-        {/* Close the lot in one go: they can't be won any more. */}
-        {tab === "passed" && rows.length > 0 && onCloseAsLost && !props.isStaff && (
+        {/* Narrow: all six views in a 2×3 grid (nothing off-screen), the
+            shortcuts, then a summary line with Sort. "Matching:" over the
+            grid while filtering or searching, as on the wide row. */}
+        <div className={`${CARDS_ONLY} flex flex-col gap-2`}>
+          {filtered && <p className="-mt-1 -mb-1 font-sans text-[12.5px] leading-4 font-bold text-muted-foreground">Matching:</p>}
+          <div role="group" aria-label="Enquiry views" className="grid grid-cols-3 @max-[359px]:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-1.5">
+            {VIEWS.map((t) => {
+              const on = view === t.id;
+              return (
+                <button key={t.id} ref={on ? gridTabRef : undefined} onClick={() => pickView(t.id)}
+                  aria-pressed={on}
+                  className={`h-9 px-1 rounded-[7px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "bg-card border-border text-foreground"}`}>
+                  {/* The lane dot, but not on the selected (navy) tab: blue on navy is 1.4:1. */}
+                  {!on && groupLane(t.id) !== "calm" && <LaneDot lane={groupLane(t.id)} size={8} className="mr-1 align-middle -mt-0.5" />}
+                  {t.short}<span className={`ml-1.5 text-xs font-extrabold ${on ? "text-primary-foreground" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
+                </button>
+              );
+            })}
+          </div>
+          {chips.length > 0 && (
+            <div className="relative">
+              <div role="group" aria-label="Shortcuts" className="flex items-center gap-1.5 overflow-x-auto pr-6 [scrollbar-width:none]">
+                {chips.map(c => <QuickChipButton key={c.id} chip={c} big on={isChipOn(state.filters, c)} onClick={() => props.onFiltersChange(f => toggleChip(f, c))} />)}
+              </div>
+              <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3 min-h-9">
+            {/* The count, and on Open how many are past their date ("Showing 22
+                of 98 open · 3 matching are past their date · Review them").
+                Only the count is announced as it changes. */}
+            <p className={`font-sans text-[13px] text-muted-foreground min-w-0 ${showPassed ? "leading-4" : ""}`}>
+              <span aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</span>
+              {showPassed && (
+                <span data-passed-note>
+                  {"\u00a0· "}{passedText(passedCount, filtered, "short")}{"\u00a0· "}{reviewPassed}
+                </span>
+              )}
+            </p>
+            <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground shrink-0">
+              <span className="sr-only">Sort</span>
+              {sortSelect("h-9 max-w-[11rem] px-2")}
+            </label>
+          </div>
+        </div>
+
+        {/* Only the date-passed ones showing: close the lot in one go, they
+            can't be won any more (Lost, reason "other" with a note, so
+            Reports' lost-reason split stays true). */}
+        {passedOnly && rows.length > 0 && onCloseAsLost && !props.isStaff && (
           <div className="flex items-center justify-between gap-3 flex-wrap rounded-[6px] border border-border bg-card px-3.5 py-2.5">
-            <p className="font-sans text-[13px] text-foreground">
+            <p id={closeNoteId} className="font-sans text-[13px] text-foreground">
               {rows.length === 1 ? "1 enquiry" : `${rows.length} enquiries`} can't go ahead on the date asked. Close {rows.length === 1 ? "it" : "them"} as Lost to keep the pipeline honest.
             </p>
             {confirmClose ? (
               <div className="flex items-center gap-2">
-                <button onClick={() => setConfirmClose(false)} className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
-                <button disabled={closing} onClick={() => onCloseAsLost(rows.map((r) => r.lead.id))}
-                  className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold text-white bg-primary disabled:opacity-50">
+                <button onClick={() => { closeFocus.current = "closeAll"; setConfirmClose(false); }} className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
+                {/* aria-disabled, not disabled, while closing: focus stays on
+                    it until the closed enquiries leave the list. */}
+                <button ref={yesCloseRef} aria-disabled={closing || undefined} aria-describedby={closeNoteId}
+                  onClick={() => { if (closing) return; closeFocus.current = "closed"; onCloseAsLost(rows.map((r) => r.lead.id)); }}
+                  className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold text-white bg-primary aria-disabled:opacity-50">
                   {closing ? "Closing…" : `Yes, close ${rows.length}`}
                 </button>
               </div>
             ) : (
-              <button onClick={() => setConfirmClose(true)}
+              <button ref={closeAllRef} onClick={() => { closeFocus.current = "yes"; setConfirmClose(true); }} aria-describedby={closeNoteId}
                 className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold border-[1.5px] border-input bg-card text-foreground hover:border-primary">
                 Close {rows.length === 1 ? "it" : `all ${rows.length}`} as Lost
               </button>
@@ -345,165 +479,219 @@ export default function EnquiryListC(props: EnquiryListCProps) {
           </div>
         )}
 
-        {/* Rows */}
-        <div ref={rowsRef} className="flex flex-col gap-2">
-          {rows.length === 0 ? (
-            <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
-          ) : rows.map(({ lead, signal }) => {
-            const tone = TONE[signal.tone];
-            const action = enquiryAction(signal.group);
-            const si = statusInfo(lead.status);
-            const replying = replyId === lead.id;
-            const dateClash = (clashMap?.[lead.id]?.length ?? 0) > 0;
-            const dateStr = lead.eventDate
-              ? fmtListDate(new Date(lead.eventDate), nowMs)
-              : (lead as any).dateFlexible ? "Date TBC" : "No date";
-            const whenStr = [
-              lead.eventDate ? new Date(lead.eventDate).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : null,
-              lead.guestCount ? `${lead.guestCount} guests` : null,
-              dateClash ? "date clash" : null,
-            ].filter(Boolean).join(" · ");
-            const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
-            const onAction = (e: React.MouseEvent) => {
-              e.stopPropagation();
-              // detail 0 = Enter/Space (a click or tap has 1 or more).
-              focusReplyBox.current = e.detail === 0;
-              if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
-            };
-
-            return (
-              <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
-                {/* The whole box is filled with the enquiry's status colour: a
-                    light tint, with a solid border in the same colour. A brand-new
-                    enquiry is the one that needs you, so its tint is the strongest. */}
-                {/* Desktop: one dense signal-first row. A click anywhere opens
-                    it; for the keyboard the name is the button, so Reply isn't
-                    nested inside another button (Enter on Reply used to open
-                    the drawer too). */}
-                <div onClick={() => onOpen(lead)}
-                  className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
-                  {/* Fixed-width signal and action columns, so the name and date
-                      columns line up from row to row whatever the chip says. */}
-                  <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-xs font-bold whitespace-nowrap justify-self-start max-w-full overflow-hidden text-ellipsis"
-                    style={{ background: tone.bg, color: tone.fg }}>
-                    <Icon name={signal.icon} />{signal.text}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 min-w-0">
-                      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
-                        className="min-w-0 truncate text-left font-serif text-[16.5px] font-semibold">
-                      <span className="font-serif text-[16.5px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
-                      </button>
-                      {/* Status in plain ink: the dot carries the status colour; the
-                          chip on the left already carries the urgency colour. */}
-                      <span className="inline-flex items-center gap-1.5 font-sans text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
-                      </span>
-                    </div>
-                    {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
-                    {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
-                  </div>
-                  <div className="min-w-0 hidden lg:block">
-                    <div className="font-sans text-[13px] text-muted-foreground whitespace-nowrap">{moneyRange(lead)}</div>
-                  </div>
-                  <button onClick={onAction}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 w-full px-3 rounded-[6px] font-sans text-[13px] font-bold whitespace-nowrap border-[1.5px] transition-colors hover:border-primary"
-                    aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
-                    style={action.primary
-                      ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
-                      : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                    <Icon name={action.icon} size={14} />{action.label}
-                  </button>
-                </div>
-
-                {/* Mobile: a stacked card — signal + budget, then name, sub, then date + action */}
-                <div className="md:hidden">
-                  <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
-                    className="px-3.5 pt-3 pb-2.5 cursor-pointer">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-[12px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
-                        style={{ background: tone.bg, color: tone.fg }}>
-                        <Icon name={signal.icon} />{signal.text}
-                      </span>
-                      <span className="font-sans text-[12px] text-muted-foreground whitespace-nowrap flex-shrink-0">{budgetRangeLabel(lead.budgetRange) ?? ""}</span>
-                    </div>
-                    <div className="mt-2 flex items-baseline gap-2 min-w-0">
-                      <span className="font-serif text-[19px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
-                      <span className="inline-flex items-center gap-1.5 font-sans text-[12px] font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
-                      </span>
-                    </div>
-                    {sub && <div className="font-sans text-[13.5px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5">Came in {fmtCameIn(lead.createdAt)}</div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
-                    <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
-                      {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
-                    </div>
-                    <button onClick={onAction}
-                      className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[6px] font-sans text-[14px] font-bold whitespace-nowrap border-[1.5px] flex-shrink-0"
-                      aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
-                      style={action.primary
-                        ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
-                        : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                      <Icon name={action.icon} size={16} />{action.label}
-                    </button>
-                  </div>
-                </div>
-
-                {/* "Moved to … · Undo" — shown in place of the row vanishing
-                    after its status was changed from the drawer. */}
-                {movedRows?.[lead.id] && (
-                  <div className="px-3.5 pb-2.5" onClick={(e) => e.stopPropagation()}>
-                    <MovedNote toLabel={statusInfo(movedRows[lead.id].to).label}
-                      onUndo={() => onUndoMove?.(lead.id)} busy={undoPendingId === lead.id} />
-                  </div>
-                )}
-
-                {/* Inline quick reply */}
-                {replying && (
-                  <div ref={replyPanelRef} className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
-                    <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                      <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
-                      {(QUICK_FOR[signal.group] ?? []).map((name) => {
-                        const on = tplName === name;
-                        const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
-                        if (!tpl) return null;
-                        return (
-                          <button key={name} aria-pressed={on} onClick={() => pickTemplate(lead, tpl)}
-                            className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
-                            style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                            {name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <textarea ref={replyBoxRef} aria-label={`Reply to ${[lead.firstName, lead.lastName].filter(Boolean).join(" ")}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
-                      className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
-                      style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
-                    <div className="mt-2 flex items-center justify-end gap-2">
-                      <button onClick={() => setReplyId(null)} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
-                      <button onClick={() => onOpen(lead)} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px]" style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }}>Open enquiry</button>
-                      <button onClick={() => doSend(lead)} disabled={sending || !draft.trim()}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-bold disabled:opacity-50"
-                        style={{ background: "var(--primary)", color: "#fff" }}>
-                        <Send style={{ width: 14, height: 14 }} />{sending ? "Sending…" : "Send"}
+        {/* A heading for the list itself (screen readers jump by headings);
+            the month and pile dividers inside it are level 3. */}
+        <h2 className="sr-only">{searching ? "Search results" : viewInfo(view).label}</h2>
+        {rows.length > 0 ? (
+          // One bordered block with hairlines between rows. overflow:clip (not
+          // hidden) rounds the corners without breaking the sticky header.
+          <div className="rounded-[7px] border border-border bg-card [overflow:clip]">
+            {/* Column header (table layouts): select-all in select mode, the
+                sort buttons, and the count, which is also the live region. */}
+            <div className={`${TABLE_ONLY} ${selectMode ? ROW_GRID_SELECT : ROW_GRID} sticky top-0 z-[2] h-8 pl-[15px] pr-3 border-b border-border bg-muted`}>
+              {selectMode && (
+                <label className="flex items-center justify-center h-8 cursor-pointer">
+                  <input type="checkbox" ref={setHeadBox} checked={allSelected}
+                    aria-label={`Select all ${ids.length} shown`}
+                    onChange={(e) => onSelectedChange?.(e.target.checked ? new Set(ids) : new Set())}
+                    className="w-4 h-4 accent-[var(--primary)] cursor-pointer" />
+                </label>
+              )}
+              <div role="group" aria-label="Sort enquiries" className="contents">
+                {HEAD.map(h => {
+                  const on = state.sort.key === h.key;
+                  const Arrow = h.key === "urgent" || state.sort.dir === "desc" ? ArrowDown : ArrowUp;
+                  // The sorted column is marked by its arrow and full-strength
+                  // ink, not the theme colour: in Seafoam and Retro Warm the
+                  // primary is too light for small text on this muted strip.
+                  return (
+                    <div key={h.key} className={`${h.cls ?? ""} min-w-0 ${h.right ? "text-right" : ""}`}>
+                      <button type="button" onClick={() => sortBy(h.key)}
+                        aria-label={on ? `${h.label}, sorted ${headPhrase(h.key, state.sort.dir)}` : `Sort by ${h.label.toLowerCase()}`}
+                        className={`inline-flex items-center gap-1 h-8 max-w-full font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap hover:text-foreground ${on ? "text-foreground" : "text-muted-foreground"}`}>
+                        {h.label}
+                        {on && <Arrow className="w-3 h-3 shrink-0" strokeWidth={2.6} aria-hidden="true" />}
                       </button>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+              <div className="flex items-center justify-end font-sans text-[12px] font-bold tabular-nums text-muted-foreground whitespace-nowrap">
+                <span aria-hidden="true">{props.loaded === false ? "" : shownCount === totalCount && !searching ? totalCount : `${shownCount} of ${totalCount}`}</span>
+                <span className="sr-only" aria-live="polite" aria-atomic="true">{liveText}</span>
+              </div>
+            </div>
+
+            {/* Rows: each child is one enquiry (the focus keeper counts on it). */}
+            <div ref={rowsRef}>
+              {rows.map((row, i) => {
+                const { lead } = row;
+                const replying = replyId === lead.id;
+                return (
+                  <EnquiryRow key={lead.id}
+                    row={row} ctx={ctx} today={today} statusInfo={statusInfo} teamById={props.teamById}
+                    divider={dividerAt.get(i) ?? null}
+                    dividerLane={dividerAt.has(i) ? headingLane(dividerAt.get(i)!) : undefined}
+                    onOpen={onOpen} onAction={onAction}
+                    replying={replying} keptForReply={pinnedOutside.has(lead.id)}
+                    selectMode={selectMode} selected={selectMode && selectedIds.has(lead.id)} onSelect={onSelect}>
+                    {/* "Moved to … · Undo" — shown in place of the row vanishing
+                        after its status was changed from the drawer. */}
+                    {movedRows?.[lead.id] && (
+                      <div className="pl-[15px] pr-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <MovedNote toLabel={statusInfo(movedRows[lead.id].to).label}
+                          onUndo={() => onUndoMove?.(lead.id)} busy={undoPendingId === lead.id} />
+                      </div>
+                    )}
+                    {replying && (
+                      <QuickReply panelRef={replyPanelRef} boxRef={replyBoxRef} lead={lead} group={row.signal.group}
+                        tplName={tplName} draft={draft} setDraft={setDraft} sending={sending}
+                        onPick={(tpl) => pickTemplate(lead, tpl)} onCancel={() => setReplyId(null)}
+                        onOpen={() => onOpen(lead)} onSend={() => doSend(lead)} />
+                    )}
+                  </EnquiryRow>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Nothing in the list: still the rows' element (empty), so the
+                focus keeper falls back to the view's tab. */}
+            <div ref={rowsRef} />
+            <div className="py-12 px-4 text-center font-sans text-sm text-muted-foreground">
+              {props.loaded === false ? "Loading…" : searching ? (
+                <p>No enquiry matches ‘{state.q.trim()}’{nFilters > 0 && result.hiddenByFilters > 0 ? " with your filters" : ""}. Search looks at names, email, phone, company, event type and space.</p>
+              ) : nFilters > 0 ? (
+                <>
+                  <p>{EMPTY_MATCH[view]} {describeFilters(state.filters, props.labels ?? {})}.</p>
+                  <button type="button" onClick={clearAllFilters} className="mt-3 h-9 px-3 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-bold text-foreground hover:border-primary">Clear filters</button>
+                </>
+              ) : viewInfo(view).empty}
+            </div>
+          </>
+        )}
+
+        {/* While searching: matches the filters hide, one click away. */}
+        {searching && nFilters > 0 && result.hiddenByFilters > 0 && (
+          <p className="font-sans text-[13px] text-muted-foreground">
+            {result.hiddenByFilters} more match{result.hiddenByFilters === 1 ? "es" : ""} but {result.hiddenByFilters === 1 ? "is" : "are"} hidden by your filters.{" "}
+            <button type="button" onClick={clearAllFilters} className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
+          </p>
+        )}
+        {/* Needs reply: forms people started but never sent. */}
+        {view === "reply" && !searching && partialCount > 0 && (
+          <p className="font-sans text-[13px] text-muted-foreground">
+            {partialCount === 1 ? "1 person" : `${partialCount} people`} started the form but didn't finish.{" "}
+            <button type="button" onClick={() => { props.onViewChange("open"); props.onFiltersChange(() => ({ ...clearFilters(), needs: ["partial"] })); }}
+              className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+const NO_IDS: ReadonlySet<number> = new Set();
+
+/** The inline quick reply under a row: template chips, the text, Send. */
+function QuickReply({ panelRef, boxRef, lead, group, tplName, draft, setDraft, sending, onPick, onCancel, onOpen, onSend }: {
+  panelRef: React.Ref<HTMLDivElement>; boxRef: React.Ref<HTMLTextAreaElement>; lead: any; group: string;
+  tplName: string; draft: string; setDraft: (s: string) => void; sending?: boolean;
+  onPick: (tpl: (typeof STARTER_TEMPLATES)[number]) => void; onCancel: () => void; onOpen: () => void; onSend: () => void;
+}) {
+  return (
+    <div ref={panelRef} className="border-t border-border pl-[15px] pr-3 pt-3 pb-3.5 bg-card" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
+        {(QUICK_FOR[group] ?? []).map((name) => {
+          const on = tplName === name;
+          const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
+          if (!tpl) return null;
+          return (
+            <button key={name} aria-pressed={on} onClick={() => onPick(tpl)}
+              className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
+              style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
+              {name}
+            </button>
+          );
+        })}
+      </div>
+      <textarea ref={boxRef} aria-label={`Reply to ${fullName(lead)}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
+        className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
+        style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button onClick={onCancel} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
+        <button onClick={onOpen} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px]" style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }}>Open enquiry</button>
+        <button onClick={onSend} disabled={sending || !draft.trim()}
+          className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-bold disabled:opacity-50"
+          style={{ background: "var(--primary)", color: "#fff" }}>
+          <Send style={{ width: 14, height: 14 }} />{sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A one-click shortcut ("This month", "Lost this year"): navy with a tick when on. */
+function QuickChipButton({ chip, on, onClick, big }: { chip: QuickChip; on: boolean; onClick: () => void; big?: boolean }) {
+  return (
+    <button type="button" data-quick-chip aria-pressed={on} onClick={onClick}
+      className={`inline-flex items-center gap-1.5 ${big ? "h-9 px-3.5" : "h-8 px-3"} rounded-full border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap shrink-0 transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:border-[CanvasText]" : "bg-card border-input text-foreground hover:border-primary"}`}>
+      {on && <Check className="w-3.5 h-3.5" strokeWidth={2.6} aria-hidden="true" />}
+      {chip.label}
+    </button>
+  );
+}
+
+const EMPTY_MATCH: Record<EnquiryView, string> = {
+  reply: "No enquiries waiting on a reply match",
+  followup: "No follow-ups due match",
+  open: "No open enquiries match",
+  confirmed: "No confirmed enquiries match",
+  closed: "No closed enquiries match",
+  all: "No enquiries match",
+};
+const NOUN: Record<EnquiryView, string> = {
+  reply: "waiting on you", followup: "follow-ups due", open: "open", confirmed: "confirmed", closed: "closed", all: "enquiries",
+};
+const NOUN_LONG: Record<EnquiryView, string> = {
+  reply: "enquiries waiting on a reply", followup: "follow-ups due", open: "open enquiries",
+  confirmed: "confirmed enquiries", closed: "closed enquiries", all: "enquiries",
+};
+function sortPhrase(view: EnquiryView, s: ListSort): string {
+  switch (s.key) {
+    case "urgent": return view === "reply" ? "longest first" : view === "followup" ? "most overdue first" : "most urgent first";
+    case "event": return s.dir === "asc" ? "soonest event first" : "latest event first";
+    case "came": return s.dir === "desc" ? "newest first" : "oldest first";
+    case "status": return "by status";
+    case "guests": return "most guests first";
+    case "name": return "A–Z by name";
+    case "space": return "by space";
+  }
+}
+/**
+ * The Open view's date-passed note. Long (laptop, beside Sort): "6 open
+ * enquiries are past their event date", "3 matching are past their event
+ * date". Short (phone, after the count): "6 are past their date", "3 matching
+ * are past their date". One: "is past its".
+ */
+export function passedText(n: number, filtered: boolean, form: "long" | "short"): string {
+  const verb = n === 1 ? "is past its" : "are past their";
+  if (form === "short") return `${n}\u00a0${filtered ? "matching " : ""}${verb} date`;
+  if (filtered) return `${n}\u00a0matching ${verb} event date`;
+  return `${n}\u00a0open ${n === 1 ? "enquiry" : "enquiries"} ${verb} event date`;
+}
+
+/** "24 waiting on you · longest first", "Showing 27 of 98 open", "4 matches for ‘ellingham’". */
+export function summaryText(view: EnquiryView, state: ListState, shown: number, total: number): string {
+  if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’ · ${sortPhrase(view, state.sort)}`;
+  if (activeCount(state.filters) > 0) return `Showing ${shown} of ${total} ${NOUN[view]}`;
+  return `${shown} ${NOUN[view]} · ${sortPhrase(view, state.sort)}`;
+}
+/** "92 of 98 open enquiries shown. Sorted soonest event first." */
+function liveCountText(view: EnquiryView, state: ListState, shown: number, total: number): string {
+  const sorted = `Sorted ${sortPhrase(view, state.sort)}.`;
+  if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’. ${sorted}`;
+  return `${shown === total ? shown : `${shown} of ${total}`} ${NOUN_LONG[view]} shown. ${sorted}`;
 }

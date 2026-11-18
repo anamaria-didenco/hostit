@@ -20,8 +20,18 @@ export type SignalTone = "red" | "amber" | "blue" | "green" | "gray";
 /** Which band of the list an enquiry falls into. Drives the view tabs. */
 export type EnquiryGroup = "reply" | "followup" | "progress" | "confirmed" | "closed";
 
+/**
+ * Which rule produced the signal: one per branch below. The list's "Needs"
+ * column, its Needs filter and its "Most urgent" order are built on this, so
+ * they never re-derive the rules.
+ */
+export type SignalKind =
+  | "waiting" | "client_replied" | "followup_overdue" | "gone_quiet" | "hold" | "hold_expired"
+  | "clash" | "partial" | "date_passed" | "in_progress" | "confirmed" | "closed";
+
 export interface EnquirySignal {
   group: EnquiryGroup;
+  kind: SignalKind;
   tone: SignalTone;
   /** lucide icon name */
   icon: string;
@@ -88,6 +98,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     const ev = ctx.eventDateMs ?? null;
     return {
       group: "confirmed",
+      kind: "confirmed",
       tone: "green",
       icon: "circle-check",
       text: "Confirmed",
@@ -96,12 +107,12 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     };
   }
   if (CLOSED_LEAD_STATUSES.includes(status)) {
-    return { group: "closed", tone: "gray", icon: "circle-minus", text: status === "finished" ? "Finished" : status === "lost" ? "Lost" : "Closed", sortKey: 0 };
+    return { group: "closed", kind: "closed", tone: "gray", icon: "circle-minus", text: status === "finished" ? "Finished" : status === "lost" ? "Lost" : "Closed", sortKey: 0 };
   }
 
   // ── Partial enquiry (form never finished) ───────────────────────────────
   if (ctx.partial) {
-    return { group: "progress", tone: "gray", icon: "circle-dashed", text: "Didn't finish the form", sortKey: 0 };
+    return { group: "progress", kind: "partial", tone: "gray", icon: "circle-dashed", text: "Didn't finish the form", sortKey: 0 };
   }
 
   // ── Needs reply: no first reply yet, or the client is waiting on you ─────
@@ -111,6 +122,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     // Client sent something and it's unanswered — treat like needs-reply.
     return {
       group: "reply",
+      kind: "client_replied",
       tone: clientWaitMs >= DAY ? "red" : "blue",
       icon: "corner-up-left",
       text: `Replied ${formatWait(clientWaitMs)} ago`,
@@ -121,6 +133,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     const waitMs = leadReplyWaitMs(lead, now) ?? 0;
     return {
       group: "reply",
+      kind: "waiting",
       tone: waitMs >= DAY ? "red" : "amber",
       icon: "clock",
       text: `Waiting ${formatWait(waitMs)}`,
@@ -130,7 +143,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
 
   // ── Event date has passed: nothing left to chase, offer to close it ──────
   if (leadDatePassed(lead, now)) {
-    return { group: "progress", tone: "gray", icon: "calendar-clock", text: "Date passed", sortKey: 0 };
+    return { group: "progress", kind: "date_passed", tone: "gray", icon: "calendar-clock", text: "Date passed", sortKey: 0 };
   }
   // ── Follow-up due (overdue after a quote, or gone quiet) ─────────────────
   const fu = leadFollowUpState(lead, now);
@@ -140,6 +153,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
       const overdueDays = daysBetween(now, dueMs);
       return {
         group: "followup",
+        kind: "followup_overdue",
         tone: overdueDays >= 1 ? "red" : "amber",
         icon: "bell",
         text: overdueDays >= 1 ? `Follow-up overdue · ${overdueDays}d` : "Follow up today",
@@ -151,6 +165,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     const quietDays = daysBetween(now, lastMs);
     return {
       group: "followup",
+      kind: "gone_quiet",
       tone: "amber",
       icon: "hourglass",
       text: `Gone quiet · ${quietDays}d`,
@@ -163,6 +178,7 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
     const daysLeft = daysBetween(ctx.holdUntilMs, now);
     return {
       group: "progress",
+      kind: ctx.holdUntilMs <= now ? "hold_expired" : "hold",
       tone: ctx.holdUntilMs <= now ? "red" : "amber",
       icon: "calendar-clock",
       text: ctx.holdUntilMs <= now ? "Hold expired" : `Hold ends · ${daysLeft}d`,
@@ -172,11 +188,11 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
 
   // ── Date clash flagged ───────────────────────────────────────────────────
   if (ctx.hasClash) {
-    return { group: "progress", tone: "red", icon: "triangle-alert", text: "Date clash", sortKey: 1 };
+    return { group: "progress", kind: "clash", tone: "red", icon: "triangle-alert", text: "Date clash", sortKey: 1 };
   }
 
   // ── In progress, nothing pressing ────────────────────────────────────────
-  return { group: "progress", tone: "blue", icon: "arrow-right", text: "In progress", sortKey: 0 };
+  return { group: "progress", kind: "in_progress", tone: "blue", icon: "arrow-right", text: "In progress", sortKey: 0 };
 }
 
 /** The context-aware primary action a row offers. */

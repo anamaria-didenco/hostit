@@ -45,10 +45,10 @@ import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
 import NeedsYouToday from "@/components/NeedsYouToday";
 import EnquiryListC from "@/components/EnquiryListC";
+import EnquiryFilterBar from "@/components/EnquiryFilterBar";
 import EnquiryDrawerExtras from "@/components/EnquiryDrawerExtras";
 import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
 import UpcomingEventsCard from "@/components/UpcomingEventsCard";
-import { isOpenEnquiry } from "@shared/needsToday";
 import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
@@ -78,7 +78,7 @@ import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { formatEventDate } from "@shared/eventDate";
+import { formatEventDate, DEFAULT_VENUE_TZ } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -95,7 +95,15 @@ import { HoldPanel, HoldTag, DateClashChip, DoubleBookedTag, holdState, fmtHoldD
 import GlobalFinder from "@/components/GlobalFinder";
 import EventSearchResults from "@/components/EventSearchResults";
 import MovedNote from "@/components/MovedNote";
-import { leadMatchesSearch } from "@/lib/leadSearch";
+import { useNow } from "@/hooks/useNow";
+import { useEnquiryListState } from "@/hooks/useEnquiryListState";
+import {
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, keptPlace, listRows, shownListKey, viewCounts, viewDefaultSort,
+  type EnquiryFilters, type EnquiryView, type KeptPlace, type LeadLike, type ListCtx, type ListLayout, type ListRow,
+} from "@shared/enquiryFilters";
+import { LaneDot } from "@/components/EnquiryRow";
+import { LANE_INK, LANE_MARK, rowLane } from "@shared/enquiryLane";
+import { statusPalette } from "@shared/statusPalette";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
@@ -983,24 +991,6 @@ export default function Dashboard() {
   };
   const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
-  const [leadSearch, setLeadSearch] = useState("");
-  // Multi-select status filter — empty array means "All Statuses".
-  const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>([]);
-  // Leads the embed autosaved after step 1 but that never completed step 2 —
-  // real, contactable, but easy to miss among finished enquiries otherwise.
-  const [showPartialOnly, setShowPartialOnly] = useState(false);
-  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
-  const statusFilterRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!statusFilterOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (statusFilterRef.current && !statusFilterRef.current.contains(e.target as Node)) {
-        setStatusFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [statusFilterOpen]);
   // Secondary enquiry actions (CSV import, bulk select) live in a "⋯" menu so
   // "Add enquiry" reads as the single primary action in the toolbar.
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -1017,40 +1007,19 @@ export default function Dashboard() {
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, [actionsMenuOpen]);
-  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // WIN BACK replaces the list with the win-back panel (lost and quiet
+  // enquiries, last year's clients).
+  const [showWinBack, setShowWinBack] = useState(false);
   // Enquiries whose status was just changed inline: kept in the list, marked
-  // "Moved to <Status> · Undo", until the next tab / filter / search change.
-  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; at: number }>>({});
-  const rowPosRef = useRef<Map<number, number>>(new Map());
+  // "Moved to <Status> · Undo", until the next view / filter / search / sort change.
+  const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; place: KeptPlace }>>({});
   const statusPriorRef = useRef<Record<number, string>>({});
-  const statusRowAtRef = useRef<Record<number, number>>({});
+  // Where each row was in the list when its status change was asked for, and
+  // the list as shown (EnquiryListC keeps it up to date).
+  const statusPlaceRef = useRef<Record<number, KeptPlace>>({});
+  const enquiryLayoutRef = useRef<ListLayout | null>(null);
   const undoingRef = useRef<Set<number>>(new Set());
-  // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
-  const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
-  // ── Events table display prefs — persisted to localStorage ────────────────
-  const LEAD_TABLE_PREFS_KEY = "vf_lead_table_prefs_v1";
-  const _savedLTP = (() => { try { const r = localStorage.getItem(LEAD_TABLE_PREFS_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } })();
-  const [leadSortBy, setLeadSortByRaw] = useState<"enquiry_date"|"event_date"|"status">(_savedLTP.sortBy ?? "event_date");
-  const [leadSortDir, setLeadSortDirRaw] = useState<"asc"|"desc">(_savedLTP.sortDir ?? "asc");
-  const [leadDateFilter, setLeadDateFilterRaw] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">(_savedLTP.dateFilter ?? "future");
-  // Closed/dead statuses are hidden from the default "All" view (no explicit
-  // status filter, no follow-up/partial focus) so the list leads with live
-  // work. Picking a status chip — including Lost — overrides this.
-  const DEFAULT_HIDDEN = React.useMemo(() => ["lost", "cancelled", "finished"], []);
-
-  // Persist whenever any pref changes
-  useEffect(() => {
-    try { localStorage.setItem(LEAD_TABLE_PREFS_KEY, JSON.stringify({ sortBy: leadSortBy, sortDir: leadSortDir, dateFilter: leadDateFilter })); } catch {}
-  }, [leadSortBy, leadSortDir, leadDateFilter]);
-
-  // Wrapped setters (same signature as original so all existing callsites work unchanged)
-  const setLeadSortBy = (v: "enquiry_date"|"event_date"|"status") => setLeadSortByRaw(v);
-  const setLeadSortDir = (fn: "asc"|"desc" | ((d: "asc"|"desc") => "asc"|"desc")) =>
-    setLeadSortDirRaw(prev => typeof fn === "function" ? fn(prev) : fn);
-  const setLeadDateFilter = (v: "all"|"future"|"today"|"weekend"|"month"|"year"|"custom") => setLeadDateFilterRaw(v);
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
   // One responsive enquiry view plus an optional Board. The user toggles only
   // List ↔ Board; the List view renders as the full table on desktop and as a
   // stacked card layout on phones (the 7-column table needs ~700px and would
@@ -1071,14 +1040,9 @@ export default function Dashboard() {
   useEffect(() => {
     setLeadViewMode(prev => prev === "kanban" ? prev : (isDesktop ? "table" : "list"));
   }, [isDesktop]);
-  // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
-  const [followUpOnly, setFollowUpOnly] = useState(false);
   // The enquiry ids in the order the list shows them, so the drawer can page
   // prev/next through the same sequence.
   const [enquiryOrder, setEnquiryOrder] = useState<number[]>([]);
-  useEffect(() => {
-    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
-  }, [tab, leadsSubTab, leadStatusFilter, leadDateFilter, followUpOnly, showPartialOnly, leadOwnerFilter, leadSearch, leadViewMode]);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -1256,20 +1220,23 @@ export default function Dashboard() {
   // "Select multiple" goes with its menu and More actions turns into CANCEL:
   // focus goes on to SELECT ALL (CANCEL when no rows are listed), not <body>.
   // CANCEL turns back into More actions, so focus goes there.
+  // SELECT ALL is the list header's box on the table, the bar's on cards.
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const headerSelectAllRef = useRef<HTMLInputElement>(null);
   const bulkCancelRef = useRef<HTMLButtonElement>(null);
   const bulkModeFocus = useRef(false);
   React.useLayoutEffect(() => {
     if (!bulkModeFocus.current) return;
     bulkModeFocus.current = false;
-    if (bulkSelectMode) (selectAllRef.current ?? bulkCancelRef.current)?.focus();
+    const shownBox = [headerSelectAllRef.current, selectAllRef.current].find(el => !!el && el.getClientRects().length > 0);
+    if (bulkSelectMode) (shownBox ?? bulkCancelRef.current)?.focus();
     else document.getElementById('leads-more-actions')?.focus();
   }, [bulkSelectMode]);
   // A selection is only ever of rows on screen (enquiryOrder is what the list
   // shows): a tab, search or filter change drops the ones it takes away, so a
   // bulk Delete or Set status can't reach an enquiry that isn't shown. Win
   // back and the Board replace the list, so nothing stays selected there.
-  const selectable = selectableIds(enquiryOrder, leadViewMode, leadsSubTab);
+  const selectable = selectableIds(enquiryOrder, leadViewMode, showWinBack ? "winback" : "list");
   React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, selectable)); }, [selectable]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
@@ -1712,11 +1679,26 @@ export default function Dashboard() {
   // Jump to a filtered enquiries / calendar view, open an event, or run a tile
   // action. Shared by the Overview tiles and the calendar's "Needs you today"
   // panel, so they live at component scope rather than inside the Overview body.
-  const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
-    setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
-    setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
-    setTab('enquiries');
+  // Lands on exactly the list a tile or badge counted: that view, with its own
+  // sort, no search and only the filters given (shared/enquiryFilters.ts).
+  // The list itself, not the Board or Win back.
+  const toEnquiryList = () => {
+    setShowWinBack(false); setLeadViewMode(prev => prev === "kanban" ? (isDesktop ? "table" : "list") : prev);
   };
+  const showEnquiries = (o: { view: EnquiryView; filters?: Partial<EnquiryFilters> }) => {
+    toEnquiryList(); setSelectedLead(null);
+    enquiryList.showEnquiries(o);
+  };
+  // The Enquiries item in the sidebar and bottom nav carries the Needs reply
+  // badge, so it opens the list that number counts ("24" → Needs reply 24),
+  // with nothing filtered, even after a filtered list earlier in the session.
+  // A filtered list you left for another tab is still one Back away. An open
+  // enquiry stays open (closing it here would step Back, onto the old list).
+  const openEnquiriesNav = () => {
+    toEnquiryList();
+    enquiryList.openFromNav();
+  };
+  const navTo = (id: string) => { if (id === "enquiries") openEnquiriesNav(); else setTab(id as any); };
   const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
   const openBookingById = async (id: number) => {
     const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
@@ -1725,12 +1707,12 @@ export default function Dashboard() {
   };
   const tileAction = (id: string) => {
     switch (id) {
-      case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
+      case 'needs_followup': return showEnquiries({ view: 'followup' });
       case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
       case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
-      case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
+      case 'active_enquiries': return showEnquiries({ view: 'open' });
       case 'upcoming_events': return showCalendarList();
-      case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
+      case 'proposals_sent': return showEnquiries({ view: 'open', filters: { status: ['proposal_sent'] } });
       // Revenue with bookings missing a total opens exactly those bookings, so
       // the number can be fixed rather than trusted.
       case 'revenue_month':
@@ -1974,7 +1956,7 @@ export default function Dashboard() {
     return ordered.filter(s => !visible.length || visible.includes(s.key));
   }, [pipelineStages, kanbanStagePrefs, showClosedStages]);
 
-  const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
+  const { data: spaces, refetch: refetchSpaces, isFetched: spacesFetched } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   // Keep the name→custom-colour map current so spaceColor() (defined earlier)
   // picks up the venue's chosen colours.
   spaceColorRef.current = React.useMemo(() => {
@@ -2417,9 +2399,9 @@ export default function Dashboard() {
       setMovedRows(prev => {
         if (wasUndo) { if (!prev[variables.id]) return prev; const { [variables.id]: _gone, ...rest } = prev; return rest; }
         // Only a row that was on screen can stay on screen.
-        const at = prev[variables.id]?.at ?? statusRowAtRef.current[variables.id];
-        if (!from || from === variables.status || at === undefined) return prev;
-        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, at } };
+        const place = prev[variables.id]?.place ?? statusPlaceRef.current[variables.id];
+        if (!from || from === variables.status || !place) return prev;
+        return { ...prev, [variables.id]: { from: prev[variables.id]?.from ?? from, to: variables.status, place } };
       });
       refetchLeads();
       utils.bookings.clashes.invalidate();
@@ -2500,8 +2482,10 @@ export default function Dashboard() {
     mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
       const priorStatus: string | undefined = (allLeads ?? []).find((x: any) => x?.id === vars.id)?.status;
       if (priorStatus) statusPriorRef.current[vars.id] = priorStatus;
-      const rowAt = rowPosRef.current.get(vars.id);
-      if (rowAt !== undefined) statusRowAtRef.current[vars.id] = rowAt;
+      // Where the row is in the list as shown (its group, the rows beside it),
+      // so it can stay there ("Moved to … · Undo").
+      const place = keptPlace(enquiryLayoutRef.current, vars.id);
+      if (place) statusPlaceRef.current[vars.id] = place;
       if (vars.status === 'lost' && vars.lostReason === undefined) {
         const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
@@ -2635,7 +2619,7 @@ export default function Dashboard() {
   function openLeadById(id: number) {
     const l: any = (allLeads ?? []).find((x: any) => x?.id === id);
     if (!l) { refetchLeads(); toast("That enquiry isn't loaded yet. Try again in a moment."); return; }
-    if (leadViewMode === "list" && !selectedBooking && leadsSubTab !== "winback") { selectLead(l); return; }
+    if (leadViewMode === "list" && !selectedBooking && !showWinBack) { selectLead(l); return; }
     openEventDrawer({ ...l, _isLead: true });
   }
   function openEventDrawer(item: any) {
@@ -2738,6 +2722,7 @@ export default function Dashboard() {
     openLead: openLeadFromUrlOrFinder,
     openBooking: openBookingFromUrl,
     leadsLoaded: !!allLeads,
+    tabParams: { tab: "enquiries", keys: LIST_PARAM_KEYS },
   });
 
   const parseEnquiryMutation = trpc.leads.parseEnquiryText.useMutation({
@@ -3539,138 +3524,86 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [user?.id]);
 
-  // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries.
   // Filter out any null/undefined entries defensively — a single bad row from
   // the API would otherwise crash every downstream `.map(l => l.id)` and
   // break the whole dashboard render.
-  const CONFIRMED_STATUSES = ['booked', 'confirmed'];
-  const allEnquiries = (allLeads ?? []).filter(Boolean).filter((l: any) => l && typeof l === 'object' && l.id != null);
-  const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
-  const newEnquiries = activeEnquiries
-    // Exclude synthetic health-check pings (same as the server's stats), which
-    // otherwise inflate the badge with enquiries that aren't real.
-    .filter((l: any) => l.status === "new" && l.source !== "healthcheck")
-    .slice()
-    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  // The sidebar badge counts NEW enquiries (status "new"), exactly the NEW tab
-  // and the Overview "New Enquiries" card. It used to count only the unopened
-  // ones, which never matched either. Definitions: shared/needsToday.ts.
-  const unreadCount = newEnquiries.length;
-  const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
+  const allEnquiries = React.useMemo(
+    () => (allLeads ?? []).filter((l: any) => l && typeof l === 'object' && l.id != null),
+    [allLeads],
+  );
 
-  // Auto-switch to "all" when there are no new enquiries
-  // (Not while a just-moved row is pinned: switching tabs would unpin it.)
-  const movedCount = Object.keys(movedRows).length;
+  // ── The Enquiries list's rows and counts, worked out once ─────────────────
+  // The sidebar badge, the Overview tiles and cards, Today, and the list's own
+  // tabs all count from these, so they always agree (shared/enquiryFilters.ts).
+  const listNowMs = useNow(60_000);
+  const venueTz = (venueSettings as any)?.timezone || DEFAULT_VENUE_TZ;
+  const listCtx = React.useMemo<ListCtx>(() => ({
+    nowMs: listNowMs,
+    tz: venueTz,
+    statusOrder: pipelineStages.map(st => st.key),
+    spaceNames: new Map((spaces ?? []).filter((sp: any) => sp?.id != null).map((sp: any) => [Number(sp.id), String(sp.name ?? '')])),
+  }), [listNowMs, venueTz, pipelineStages, spaces]);
+  const enquiryRows = React.useMemo(
+    () => enrichRows(allEnquiries as LeadLike[], { ...listCtx, replyStatus: replyStatus as any, clashMap: clashMap as any, isPartial: isPartialLead }),
+    [allEnquiries, listCtx, replyStatus, clashMap],
+  );
+  const baseCounts = React.useMemo(() => viewCounts(enquiryRows, EMPTY_FILTERS, "", listCtx), [enquiryRows, listCtx]);
+  const baseCountsRef = useRef(baseCounts);
+  baseCountsRef.current = baseCounts;
+  const listAllowedRef = useRef({ statuses: [] as string[], spaceIds: [] as number[] });
+  listAllowedRef.current = { statuses: pipelineStages.map(st => st.key), spaceIds: (spaces ?? []).map((sp: any) => Number(sp.id)) };
+  const enquiryList = useEnquiryListState({
+    tab,
+    setTab: setTab as (t: "enquiries") => void,
+    ready: !!allLeads && venueSettingsFetched && spacesFetched,
+    getCounts: () => baseCountsRef.current,
+    getAllowed: () => listAllowedRef.current,
+  });
+  const listState = enquiryList.state;
+  // A just-moved row ("Moved to … · Undo") stays only until the list changes:
+  // another view, filter, search or sort (shownListKey), the Board or WIN BACK.
+  const keptListKey = shownListKey(listState);
   useEffect(() => {
-    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new" && movedCount === 0) {
-      setLeadsSubTab("all");
+    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
+  }, [tab, listState.view, keptListKey, leadViewMode, showWinBack]);
+  // The badge number: everyone waiting on a reply (Needs reply), not just
+  // status New. Definitions: shared/needsToday.ts.
+  const replyCount = allLeads ? baseCounts.reply : null;
+  // The badge itself: the count, capped, or a dash until the enquiries load
+  // (never a number from somewhere else that then jumps).
+  const replyBadge = (cap: number) => replyCount === null
+    ? <span aria-hidden="true">–</span>
+    : <>{replyCount > cap ? `${cap}+` : replyCount}<span className="sr-only"> waiting on a reply</span></>;
+  // How many the list shows with the current view, filters and search.
+  const listShownCount = React.useMemo(
+    () => viewCounts(enquiryRows, listState.filters, listState.q, listCtx)[effectiveView(listState)],
+    [enquiryRows, listState, listCtx],
+  );
+  // The Board: every enquiry the search and filters (not Status) let through.
+  const boardRowById = React.useMemo(() => {
+    const m = new Map<number, ListRow>();
+    if (leadViewMode !== "kanban") return m;
+    for (const r of boardRows(enquiryRows, listState, listCtx)) m.set(r.lead.id, r);
+    return m;
+  }, [leadViewMode, enquiryRows, listState, listCtx]);
+  const boardNarrowed = !!listState.q.trim() || activeCount({ ...listState.filters, status: [] }) > 0;
+  // Matches in columns the Board isn't showing (Lost and Cancelled, unless shown).
+  const boardHidden = React.useMemo(() => {
+    const shownKeys = new Set(kanbanStages.map(st => st.key));
+    const byStage = new Map<string, number>();
+    for (const r of boardRowById.values()) {
+      const k = String(r.lead.status ?? '');
+      if (!shownKeys.has(k)) byStage.set(k, (byStage.get(k) ?? 0) + 1);
     }
-  }, [newEnquiries.length, allLeads, movedCount]);
-
-  function applyDateFilter(list: any[]) {
-    if (leadDateFilter === "all") return list;
-    const now = new Date();
-    return list.filter((l: any) => {
-      const d = l.eventDate ? new Date(l.eventDate) : null;
-      // An enquiry with no date yet is not "past": it needs a date decided,
-      // and hiding it from Upcoming made no-date enquiries vanish from the
-      // default view entirely. It belongs in Upcoming; the specific-window
-      // filters (today / weekend / this month) still exclude it.
-      if (!d) return leadDateFilter === "future";
-      if (leadDateFilter === "future") {
-        const today = new Date(); today.setHours(0,0,0,0);
-        return d >= today;
-      }
-      if (leadDateFilter === "today") {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-      }
-      if (leadDateFilter === "weekend") {
-        // Find the upcoming Saturday and Sunday
-        const dayOfWeek = now.getDay(); // 0=Sun,1=Mon,...,6=Sat
-        const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek);
-        const sat = new Date(now); sat.setDate(now.getDate() + daysToSat); sat.setHours(0,0,0,0);
-        const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
-        const dNorm = new Date(d); dNorm.setHours(0,0,0,0);
-        return dNorm.getTime() === sat.getTime() || dNorm.getTime() === sun.getTime();
-      }
-      if (leadDateFilter === "month") {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      }
-      if (leadDateFilter === "year") {
-        return d.getFullYear() === now.getFullYear();
-      }
-      if (leadDateFilter === "custom") {
-        const from = customDateFrom ? new Date(customDateFrom) : null;
-        const to = customDateTo ? new Date(customDateTo) : null;
-        if (from && d < from) return false;
-        if (to) { const toEnd = new Date(to); toEnd.setHours(23,59,59,999); if (d > toEnd) return false; }
-        return true;
-      }
-      return true;
-    });
-  }
-
-  // When the user has picked one or more statuses, fetch+filter from the full
-  // enquiry set. Multiple selections OR together.
-  // Typing in the search box searches EVERYTHING: every status, every date,
-  // every filter. (It used to search only the current tab and date window, so
-  // a past or already-quoted client was "not found" under New + Upcoming.)
-  const searching = leadSearch.trim().length > 0;
-  // Rows just moved to another status stay put (marked "Moved to … · Undo")
-  // until the next tab/filter/search change, instead of vanishing: they are
-  // taken out of the filtered list and put back at the row they were on.
-  const pinnedMoves = allEnquiries.filter((l: any) => movedRows[l.id]);
-  const leadsToShow = searching
-    ? allEnquiries
-    : leadStatusFilter.length > 0
-    ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
-    // Follow-up covers every open enquiry, "new" ones included (the tab's badge counts them).
-    : followUpOnly ? applyDateFilter(allEnquiries)
-    // The "New" tab is NOT date-filtered: its badge counts every new enquiry,
-    // so date-filtering the list (default "Upcoming") hid past-date ones and
-    // left the badge pointing at an empty list — "a new enquiry waiting" with
-    // nothing to show. Show all new enquiries so the count always matches, and
-    // you can action/clear the old ones. The date filter still applies to the
-    // Replied/All tabs, where you browse events by when they happen.
-    : leadsSubTab === "new" ? newEnquiries : applyDateFilter(repliedLeads);
-  const followUpNowMs = Date.now();
-  const sortedLeads = leadsToShow
-    .filter((l: any) => !movedRows[l.id])
-    .filter((l: any) => searching ? true : (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
-    .filter((l: any) => searching || !showPartialOnly || isPartialLead(l))
-    .filter((l: any) => searching || !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
-    .filter((l: any) => searching || (leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter))
-    .filter((l: any) => !searching || leadMatchesSearch(l, leadSearch))
-    .slice()
-    .sort((a: any, b: any) => {
-      let cmp = 0;
-      if (leadSortBy === 'enquiry_date') {
-        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      } else if (leadSortBy === 'event_date') {
-        // An enquiry with no event date yet has nothing to sort on. It used to
-        // count as 1970, so ascending order floated every undated lead to the
-        // TOP of an "Upcoming" list. Park them last in either direction.
-        if (!a.eventDate && !b.eventDate) return 0;
-        if (!a.eventDate) return 1;
-        if (!b.eventDate) return -1;
-        cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
-      } else if (leadSortBy === 'status') {
-        const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
-        // indexOf returns -1 (not undefined) for unknown/custom statuses, so
-        // `?? 99` was dead code and custom statuses sorted to the very top.
-        const rank = (s: string) => { const i = order.indexOf(s); return i < 0 ? 99 : i; };
-        cmp = rank(a.status) - rank(b.status);
-      }
-      return leadSortDir === 'asc' ? cmp : -cmp;
-    });
-  const filteredLeads = pinnedMoves.length === 0 ? sortedLeads : (() => {
-    const out = sortedLeads.slice();
-    pinnedMoves.slice().sort((a: any, b: any) => movedRows[a.id].at - movedRows[b.id].at)
-      .forEach((l: any) => out.splice(Math.min(movedRows[l.id].at, out.length), 0, l));
-    return out;
-  })();
-  rowPosRef.current = new Map(filteredLeads.map((l: any, i: number) => [l.id, i]));
-  const followUpCount = allEnquiries.filter((l: any) => leadFollowUpState(l, followUpNowMs).needs).length;
+    const labels = Array.from(byStage.keys()).map(k => getStatusInfo(k).label);
+    return { total: Array.from(byStage.values()).reduce((a, b) => a + b, 0), labels };
+  }, [boardRowById, kanbanStages]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boardShownCount = boardRowById.size - boardHidden.total;
+  // Needs reply in "most urgent" order, for the Overview card.
+  const replyRows = React.useMemo(
+    () => listRows(enquiryRows, { view: "reply", filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort("reply") }, listCtx).rows,
+    [enquiryRows, listCtx],
+  );
 
   // Calendar
   const year = calDate.getFullYear();
@@ -4001,7 +3934,7 @@ export default function Dashboard() {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => setTab(item.id as any)}
+              onClick={() => navTo(item.id)}
               className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
                 tab === item.id
                   ? "text-primary border-primary font-semibold"
@@ -4009,9 +3942,9 @@ export default function Dashboard() {
               }`}
             >
               {item.label}
-              {item.id === "enquiries" && unreadCount > 0 && (
+              {item.id === "enquiries" && replyCount !== 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-700 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {replyBadge(99)}
                 </span>
               )}
             </button>
@@ -4111,16 +4044,18 @@ export default function Dashboard() {
           return (
             <button
               key={item.id}
-              onClick={() => setTab(item.id as any)}
+              onClick={() => navTo(item.id)}
               aria-current={tab === item.id ? "page" : undefined}
               className={baseClass}
             >
               {indicator}
               {item.icon}
               <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              {item.id === "enquiries" && unreadCount > 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+              {item.id === "enquiries" && replyCount !== 0 && (
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-600 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                  {/* The same number as the Needs reply tab ("24"), not "9+";
+                      red-600, as white on red-500 was 3.8:1. */}
+                  {replyBadge(99)}
                 </span>
               )}
             </button>
@@ -4169,13 +4104,13 @@ export default function Dashboard() {
           ]).map(item => {
             const active = tab === item.id;
             return (
-              <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
+              <button key={item.id} onClick={() => navTo(item.id)} aria-current={active ? "page" : undefined}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${active ? "font-bold text-white" : "font-medium text-[#d6deea] hover:text-white hover:bg-white/[0.08]"}`}
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
-                {item.id === "enquiries" && unreadCount > 0 && (
-                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+                {item.id === "enquiries" && replyCount !== 0 && (
+                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{replyBadge(99)}</span>
                 )}
               </button>
             );
@@ -4214,8 +4149,13 @@ export default function Dashboard() {
             // The action tiles come first, the vanity numbers sit in a collapsed
             // "Performance" row. Every count below is the one the list it opens
             // shows (definitions: shared/needsToday.ts).
-            const openEnquiryCount = allLeads ? allEnquiries.filter((l: any) => isOpenEnquiry(l.status)).length : (stats?.newLeads ?? 0);
-            const followUpTileCount = allLeads ? followUpCount : (stats?.needsFollowUp ?? 0);
+            // Counted from the same rows as the list: each tile opens exactly the
+            // view it counts. A dash until the enquiries load, never the
+            // server's older rule flashing first.
+            const listLoaded = !!allLeads;
+            const openEnquiryCount = baseCounts.open;
+            const followUpTileCount = listLoaded ? baseCounts.followup : 0;
+            const atProposalSent = allEnquiries.filter((l: any) => l.status === 'proposal_sent').length;
             const overdueTaskCount = stats?.overdueTasks ?? 0;
             const depositsDueCount = stats?.depositsDue ?? 0;
             // Never show a confident $0 when the real problem is missing totals.
@@ -4223,13 +4163,13 @@ export default function Dashboard() {
             const revenueRounded = Math.round(stats?.revenueThisMonth ?? 0);
             const revenueValue = revenueRounded === 0 && missingTotals > 0 ? "—" : `$${revenueRounded.toLocaleString()}`;
             const allStats = [
-              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
+              { id: "needs_followup", label: "Needs Follow-up", value: listLoaded ? followUpTileCount : "–", sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
               { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-destructive' : 'text-muted-foreground/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
               { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
-              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-primary" /> },
+              { id: "active_enquiries", label: "Open Enquiries", value: listLoaded ? openEnquiryCount : "–", sub: listLoaded ? `${baseCounts.reply} need${baseCounts.reply === 1 ? "s" : ""} a reply` : "", icon: <MessageSquare className="w-5 h-5 text-primary" /> },
               { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-primary" /> },
               { id: "revenue_month", label: "Revenue This Month", value: revenueValue, sub: missingTotals > 0 ? `${missingTotals} booking${missingTotals === 1 ? "" : "s"} not counted — no total` : "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-gold-deep" />, alert: missingTotals > 0 ? 'warn' as const : undefined },
-              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: listLoaded ? `${atProposalSent} enquir${atProposalSent === 1 ? "y" : "ies"} at Proposal Sent` : "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-primary" />, perf: true },
             ];
             // Land on exactly the records a tile counted: clear the date, owner,
@@ -4311,8 +4251,8 @@ export default function Dashboard() {
                   className="lg:w-[360px]"
                   onOpenEvent={openOverviewEvent}
                   onCalendar={() => setTab('calendar')}
-                  newEnquiries={newEnquiries.length}
-                  onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                  newEnquiries={replyCount ?? 0}
+                  onNewEnquiries={() => showEnquiries({ view: 'reply' })}
                 />
               )}
 
@@ -4457,32 +4397,35 @@ export default function Dashboard() {
                     statusInfo={(st) => getStatusInfo(st)}
                   />
 
-                  {/* New Enquiries */}
+                  {/* Needs reply: the same people as the badge and the list's
+                      Needs reply tab, longest wait first. */}
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <SectionHead title="Needs reply" meta={replyCount ? `${replyCount} waiting` : undefined} className="flex-1" />
+                      <button onClick={() => showEnquiries({ view: 'reply' })} aria-label="View all enquiries that need a reply" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
-                    {newEnquiries.length === 0 ? (
+                    {replyCount === null ? (
+                      <p className="px-4 py-3 font-dm text-sm text-sage">Loading…</p>
+                    ) : replyRows.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
                         <CheckCircle className="w-8 h-8 text-forest/20 mx-auto mb-2" />
-                        <p className="font-dm text-xs text-sage/50">All caught up!</p>
+                        <p className="font-dm text-xs text-muted-foreground">All caught up!</p>
                       </div>
                     ) : (
                       <div className="divide-y divide-border max-h-56 overflow-auto">
-                        {newEnquiries.slice(0, 6).map((lead: any) => (
+                        {replyRows.slice(0, 6).map(({ lead, signal }: any) => (
                           <button key={lead.id} onClick={() => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${lead.id}`); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
                               <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(lead.status).label}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
+                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{signal.text}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
-                        {newEnquiries.length > 6 && (
-                          <button onClick={() => showEnquiries({ sub: 'new' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
-                            +{newEnquiries.length - 6} more new enquiries {'\u2192'}
+                        {replyRows.length > 6 && (
+                          <button onClick={() => showEnquiries({ view: 'reply' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
+                            +{replyRows.length - 6} more waiting on a reply {'\u2192'}
                           </button>
                         )}
                       </div>
@@ -4520,7 +4463,10 @@ export default function Dashboard() {
             <div className="vf-pane flex h-full overflow-hidden">
 
               {/* ── MAIN ENQUIRIES COLUMN ──────────────────────────────────── */}
-              <div className="vf-pane flex flex-col flex-1 min-w-0 overflow-hidden">
+              {/* A container: the toolbar and the list follow this column's own
+                  width, not the window's, so at 400% zoom the table becomes
+                  cards and the filter buttons become one Filters button. */}
+              <div className="vf-pane @container flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
@@ -4535,17 +4481,18 @@ export default function Dashboard() {
                         flip to "Pipeline" on the board while the nav still said
                         "Events"/"Enquiries". The List/Board toggle says which
                         view this is. */}
-                    <h1 className="font-cormorant text-3xl font-semibold text-ink mr-1">Enquiries</h1>
+                    <h1 className="font-cormorant text-[26px] md:text-3xl font-semibold text-ink mr-1">Enquiries</h1>
                     {/* Win-back toggle — the enquiry statuses now live in the
                         list's own view tabs (Needs reply / Follow-up due /
                         Confirmed / All), so the one thing left here is the
                         separate Win-back panel for lost and quiet enquiries. */}
+                    {/* On a phone it lives in the ⋯ menu instead (unless it is on). */}
                     {leadViewMode !== "kanban" && (
-                      <button onClick={() => { setLeadsSubTab(leadsSubTab === "winback" ? "all" : "winback"); setLeadStatusFilter([]); setFollowUpOnly(false); setShowPartialOnly(false); setSelectedLead(null); }}
-                        aria-pressed={leadsSubTab === "winback"}
+                      <button onClick={() => { setShowWinBack(v => !v); setSelectedLead(null); }}
+                        aria-pressed={showWinBack}
                         title="Lost and quiet enquiries, and last year's clients, to invite back"
-                        className="vf-btn vf-btn-secondary">
-                        <RotateCcw className="w-3.5 h-3.5" /> {leadsSubTab === "winback" ? "ENQUIRIES" : "WIN BACK"}
+                        className={`vf-btn vf-btn-secondary ${showWinBack ? "" : "max-md:hidden!"}`}>
+                        <RotateCcw className="w-3.5 h-3.5" /> {showWinBack ? "ENQUIRIES" : "WIN BACK"}
                       </button>
                     )}
                   </div>
@@ -4553,15 +4500,16 @@ export default function Dashboard() {
                   {/* View toggle: one responsive List (table on desktop, cards
                       on mobile) ↔ Board (kanban). */}
                   <div role="group" aria-label="Enquiries view" className="flex border border-gold/30 rounded-lg overflow-hidden">
+                    {/* Narrow: icons only (40×36), named by aria-label. */}
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
-                      title="List view" aria-pressed={leadViewMode !== "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
-                      <List className="w-3.5 h-3.5" /> LIST
+                      title="List view" aria-label="List view" aria-pressed={leadViewMode !== "kanban"}
+                      className={`flex items-center justify-center gap-1.5 min-w-10 px-3 @max-[719px]:px-0 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <List className="w-3.5 h-3.5 @max-[719px]:w-4 @max-[719px]:h-4" aria-hidden="true" /> <span className="@max-[719px]:hidden">LIST</span>
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
-                      title="Board view" aria-pressed={leadViewMode === "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
-                      <Columns className="w-3.5 h-3.5" /> BOARD
+                      title="Board view" aria-label="Board view" aria-pressed={leadViewMode === "kanban"}
+                      className={`flex items-center justify-center gap-1.5 min-w-10 px-3 @max-[719px]:px-0 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <Columns className="w-3.5 h-3.5 @max-[719px]:w-4 @max-[719px]:h-4" aria-hidden="true" /> <span className="@max-[719px]:hidden">BOARD</span>
                     </button>
                   </div>
 
@@ -4605,6 +4553,12 @@ export default function Dashboard() {
                         </button>
                         {actionsMenuOpen && (
                           <div id="enquiry-more-actions" className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
+                            {leadViewMode !== "kanban" && !showWinBack && (
+                              <button onClick={() => { setShowWinBack(true); setSelectedLead(null); setActionsMenuOpen(false); }}
+                                className="md:hidden w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
+                                <RotateCcw className="w-3.5 h-3.5 text-ink/60" /> Win back lost and quiet enquiries
+                              </button>
+                            )}
                             <button onClick={() => { setShowCsvImport(true); setActionsMenuOpen(false); }}
                               className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
@@ -4622,35 +4576,32 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
-                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
-                  <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
-                    {/* Search + owner feed the list; status / date / sort now live
-                        in the list's own view tabs and signal ordering. */}
-                    <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
-                      <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
-                        aria-label="Search enquiries" data-search-box
-                        placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
-                    </div>
-                    {(teamList ?? []).length > 0 && (
-                      <select value={String(leadOwnerFilter)} aria-label="Filter by owner" title="Filter by owner"
-                        onChange={e => { const v = e.target.value; setLeadOwnerFilter(v === "all" || v === "unassigned" ? v : Number(v)); }}
-                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${leadOwnerFilter !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
-                        <option value="all">All owners</option>
-                        <option value="unassigned">Unassigned</option>
-                        {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    )}
-                  </div>
+                {/* Row 2: search and filters (not in Win back). Each filter you
+                    pick stays on screen as a chip with its own ×. The Board
+                    has the same row without Status (its columns are the
+                    statuses). */}
+                {(leadViewMode === "kanban" || !showWinBack) && (
+                  <EnquiryFilterBar
+                    mode={leadViewMode === "kanban" ? "board" : "list"}
+                    rows={enquiryRows}
+                    ctx={listCtx}
+                    state={listState}
+                    onFiltersChange={enquiryList.setFilters}
+                    onQChange={enquiryList.setQ}
+                    statuses={pipelineStages}
+                    spaces={(spaces ?? []).filter((sp: any) => sp?.id != null).map((sp: any) => ({ id: Number(sp.id), name: String(sp.name ?? '') }))}
+                    team={(teamList ?? []).map((m: any) => ({ id: Number(m.id), name: String(m.name ?? '') }))}
+                    shownCount={leadViewMode === "kanban" ? boardShownCount : listShownCount}
+                  />
                 )}
-                {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
-                  <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
+                {listState.q.trim() && !isStaff && leadViewMode !== "kanban" && !showWinBack && (
+                  <EventSearchResults query={listState.q} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
                 {/* Bulk select all bar: selects the rows the list shows (its own
                     tabs filter them too), not the wider filteredLeads. */}
-                {bulkSelectMode && leadsSubTab !== "winback" && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
+                {/* Cards only: on the table the header's box selects all. */}
+                {bulkSelectMode && !showWinBack && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
+                  <div className="@min-[768px]:hidden flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" ref={selectAllRef}
                         checked={allShownSelected(selectedLeadIds, enquiryOrder)}
@@ -4668,13 +4619,13 @@ export default function Dashboard() {
               <div ref={enquiryContentRef} className="flex flex-1 overflow-hidden" style={bulkBarCover ? { paddingBottom: bulkBarCover } : undefined}>
 
                 {/* ── WIN BACK ──────────────────────────────────────── */}
-                {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
+                {showWinBack && leadViewMode !== "kanban" && (
                   <WinBackPanel onOpenLead={openLeadById} />
                 )}
 
                 {/* ── ENQUIRY LIST (Option C) — signal-first rows, replaces the
                        old table + phone list; Board (kanban) is the alternative view ── */}
-                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                {leadViewMode !== "kanban" && !showWinBack && (
                   leadsError ? (
                     <div className="flex-1 p-8 text-center">
                       <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
@@ -4683,16 +4634,14 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <EnquiryListC
-                      leads={(() => {
-                        const ql = leadSearch.trim().toLowerCase();
-                        const base = allEnquiries.filter((l: any) => leadOwnerFilter === 'all' ? true : leadOwnerFilter === 'unassigned' ? !l.assignedTo : l.assignedTo === leadOwnerFilter);
-                        return ql ? base.filter((l: any) => `${l.firstName ?? ''} ${l.lastName ?? ''} ${l.company ?? ''} ${l.email ?? ''} ${l.eventType ?? ''}`.toLowerCase().includes(ql)) : base;
-                      })()}
-                      nowMs={followUpNowMs}
+                      rows={enquiryRows}
+                      ctx={listCtx}
+                      loaded={!!allLeads}
+                      state={listState}
+                      onViewChange={enquiryList.setView}
+                      onFiltersChange={enquiryList.setFilters}
+                      onSortChange={enquiryList.setSort}
                       venueName={(venueSettings as any)?.name ?? 'the venue'}
-                      replyStatus={replyStatus}
-                      clashMap={clashMap as any}
-                      isPartial={(l: any) => isPartialLead(l)}
                       isStaff={isStaff}
                       // getStatusInfo maps the retired 'booked'/'confirmed' keys to one label,
                       // so a confirmed enquiry reads "Confirmed", not raw "confirmed".
@@ -4704,6 +4653,7 @@ export default function Dashboard() {
                       }}
                       sending={sendEmail.isPending}
                       onRowsChange={setEnquiryOrder}
+                      layoutRef={enquiryLayoutRef}
                       // Keep a just-moved row in place with "Moved to … · Undo"
                       // instead of it vanishing from the tab it no longer matches.
                       movedRows={movedRows}
@@ -4713,6 +4663,18 @@ export default function Dashboard() {
                       // (reason recorded, so Reports' lost-reason split stays true).
                       onCloseAsLost={(ids: number[]) => bulkUpdateStatusMut.mutate({ ids, status: 'lost', lostReason: 'other', lostReasonNote: 'Event date passed without a booking' })}
                       closing={bulkUpdateStatusMut.isPending}
+                      labels={{
+                        status: (k: string) => getStatusInfo(k).label,
+                        space: (id: number) => (spaces ?? []).find((sp: any) => Number(sp?.id) === id)?.name,
+                        owner: (id: number) => teamById.get(id)?.name,
+                      }}
+                      teamById={teamById}
+                      // Select multiple: a box on each row; on the table the
+                      // header's box is SELECT ALL.
+                      selectMode={bulkSelectMode}
+                      selectedIds={selectedLeadIds}
+                      onSelectedChange={setSelectedLeadIds}
+                      selectAllRef={headerSelectAllRef}
                     />
                   )
                 )}
@@ -4724,20 +4686,30 @@ export default function Dashboard() {
                       Confirmed/Lost sat off-screen with nothing hinting they
                       exist. The fade sits over the 24px right padding. */}
                   <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10 bg-gradient-to-l from-background to-transparent" />
+                  {/* A search reaches every status: say when some of what it
+                      found is in a column that isn't showing. */}
+                  {listState.q.trim() && boardHidden.total > 0 && (
+                    <p className="px-6 pt-3 font-sans text-[13px] text-muted-foreground bg-background">
+                      {boardHidden.total} match{boardHidden.total === 1 ? '' : 'es'} in {boardHidden.labels.join(' and ')}{' · '}
+                      {kanbanStagePrefs ? (
+                        <button type="button" onClick={() => setKanbanSettingsOpen(true)} className="font-bold text-primary underline underline-offset-[3px]">Show columns</button>
+                      ) : (
+                        <button type="button" onClick={() => setShowClosedStages(true)} className="font-bold text-primary underline underline-offset-[3px]">Show lost</button>
+                      )}
+                    </p>
+                  )}
                   <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
-                        // The board shows the WHOLE pipeline grouped by stage —
-                        // not the list view's new/all subtab, search, partial,
-                        // follow-up or date filters (none of which have a
-                        // control in board mode). Using filteredLeads here left
-                        // the board showing only the active subset (e.g. just
-                        // "new" leads), so most columns looked empty.
+                        // The board shows the whole pipeline grouped by stage,
+                        // not the list's views: only the search and the filters
+                        // in the row above narrow it (boardRowById), so its
+                        // column counts and totals are of what is shown.
                         // "Needs you first": overdue follow-ups, then upcoming events by
                         // date, then undated, then past; newest enquiry breaks ties.
                         const nowTs = Date.now();
                         const needsYou = (l: any) => leadFollowUpState(l, nowTs).reason === 'overdue';
-                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key).sort((a: any, b: any) => {
+                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key && boardRowById.has(l.id)).sort((a: any, b: any) => {
                           const oa = needsYou(a) ? 0 : 1, ob = needsYou(b) ? 0 : 1;
                           if (oa !== ob) return oa - ob;
                           // upcoming (soonest first) → undated → already past
@@ -4747,7 +4719,11 @@ export default function Dashboard() {
                           if (ra === 0) { const d = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(); if (d) return d; }
                           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         });
-                        const tone = (stage as any).swatch ?? '#2f5488';
+                        // The stage's colours, derived from its colour in Settings >
+                        // Statuses and clamped for contrast (the same as the list's pills).
+                        const pal = statusPalette((stage as any).swatch ?? '#2f5488');
+                        // How many cards in the column are late (the red lane).
+                        const lateCount = stageLeads.reduce((n: number, l: any) => { const r = boardRowById.get(l.id); return n + (r && rowLane(r, listCtx).lane === 'red' ? 1 : 0); }, 0);
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
                         const stageHeadingId = `kanban-stage-${String(stage.key).replace(/[^a-z0-9_-]/gi, '_')}`;
@@ -4755,31 +4731,41 @@ export default function Dashboard() {
                           // Each column is a group named by its stage, so a card's
                           // stage is known to screen readers too (it was a flat run).
                           <div key={stage.key} role="group" aria-labelledby={stageHeadingId} className="w-72 flex-shrink-0 flex flex-col min-w-0">
-                            {/* Column header — tracked title, colored rule, serif total */}
-                            {/* min-h keeps every header the same height — a column
-                                with no total yet (e.g. New Enquiry) used to sit a
-                                couple of px higher than its neighbours. */}
-                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0 min-h-[34px]" style={{ borderBottom: `2px solid ${tone}` }}>
-                              {/* Stage colour shown as a dot + the underline, so the
-                                  label text can stay dark and readable — the raw
-                                  swatch colours (sky/amber/orange) only hit ~2:1 as
-                                  text on cream. */}
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
-                              <span id={stageHeadingId} role="heading" aria-level={2} className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
-                              <span className="font-sans text-[12px] font-bold" style={{ color: '#6e665c' }}><span className="sr-only">, </span>{stageLeads.length}<span className="sr-only"> {stageLeads.length === 1 ? 'enquiry' : 'enquiries'}</span></span>
+                            {/* Column header: a block in the stage's tint, its words in
+                                the stage's dark ink (the raw swatch colours only hit ~2:1
+                                as text on cream), a 3px rule underneath in its outline
+                                colour (a border, so forced colours keep it), the late
+                                count in red, and the serif total. min-h keeps every
+                                header the same height, with or without a total. */}
+                            <div className="flex items-center gap-2 pl-2.5 pr-3 mb-3 flex-shrink-0 min-h-[36px] rounded-[6px]"
+                              style={{ background: pal.tint, color: pal.ink, borderBottom: `3px solid ${pal.outline}` }}>
+                              <span id={stageHeadingId} role="heading" aria-level={2} className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]">{stage.label}</span>
+                              <span className="font-sans text-[12px] font-bold"><span className="sr-only">, </span>{stageLeads.length}<span className="sr-only"> {stageLeads.length === 1 ? 'enquiry' : 'enquiries'}</span></span>
+                              {lateCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-sans text-[11.5px] font-bold whitespace-nowrap" style={{ color: LANE_INK.red }}>
+                                  <LaneDot lane="red" size={7} />{lateCount} late
+                                </span>
+                              )}
                               <span className="flex-1" />
                               {stageTotalLabel && (
-                                <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
+                                <span className="font-serif text-[13px] font-semibold [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
                               )}
                             </div>
                             {/* Cards */}
                             <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                const fuReason = leadFollowUpState(lead, nowTs).reason;
+                                // The same lane and words as the list's Needs column.
+                                const boardRow = boardRowById.get(lead.id);
+                                const needs = boardRow ? rowLane(boardRow, listCtx) : null;
+                                // The lane as a 5px left edge (a border, so forced colours
+                                // keep it; it keeps its colour on hover); calm cards keep
+                                // the plain edge. The padding gives back the extra width.
+                                const edge = needs && needs.lane !== 'calm' ? LANE_MARK[needs.lane] : null;
                                 return (
                                   <button key={lead.id}
                                     onClick={() => openEventDrawer({ ...lead, _isLead: true })}
+                                    style={edge ? { borderLeft: `5px solid ${edge}`, paddingLeft: 10 } : undefined}
                                     className="group w-full shrink-0 text-left bg-cream rounded-[8px] p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] shadow-[var(--shadow-card)] hover:border-[#6e665c] hover:shadow-[var(--shadow-card-hover)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
@@ -4813,21 +4799,15 @@ export default function Dashboard() {
                                         ) : null}
                                       </div>
                                     )}
-                                    {/* Footer — serif value + age / overdue flag */}
-                                    {/* Footer — value (only when there is one) + age / overdue flag.
-                                        An em dash on every card without a value was noise. */}
+                                    {/* Footer — value (only when there is one), then what the
+                                        enquiry needs, in the list's words ("Waiting 6d 13h"),
+                                        so the Board and the list never disagree. */}
                                     <div className="flex items-baseline justify-between gap-2 pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? ''}</span>
-                                      {leadDatePassed(lead, nowTs) ? (
-                                        <span className="text-xs font-semibold" style={{ color: '#6a6256' }}>Date passed</span>
-                                      ) : fuReason === 'overdue' ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
-                                      ) : fuReason === 'idle' ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
-                                      ) : leadNeedsReply(lead) ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
-                                      ) : (
-                                        <span className="text-[12px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
+                                      {needs && (
+                                        <span className="inline-flex items-center gap-1.5 min-w-0 text-right text-[12px] font-bold" style={{ color: LANE_INK[needs.lane] }}>
+                                          <LaneDot lane={needs.lane} size={8} />{needs.text}
+                                        </span>
                                       )}
                                     </div>
                                   </button>
@@ -4835,7 +4815,7 @@ export default function Dashboard() {
                               })}
                               {stageLeads.length === 0 && (
                                 <div className="shrink-0 rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
-                                  <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>No leads</p>
+                                  <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>{boardNarrowed ? 'No matches' : 'No leads'}</p>
                                 </div>
                               )}
                               <button
@@ -4856,17 +4836,17 @@ export default function Dashboard() {
 
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
-                // On phones and tablets it ran off both sides, CLEAR and DELETE
-                // out of reach: below xl (iPad landscape and zoomed windows too)
-                // it fits the screen and wraps, and on phones it sits above the
-                // tab bar. Desktop (1280px and up) is as it was.
-                <div ref={bulkBarRef} data-toast-clear className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex max-xl:flex-wrap max-xl:w-max max-xl:max-w-[calc(100vw-2rem)] items-center gap-3 max-xl:gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                // It is as wide as its buttons and never wider than the screen,
+                // wrapping when they don't fit, at every width. (Placed at 50%,
+                // it used to get only half the window on a laptop, so LOST sat
+                // on top of CLEAR.) On phones it sits above the tab bar.
+                <div ref={bulkBarRef} data-toast-clear className="fixed bottom-6 max-md:bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-50 flex flex-wrap w-max max-w-[calc(100vw-2rem)] items-center gap-3 gap-y-2 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
                   <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
                   {/* aria-disabled, not disabled, while it saves: focus stays on the
                       button, so it can move to More actions when the bar goes. */}
-                  <div className={`flex max-xl:flex-wrap items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
+                  <div className={`flex flex-wrap items-center gap-1.5 ${bulkUpdateStatus.isPending ? 'opacity-50' : ''}`}>
                     {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => {
@@ -6338,7 +6318,7 @@ export default function Dashboard() {
                 onOpenLink={(link) => { void openAlertLink(link); }}
                 onGoCalendarList={showCalendarList}
                 onGoTasksOverdue={() => tileAction('overdue_tasks')}
-                onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                onGoEnquiries={(view) => showEnquiries({ view: view === 'new' ? 'reply' : 'followup' })}
                 onGoDeposits={() => tileAction('deposits_due')}
               />
             </div>
