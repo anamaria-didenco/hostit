@@ -1181,9 +1181,25 @@ export default function RunsheetBuilder() {
     if (applied.length > 0) toast.success(`Applied: ${applied.join(', ')}`);
   }
 
-  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string; imageUrl?: string }[]>([]);
+  type ChecklistItem = { id: string; text: string; checked: boolean; category: string; imageUrl?: string };
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistInstance, setChecklistInstance] = useState<any>(null);
   const [newChecklistText, setNewChecklistText] = useState("");
+  // What's in the add box now, for a save that answers later.
+  const newChecklistTextRef = useRef("");
+  newChecklistTextRef.current = newChecklistText;
+  // Items on show that are still being saved (the add box and PULL BAR DRINKS
+  // show them straight away). A saved list that comes back meanwhile, from
+  // any change, keeps them on show until their own save answers. `removed`:
+  // taken off the list before its save answered; it's removed on the server
+  // once it has saved.
+  const unsavedChecklistAdds = useRef(new Map<string, { item: ChecklistItem; removed: boolean }>());
+  const showSavedChecklistItems = (saved: ChecklistItem[]) => {
+    const unsaved = Array.from(unsavedChecklistAdds.current.values())
+      .filter(u => !u.removed && !saved.some(s => s.id === u.item.id))
+      .map(u => u.item);
+    setChecklistItems([...saved, ...unsaved]);
+  };
   // Per-item reference photo (uploaded to /api/upload-image, stored as a URL
   // in the checklist item JSON). Shown to staff in the shared checklist view.
   const checklistPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -1223,7 +1239,7 @@ export default function RunsheetBuilder() {
       if (!instance) return;
       setChecklistInstance(instance);
       const dbItems = (instance.items ?? []) as any[];
-      if (dbItems.length > 0) setChecklistItems(dbItems);
+      if (dbItems.length > 0) showSavedChecklistItems(dbItems);
     },
   });
 
@@ -1252,7 +1268,7 @@ export default function RunsheetBuilder() {
     setChecklistRefocus(null);
   });
   const applySavedChecklist = (r: { items: unknown; name: string | null }) => {
-    setChecklistItems((r.items ?? []) as any);
+    showSavedChecklistItems((r.items ?? []) as ChecklistItem[]);
     setChecklistInstance((inst: any) => inst ? { ...inst, name: r.name, items: r.items } : inst);
   };
   // Shows the list as it is on the server now (after a change failed, or the
@@ -1265,15 +1281,49 @@ export default function RunsheetBuilder() {
   const checklistRowsRef = useRef<HTMLDivElement>(null);
   const checklistAddRef = useRef<HTMLInputElement>(null);
   useFocusKeeper(checklistRowsRef, checklistAddRef);
-  // Each caller says what went wrong (the add box and AI PASTE keep what was
-  // typed for Try again); here the list is re-read so it shows what's saved.
-  const addChecklistItemsMut = trpc.checklists.addItemsForRunsheet.useMutation({
-    onSuccess: r => applySavedChecklist(r),
-    onError: () => rereadChecklist(),
-  });
-  const checklistAddFailed = (err: { data?: { code?: string } | null }) => err.data?.code === "NOT_FOUND"
+  // Adding goes through sendChecklistAdditions, where each save answers on
+  // its own (mutateAsync): several can be on their way at once (items typed
+  // one after another, PULL BAR DRINKS meanwhile), and the callbacks given to
+  // mutate() are only kept for a mutation's latest call. AI PASTE has its
+  // own, so its ADDING… shows only for its own save.
+  const addChecklistItemsMut = trpc.checklists.addItemsForRunsheet.useMutation();
+  const addPastedChecklistItemsMut = trpc.checklists.addItemsForRunsheet.useMutation();
+  const checklistAddFailed = (err: { data?: { code?: string } | null }) => err?.data?.code === "NOT_FOUND"
     ? "The checklist hasn't loaded yet"
     : "Couldn't add to the checklist";
+  // Saves new items. `shown` are put on the list straight away; if the save
+  // fails they leave it again. Either way the list then shows what's saved.
+  // The caller says what went wrong (`removedMeanwhile`: the owner had
+  // already taken the shown items off the list again).
+  function sendChecklistAdditions(
+    input: { runsheetId: number; items: { id: string; text: string; category: (typeof EVENT_CHECKLIST_CATEGORIES)[number] }[]; skipSameText?: boolean },
+    shown: ChecklistItem[],
+    then: { saved?: (r: { added: number }) => void; failed?: (err: { data?: { code?: string } | null }, removedMeanwhile: boolean) => void },
+    mut: typeof addChecklistItemsMut = addChecklistItemsMut,
+  ) {
+    for (const item of shown) unsavedChecklistAdds.current.set(item.id, { item, removed: false });
+    if (shown.length) setChecklistItems(cur => [...cur, ...shown]);
+    // The shown items the owner removed while they were being saved.
+    const settle = () => shown.filter(item => {
+      const removed = unsavedChecklistAdds.current.get(item.id)?.removed ?? false;
+      unsavedChecklistAdds.current.delete(item.id);
+      return removed;
+    });
+    mut.mutateAsync(input).then(
+      r => {
+        const removed = settle();
+        applySavedChecklist(removed.length ? { ...r, items: (r.items as ChecklistItem[]).filter(i => !removed.some(x => x.id === i.id)) } : r);
+        for (const item of removed) removeChecklistItemMut.mutate({ runsheetId: input.runsheetId, itemId: item.id });
+        then.saved?.(r);
+      },
+      err => {
+        const removed = settle();
+        setChecklistItems(cur => cur.filter(i => !shown.some(s => s.id === i.id)));
+        rereadChecklist();
+        then.failed?.(err, removed.length > 0);
+      },
+    );
+  }
   const removeChecklistItemMut = trpc.checklists.removeItemForRunsheet.useMutation({
     onSuccess: r => applySavedChecklist(r),
     onError: () => { toast.error("Couldn't remove the item — please try again."); rereadChecklist(); },
@@ -1361,7 +1411,7 @@ export default function RunsheetBuilder() {
   const checklistCategory = (c: string) => (EVENT_CHECKLIST_CATEGORIES as readonly string[]).includes(c)
     ? c as (typeof EVENT_CHECKLIST_CATEGORIES)[number] : 'other' as const;
   function applyChecklistParsed() {
-    if (!checklistParsed || addChecklistItemsMut.isPending) return;
+    if (!checklistParsed || addPastedChecklistItemsMut.isPending) return;
     const selected = checklistParsed.items.filter(i => i._selected && i.text.trim());
     if (selected.length === 0) { setChecklistPasteError("Select at least one item."); return; }
     const tooLong = selected.map(it => checklistItemTooLong(it.text)).find(Boolean);
@@ -1383,17 +1433,19 @@ export default function RunsheetBuilder() {
       toast.success(`Added ${additions.length} item${additions.length !== 1 ? 's' : ''} to the checklist`);
     };
     if (!sheetId) { setChecklistItems([...checklistItems, ...additions]); done(); return; }
-    addChecklistItemsMut.mutate(
+    sendChecklistAdditions(
       { runsheetId: sheetId, items: additions.map(a => ({ id: a.id, text: a.text, category: checklistCategory(a.category) })) },
+      [],
       {
-        onSuccess: done,
-        onError: err => setChecklistPasteError(`${checklistAddFailed(err)}. Nothing is lost: press ADD TO CHECKLIST to try again.`),
+        saved: done,
+        failed: err => setChecklistPasteError(`${checklistAddFailed(err)}. Nothing is lost: press ADD TO CHECKLIST to try again.`),
       },
+      addPastedChecklistItemsMut,
     );
   }
   const toggleByToken = trpc.checklists.toggleItemByToken.useMutation({
     onSuccess: (data) => {
-      if (data?.items) setChecklistItems(data.items as any);
+      if (data?.items) showSavedChecklistItems(data.items as any);
     },
     onError: () => { toast.error("Couldn't save the tick — please try again."); rereadChecklist(); },
   });
@@ -1791,7 +1843,8 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible' || !checklistInstance || getOrCreateChecklist.isPending) return;
-      if (addChecklistItemsMut.isPending || removeChecklistItemMut.isPending || setChecklistImageMut.isPending
+      if (unsavedChecklistAdds.current.size > 0 || addChecklistItemsMut.isPending || addPastedChecklistItemsMut.isPending
+        || removeChecklistItemMut.isPending || setChecklistImageMut.isPending
         || editChecklistItemMut.isPending || reorderChecklistMut.isPending || renameChecklistMut.isPending || toggleByToken.isPending) return;
       rereadChecklist();
     };
@@ -2933,27 +2986,45 @@ export default function RunsheetBuilder() {
     return false;
   };
 
-  // The add box keeps its words until the item is saved, so if saving fails
-  // they're still there to try again. Typing meanwhile isn't cleared.
-  const [checklistBoxSaving, setChecklistBoxSaving] = useState(false);
+  // The add box clears at once and the item shows on the list straight away,
+  // so the next one can be typed while it saves.
   function addChecklistItem() {
     const text = newChecklistText.trim();
-    if (!text || checklistBoxSaving || checklistNotReady()) return;
+    if (!text || checklistNotReady()) return;
     const tooLong = checklistItemTooLong(text);
     if (tooLong) { toast.error(tooLong); return; }
-    const item = { id: `c-${Date.now()}`, text, checked: false, category: "other" };
-    if (!sheetId) { setChecklistItems([...checklistItems, item]); setNewChecklistText(""); return; }
-    setChecklistBoxSaving(true);
-    addChecklistItemsMut.mutate({ runsheetId: sheetId, items: [{ id: item.id, text, category: "other" }] }, {
-      onSuccess: () => setNewChecklistText(cur => (cur.trim() === text ? "" : cur)),
-      onError: err => toast.error(`${checklistAddFailed(err)}. Your words are still in the box: press ADD to try again.`),
-      onSettled: () => setChecklistBoxSaving(false),
+    setNewChecklistText("");
+    saveChecklistBoxItem(text);
+  }
+  // If the save fails, the item leaves the list and its words go back in the
+  // box; if the next item is already being typed there, the message holds
+  // them instead, with TRY AGAIN.
+  function saveChecklistBoxItem(text: string) {
+    const item = { id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text, checked: false, category: "other" };
+    if (!sheetId) { setChecklistItems(cur => [...cur, item]); return; }
+    sendChecklistAdditions({ runsheetId: sheetId, items: [{ id: item.id, text, category: "other" }] }, [item], {
+      failed: (err, removedMeanwhile) => {
+        if (removedMeanwhile) return;
+        const why = checklistAddFailed(err);
+        if (!newChecklistTextRef.current.trim()) {
+          setNewChecklistText(text);
+          toast.error(`${why}. Your words are back in the box: press ADD to try again.`);
+          return;
+        }
+        const words = text.length > 120 ? `${text.slice(0, 120)}…` : text;
+        toast.error(`${why}: “${words}”. Press TRY AGAIN to add it.`, {
+          action: { label: "TRY AGAIN", onClick: () => saveChecklistBoxItem(text) },
+        });
+      },
     });
   }
 
   function removeChecklistItem(id: string) {
     if (checklistNotReady()) return;
-    setChecklistItems(checklistItems.filter(item => item.id !== id));
+    setChecklistItems(cur => cur.filter(item => item.id !== id));
+    // Still being saved: it's removed on the server once that save is done.
+    const unsaved = unsavedChecklistAdds.current.get(id);
+    if (unsaved) { unsaved.removed = true; return; }
     if (sheetId) removeChecklistItemMut.mutate({ runsheetId: sheetId, itemId: id });
   }
 
@@ -3005,12 +3076,12 @@ export default function RunsheetBuilder() {
     const said = (n: number) => n === 0
       ? toast.info('All drinks are already in the checklist.')
       : toast.success(`Added ${n} bar stock item${n !== 1 ? 's' : ''} to the checklist`);
-    setChecklistItems([...checklistItems, ...toAdd]);
-    if (!sheetId) { said(toAdd.length); return; }
-    // The server skips any already on the list as it is now.
-    addChecklistItemsMut.mutate(
+    if (!sheetId) { setChecklistItems([...checklistItems, ...toAdd]); said(toAdd.length); return; }
+    // Shown straight away; the server skips any already on the list as it is now.
+    sendChecklistAdditions(
       { runsheetId: sheetId, items: toAdd.map(a => ({ id: a.id, text: a.text, category: 'bar' as const })), skipSameText: true },
-      { onSuccess: r => said(r.added), onError: err => toast.error(`${checklistAddFailed(err)}. Please press PULL BAR DRINKS again.`) },
+      toAdd,
+      { saved: r => said(r.added), failed: err => toast.error(`${checklistAddFailed(err)}. Please press PULL BAR DRINKS again.`) },
     );
   }
 
@@ -6048,10 +6119,9 @@ export default function RunsheetBuilder() {
               />
               <Button
                 onClick={addChecklistItem}
-                aria-disabled={checklistBoxSaving || undefined}
-                className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 h-9 flex items-center gap-1.5 aria-disabled:opacity-60"
+                className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 h-9 flex items-center gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5" /> {checklistBoxSaving ? 'ADDING…' : 'ADD'}
+                <Plus className="w-3.5 h-3.5" /> ADD
               </Button>
             </div>
           </div>
@@ -7947,8 +8017,8 @@ export default function RunsheetBuilder() {
                 )}
                 <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-gold/20">
                   <Button variant="outline" onClick={() => { setChecklistParsed(null); setChecklistPasteError(null); }} className="font-bebas tracking-widest text-xs rounded-sm">BACK</Button>
-                  <Button onClick={applyChecklistParsed} aria-disabled={addChecklistItemsMut.isPending || undefined} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm aria-disabled:opacity-60">
-                    {addChecklistItemsMut.isPending ? 'ADDING…' : 'ADD TO CHECKLIST'}
+                  <Button onClick={applyChecklistParsed} aria-disabled={addPastedChecklistItemsMut.isPending || undefined} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm aria-disabled:opacity-60">
+                    {addPastedChecklistItemsMut.isPending ? 'ADDING…' : 'ADD TO CHECKLIST'}
                   </Button>
                 </div>
               </>
