@@ -1676,10 +1676,24 @@ export default function Dashboard() {
   // panel, so they live at component scope rather than inside the Overview body.
   // Lands on exactly the list a tile or badge counted: that view, with its own
   // sort, no search and only the filters given (shared/enquiryFilters.ts).
+  // The list itself, not the Board or Win back.
+  const toEnquiryList = () => {
+    setShowWinBack(false); setLeadViewMode(prev => prev === "kanban" ? (isDesktop ? "table" : "list") : prev);
+  };
   const showEnquiries = (o: { view: EnquiryView; filters?: Partial<EnquiryFilters> }) => {
-    setShowWinBack(false); setLeadViewMode(prev => prev === "kanban" ? (isDesktop ? "table" : "list") : prev); setSelectedLead(null);
+    toEnquiryList(); setSelectedLead(null);
     enquiryList.showEnquiries(o);
   };
+  // The Enquiries item in the sidebar and bottom nav carries the Needs reply
+  // badge, so it opens the list that number counts ("24" → Needs reply 24),
+  // with nothing filtered, even after a filtered list earlier in the session.
+  // A filtered list you left for another tab is still one Back away. An open
+  // enquiry stays open (closing it here would step Back, onto the old list).
+  const openEnquiriesNav = () => {
+    toEnquiryList();
+    enquiryList.openFromNav();
+  };
+  const navTo = (id: string) => { if (id === "enquiries") openEnquiriesNav(); else setTab(id as any); };
   const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
   const openBookingById = async (id: number) => {
     const b = await utils.bookings.getById.fetch({ id }).catch(() => null);
@@ -3912,7 +3926,7 @@ export default function Dashboard() {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => setTab(item.id as any)}
+              onClick={() => navTo(item.id)}
               className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
                 tab === item.id
                   ? "text-primary border-primary font-semibold"
@@ -4022,7 +4036,7 @@ export default function Dashboard() {
           return (
             <button
               key={item.id}
-              onClick={() => setTab(item.id as any)}
+              onClick={() => navTo(item.id)}
               aria-current={tab === item.id ? "page" : undefined}
               className={baseClass}
             >
@@ -4082,7 +4096,7 @@ export default function Dashboard() {
           ]).map(item => {
             const active = tab === item.id;
             return (
-              <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
+              <button key={item.id} onClick={() => navTo(item.id)} aria-current={active ? "page" : undefined}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${active ? "font-bold text-white" : "font-medium text-[#d6deea] hover:text-white hover:bg-white/[0.08]"}`}
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>

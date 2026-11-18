@@ -66,6 +66,8 @@ function writeUrl(s: ListState) {
  *  2. else this browser session's last view and filters;
  *  3. else the first of Needs reply, Follow-up due, Open with something in it.
  *     Decided once, so a refetch never flips the view under you.
+ * The Enquiries item in the sidebar and bottom nav (it carries the Needs reply
+ * badge) always opens 3, with nothing filtered: `openFromNav`.
  *
  * While the Enquiries tab is showing, the state is written to the address
  * (replaced, not pushed; the search 300ms after typing stops), so a reload or a
@@ -91,6 +93,13 @@ export function useEnquiryListState(opts: {
   const [decided, setDecided] = useState(false);
   const decidedRef = useRef(false);
   const decide = () => { if (!decidedRef.current) { decidedRef.current = true; setDecided(true); } };
+  // The nav item was clicked before the enquiries had loaded: open where it says.
+  const navFirst = useRef(false);
+  /** The opening view (rule 3 above), with no filters or search, in your sort for it. */
+  const homeState = (): ListState => {
+    const view = defaultView(o.current.getCounts());
+    return { view, filters: clearFilters(), q: "", searchIn: false, sort: rememberedSort(view) };
+  };
   const setState = useCallback((fn: (s: ListState) => ListState) => { decide(); setStateRaw(fn); }, []);
 
   useEffect(() => { try { localStorage.removeItem(OLD_PREFS_KEY); } catch { /* blocked */ } }, []);
@@ -99,6 +108,7 @@ export function useEnquiryListState(opts: {
   useEffect(() => {
     if (decidedRef.current || !opts.ready) return;
     const sp = new URLSearchParams(initialSearch.current);
+    if (navFirst.current) { setState(homeState); return; }
     if (hasListParams(sp)) { setState(() => fromParams(sp, o.current.getAllowed())); return; }
     try {
       const saved = sessionStorage.getItem(SESSION_KEY);
@@ -165,5 +175,17 @@ export function useEnquiryListState(opts: {
     o.current.setTab("enquiries");
   }, [setState]);
 
-  return { state, decided, setView, setFilters, setQ, setSort, showEnquiries, applyFromUrl, filtersKey: fKey };
+  /**
+   * The Enquiries item in the sidebar and bottom nav. It carries the Needs
+   * reply badge, so it opens the list that number counts: the opening view
+   * (Needs reply when anyone is waiting) with no filters or search, in your
+   * sort for that view. A filtered list you left for another tab is still one
+   * Back away.
+   */
+  const openFromNav = useCallback(() => {
+    if (decidedRef.current) setState(homeState); else navFirst.current = true;
+    o.current.setTab("enquiries");
+  }, [setState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { state, decided, setView, setFilters, setQ, setSort, showEnquiries, openFromNav, applyFromUrl, filtersKey: fKey };
 }
