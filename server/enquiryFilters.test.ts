@@ -775,6 +775,35 @@ describe("L. kept rows and the opening view", () => {
     expect(heads(both)).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
     expect(heads(moveToLost(200))).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
   });
+  it("a row just moved that was its month's only one keeps that month's heading, counting none", () => {
+    const s = state({ view: "open", sort: { key: "event", dir: "asc" } });
+    const leads = [
+      ...[19, 20, 22, 24, 26, 28].map((d, k) => lead({ id: 300 + k, eventDate: dateOnly(2026, 11, d) })),
+      lead({ id: 310, eventDate: dateOnly(2026, 12, 1) }),
+      ...[8, 12, 16, 20, 24].map((d, k) => lead({ id: 320 + k, eventDate: dateOnly(2027, 1, d) })),
+      lead({ id: 330, eventDate: null }),
+    ];
+    const before = listRows(rowsOf(leads), s, ctx);
+    const heads = (res: ReturnType<typeof listRows>) => res.dividers.map(d => `${d.label} · ${d.count} @${d.at}`);
+    expect(heads(before)).toEqual(["November 2026 · 6 @0", "December 2026 · 1 @6", "January 2027 · 5 @7", "No date yet · 1 @12"]);
+    const moveToLost = (ids: number[]) => {
+      const after = rowsOf(leads.map(l => (ids.includes(l.id) ? { ...l, status: "lost", lostReason: "price" } : l)));
+      return listRows(after, s, ctx, { keepAt: new Map(ids.map(id => [id, before.rows.findIndex(r => r.lead.id === id)])) });
+    };
+    // December's only booking: it stays under December, not November.
+    expect(heads(moveToLost([310]))).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 1 @12"]);
+    // The only undated one, last in the list: it stays under No date yet, not January.
+    expect(heads(moveToLost([330]))).toEqual(["November 2026 · 6 @0", "December 2026 · 1 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
+    expect(heads(moveToLost([310, 330]))).toEqual(["November 2026 · 6 @0", "December 2026 · 0 @6", "January 2027 · 5 @7", "No date yet · 0 @12"]);
+    // A list too thin for month headings gets none back.
+    const few = leads.filter(l => [300, 310, 320, 330].includes(l.id));
+    const fewBefore = listRows(rowsOf(few), s, ctx);
+    expect(heads(fewBefore)).toEqual(["No date yet · 1 @3"]);
+    const fewAfter = listRows(rowsOf(few.map(l => (l.id === 320 ? { ...l, status: "lost", lostReason: "price" } : l))), s, ctx,
+      { keepAt: new Map([[320, 2]]) });
+    expect(fewAfter.rows.map(r => r.lead.id)).toEqual([300, 310, 320, 330]);
+    expect(heads(fewAfter)).toEqual(["No date yet · 1 @3"]);
+  });
   it("75. the opening view: reply, else follow-up, else open", () => {
     const c = { reply: 0, followup: 0, open: 0, confirmed: 4, closed: 1, all: 5 };
     expect(defaultView({ ...c, reply: 2, followup: 3 })).toBe("reply");

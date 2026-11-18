@@ -703,6 +703,8 @@ export function listRows(
   let dividers: ListResult["dividers"] = [];
   /** Whether a row belongs under this heading (month headings only). */
   let heads: (d: ListResult["dividers"][number], r: ListRow) => boolean = () => false;
+  /** The heading a kept row would need if its own went when it moved (month headings only). */
+  let ownHeading: (r: ListRow) => ListResult["dividers"][number] | null = () => null;
   if (q && view === "all") {
     out = [];
     PILES.forEach((p, i) => {
@@ -742,17 +744,32 @@ export function listRows(
         const key = groupOf(r).key;
         return !!sp && (key === sp[0] || (isMonthKey(key) && key >= sp[0] && key <= sp[1]));
       };
+      const monthHeadings = groups.some(g => isMonthKey(g.key));
+      ownHeading = r => {
+        const g = groupOf(r);
+        if (!dividers.length || g.key === month || (isMonthKey(g.key) && !monthHeadings)) return null;
+        const d = { at: 0, label: g.label, count: 0 };
+        span.set(d, [g.key, g.key]);
+        return d;
+      };
     }
   }
   // Rows kept in place after a status change go back where they were. A kept
   // row that lands where a heading starts goes under that heading when it
   // belongs there (it was the month's first row), else above it (the month
-  // before's last row).
+  // before's last row). When the row was its month's only one, that month's
+  // heading stays above it, counting none.
   kept.sort((a, b) => (keepAt.get(a.lead.id)! - keepAt.get(b.lead.id)!));
   for (const r of kept) {
     const at = Math.min(Math.max(0, keepAt.get(r.lead.id)!), out.length);
     out.splice(at, 0, r);
     for (const d of dividers) if (d.at > at || (d.at === at && !heads(d, r))) d.at++;
+    const endsGroup = at === out.length - 1 || dividers.some(d => d.at === at + 1);
+    if (!endsGroup || dividers.some(d => heads(d, r))) continue;
+    const own = ownHeading(r);
+    if (!own) continue;
+    own.at = at;
+    dividers.splice(dividers.filter(d => d.at < at).length, 0, own);
   }
   return { rows: out, dividers, hiddenByFilters, pinnedOutside };
 }
