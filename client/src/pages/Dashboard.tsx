@@ -45,6 +45,7 @@ import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
 import NeedsYouToday from "@/components/NeedsYouToday";
 import EnquiryListC from "@/components/EnquiryListC";
+import EnquiryFilterBar from "@/components/EnquiryFilterBar";
 import EnquiryDrawerExtras from "@/components/EnquiryDrawerExtras";
 import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
 import UpcomingEventsCard from "@/components/UpcomingEventsCard";
@@ -97,7 +98,7 @@ import MovedNote from "@/components/MovedNote";
 import { useNow } from "@/hooks/useNow";
 import { useEnquiryListState } from "@/hooks/useEnquiryListState";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, enrichRows, listRows, viewCounts, viewDefaultSort,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, effectiveView, enrichRows, listRows, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx,
 } from "@shared/enquiryFilters";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
@@ -3547,6 +3548,11 @@ export default function Dashboard() {
   const replyBadge = (cap: number) => replyCount === null
     ? <span aria-hidden="true">–</span>
     : <>{replyCount > cap ? `${cap}+` : replyCount}<span className="sr-only"> waiting on a reply</span></>;
+  // How many the list shows with the current view, filters and search.
+  const listShownCount = React.useMemo(
+    () => viewCounts(enquiryRows, listState.filters, listState.q, listCtx)[effectiveView(listState)],
+    [enquiryRows, listState, listCtx],
+  );
   // Needs reply in "most urgent" order, for the Overview card.
   const replyRows = React.useMemo(
     () => listRows(enquiryRows, { view: "reply", filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort("reply") }, listCtx).rows,
@@ -4409,7 +4415,10 @@ export default function Dashboard() {
             <div className="vf-pane flex h-full overflow-hidden">
 
               {/* ── MAIN ENQUIRIES COLUMN ──────────────────────────────────── */}
-              <div className="vf-pane flex flex-col flex-1 min-w-0 overflow-hidden">
+              {/* A container: the toolbar and the list follow this column's own
+                  width, not the window's, so at 400% zoom the table becomes
+                  cards and the filter buttons become one Filters button. */}
+              <div className="vf-pane @container flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
@@ -4424,16 +4433,17 @@ export default function Dashboard() {
                         flip to "Pipeline" on the board while the nav still said
                         "Events"/"Enquiries". The List/Board toggle says which
                         view this is. */}
-                    <h1 className="font-cormorant text-3xl font-semibold text-ink mr-1">Enquiries</h1>
+                    <h1 className="font-cormorant text-[26px] md:text-3xl font-semibold text-ink mr-1">Enquiries</h1>
                     {/* Win-back toggle — the enquiry statuses now live in the
                         list's own view tabs (Needs reply / Follow-up due /
                         Confirmed / All), so the one thing left here is the
                         separate Win-back panel for lost and quiet enquiries. */}
+                    {/* On a phone it lives in the ⋯ menu instead (unless it is on). */}
                     {leadViewMode !== "kanban" && (
                       <button onClick={() => { setShowWinBack(v => !v); setSelectedLead(null); }}
                         aria-pressed={showWinBack}
                         title="Lost and quiet enquiries, and last year's clients, to invite back"
-                        className="vf-btn vf-btn-secondary">
+                        className={`vf-btn vf-btn-secondary ${showWinBack ? "" : "max-md:hidden!"}`}>
                         <RotateCcw className="w-3.5 h-3.5" /> {showWinBack ? "ENQUIRIES" : "WIN BACK"}
                       </button>
                     )}
@@ -4442,15 +4452,16 @@ export default function Dashboard() {
                   {/* View toggle: one responsive List (table on desktop, cards
                       on mobile) ↔ Board (kanban). */}
                   <div role="group" aria-label="Enquiries view" className="flex border border-gold/30 rounded-lg overflow-hidden">
+                    {/* Narrow: icons only (40×36), named by aria-label. */}
                     <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
-                      title="List view" aria-pressed={leadViewMode !== "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
-                      <List className="w-3.5 h-3.5" /> LIST
+                      title="List view" aria-label="List view" aria-pressed={leadViewMode !== "kanban"}
+                      className={`flex items-center justify-center gap-1.5 min-w-10 px-3 @max-[719px]:px-0 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <List className="w-3.5 h-3.5 @max-[719px]:w-4 @max-[719px]:h-4" aria-hidden="true" /> <span className="@max-[719px]:hidden">LIST</span>
                     </button>
                     <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
-                      title="Board view" aria-pressed={leadViewMode === "kanban"}
-                      className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
-                      <Columns className="w-3.5 h-3.5" /> BOARD
+                      title="Board view" aria-label="Board view" aria-pressed={leadViewMode === "kanban"}
+                      className={`flex items-center justify-center gap-1.5 min-w-10 px-3 @max-[719px]:px-0 py-2 min-h-[36px] font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <Columns className="w-3.5 h-3.5 @max-[719px]:w-4 @max-[719px]:h-4" aria-hidden="true" /> <span className="@max-[719px]:hidden">BOARD</span>
                     </button>
                   </div>
 
@@ -4494,6 +4505,12 @@ export default function Dashboard() {
                         </button>
                         {actionsMenuOpen && (
                           <div id="enquiry-more-actions" className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
+                            {leadViewMode !== "kanban" && !showWinBack && (
+                              <button onClick={() => { setShowWinBack(true); setSelectedLead(null); setActionsMenuOpen(false); }}
+                                className="md:hidden w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
+                                <RotateCcw className="w-3.5 h-3.5 text-ink/60" /> Win back lost and quiet enquiries
+                              </button>
+                            )}
                             <button onClick={() => { setShowCsvImport(true); setActionsMenuOpen(false); }}
                               className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
                               <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
@@ -4511,28 +4528,21 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
+                {/* Row 2: search and filters (not in Win back). Each filter you
+                    pick stays on screen as a chip with its own ×. */}
                 {leadViewMode !== "kanban" && !showWinBack && (
-                  <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
-                    {/* Search + owner feed the list; status / date / sort now live
-                        in the list's own view tabs and signal ordering. */}
-                    <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
-                      <Input value={listState.q} onChange={e => enquiryList.setQ(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Escape" && listState.q) { e.preventDefault(); enquiryList.setQ(""); } }}
-                        aria-label="Search enquiries" data-search-box
-                        placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
-                    </div>
-                    {(teamList ?? []).length > 0 && (
-                      <select value={String(listState.filters.owner)} aria-label="Filter by owner" title="Filter by owner"
-                        onChange={e => { const v = e.target.value; enquiryList.setFilters(f => ({ ...f, owner: v === "all" || v === "unassigned" ? v : Number(v) })); }}
-                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${listState.filters.owner !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
-                        <option value="all">All owners</option>
-                        <option value="unassigned">Unassigned</option>
-                        {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    )}
-                  </div>
+                  <EnquiryFilterBar
+                    mode="list"
+                    rows={enquiryRows}
+                    ctx={listCtx}
+                    state={listState}
+                    onFiltersChange={enquiryList.setFilters}
+                    onQChange={enquiryList.setQ}
+                    statuses={pipelineStages}
+                    spaces={(spaces ?? []).filter((sp: any) => sp?.id != null).map((sp: any) => ({ id: Number(sp.id), name: String(sp.name ?? '') }))}
+                    team={(teamList ?? []).map((m: any) => ({ id: Number(m.id), name: String(m.name ?? '') }))}
+                    shownCount={listShownCount}
+                  />
                 )}
                 {listState.q.trim() && !isStaff && leadViewMode !== "kanban" && !showWinBack && (
                   <EventSearchResults query={listState.q} onOpenEvent={id => setLocation(`/event/${id}`)} />
@@ -4601,6 +4611,11 @@ export default function Dashboard() {
                       // (reason recorded, so Reports' lost-reason split stays true).
                       onCloseAsLost={(ids: number[]) => bulkUpdateStatusMut.mutate({ ids, status: 'lost', lostReason: 'other', lostReasonNote: 'Event date passed without a booking' })}
                       closing={bulkUpdateStatusMut.isPending}
+                      labels={{
+                        status: (k: string) => getStatusInfo(k).label,
+                        space: (id: number) => (spaces ?? []).find((sp: any) => Number(sp?.id) === id)?.name,
+                        owner: (id: number) => teamById.get(id)?.name,
+                      }}
                     />
                   )
                 )}

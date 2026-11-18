@@ -1,12 +1,13 @@
 import React from "react";
 import {
   Clock, Bell, Hourglass, CornerUpLeft, Send, ArrowRight, CalendarClock,
-  CircleDashed, AlertTriangle, CheckCircle2, MinusCircle, SlidersHorizontal, X,
+  CircleDashed, AlertTriangle, CheckCircle2, MinusCircle, Check,
 } from "lucide-react";
 import { enquiryAction, type SignalTone } from "@shared/enquirySignal";
 import {
-  EMPTY_FILTERS, SORT_OPTIONS, VIEWS, activeCount, isSearching, effectiveView, listRows, sortToParam, sortFromParam, viewCounts, viewInfo,
-  type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState,
+  EMPTY_FILTERS, SORT_OPTIONS, VIEWS, activeCount, describeFilters, isChipOn, isSearching, effectiveView, listRows, quickChips,
+  sortToParam, sortFromParam, toggleChip, viewCounts, viewInfo,
+  type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip,
 } from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
@@ -48,6 +49,8 @@ export interface EnquiryListCProps {
   movedRows?: Record<number, { from: string; to: string; at: number }>;
   onUndoMove?: (id: number) => void;
   undoPendingId?: number | null;
+  /** Names for the empty state ("No confirmed enquiries match Space: Courtyard"). */
+  labels?: ChipLabels;
 }
 
 const TONE: Record<SignalTone, { fg: string; bg: string }> = {
@@ -193,16 +196,27 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   // focus on that row (or the next one) instead of dropping it to the page.
   // When the last one goes, the view it was on ("Needs reply 0").
   const rowsRef = React.useRef<HTMLDivElement>(null);
-  const tabRef = React.useRef<HTMLButtonElement>(null);
+  const tabRef = React.useMemo(() => ({
+    get current() { return [deskTabRefShared.current, gridTabRefShared.current].find(el => !!el && el.getClientRects().length > 0) ?? null; },
+  }), []);
+  const deskTabRefShared = React.useRef<HTMLButtonElement | null>(null);
+  const gridTabRefShared = React.useRef<HTMLButtonElement | null>(null);
   useFocusKeeper(rowsRef, tabRef);
 
   const sortValue = sortToParam(state.sort);
   const baseCounts = React.useMemo(() => viewCounts(allRows, EMPTY_FILTERS, "", ctx), [allRows, ctx]);
-  const summary = filtered
-    ? `Showing ${rows.length} of ${baseCounts[view]} ${view === "all" ? "enquiries" : viewInfo(view).label.toLowerCase()}`
-    : view === "reply" ? `${counts.reply} waiting on you · longest first`
-    : `${rows.length} ${view === "all" ? "enquiries" : viewInfo(view).label.toLowerCase()}`;
-  const emptyText = viewInfo(view).empty;
+  const nFilters = activeCount(state.filters);
+  const summary = summaryText(view, state, rows.length, baseCounts[view]);
+  const chips = quickChips(view);
+  // Open enquiries left past their date, and forms nobody finished: each gets
+  // a one-line way in, so neither needs a tab of its own.
+  const passedCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "date_passed").length, [allRows]);
+  const partialCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "partial").length, [allRows]);
+  const pinnedOutside = new Set(result.pinnedOutside);
+  // The active view button, whichever layout shows (the focus keeper's fallback).
+  const deskTabRef = deskTabRefShared;
+  const gridTabRef = gridTabRefShared;
+  const clearFilters = () => props.onFiltersChange(f => ({ ...EMPTY_FILTERS, status: [], space: [], source: [], needs: [], type: [], guests: [], budget: [], lostReason: [], client: [] }));
 
   const startReply = (row: ListRow) => {
     const names = QUICK_FOR[row.signal.group] ?? [];
@@ -232,39 +246,95 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
-        {/* View tabs. While filtering or searching each count is what that
-            view would show, so they start with "Matching:". */}
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-1 border-b border-border/60 -mb-px max-w-full flex-wrap">
-            {filtered && <span className="px-1 py-2 font-sans text-sm font-semibold text-muted-foreground">Matching:</span>}
+        {/* View row (wide): "Matching:" while filtering or searching (each
+            count is then what that view would show), the six views, the
+            view's one-click shortcuts, and Sort. */}
+        <div className="hidden @min-[720px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
+          {filtered && <span className="pb-2.5 pr-1 font-sans text-[12.5px] font-bold text-muted-foreground">Matching:</span>}
+          <div role="group" aria-label="Enquiry views" className="flex items-end flex-wrap -mb-px">
             {VIEWS.map((t) => {
               const on = view === t.id;
               return (
-                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? deskTabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
                   aria-pressed={on}
-                  className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  className={`relative px-2 @min-[1100px]:px-2.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
-                  {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. */}
+                  {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. A 0 stays full strength too. */}
                   <span className={`ml-1.5 text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
                 </button>
               );
             })}
           </div>
+          {chips.length > 0 && <span aria-hidden="true" className="self-center w-px h-5 bg-border mx-1" />}
+          {chips.length > 0 && (
+            <div role="group" aria-label="Shortcuts" className="self-center flex items-center gap-1.5 flex-wrap py-1">
+              {chips.map(c => <QuickChipButton key={c.id} chip={c} on={isChipOn(state.filters, c)} onClick={() => props.onFiltersChange(f => toggleChip(f, c))} />)}
+            </div>
+          )}
+          <label className="ml-auto self-center inline-flex items-center gap-2 py-1 font-sans text-[13px] text-muted-foreground">
+            <span className="@max-[1099px]:sr-only">Sort</span>
+            <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
+              aria-label="Sort"
+              className="h-8 max-w-[11.5rem] rounded-[6px] border-[1.5px] border-input bg-card px-1.5 font-sans text-[13px] font-semibold text-foreground">
+              {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
         </div>
-        {rows.length > 0 && (
-          <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
-            <div className="font-sans text-[13px] text-muted-foreground">{summary}</div>
-            <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
-              Sort
+
+        {/* Narrow: all six views in a 2×3 grid (nothing off-screen), the
+            shortcuts, then a summary line with Sort. */}
+        <div className="@min-[720px]:hidden flex flex-col gap-2">
+          <div role="group" aria-label="Enquiry views" className="grid grid-cols-3 @max-[359px]:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-1.5">
+            {VIEWS.map((t) => {
+              const on = view === t.id;
+              return (
+                <button key={t.id} ref={on ? gridTabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
+                  aria-pressed={on}
+                  className={`h-9 px-1 rounded-[7px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "bg-card border-border text-foreground"}`}>
+                  {t.short}<span className={`ml-1.5 text-xs font-extrabold ${on ? "text-primary-foreground" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
+                </button>
+              );
+            })}
+          </div>
+          {chips.length > 0 && (
+            <div className="relative">
+              <div role="group" aria-label="Shortcuts" className="flex items-center gap-1.5 overflow-x-auto pr-6 [scrollbar-width:none]">
+                {chips.map(c => <QuickChipButton key={c.id} chip={c} big on={isChipOn(state.filters, c)} onClick={() => props.onFiltersChange(f => toggleChip(f, c))} />)}
+              </div>
+              <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3 min-h-10">
+            <div className="font-sans text-[13px] text-muted-foreground min-w-0" aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</div>
+            <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground shrink-0">
+              <span className="sr-only">Sort</span>
               <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
-                className="h-8 rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
+                aria-label="Sort"
+                className="h-9 max-w-[11rem] rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
                 {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
           </div>
+        </div>
+
+        {/* Wide summary (and the screen-reader announcement of the count). */}
+        <div className="hidden @min-[720px]:block -mt-1.5 font-sans text-[13px] text-muted-foreground" aria-live="polite" aria-atomic="true">
+          {props.loaded === false ? "" : summary}
+        </div>
+
+        {/* Open view: enquiries still open after their date. */}
+        {view === "open" && !passedOnly && passedCount > 0 && (
+          <div className="flex items-center gap-2 flex-wrap min-h-8 px-3 py-1 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
+            <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+            <span>{passedCount === 1 ? "1 open enquiry is" : `${passedCount} open enquiries are`} past their event date.</span>
+            <button type="button" onClick={() => props.onFiltersChange(f => ({ ...f, needs: ["passed"] }))}
+              className="font-bold text-primary underline underline-offset-[3px]">Review them</button>
+          </div>
         )}
 
-        {/* Close the lot in one go: they can't be won any more. */}
+        {/* Only the date-passed ones showing: close the lot in one go, they
+            can't be won any more (Lost, reason "other" with a note, so
+            Reports' lost-reason split stays true). */}
         {passedOnly && rows.length > 0 && onCloseAsLost && !props.isStaff && (
           <div className="flex items-center justify-between gap-3 flex-wrap rounded-[6px] border border-border bg-card px-3.5 py-2.5">
             <p className="font-sans text-[13px] text-foreground">
@@ -290,7 +360,18 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         {/* Rows */}
         <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
-            <div className="py-12 text-center font-sans text-sm text-muted-foreground">{props.loaded === false ? "Loading…" : emptyText}</div>
+            <div className="py-12 px-4 text-center font-sans text-sm text-muted-foreground">
+              {props.loaded === false ? "Loading…" : searching ? (
+                <>
+                  <p>No enquiry matches ‘{state.q.trim()}’{nFilters > 0 && result.hiddenByFilters > 0 ? " with your filters" : ""}. Search looks at names, email, phone, company, event type and space.</p>
+                </>
+              ) : nFilters > 0 ? (
+                <>
+                  <p>{EMPTY_MATCH[view]} {describeFilters(state.filters, props.labels ?? {})}.</p>
+                  <button type="button" onClick={clearFilters} className="mt-3 h-9 px-3 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-bold text-foreground hover:border-primary">Clear filters</button>
+                </>
+              ) : viewInfo(view).empty}
+            </div>
           ) : rows.map((row, i) => {
             const { lead, signal } = row;
             const divider = dividerAt.get(i);
@@ -454,7 +535,63 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             );
           })}
         </div>
+
+        {/* While searching: matches the filters hide, one click away. */}
+        {searching && nFilters > 0 && result.hiddenByFilters > 0 && (
+          <p className="font-sans text-[13px] text-muted-foreground">
+            {result.hiddenByFilters} more match{result.hiddenByFilters === 1 ? "es" : ""} but {result.hiddenByFilters === 1 ? "is" : "are"} hidden by your filters.{" "}
+            <button type="button" onClick={clearFilters} className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
+          </p>
+        )}
+        {/* Needs reply: forms people started but never sent. */}
+        {view === "reply" && !searching && partialCount > 0 && (
+          <p className="font-sans text-[13px] text-muted-foreground">
+            {partialCount === 1 ? "1 person" : `${partialCount} people`} started the form but didn't finish.{" "}
+            <button type="button" onClick={() => { props.onViewChange("open"); props.onFiltersChange(() => ({ ...EMPTY_FILTERS, status: [], space: [], source: [], type: [], guests: [], budget: [], lostReason: [], client: [], needs: ["partial"] })); }}
+              className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+/** A one-click shortcut ("This month", "Lost this year"): navy with a tick when on. */
+function QuickChipButton({ chip, on, onClick, big }: { chip: QuickChip; on: boolean; onClick: () => void; big?: boolean }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onClick}
+      className={`inline-flex items-center gap-1.5 ${big ? "h-9 px-3.5" : "h-8 px-3"} rounded-full border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap shrink-0 transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:border-[CanvasText]" : "bg-card border-input text-foreground hover:border-primary"}`}>
+      {on && <Check className="w-3.5 h-3.5" strokeWidth={2.6} aria-hidden="true" />}
+      {chip.label}
+    </button>
+  );
+}
+
+const EMPTY_MATCH: Record<EnquiryView, string> = {
+  reply: "No enquiries waiting on a reply match",
+  followup: "No follow-ups due match",
+  open: "No open enquiries match",
+  confirmed: "No confirmed enquiries match",
+  closed: "No closed enquiries match",
+  all: "No enquiries match",
+};
+const NOUN: Record<EnquiryView, string> = {
+  reply: "waiting on you", followup: "follow-ups due", open: "open", confirmed: "confirmed", closed: "closed", all: "enquiries",
+};
+function sortPhrase(view: EnquiryView, s: ListSort): string {
+  switch (s.key) {
+    case "urgent": return view === "reply" ? "longest first" : view === "followup" ? "most overdue first" : "most urgent first";
+    case "event": return s.dir === "asc" ? "soonest event first" : "latest event first";
+    case "came": return s.dir === "desc" ? "newest first" : "oldest first";
+    case "status": return "by status";
+    case "guests": return "most guests first";
+    case "name": return "A–Z by name";
+    case "space": return "by space";
+  }
+}
+/** "24 waiting on you · longest first", "Showing 27 of 98 open", "4 matches for ‘ellingham’". */
+export function summaryText(view: EnquiryView, state: ListState, shown: number, total: number): string {
+  if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’ · ${sortPhrase(view, state.sort)}`;
+  if (activeCount(state.filters) > 0) return `Showing ${shown} of ${total} ${NOUN[view]}`;
+  return `${shown} ${NOUN[view]} · ${sortPhrase(view, state.sort)}`;
 }
