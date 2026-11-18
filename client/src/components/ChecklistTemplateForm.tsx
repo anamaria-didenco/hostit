@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { checklistItemTooLong } from "@shared/eventChecklistEdit";
 
 export type ChecklistTemplateValues = { name: string; description: string; items: string };
 
@@ -30,7 +31,9 @@ export function ChecklistTemplateForm({ heading, initial, submitLabel, pendingLa
     if (pending) return;
     const next = {
       name: form.name.trim() ? undefined : "Give the template a name.",
-      items: form.items.trim() ? undefined : "Add at least one item, one per line.",
+      items: form.items.trim()
+        ? form.items.split(/\r?\n/).map(line => checklistItemTooLong(line)).find(Boolean) ?? undefined
+        : "Add at least one item, one per line.",
     };
     setErrors(next);
     if (next.name) { nameRef.current?.focus(); return; }

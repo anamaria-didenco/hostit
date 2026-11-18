@@ -22,7 +22,7 @@ import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
 import { normaliseTaskPriority } from "@shared/taskFields";
-import { EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
+import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -4906,7 +4906,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({
         name: z.string(),
         description: z.string().optional(),
-        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), required: z.boolean().optional() })),
+        items: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), required: z.boolean().optional() })),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -4921,7 +4921,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         id: z.number(),
         name: z.string().optional(),
         description: z.string().optional(),
-        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), required: z.boolean().optional() })).optional(),
+        items: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), required: z.boolean().optional() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -5024,7 +5024,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // a leadId — stamped on the checklist so /checklist finds it.
         bookingId: z.number().optional(),
         name: z.string().optional(),
-        defaultItems: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean() })).optional(),
+        defaultItems: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), checked: z.boolean() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -5084,9 +5084,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         runsheetId: z.number(),
         items: z.array(z.object({
           id: z.string().min(1).max(100),
-          text: z.string().trim().min(1, 'An item needs some words').max(500),
+          text: z.string().trim().min(1, 'An item needs some words').max(CHECKLIST_ITEM_MAX_CHARS),
           category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
-        })).min(1).max(200),
+        })).min(1).max(1000),
         // Leave out items whose words are already on the list (PULL BAR DRINKS).
         skipSameText: z.boolean().optional(),
       }))
@@ -5119,9 +5119,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({
         runsheetId: z.number(),
         itemId: z.string().max(100),
-        text: z.string().trim().min(1, 'An item needs some words').max(500).optional(),
+        text: z.string().trim().min(1, 'An item needs some words').max(CHECKLIST_ITEM_MAX_CHARS).optional(),
         category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
-        notes: z.string().max(2000).optional(),
+        notes: z.string().max(CHECKLIST_ITEM_MAX_CHARS).optional(),
         // A photo from /api/upload-image (or "" to take it off).
         imageUrl: z.string().max(2000).regex(/^(|\/(?!\/)\S*|https:\/\/\S+)$/, 'Not a photo address').optional(),
       }))
@@ -5135,7 +5135,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return { items: saved.items, name: saved.name };
       }),
     reorderItemsForRunsheet: protectedProcedure
-      .input(z.object({ runsheetId: z.number(), ids: z.array(z.string().max(100)).max(500) }))
+      .input(z.object({ runsheetId: z.number(), ids: z.array(z.string().max(100)).max(5000) }))
       .mutation(async ({ input, ctx }) => {
         const { changeRunsheetChecklist } = await import('./eventChecklist');
         const { reorderEventChecklist } = await import('@shared/eventChecklistEdit');

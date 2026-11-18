@@ -8,6 +8,22 @@ import { applyOrder } from "./listOrder";
 
 export const EVENT_CHECKLIST_CATEGORIES = ["setup", "bar", "kitchen", "staff", "guest", "admin", "other"] as const;
 
+/**
+ * The most words one checklist item (or its note) can hold, on every path
+ * that writes items: the add box, editing, AI PASTE ("task — note"),
+ * templates and PULL BAR DRINKS. Generous on purpose: the run sheet used to
+ * save the whole list with no limit, and the AI PASTE box takes up to
+ * 10,000 characters, so anything that saved before still saves.
+ */
+export const CHECKLIST_ITEM_MAX_CHARS = 10_000;
+
+/** What to tell the owner when an item is over the limit, or null when it fits. */
+export function checklistItemTooLong(text: string): string | null {
+  const n = text.trim().length;
+  if (n <= CHECKLIST_ITEM_MAX_CHARS) return null;
+  return `That item is ${n.toLocaleString("en-NZ")} characters long. One item can hold up to ${CHECKLIST_ITEM_MAX_CHARS.toLocaleString("en-NZ")}: split it into shorter items.`;
+}
+
 export function eventChecklistCategoryLabel(c: string): string {
   return c ? c.charAt(0).toUpperCase() + c.slice(1) : "Other";
 }

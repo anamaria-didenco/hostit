@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  addEventChecklistItems, editEventChecklistItem, eventChecklistCategoryLabel, removeEventChecklistItem, reorderEventChecklist,
+  addEventChecklistItems, CHECKLIST_ITEM_MAX_CHARS, checklistItemTooLong, editEventChecklistItem, eventChecklistCategoryLabel,
+  removeEventChecklistItem, reorderEventChecklist,
 } from "../shared/eventChecklistEdit";
 
 type Item = { id: string; text: string; category?: string; checked: boolean; checkedAt?: string; notes?: string; imageUrl?: string };
@@ -114,5 +115,17 @@ describe("eventChecklistCategoryLabel", () => {
   it("capitalises", () => {
     expect(eventChecklistCategoryLabel("bar")).toBe("Bar");
     expect(eventChecklistCategoryLabel("")).toBe("Other");
+  });
+});
+
+describe("checklistItemTooLong", () => {
+  it("lets long items through (the old run sheet saved any length) and explains the limit past it", () => {
+    expect(CHECKLIST_ITEM_MAX_CHARS).toBeGreaterThanOrEqual(10_000);
+    expect(checklistItemTooLong("x".repeat(520))).toBeNull();
+    expect(checklistItemTooLong("x".repeat(3000))).toBeNull();
+    expect(checklistItemTooLong(`  ${"x".repeat(CHECKLIST_ITEM_MAX_CHARS)}  `)).toBeNull();
+    expect(checklistItemTooLong("x".repeat(CHECKLIST_ITEM_MAX_CHARS + 1))).toBe(
+      "That item is 10,001 characters long. One item can hold up to 10,000: split it into shorter items.",
+    );
   });
 });

@@ -319,6 +319,36 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
     ]);
   });
 
+  it("saves long items on every path: add, AI PASTE's 'task — note', edit, template and drinks", async () => {
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Ada Example — Gala", bookingId: bk.id } as any);
+    await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id });
+    const words = (n: number, w: string) => (w + " ").repeat(Math.ceil(n / (w.length + 1))).slice(0, n).trim();
+    const t520 = words(520, "Fold");
+    const t3000 = words(3000, "Polish");
+    const pasted = `${words(400, "Brief")} — ${words(2600, "detail")}`;
+    let res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-1", text: t520 }, { id: "c-2", text: t3000 }] });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-3", text: pasted, category: "staff" }] });
+    expect((res.items as any[]).map(i => i.text.length)).toEqual([t520.length, t3000.length, pasted.length]);
+    expect(t520.length).toBeGreaterThan(500);
+
+    const t5000 = words(5000, "Steam");
+    res = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: t5000, notes: words(3000, "note") });
+    expect((res.items as any[])[0].text).toBe(t5000);
+
+    const tpl = await a.checklists.createTemplate({ name: "Long", items: [{ id: "1", text: t3000 + " extra" }] });
+    await a.checklists.assignToBooking({ templateId: tpl.id, bookingId: bk.id });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "d-1", text: `Stock bar: ${words(250, "Prosecco")}`, category: "bar" }], skipSameText: true });
+    expect(res.added).toBe(1);
+    expect((res.items as any[]).map(i => i.text.length)).toEqual([t5000.length, t3000.length, pasted.length, t3000.length + 6, expect.any(Number)]);
+
+    // Past the limit it's refused, on every path, rather than cut short.
+    const tooLong = "x".repeat(10_001);
+    await expect(a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: tooLong }] })).rejects.toThrow();
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: tooLong })).rejects.toThrow();
+    await expect(a.checklists.createTemplate({ name: "Too long", items: [{ id: "1", text: tooLong }] })).rejects.toThrow();
+  });
+
   it("another venue can't read, create or fill an event's checklist", async () => {
     const bk = await newBooking();
     const rs = await a.runsheets.create({ title: "Private", bookingId: bk.id } as any);
