@@ -98,10 +98,11 @@ import MovedNote from "@/components/MovedNote";
 import { useNow } from "@/hooks/useNow";
 import { useEnquiryListState } from "@/hooks/useEnquiryListState";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, keptPlace, listRows, rowNeeds, shownListKey, viewCounts, viewDefaultSort,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, keptPlace, listRows, shownListKey, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type KeptPlace, type LeadLike, type ListCtx, type ListLayout, type ListRow,
 } from "@shared/enquiryFilters";
-import { ROW_INK, Icon as RowIcon } from "@/components/EnquiryRow";
+import { LaneDot } from "@/components/EnquiryRow";
+import { LANE_INK, LANE_MARK, rowLane } from "@shared/enquiryLane";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
@@ -4746,12 +4747,17 @@ export default function Dashboard() {
                             <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                // The same words as the list's Needs column.
+                                // The same lane and words as the list's Needs column.
                                 const boardRow = boardRowById.get(lead.id);
-                                const needs = boardRow ? rowNeeds(boardRow, listCtx) : null;
+                                const needs = boardRow ? rowLane(boardRow, listCtx) : null;
+                                // The lane as a 5px left edge (a border, so forced colours
+                                // keep it; it keeps its colour on hover); calm cards keep
+                                // the plain edge. The padding gives back the extra width.
+                                const edge = needs && needs.lane !== 'calm' ? LANE_MARK[needs.lane] : null;
                                 return (
                                   <button key={lead.id}
                                     onClick={() => openEventDrawer({ ...lead, _isLead: true })}
+                                    style={edge ? { borderLeft: `5px solid ${edge}`, paddingLeft: 10 } : undefined}
                                     className="group w-full shrink-0 text-left bg-cream rounded-[8px] p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] shadow-[var(--shadow-card)] hover:border-[#6e665c] hover:shadow-[var(--shadow-card-hover)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
@@ -4791,8 +4797,8 @@ export default function Dashboard() {
                                     <div className="flex items-baseline justify-between gap-2 pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? ''}</span>
                                       {needs && (
-                                        <span className="inline-flex items-center gap-1 min-w-0 text-right text-[12px] font-semibold" style={{ color: ROW_INK[needs.tone] }}>
-                                          <RowIcon name={needs.icon} size={12} className="shrink-0" />{needs.text}
+                                        <span className="inline-flex items-center gap-1.5 min-w-0 text-right text-[12px] font-bold" style={{ color: LANE_INK[needs.lane] }}>
+                                          <LaneDot lane={needs.lane} size={8} />{needs.text}
                                         </span>
                                       )}
                                     </div>

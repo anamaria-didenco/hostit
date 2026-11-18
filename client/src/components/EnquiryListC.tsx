@@ -3,12 +3,13 @@ import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
   SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, datePassedCount, describeFilters, isChipOn, isSearching,
   effectiveView, listLayout, listRows, quickChips, reviewPassedFilters, shownListKey, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
-  type ChipLabels, type EnquiryFilters, type EnquiryView, type KeptPlace, type ListCtx, type ListLayout, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
+  type ChipLabels, type EnquiryFilters, type EnquiryView, type KeptPlace, type ListCtx, type ListDivider, type ListLayout, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
 } from "@shared/enquiryFilters";
+import { groupLane, type Lane } from "@shared/enquiryLane";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { allShownSelected } from "@shared/bulkSelection";
 import MovedNote from "@/components/MovedNote";
-import EnquiryRow, { ROW_GRID, ROW_GRID_SELECT, FROM_L, FROM_XL, TABLE_ONLY, CARDS_ONLY, fullName } from "@/components/EnquiryRow";
+import EnquiryRow, { ROW_GRID, ROW_GRID_SELECT, FROM_L, FROM_XL, TABLE_ONLY, CARDS_ONLY, LaneDot, fullName } from "@/components/EnquiryRow";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
@@ -105,8 +106,8 @@ function useSettled<T>(value: T, ms: number): T {
 
 // The column header's sort buttons. Each says which way it sorts when on.
 const HEAD: { key: SortKey; label: string; cls?: string; right?: boolean }[] = [
-  { key: "name", label: "Name" },
   { key: "urgent", label: "Needs" },
+  { key: "name", label: "Name" },
   { key: "status", label: "Status" },
   { key: "event", label: "Event date" },
   { key: "guests", label: "Guests", cls: FROM_L, right: true },
@@ -181,6 +182,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   }, [allRows, state, ctx, keepReply, pinnedMoves, listKey, movedRows]);
   const rows = result.rows;
   const dividerAt = React.useMemo(() => new Map(result.dividers.map(d => [d.at, d])), [result.dividers]);
+  // A heading carries its section's colour where every row under it shares
+  // one: a search's piles their own (In progress none), "Already happened"
+  // grey, and months in Confirmed green and in Closed grey. Months in the
+  // other views mix lanes, so they stay neutral.
+  const headingLane = (d: ListDivider): Lane => {
+    if (d.key === "past") return "grey";
+    if (d.key === "none" || /^\d{4}-\d{2}$/.test(d.key)) return view === "confirmed" || view === "closed" ? groupLane(view) : "calm";
+    return groupLane(d.key);
+  };
   const passedOnly = state.filters.needs.length === 1 && state.filters.needs[0] === "passed";
 
   // Leaving the Date passed list (or emptying it) cancels a pending confirm.
@@ -357,9 +367,14 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             {VIEWS.map((t) => {
               const on = view === t.id;
               return (
+                // A 7px lane dot before the views that hold one lane (Open and
+                // All hold every lane): the dotted tabs are the colour key. The
+                // padding is 4px narrower a side than it was, so the dots
+                // don't widen the row.
                 <button key={t.id} ref={on ? deskTabRef : undefined} onClick={() => pickView(t.id)}
                   aria-pressed={on}
-                  className={`relative px-2 @min-[1148px]:px-2.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  className={`relative px-1 @min-[1148px]:px-1.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  {groupLane(t.id) !== "calm" && <LaneDot lane={groupLane(t.id)} size={7} className="mr-1 align-middle" />}
                   {t.label}
                   {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. A 0 stays full strength too. */}
                   <span className={`ml-1.5 text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
@@ -402,6 +417,8 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 <button key={t.id} ref={on ? gridTabRef : undefined} onClick={() => pickView(t.id)}
                   aria-pressed={on}
                   className={`h-9 px-1 rounded-[7px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "bg-card border-border text-foreground"}`}>
+                  {/* The lane dot, but not on the selected (navy) tab: blue on navy is 1.4:1. */}
+                  {!on && groupLane(t.id) !== "calm" && <LaneDot lane={groupLane(t.id)} size={8} className="mr-1 align-middle -mt-0.5" />}
                   {t.short}<span className={`ml-1.5 text-xs font-extrabold ${on ? "text-primary-foreground" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
                 </button>
               );
@@ -511,6 +528,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                   <EnquiryRow key={lead.id}
                     row={row} ctx={ctx} today={today} statusInfo={statusInfo} teamById={props.teamById}
                     divider={dividerAt.get(i) ?? null}
+                    dividerLane={dividerAt.has(i) ? headingLane(dividerAt.get(i)!) : undefined}
                     onOpen={onOpen} onAction={onAction}
                     replying={replying} keptForReply={pinnedOutside.has(lead.id)}
                     selectMode={selectMode} selected={selectMode && selectedIds.has(lead.id)} onSelect={onSelect}>

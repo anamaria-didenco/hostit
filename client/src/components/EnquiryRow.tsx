@@ -1,13 +1,12 @@
 import React from "react";
+import { CornerUpLeft, Send, ArrowRight, AlertTriangle } from "lucide-react";
+import { enquiryAction } from "@shared/enquirySignal";
 import {
-  Clock, Bell, Hourglass, CornerUpLeft, Send, ArrowRight, CalendarClock,
-  CircleDashed, AlertTriangle, CheckCircle2, MinusCircle,
-} from "lucide-react";
-import { enquiryAction, type SignalTone } from "@shared/enquirySignal";
-import {
-  daysBetweenKeys, formatDayKey, isOpenStatus, rowDatePassed, rowNeeds, sourceLabel,
+  daysBetweenKeys, formatDayKey, isOpenStatus, rowDatePassed, sourceLabel,
   type ListCtx, type ListRow,
 } from "@shared/enquiryFilters";
+import { LANE_INK, LANE_MARK, LANE_TINT, rowLane, type Lane } from "@shared/enquiryLane";
+import { statusPalette } from "@shared/statusPalette";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { formatEventTime } from "@shared/eventDate";
 import { clientFlagLabels } from "@shared/clientMatch";
@@ -18,7 +17,7 @@ import { LeadRowBadges } from "@/components/LeadClientPanel";
  * its rows by the list's direct children), holding both layouts, one of them
  * display:none by the width of the list's column:
  *
- *  - a table row from 768px of column width: Name · Needs · Status · Event
+ *  - a table row from 768px of column width: Needs · Name · Status · Event
  *    date · Guests · Space · Came in · Reply/Nudge (fewer columns when
  *    narrower: Guests and Space fold into the other cells below 992px, Came in
  *    only shows from 1148px);
@@ -27,6 +26,13 @@ import { LeadRowBadges } from "@/components/LeadClientPanel";
  * Plus, inside the same element: a group heading when this row starts one
  * ("November 2026 · 9"), the "kept while you reply" note, and whatever the
  * list puts under the row (the quick reply, "Moved to … · Undo").
+ *
+ * Colour (shared/enquiryLane.ts, shared/statusPalette.ts): the row has no
+ * fill. Its lane (what to do next) is the loud colour: a band down the left
+ * edge and a dot + words in the first column. Its status keeps the venue's
+ * own colour as a quieter pill. Every mark is a border, so forced colours
+ * (Windows High Contrast) still draw it, and the words always carry the
+ * meaning.
  */
 
 // Column templates. Widths follow the spec; the name column's minimum is
@@ -35,15 +41,15 @@ import { LeadRowBadges } from "@/components/LeadClientPanel";
 // (No "grid" here: TABLE_ONLY switches the display, by width.)
 export const ROW_GRID = [
   "items-center gap-x-2.5",
-  "grid-cols-[minmax(150px,1fr)_140px_116px_132px_84px]",
-  "@min-[992px]:grid-cols-[minmax(200px,1fr)_150px_120px_116px_52px_120px_84px]",
-  "@min-[1148px]:gap-x-3 @min-[1148px]:grid-cols-[minmax(220px,1fr)_156px_124px_120px_56px_128px_92px_84px]",
+  "grid-cols-[140px_minmax(150px,1fr)_116px_132px_84px]",
+  "@min-[992px]:grid-cols-[150px_minmax(200px,1fr)_120px_116px_52px_120px_84px]",
+  "@min-[1148px]:gap-x-3 @min-[1148px]:grid-cols-[156px_minmax(220px,1fr)_124px_120px_56px_128px_92px_84px]",
 ].join(" ");
 export const ROW_GRID_SELECT = [
   "items-center gap-x-2.5",
-  "grid-cols-[32px_minmax(120px,1fr)_140px_116px_132px_84px]",
-  "@min-[992px]:grid-cols-[36px_minmax(150px,1fr)_150px_120px_116px_52px_120px_84px]",
-  "@min-[1148px]:gap-x-3 @min-[1148px]:grid-cols-[36px_minmax(170px,1fr)_156px_124px_120px_56px_128px_92px_84px]",
+  "grid-cols-[32px_140px_minmax(120px,1fr)_116px_132px_84px]",
+  "@min-[992px]:grid-cols-[36px_150px_minmax(150px,1fr)_120px_116px_52px_120px_84px]",
+  "@min-[1148px]:gap-x-3 @min-[1148px]:grid-cols-[36px_156px_minmax(170px,1fr)_124px_120px_56px_128px_92px_84px]",
 ].join(" ");
 /** Cells shown from the L layout (992px) up: Guests and Space. */
 export const FROM_L = "hidden @min-[992px]:block";
@@ -55,32 +61,41 @@ export const FROM_XL = "hidden @min-[1148px]:block";
 export const TABLE_ONLY = "hidden @min-[768px]:grid";
 export const CARDS_ONLY = "@min-[768px]:hidden";
 
-/**
- * Text colours for the Needs line and the clash date (rows and Board cards).
- * They are a shade darker than the old signal chips' colours (#c0392b red,
- * #8a5f18 amber, #3f7350 green): the chips had their own light fill, these
- * sit straight on the row, and a New Enquiry row's blue tint took those under
- * 4.5:1 (4.1-4.3). Each passes 4.5:1 on the card, the New Enquiry tint and a
- * selected row. Gray is the theme's own muted ink.
- */
-export const ROW_INK: Record<SignalTone, string> = {
-  red: "#a93226",
-  amber: "#7a5414",
-  blue: "#2f5488",
-  green: "#36643f",
-  gray: "var(--muted-foreground)",
-};
+/** "No date": a dark amber chosen for 4.5:1 on every row surface. */
 const NO_DATE = "#6b4710";
 
-const ICON: Record<string, React.ComponentType<any>> = {
-  "circle-check": CheckCircle2, "circle-minus": MinusCircle, "circle-dashed": CircleDashed,
-  "corner-up-left": CornerUpLeft, clock: Clock, bell: Bell, hourglass: Hourglass,
-  "calendar-clock": CalendarClock, "triangle-alert": AlertTriangle, "arrow-right": ArrowRight,
-  send: Send,
-};
-export function Icon({ name, size = 13, className }: { name: string; size?: number; className?: string }) {
+// The Reply / Nudge / Open buttons' icons.
+const ICON: Record<string, React.ComponentType<any>> = { "corner-up-left": CornerUpLeft, send: Send, "arrow-right": ArrowRight };
+function Icon({ name, size = 13, className }: { name: string; size?: number; className?: string }) {
   const C = ICON[name] ?? ArrowRight;
   return <C style={{ width: size, height: size }} className={className} strokeWidth={2.2} aria-hidden="true" />;
+}
+
+/**
+ * The lane's dot. Drawn as a border, not a fill, so forced colours still show
+ * it; the words beside it carry the meaning. A calm lane (nothing due) is a
+ * hollow ring in the text colour.
+ */
+export function LaneDot({ lane, size = 9, className = "" }: { lane: Lane; size?: number; className?: string }) {
+  const style: React.CSSProperties = lane === "calm"
+    ? { width: size, height: size, border: "1.5px solid currentColor" }
+    : { width: size, height: size, border: `${size / 2}px solid ${LANE_MARK[lane]}` };
+  return <span aria-hidden="true" data-lane-dot className={`inline-block shrink-0 rounded-full ${className}`} style={style} />;
+}
+
+/**
+ * A status in the venue's own colour (Settings > Statuses) as a quiet pill:
+ * light tint, dark ink of the same hue, and an outline that shows on any row
+ * (shared/statusPalette.ts clamps all three). No dot: a row has one, the lane's.
+ */
+export function StatusPill({ label, colour, className = "" }: { label: string; colour: string; className?: string }) {
+  const p = statusPalette(colour);
+  return (
+    <span data-cell="status" className={`inline-flex items-center max-w-full min-h-[18px] px-[7px] rounded-full border font-sans text-[12.5px] leading-[14px] font-semibold [overflow-wrap:anywhere] ${className}`}
+      style={{ background: p.tint, borderColor: p.outline, color: p.ink }}>
+      {label}
+    </span>
+  );
 }
 
 export const fullName = (lead: any) => [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim();
@@ -119,6 +134,8 @@ export interface EnquiryRowProps {
   teamById?: Map<number, { name: string }>;
   /** This row starts a group: its heading. */
   divider?: { label: string; count: number } | null;
+  /** The heading's colour: its section's lane, or calm (neutral) when its rows mix lanes. */
+  dividerLane?: Lane;
   onOpen: (lead: any) => void;
   /** Reply / Nudge. */
   onAction: (e: React.MouseEvent, row: ListRow) => void;
@@ -137,19 +154,21 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
   const { row, ctx, today, statusInfo, teamById, divider, onOpen, onAction, replying, keptForReply, selectMode, selected, onSelect } = props;
   const { lead, signal } = row;
   const name = displayName(lead);
-  const needs = rowNeeds(row, ctx);
-  const needsInk = ROW_INK[needs.tone];
+  const lane = rowLane(row, ctx);
+  const laneInk = LANE_INK[lane.lane];
   const action = enquiryAction(signal.group);
   const hasAction = action.reply;
   const si = statusInfo(lead.status);
-  const isNew = String(lead.status ?? "").toLowerCase() === "new";
+  const pal = statusPalette(si.dot);
   const clash = !!row.clash || signal.kind === "clash";
   const passed = isOpenStatus(lead.status) && rowDatePassed(row, ctx);
   const dated = !!row.eventDay;
   const dateText = dated ? formatDayKey(row.eventDay, today) : lead.dateFlexible ? "Date TBC" : "No date";
   // On a card the year is the extra word, so the weekday goes instead.
   const cardDateText = dated && row.eventDay.slice(0, 4) !== today.slice(0, 4) ? formatDayKey(row.eventDay, today, { weekday: false }) : dateText;
-  const dateInk = clash ? ROW_INK.red : !dated ? NO_DATE : "var(--foreground)";
+  // The date turns red when it is what's wrong: a clash (a booking's too,
+  // though its lane stays green) or a passed date on a red row.
+  const dateInk = clash || (passed && lane.lane === "red") ? LANE_INK.red : !dated ? NO_DATE : "var(--foreground)";
   const time = formatEventTime(lead.eventDate as any, ctx.tz);
   const guests = Number(lead.guestCount) > 0 ? Number(lead.guestCount) : null;
   const space = String(lead.spaceName ?? "").trim() || (lead.spaceId != null ? ctx.spaceNames?.get(Number(lead.spaceId)) ?? "" : "");
@@ -159,13 +178,14 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
   const cbId = `enq-select-${lead.id}`;
   const actionLabel = `${action.label}${action.label === "Reply" ? " to" : ""} ${name}`;
 
-  // Colour is the second cue only: a 3px bar in the status colour. Only a New
-  // Enquiry keeps a fill (the tint server/themeContrast.test.ts checks). A
-  // selected row takes a light wash of the primary colour (close to the accent
-  // blue on the default theme; the gold accents of other themes would take
-  // muted text under 4.5:1) and its bar turns primary.
-  const bg = selected ? "bg-primary/[0.13]" : isNew ? "bg-[#2f54882b]" : "bg-card hover:bg-accent/50";
-  const bar = selected ? "var(--primary)" : si.dot;
+  // No fill on any row. The lane shows as a 5px band down the left edge,
+  // stopping 3px short of the top and bottom so a run of rows in one lane
+  // reads as separate marks; calm rows have none. A selected row takes a
+  // light wash of the primary colour and a primary outline (blue tint + blue
+  // border); its band keeps the lane. Hover is a muted wash (the gold
+  // accents of some themes took text under 4.5:1).
+  const bg = selected ? "bg-primary/[0.13]" : "bg-card hover:bg-muted/70";
+  const band = lane.lane === "calm" ? null : LANE_MARK[lane.lane];
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   // Shift held on the box's cell, for a range (a label's click on the box
   // doesn't always carry the modifier through).
@@ -186,7 +206,7 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
   );
 
   const clashMark = (
-    <span className="whitespace-nowrap font-semibold" style={{ color: ROW_INK.red }}>
+    <span className="whitespace-nowrap font-semibold" style={{ color: LANE_INK.red }}>
       <AlertTriangle className="inline-block w-3 h-3 -mt-0.5 mr-0.5" strokeWidth={2.4} aria-hidden="true" />Date clash
     </span>
   );
@@ -196,23 +216,39 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
   // the guests' one goes with them.
   const dateLine2: { key: string; node: React.ReactNode; cls?: string }[] = [];
   if (time) dateLine2.push({ key: "t", node: time, cls: "whitespace-nowrap" });
-  if (clash) dateLine2.push({ key: "c", node: clashMark });
-  else if (passed) dateLine2.push({ key: "p", node: "Date passed", cls: "whitespace-nowrap" });
+  // When the lane already says "Date clash" / "Date passed" (first column,
+  // in red), the words aren't repeated here; the date itself is red.
+  if (clash) { if (lane.text !== "Date clash") dateLine2.push({ key: "c", node: clashMark }); }
+  else if (passed && lane.text !== "Date passed") dateLine2.push({ key: "p", node: "Date passed", cls: "whitespace-nowrap" });
   if (guests != null) dateLine2.push({ key: "g", node: `${guests} guests`, cls: `${BELOW_L} whitespace-nowrap` });
 
 
   return (
     <div className={`relative border-b border-border last:border-b-0 ${replying ? "z-[1]" : ""}`}
       style={replying ? { outline: "1.5px solid var(--primary)", outlineOffset: "-1.5px" } : undefined}>
-      {divider && (
+      {divider && (!props.dividerLane || props.dividerLane === "calm" ? (
         <div role="heading" aria-level={3}
           className="flex items-center h-7 pl-[15px] pr-3 border-b border-border bg-muted font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
           {divider.label} · {divider.count}
         </div>
-      )}
+      ) : (
+        // A section's colour: the lane's wash over the card (a background
+        // image, which forced colours drop) and a full-height 5px rule (a
+        // border, which they keep). Full height, so it never looks like a row.
+        <div role="heading" aria-level={3}
+          className="flex items-center gap-2 h-7 pl-[10px] pr-3 border-b border-border font-sans text-[11px] font-extrabold uppercase tracking-[0.14em]"
+          style={{
+            color: LANE_INK[props.dividerLane], borderLeft: `5px solid ${LANE_MARK[props.dividerLane]}`,
+            backgroundColor: "var(--card)", backgroundImage: `linear-gradient(${LANE_TINT[props.dividerLane]}, ${LANE_TINT[props.dividerLane]})`,
+          }}>
+          <LaneDot lane={props.dividerLane} size={8} />
+          <span>{divider.label} · {divider.count}</span>
+        </div>
+      ))}
 
-      <div className={`relative ${bg} transition-colors`}>
-        <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: bar }} />
+      <div className={`relative ${bg} transition-colors`}
+        style={selected ? { outline: "1.5px solid var(--primary)", outlineOffset: "-1.5px" } : undefined}>
+        {band && <span aria-hidden="true" data-lane-band className="absolute left-0 top-[3px] bottom-[3px] w-0 rounded-r-[2px] z-[1]" style={{ borderLeft: `5px solid ${band}` }} />}
 
         {/* ── Table row. A click anywhere opens it; for the keyboard the name
             is the button, so Reply isn't nested inside another button. ── */}
@@ -224,6 +260,17 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
               {checkbox("w-4 h-4")}
             </label>
           )}
+
+          {/* What to do next: the lane's dot and words, first, so the eye
+              runs down one column of colour. A red clash or passed date puts
+              the Needs line under it. Wraps, never cut off. */}
+          <div className="min-w-0 font-sans text-[12.5px] leading-4">
+            <div className="flex items-start gap-[6px] font-bold" style={{ color: laneInk }}>
+              <LaneDot lane={lane.lane} className="mt-[3.5px]" />
+              <span data-cell="needs" className="min-w-0 [overflow-wrap:anywhere]">{lane.text}</span>
+            </div>
+            {lane.sub && <div className="pl-[15px] text-[12px] font-semibold text-muted-foreground [overflow-wrap:anywhere]">{lane.sub}</div>}
+          </div>
 
           {/* Name, then badges and company · type · format (· space on M). */}
           <div className="min-w-0">
@@ -244,19 +291,10 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
             )}
           </div>
 
-          {/* Needs: what it needs from you. Wraps, never cut off. */}
-          <div className="min-w-0 flex items-start gap-[5px] font-sans text-[12.5px] leading-4 font-bold" style={{ color: needsInk }}>
-            <Icon name={needs.icon} className="shrink-0 mt-[1.5px]" />
-            <span data-cell="needs" className="min-w-0 [overflow-wrap:anywhere]">{needs.text}</span>
-          </div>
-
-          {/* Status in full ink, its colour as a dot; budget under it. */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-[7px] font-sans text-[13px] leading-[17px] font-semibold text-foreground">
-              <span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ background: si.dot }} />
-              <span data-cell="status" className="min-w-0 [overflow-wrap:anywhere]">{si.label}</span>
-            </div>
-            {budget && <div className="mt-px pl-[15px] font-sans text-[12px] leading-4 text-muted-foreground whitespace-nowrap">{budget}</div>}
+          {/* Status in the venue's colour, as a quiet pill; budget under it. */}
+          <div className="min-w-0 flex flex-col items-start">
+            <StatusPill label={si.label} colour={si.dot} />
+            {budget && <div className="pl-2 font-sans text-[12px] leading-4 text-muted-foreground whitespace-nowrap">{budget}</div>}
           </div>
 
           {/* Event date; time and any date warning under it (· guests on M). */}
@@ -315,14 +353,19 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
                   <span className="min-w-0 font-serif text-[16.5px] leading-5 font-semibold [overflow-wrap:anywhere]" style={{ color: "#211d18" }}>{name}</span>
                   <span className="shrink-0 font-sans text-[13.5px] font-bold whitespace-nowrap" style={{ color: dateInk }}>{cardDateText}</span>
                 </span>
+                {/* The lane's dot and words; the status as an inline pill (in
+                    place of the "·" before it, so the line is no wider);
+                    guests; and on a red clash or passed date, the Needs line. */}
                 <span className="block mt-0.5 font-sans text-[12px] leading-4 text-muted-foreground">
-                  <span className="whitespace-nowrap font-bold" style={{ color: needsInk }}>
-                    <Icon name={needs.icon} size={12} className="inline-block -mt-0.5 mr-[3px]" />{needs.text}
+                  <span className="whitespace-nowrap font-bold" style={{ color: laneInk }}>
+                    <LaneDot lane={lane.lane} size={8} className="mr-[5px] -mt-px align-middle" />{lane.text}
                   </span>{" "}
-                  <span className="whitespace-nowrap"><span aria-hidden="true">· </span><span className="font-semibold text-foreground">{si.label}</span></span>
+                  <span className="font-semibold rounded-[4px] px-[3px] border [box-decoration-break:clone] [-webkit-box-decoration-break:clone]"
+                    style={{ background: pal.tint, borderColor: pal.outline, color: pal.ink }}>{si.label}</span>
                   {guests != null && <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>{guests} guests</span></>}
-                  {clash ? <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>{clashMark}</span></>
-                    : passed ? <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>Date passed</span></> : null}
+                  {lane.sub ? <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>{lane.sub}</span></>
+                    : clash && lane.text !== "Date clash" ? <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>{clashMark}</span></>
+                    : passed && lane.text !== "Date passed" ? <>{" "}<span className="whitespace-nowrap"><span aria-hidden="true">· </span>Date passed</span></> : null}
                 </span>
               </>
             );
