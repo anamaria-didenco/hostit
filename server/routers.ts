@@ -9285,24 +9285,14 @@ Return ONLY valid JSON.`;
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnbRaw = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
         const fnb = showMoney ? fnbRaw : fnbRaw.map((f: any) => ({ ...f, unitPrice: null }));
-        const { checklistInstances } = await import('../drizzle/schema');
-        const cryptoMod = await import('crypto');
-        let [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
-        if (!checklistInstance) {
-          const shareToken = cryptoMod.randomBytes(24).toString('hex');
-          const [created] = await db.insert(checklistInstances).values({
-            runsheetId: link.runsheetId,
-            ownerId: link.ownerId,
-            name: runsheet.title ? `${runsheet.title} — Staff Checklist` : 'Staff Checklist',
-            items: [],
-            shareToken,
-          }).returning();
-          checklistInstance = created;
-        } else if (!checklistInstance.shareToken) {
-          const shareToken = cryptoMod.randomBytes(24).toString('hex');
-          await db.update(checklistInstances).set({ shareToken }).where(eq(checklistInstances.id, checklistInstance.id));
-          checklistInstance = { ...checklistInstance, shareToken };
-        }
+        // The run sheet's checklist, made (with a share token) if it has none.
+        // Through the same locked path as the run sheet, so a staff member
+        // opening the link while the owner opens the sheet can't make a second
+        // list, and nothing is written when the list is already set up.
+        const { getOrCreateRunsheetChecklist } = await import('./eventChecklist');
+        const checklistInstance = await getOrCreateRunsheetChecklist(runsheet.ownerId, link.runsheetId, {
+          name: runsheet.title ? `${runsheet.title} — Staff Checklist` : undefined,
+        });
         // Contact info: the runsheet's own saved value wins (an edit made in
         // the Runsheet Builder must show up here, not the original lead's
         // stale details), then the linked lead, then the linked booking —

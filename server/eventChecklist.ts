@@ -111,20 +111,24 @@ export async function getOrCreateRunsheetChecklist(
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
   return db.transaction(async (tx) => {
-    // One at a time per run sheet, so two tabs opening it together can't make
-    // two checklists or fold the same old list in twice.
+    // One at a time per run sheet, so two callers making it together can't
+    // make two checklists or fold the same old list in twice. Every place
+    // that creates a run sheet's checklist comes through here.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('checklist_instances:runsheet'), ${runsheetId}::int)`);
     const [sheet] = await tx.select({ bookingId: runsheets.bookingId, title: runsheets.title }).from(runsheets)
       .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ownerId))).limit(1);
     if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Runsheet not found" });
     const bookingId = sheet.bookingId ?? opts.bookingId ?? null;
 
+    // The rows are locked (FOR UPDATE) until the items are written back, so a
+    // tick made on the staff link at the same moment (toggleItemByToken locks
+    // the row too) waits and is applied to the new list instead of being lost.
     const [existing] = await tx.select().from(checklistInstances)
       .where(and(eq(checklistInstances.runsheetId, runsheetId), eq(checklistInstances.ownerId, ownerId)))
-      .orderBy(asc(checklistInstances.id)).limit(1);
+      .orderBy(asc(checklistInstances.id)).limit(1).for("update");
     const old = bookingId == null ? [] : await tx.select().from(checklistInstances)
       .where(and(eq(checklistInstances.bookingId, bookingId), eq(checklistInstances.ownerId, ownerId), isNull(checklistInstances.runsheetId)))
-      .orderBy(asc(checklistInstances.createdAt), asc(checklistInstances.id));
+      .orderBy(asc(checklistInstances.createdAt), asc(checklistInstances.id)).for("update");
 
     let items: ChecklistItem[] = existing
       ? ((existing.items as ChecklistItem[]) ?? [])

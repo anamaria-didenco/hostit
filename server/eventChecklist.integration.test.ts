@@ -9,7 +9,7 @@ import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
-import { bookings, checklistInstances, checklistTemplates, leads, runsheets } from "../drizzle/schema";
+import { bookings, checklistInstances, checklistTemplates, leads, runsheets, staffPortalLinks } from "../drizzle/schema";
 import { correctedChecklistName, mergeChecklistItems, PLACEHOLDER_CHECKLIST_NAME } from "./eventChecklist";
 
 const HAS_DB = !!process.env.DATABASE_URL;
@@ -64,6 +64,7 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
   afterAll(async () => {
     const db = (await getDb())!;
     const owners = [OWNER_A, OWNER_B];
+    await db.delete(staffPortalLinks).where(inArray(staffPortalLinks.ownerId, owners));
     await db.delete(checklistInstances).where(inArray(checklistInstances.ownerId, owners));
     await db.delete(checklistTemplates).where(inArray(checklistTemplates.ownerId, owners));
     await db.delete(runsheets).where(inArray(runsheets.ownerId, owners));
@@ -259,6 +260,63 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
     await expect(b.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     const staff = await pub.checklists.getByShareToken({ token: inst.shareToken! });
     expect((staff!.items as any[]).map(i => i.id)).toEqual(["c-1", "c-2", "d-1", "d-2"]);
+  });
+
+  it("opening the list from several places at once makes one list", async () => {
+    const db = (await getDb())!;
+    for (let round = 0; round < 3; round++) {
+      const bk = await newBooking();
+      const rs = await a.runsheets.create({ title: `Zoe Example — Party ${round}`, bookingId: bk.id } as any);
+      const link = await a.staffPortal.createLink({ runsheetId: rs.id });
+      // Staff open the link on several phones while the run sheet and
+      // /checklist open it, all at the same moment.
+      const opened = await Promise.all([
+        ...[1, 2, 3, 4].map(() => pub.staffPortal.getByToken({ token: link.token }).then(p => p!.checklist!.id)),
+        a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Zoe Example — Party — Staff Checklist" }).then(i => i.id),
+        a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, bookingId: bk.id }).then(i => i.id),
+      ]);
+      const rows = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, rs.id));
+      expect(rows).toHaveLength(1);
+      expect(opened.every(id => id === rows[0].id)).toBe(true);
+      expect(rows[0].shareToken).toBeTruthy();
+    }
+  });
+
+  it("a template applied while a staff tick is being saved keeps the tick", async () => {
+    const db = (await getDb())!;
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Leo Example — Launch", bookingId: bk.id } as any);
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id });
+    await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [
+      { id: "c-1", text: "Set tables" }, { id: "c-2", text: "Ice in wells", category: "bar" },
+    ] });
+    const tpl = await newTemplate([{ id: "1", text: "Music on" }, { id: "2", text: "Set tables" }]);
+
+    // A staff tick that has locked the row and changed it, but not yet
+    // committed (what toggleItemByToken does)...
+    let release!: () => void;
+    const held = new Promise<void>(r => { release = r; });
+    let locked!: () => void;
+    const isLocked = new Promise<void>(r => { locked = r; });
+    const tick = db.transaction(async (tx) => {
+      const [row] = await tx.select().from(checklistInstances).where(eq(checklistInstances.id, inst.id)).for("update");
+      const items = (row.items as any[]).map(i => i.id === "c-2" ? { ...i, checked: true, checkedAt: "2027-03-06T05:00:00Z" } : i);
+      await tx.update(checklistInstances).set({ items }).where(eq(checklistInstances.id, inst.id));
+      locked();
+      await held;
+    });
+    await isLocked;
+    // ...while "Assign template" runs on /checklist. It must wait for the tick
+    // and add to the ticked list, not write back the list it read before.
+    const assign = a.checklists.assignToBooking({ templateId: tpl.id, bookingId: bk.id });
+    await new Promise(r => setTimeout(r, 400));
+    release();
+    await Promise.all([tick, assign]);
+
+    const view = await a.checklists.getForBooking({ bookingId: bk.id });
+    expect((view.instance!.items as any[]).map(i => [i.text, i.checked])).toEqual([
+      ["Set tables", false], ["Ice in wells", true], ["Music on", false],
+    ]);
   });
 
   it("another venue can't read, create or fill an event's checklist", async () => {
