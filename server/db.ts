@@ -500,7 +500,11 @@ export async function getDashboardStats(ownerId: number) {
   const upcomingEvents = upcomingBookings.length + upcomingFromLeads;
   // Overdue tasks
   const allTasks = await db.select().from(tasks).where(eq(tasks.ownerId, ownerId));
-  const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < now.getTime()).length;
+  // The Tasks tab's Overdue rule: due before today (venue's zone), not earlier today.
+  const { taskOverdueBefore } = await import('../shared/taskFields');
+  const [tzRow] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
+  const overdueBefore = taskOverdueBefore(tzRow?.tz, now.getTime());
+  const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < overdueBefore).length;
   // Conversion rate: of the last 12 months' real enquiries (NZ calendar), how
   // many are won now — the shared definition Reports and the weekly email use.
   const { conversionHeadline } = await import('./conversionReport');

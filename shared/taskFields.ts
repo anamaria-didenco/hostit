@@ -2,6 +2,7 @@
  * Small rules about a task's fields, shared by the Tasks tab, the Tasks box on
  * an enquiry / event, the automated-task rules and the server.
  */
+import { DEFAULT_VENUE_TZ, zonedWallTimeToDate } from "./eventDate";
 
 export const TASK_PRIORITIES = ["low", "normal", "high"] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
@@ -36,4 +37,31 @@ export function taskDueState(dueMs: number, nowMs: number = Date.now()): TaskDue
 /** "Overdue — ", "Due today — " or "Due ", put before the date. */
 export function taskDuePrefix(state: TaskDueState): string {
   return state === "overdue" ? "Overdue — " : state === "today" ? "Due today — " : "Due ";
+}
+
+/**
+ * Where "Overdue" starts on the server (the Tasks tab's Overdue and Upcoming
+ * filters, the Overview's overdue count and Needs-you-today list): the start
+ * of today in the venue's time zone. A task due earlier today is "Due today"
+ * on its row (taskDueState), so it isn't counted as overdue until tomorrow.
+ * An unknown zone falls back to the default venue zone.
+ */
+export function taskOverdueBefore(tz: string | null | undefined, nowMs: number = Date.now()): number {
+  let ymd: { y: number; m: number; d: number };
+  try {
+    ymd = ymdIn(tz || DEFAULT_VENUE_TZ, nowMs);
+  } catch {
+    tz = DEFAULT_VENUE_TZ;
+    ymd = ymdIn(tz, nowMs);
+  }
+  // zonedWallTimeToDate nudges an exact UTC midnight on by 1 ms (its marker
+  // for "has a time"); midnight anywhere is on a whole second, so drop it.
+  const start = zonedWallTimeToDate(ymd.y, ymd.m, ymd.d, 0, 0, tz || DEFAULT_VENUE_TZ).getTime();
+  return Math.floor(start / 1000) * 1000;
+}
+
+function ymdIn(tz: string, nowMs: number) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(nowMs));
+  const n = (t: string) => Number(parts.find(p => p.type === t)?.value);
+  return { y: n("year"), m: n("month"), d: n("day") };
 }

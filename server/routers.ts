@@ -7442,8 +7442,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(tasks.ownerId, ctx.user.id), about.length ? or(...about) : undefined))
           .orderBy(desc(tasks.createdAt));
         const filter = input?.filter ?? 'all';
-        if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < now);
-        else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= now);
+        // Overdue from the day after it was due, as the rows say ("Due today"
+        // all of its day): before the start of today in the venue's zone.
+        let overdueBefore = now;
+        if (filter === 'overdue' || filter === 'upcoming') {
+          const { venueSettings } = await import('../drizzle/schema');
+          const { taskOverdueBefore } = await import('@shared/taskFields');
+          const [vs] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+          overdueBefore = taskOverdueBefore(vs?.tz, now);
+        }
+        if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < overdueBefore);
+        else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= overdueBefore);
         else if (filter === 'completed') rows = rows.filter(t => t.completed);
         else if (filter === 'mine') {
           // Open tasks assigned to the signed-in person (by name, as assignedTo

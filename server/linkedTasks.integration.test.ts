@@ -161,6 +161,25 @@ d("linked, assigned and follow-up tasks (DB)", () => {
     });
   });
 
+  describe("overdue and upcoming", () => {
+    it("a task due earlier today is Upcoming (its row says Due today), not Overdue, everywhere", async () => {
+      const { taskOverdueBefore } = await import("../shared/taskFields");
+      const { getNeedsAttention } = await import("./needsAttention");
+      const { getDashboardStats } = await import("./db");
+      // The venue is in Auckland (the default zone).
+      const startOfToday = taskOverdueBefore("Pacific/Auckland");
+      await caller.tasks.create({ title: "Due first thing today", dueDate: startOfToday + 60_000 });
+      await caller.tasks.create({ title: "Due last night", dueDate: startOfToday - 60_000 });
+      await caller.tasks.create({ title: "Due next week", dueDate: Date.now() + 7 * DAY });
+
+      expect((await caller.tasks.list({ filter: "overdue" })).map(t => t.title)).toEqual(["Due last night"]);
+      expect((await caller.tasks.list({ filter: "upcoming" })).map(t => t.title).sort()).toEqual(["Due first thing today", "Due next week"]);
+      const needs = await getNeedsAttention(OWNER);
+      expect(needs.tasks.items.map(t => t.title)).toEqual(["Due last night"]);
+      expect((await getDashboardStats(OWNER))?.overdueTasks).toBe(1);
+    });
+  });
+
   describe("the 'mine' filter", () => {
     it("returns only my open tasks, unlike 'all'", async () => {
       await caller.tasks.create({ title: "Mine 1", assignedTo: "Olive Owner" });
