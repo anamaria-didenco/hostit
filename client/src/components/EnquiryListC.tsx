@@ -305,8 +305,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       <div className="px-4 md:px-6 pt-3 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
         {/* View row (wide): "Matching:" while filtering or searching (each
             count is then what that view would show), the six views, the
-            view's one-click shortcuts, and Sort. */}
-        <div className="hidden @min-[768px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
+            view's one-click shortcuts, and Sort. The filter bar's popovers
+            open below it (data-view-row), so a shortcut stays clickable. */}
+        <div data-view-row className="hidden @min-[768px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
           {filtered && <span className="pb-2.5 pr-1 font-sans text-[12.5px] font-bold text-muted-foreground">Matching:</span>}
           <div role="group" aria-label="Enquiry views" className="flex items-end flex-wrap -mb-px">
             {VIEWS.map((t) => {

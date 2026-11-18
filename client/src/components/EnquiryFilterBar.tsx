@@ -54,12 +54,43 @@ const COUNT = "ml-auto pl-3 font-sans text-[12px] font-bold text-muted-foregroun
 
 const visible = (el: Element) => (el as HTMLElement).getClientRects().length > 0;
 
+/**
+ * How far below its button a filter opens: past the rest of this bar and,
+ * when it sits right underneath, the list's row of views and shortcuts
+ * (EnquiryListC's [data-view-row]). Dropping over that row hid "This month"
+ * and "Next month", which are meant to be clickable with a filter open.
+ */
+function dropOffset(trigger: Element | null | undefined, bar: HTMLElement | null): number {
+  if (!trigger || !bar) return 6;
+  const t = trigger.getBoundingClientRect();
+  // The bar's last line of buttons (its bottom padding is 12px).
+  let bottom = bar.getBoundingClientRect().bottom - 12;
+  const row = Array.from(document.querySelectorAll("[data-view-row]")).find(visible);
+  if (row) {
+    const r = row.getBoundingClientRect();
+    if (r.top >= t.bottom - 1 && r.top - bottom < 48 && r.bottom > bottom) bottom = r.bottom;
+  }
+  return Math.max(6, Math.round(bottom - t.bottom) + 6);
+}
+
 export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
   const { mode, rows, ctx, state, onFiltersChange, onQChange, statuses, spaces, team } = props;
   const f = state.filters;
   const searchRef = React.useRef<HTMLInputElement>(null);
   const barRef = React.useRef<HTMLDivElement>(null);
   const [openFacet, setOpenFacet] = React.useState<Facet | "more" | null>(null);
+  const [popOffset, setPopOffset] = React.useState(6);
+  const measureDrop = (key: Facet | "more") => dropOffset(barRef.current?.querySelector(`[data-facet-trigger="${key}"]`), barRef.current);
+  const openPopover = (key: Facet | "more", open: boolean) => {
+    if (open) setPopOffset(measureDrop(key));
+    setOpenFacet(open ? key : null);
+  };
+  // A pick can add a chip and push the views down: keep the popover clear of them.
+  React.useLayoutEffect(() => {
+    if (!openFacet) return;
+    const v = measureDrop(openFacet);
+    if (v !== popOffset) setPopOffset(v);
+  });
   const [sheetOpen, setSheetOpen] = React.useState(false);
   // "Custom range" picked but no day typed yet: a choice on screen, not yet a filter.
   const [rangeMode, setRangeMode] = React.useState<{ date?: boolean; came?: boolean }>({});
@@ -238,7 +269,7 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
     const c = open ? counts(facet) : new Map<string, number>();
     const trigger = (
       <PopoverTrigger asChild>
-        <button type="button" className={chip ? `${CHIP_TEXT} hover:underline` : BTN} aria-haspopup="dialog">
+        <button type="button" data-facet-trigger={facet} className={chip ? `${CHIP_TEXT} hover:underline` : BTN} aria-haspopup="dialog">
           {chip ? (
             <span>{chip.text}</span>
           ) : (
@@ -248,7 +279,7 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
       </PopoverTrigger>
     );
     return (
-      <Popover key={facet} open={open} onOpenChange={o => setOpenFacet(o ? facet : null)} modal={false}>
+      <Popover key={facet} open={open} onOpenChange={o => openPopover(facet, o)} modal={false}>
         {chip ? (
           <span className={CHIP}>
             {trigger}
@@ -257,7 +288,7 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
             </button>
           </span>
         ) : trigger}
-        <PopoverContent align="start" sideOffset={6} className="w-[300px] max-h-[min(70vh,520px)] overflow-y-auto p-0 bg-card border-border"
+        <PopoverContent align="start" sideOffset={popOffset} className="w-[300px] max-h-[min(70vh,520px)] overflow-y-auto p-0 bg-card border-border"
           aria-label={`Filter by ${FACET_LABELS[facet].toLowerCase()}`}
           // An outside click closes without taking focus back, so a quick chip
           // or a row can be clicked straight from an open filter.
@@ -283,13 +314,13 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
   const moreButton = () => {
     const open = openFacet === "more";
     return (
-      <Popover open={open} onOpenChange={o => setOpenFacet(o ? "more" : null)} modal={false}>
+      <Popover open={open} onOpenChange={o => openPopover("more", o)} modal={false}>
         <PopoverTrigger asChild>
-          <button type="button" className={BTN} aria-haspopup="dialog">
+          <button type="button" data-facet-trigger="more" className={BTN} aria-haspopup="dialog">
             More<ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={6} className="w-[320px] max-h-[min(70vh,560px)] overflow-y-auto p-0 bg-card border-border" aria-label="More filters"
+        <PopoverContent align="start" sideOffset={popOffset} className="w-[320px] max-h-[min(70vh,560px)] overflow-y-auto p-0 bg-card border-border" aria-label="More filters"
           onCloseAutoFocus={e => { if (document.activeElement && document.activeElement !== document.body) e.preventDefault(); }}>
           {open && moreFacets.map(facet => {
             const c = counts(facet);
