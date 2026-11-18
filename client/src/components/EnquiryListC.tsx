@@ -336,8 +336,10 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         </div>
 
         {/* Narrow: all six views in a 2×3 grid (nothing off-screen), the
-            shortcuts, then a summary line with Sort. */}
+            shortcuts, then a summary line with Sort. "Matching:" over the
+            grid while filtering or searching, as on the wide row. */}
         <div className={`${CARDS_ONLY} flex flex-col gap-2`}>
+          {filtered && <p className="-mt-1 -mb-1 font-sans text-[12.5px] leading-4 font-bold text-muted-foreground">Matching:</p>}
           <div role="group" aria-label="Enquiry views" className="grid grid-cols-3 @max-[359px]:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-1.5">
             {VIEWS.map((t) => {
               const on = view === t.id;
