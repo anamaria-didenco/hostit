@@ -283,6 +283,22 @@ describe("D. event-date sort and dividers", () => {
     const single = listRows(rowsOf([lead({ eventDate: dateOnly(2026, 11, 20) }), lead({ eventDate: dateOnly(2026, 11, 21) })]), state({ sort: { key: "event", dir: "asc" } }), ctx);
     expect(single.dividers).toEqual([]);
   });
+  it("31b. Event date set to one month: no heading for that month, Already happened keeps its own", () => {
+    const nov = rowsOf([
+      lead({ id: 21, lastName: "Thu19", status: "booked", eventDate: dateOnly(2026, 11, 19) }),
+      lead({ id: 22, lastName: "Sun29", status: "booked", eventDate: dateOnly(2026, 11, 29) }),
+      lead({ id: 23, lastName: "Mon2", status: "booked", eventDate: dateOnly(2026, 11, 2) }),
+      lead({ id: 24, lastName: "Dec5", status: "booked", eventDate: dateOnly(2026, 12, 5) }),
+    ]);
+    const confirmed = (date: EnquiryFilters["date"]) => listRows(nov, state({ view: "confirmed", filters: withF({ date }), sort: { key: "event", dir: "asc" } }), ctx);
+    const thisMonth = confirmed({ preset: "this_month" });
+    expect(names(thisMonth.rows)).toEqual(["Thu19", "Sun29", "Mon2"]);
+    expect(thisMonth.dividers.map(d => [d.label, d.count, d.at])).toEqual([["Already happened", 1, 2]]);
+    expect(confirmed({ month: "2026-11" }).dividers.map(d => d.label)).toEqual(["Already happened"]);
+    // Any other range keeps its month headings.
+    expect(confirmed({ preset: "upcoming" }).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026"]);
+    expect(confirmed(null).dividers.map(d => d.label)).toEqual(["November 2026", "December 2026", "Already happened"]);
+  });
   it("32. most urgent has no dividers", () => {
     expect(listRows(rows, state(), ctx).dividers).toEqual([]);
   });

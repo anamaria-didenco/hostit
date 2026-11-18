@@ -335,6 +335,12 @@ export function dayKeyRange(f: DateFilter<string>, today: string): { from?: stri
   return { from, to, undated: false };
 }
 const inRange = (k: string, r: { from?: string; to?: string }) => (!r.from || k >= r.from) && (!r.to || k <= r.to);
+/** The month ("2026-11") an Event date filter covers exactly (This month, Next month, a picked month), else null. */
+function filterMonth(f: DateFilter<DatePreset>, today: string): string | null {
+  const r = dayKeyRange(f, today);
+  if (!r?.from || !r.to || r.undated || !r.from.endsWith("-01") || r.to !== monthEnd(r.from)) return null;
+  return r.from.slice(0, 7);
+}
 
 // ── Rows ───────────────────────────────────────────────────────────────────
 
@@ -660,12 +666,20 @@ export function listRows(
         return { key: r.eventDay.slice(0, 7), label: formatMonthLong(r.eventDay.slice(0, 7)) };
       };
       let cur: string | null = null;
+      const keys: string[] = [];
       out.forEach((r, i) => {
         const g = groupOf(r);
-        if (g.key !== cur) { dividers.push({ at: i, label: g.label, count: 0 }); cur = g.key; }
+        if (g.key !== cur) { dividers.push({ at: i, label: g.label, count: 0 }); keys.push(g.key); cur = g.key; }
         dividers[dividers.length - 1].count++;
       });
       if (dividers.length < 2) dividers = [];
+      else {
+        // Event date set to one month ("This month"): the chip already names
+        // it, so that month gets no heading of its own. "Already happened"
+        // keeps its heading.
+        const month = filterMonth(s.filters.date, today);
+        if (month) dividers = dividers.filter((_, i) => keys[i] !== month);
+      }
     }
   }
   // Rows kept in place after a status change go back where they were.
