@@ -501,11 +501,14 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 {HEAD.map(h => {
                   const on = state.sort.key === h.key;
                   const Arrow = h.key === "urgent" || state.sort.dir === "desc" ? ArrowDown : ArrowUp;
+                  // The sorted column is marked by its arrow and full-strength
+                  // ink, not the theme colour: in Seafoam and Retro Warm the
+                  // primary is too light for small text on this muted strip.
                   return (
                     <div key={h.key} className={`${h.cls ?? ""} min-w-0 ${h.right ? "text-right" : ""}`}>
                       <button type="button" onClick={() => sortBy(h.key)}
                         aria-label={on ? `${h.label}, sorted ${headPhrase(h.key, state.sort.dir)}` : `Sort by ${h.label.toLowerCase()}`}
-                        className={`inline-flex items-center gap-1 h-8 max-w-full font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap hover:text-foreground ${on ? "text-primary" : "text-muted-foreground"}`}>
+                        className={`inline-flex items-center gap-1 h-8 max-w-full font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap hover:text-foreground ${on ? "text-foreground" : "text-muted-foreground"}`}>
                         {h.label}
                         {on && <Arrow className="w-3 h-3 shrink-0" strokeWidth={2.6} aria-hidden="true" />}
                       </button>
