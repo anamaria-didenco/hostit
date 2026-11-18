@@ -1394,11 +1394,21 @@ export default function RunsheetBuilder() {
 
   // ─── AI Smart Paste for Event Checklist ──────────────────────────────────
   const [showChecklistPaste, setShowChecklistPaste] = useState(false);
+  // Whether the dialog is open now, for a save that answers later.
+  const checklistPasteOpenRef = useRef(false);
+  checklistPasteOpenRef.current = showChecklistPaste;
   const [checklistPasteText, setChecklistPasteText] = useState("");
   const [checklistParsed, setChecklistParsed] = useState<{ items: { text: string; category: string; _selected: boolean }[] } | null>(null);
   // Why the last ADD TO CHECKLIST didn't save. The dialog stays open with
-  // the items, so pressing it again tries again.
+  // the items, so pressing it again tries again; closed and opened again, it
+  // still says so.
   const [checklistPasteError, setChecklistPasteError] = useState<string | null>(null);
+  const CHECKLIST_PASTE_FAILED_TOAST = "checklist-paste-failed";
+  function openChecklistPaste() {
+    setShowChecklistPaste(true);
+    // The dialog says the same as the message.
+    toast.dismiss(CHECKLIST_PASTE_FAILED_TOAST);
+  }
   const parseChecklistTextMut = trpc.menuCatalog.parseChecklistText.useMutation({
     onSuccess: (data: any) => {
       if (!data.success || !data.items?.length) { toast.error("Couldn't extract any tasks. Try clearer text."); return; }
@@ -1438,7 +1448,14 @@ export default function RunsheetBuilder() {
       [],
       {
         saved: done,
-        failed: err => setChecklistPasteError(`${checklistAddFailed(err)}. Nothing is lost: press ADD TO CHECKLIST to try again.`),
+        failed: err => {
+          const why = checklistAddFailed(err);
+          setChecklistPasteError(`${why}. Nothing is lost: press ADD TO CHECKLIST to try again.`);
+          // Closed while saving: the dialog's message would go unseen.
+          if (!checklistPasteOpenRef.current) {
+            toast.error(`${why}. The items are still in AI PASTE: open it and press ADD TO CHECKLIST to try again.`, { id: CHECKLIST_PASTE_FAILED_TOAST });
+          }
+        },
       },
       addPastedChecklistItemsMut,
     );
@@ -5885,7 +5902,7 @@ export default function RunsheetBuilder() {
                   </span>
                 )}
                 <button
-                  onClick={() => { setShowChecklistPaste(true); setChecklistPasteError(null); }}
+                  onClick={openChecklistPaste}
                   className="min-h-[40px] max-md:min-h-[44px] pointer-coarse:min-h-[44px] whitespace-nowrap font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 hover:bg-gold/5"
                   title="Paste a to-do list and AI will turn it into checklist items"
                 >
