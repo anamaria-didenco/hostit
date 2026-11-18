@@ -219,12 +219,31 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   // Lost" (or, for staff, the view's tab) instead of dropping to the page.
   const closeNoteId = React.useId();
   const closeAllRef = React.useRef<HTMLButtonElement>(null);
+  const yesCloseRef = React.useRef<HTMLButtonElement>(null);
   const focusAfterReview = React.useRef(false);
   React.useEffect(() => {
     if (!passedOnly || !focusAfterReview.current) return;
     focusAfterReview.current = false;
     (closeAllRef.current ?? tabRef.current)?.focus();
   }, [passedOnly, tabRef]);
+  // "Close all N as Lost", Cancel and "Yes, close N" take each other's place,
+  // so focus follows to the button that replaced the one pressed. After "Yes",
+  // it waits for the box to change once the closed enquiries leave the list:
+  // then "Close all" if some are left, or the view's tab when the box has gone.
+  const closeFocus = React.useRef<"yes" | "closeAll" | "closed" | null>(null);
+  React.useLayoutEffect(() => {
+    const want = closeFocus.current;
+    if (!want) return;
+    if (want !== "closed") {
+      (want === "yes" ? yesCloseRef.current : closeAllRef.current)?.focus();
+      closeFocus.current = null;
+      return;
+    }
+    if (yesCloseRef.current) return;
+    closeFocus.current = null;
+    const active = document.activeElement;
+    if (!active || active === document.body) (closeAllRef.current ?? tabRef.current)?.focus();
+  });
   const reviewPassed = (
     <button type="button" onClick={() => { focusAfterReview.current = true; props.onFiltersChange(reviewPassedFilters); }}
       className="font-bold text-primary underline underline-offset-[3px] whitespace-nowrap">Review them</button>
@@ -416,14 +435,17 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             </p>
             {confirmClose ? (
               <div className="flex items-center gap-2">
-                <button onClick={() => setConfirmClose(false)} className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
-                <button disabled={closing} onClick={() => onCloseAsLost(rows.map((r) => r.lead.id))}
-                  className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold text-white bg-primary disabled:opacity-50">
+                <button onClick={() => { closeFocus.current = "closeAll"; setConfirmClose(false); }} className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
+                {/* aria-disabled, not disabled, while closing: focus stays on
+                    it until the closed enquiries leave the list. */}
+                <button ref={yesCloseRef} aria-disabled={closing || undefined} aria-describedby={closeNoteId}
+                  onClick={() => { if (closing) return; closeFocus.current = "closed"; onCloseAsLost(rows.map((r) => r.lead.id)); }}
+                  className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold text-white bg-primary aria-disabled:opacity-50">
                   {closing ? "Closing…" : `Yes, close ${rows.length}`}
                 </button>
               </div>
             ) : (
-              <button ref={closeAllRef} onClick={() => setConfirmClose(true)} aria-describedby={closeNoteId}
+              <button ref={closeAllRef} onClick={() => { closeFocus.current = "yes"; setConfirmClose(true); }} aria-describedby={closeNoteId}
                 className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold border-[1.5px] border-input bg-card text-foreground hover:border-primary">
                 Close {rows.length === 1 ? "it" : `all ${rows.length}`} as Lost
               </button>
