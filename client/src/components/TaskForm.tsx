@@ -63,7 +63,7 @@ export function TaskForm({
   className = "mb-6", frameClassName = "dante-card p-5", showLink = true, autoFocusTitle = false, ariaLabel,
 }: {
   heading: string;
-  /** The heading's level where the form sits (2 on the Tasks tab, 4 inside a Tasks box). */
+  /** The heading's level where the form sits (2 on the Tasks tab; inside a Tasks box, one under the box's heading). */
   headingLevel?: 2 | 3 | 4;
   className?: string;
   /** The form's box. The Tasks box on an enquiry is already a card. */

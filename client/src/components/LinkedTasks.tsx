@@ -133,13 +133,16 @@ export default function LinkedTasks({ leadId, bookingId, className = "mb-4 max-w
   };
 
   const doneNow = Object.values(justDone).filter((t: any) => !(tasks ?? []).some((x: any) => x.id === t.id));
+  // The form's heading sits one level under the box's: TASKS is a level-2
+  // heading on the Event page (like its other gold rules), an h3 in the drawer.
+  const formHeadingLevel = ruleHeading ? 3 : 4;
   const open = [...(tasks ?? [])].sort((a: any, b: any) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity));
 
   return (
     <div className={`dante-card p-4 ${className}`}>
       <div className="flex items-center justify-between mb-2">
         {ruleHeading
-          ? <div className="gold-rule max-w-full flex-1"><span>TASKS{open.length ? ` · ${open.length}` : ""}</span></div>
+          ? <div role="heading" aria-level={2} className="gold-rule max-w-full flex-1"><span>TASKS{open.length ? ` · ${open.length}` : ""}</span></div>
           : <h3 className="font-bebas text-xs tracking-widest text-ink/70">TASKS{open.length ? ` · ${open.length}` : ""}</h3>}
         {!adding && (
           <button type="button" ref={addRef} onClick={() => { setEditingId(null); setAdding(true); }}
@@ -162,7 +165,7 @@ export default function LinkedTasks({ leadId, bookingId, className = "mb-4 max-w
                 <li key={t.id} className="py-2">
                   <TaskForm
                     heading="EDIT TASK"
-                    headingLevel={4}
+                    headingLevel={formHeadingLevel}
                     ariaLabel={`Edit task: ${t.title}`}
                     initial={initial}
                     submitLabel="SAVE"
@@ -246,7 +249,7 @@ export default function LinkedTasks({ leadId, bookingId, className = "mb-4 max-w
       {adding && (
         <TaskForm
           heading="NEW TASK"
-          headingLevel={4}
+          headingLevel={formHeadingLevel}
           initial={EMPTY_TASK_FORM}
           submitLabel="ADD TASK"
           pendingLabel="ADDING..."
