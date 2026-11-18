@@ -103,6 +103,7 @@ import {
 } from "@shared/enquiryFilters";
 import { LaneDot } from "@/components/EnquiryRow";
 import { LANE_INK, LANE_MARK, rowLane } from "@shared/enquiryLane";
+import { statusPalette } from "@shared/statusPalette";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
@@ -4718,7 +4719,11 @@ export default function Dashboard() {
                           if (ra === 0) { const d = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(); if (d) return d; }
                           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         });
-                        const tone = (stage as any).swatch ?? '#2f5488';
+                        // The stage's colours, derived from its colour in Settings >
+                        // Statuses and clamped for contrast (the same as the list's pills).
+                        const pal = statusPalette((stage as any).swatch ?? '#2f5488');
+                        // How many cards in the column are late (the red lane).
+                        const lateCount = stageLeads.reduce((n: number, l: any) => { const r = boardRowById.get(l.id); return n + (r && rowLane(r, listCtx).lane === 'red' ? 1 : 0); }, 0);
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
                         const stageHeadingId = `kanban-stage-${String(stage.key).replace(/[^a-z0-9_-]/gi, '_')}`;
@@ -4726,21 +4731,24 @@ export default function Dashboard() {
                           // Each column is a group named by its stage, so a card's
                           // stage is known to screen readers too (it was a flat run).
                           <div key={stage.key} role="group" aria-labelledby={stageHeadingId} className="w-72 flex-shrink-0 flex flex-col min-w-0">
-                            {/* Column header — tracked title, colored rule, serif total */}
-                            {/* min-h keeps every header the same height — a column
-                                with no total yet (e.g. New Enquiry) used to sit a
-                                couple of px higher than its neighbours. */}
-                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0 min-h-[34px]" style={{ borderBottom: `2px solid ${tone}` }}>
-                              {/* Stage colour shown as a dot + the underline, so the
-                                  label text can stay dark and readable — the raw
-                                  swatch colours (sky/amber/orange) only hit ~2:1 as
-                                  text on cream. */}
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
-                              <span id={stageHeadingId} role="heading" aria-level={2} className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
-                              <span className="font-sans text-[12px] font-bold" style={{ color: '#6e665c' }}><span className="sr-only">, </span>{stageLeads.length}<span className="sr-only"> {stageLeads.length === 1 ? 'enquiry' : 'enquiries'}</span></span>
+                            {/* Column header: a block in the stage's tint, its words in
+                                the stage's dark ink (the raw swatch colours only hit ~2:1
+                                as text on cream), a 3px rule underneath in its outline
+                                colour (a border, so forced colours keep it), the late
+                                count in red, and the serif total. min-h keeps every
+                                header the same height, with or without a total. */}
+                            <div className="flex items-center gap-2 pl-2.5 pr-3 mb-3 flex-shrink-0 min-h-[36px] rounded-[6px]"
+                              style={{ background: pal.tint, color: pal.ink, borderBottom: `3px solid ${pal.outline}` }}>
+                              <span id={stageHeadingId} role="heading" aria-level={2} className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]">{stage.label}</span>
+                              <span className="font-sans text-[12px] font-bold"><span className="sr-only">, </span>{stageLeads.length}<span className="sr-only"> {stageLeads.length === 1 ? 'enquiry' : 'enquiries'}</span></span>
+                              {lateCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-sans text-[11.5px] font-bold whitespace-nowrap" style={{ color: LANE_INK.red }}>
+                                  <LaneDot lane="red" size={7} />{lateCount} late
+                                </span>
+                              )}
                               <span className="flex-1" />
                               {stageTotalLabel && (
-                                <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
+                                <span className="font-serif text-[13px] font-semibold [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
                               )}
                             </div>
                             {/* Cards */}
