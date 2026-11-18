@@ -1214,13 +1214,16 @@ export default function Dashboard() {
   // "Select multiple" goes with its menu and More actions turns into CANCEL:
   // focus goes on to SELECT ALL (CANCEL when no rows are listed), not <body>.
   // CANCEL turns back into More actions, so focus goes there.
+  // SELECT ALL is the list header's box on the table, the bar's on cards.
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const headerSelectAllRef = useRef<HTMLInputElement>(null);
   const bulkCancelRef = useRef<HTMLButtonElement>(null);
   const bulkModeFocus = useRef(false);
   React.useLayoutEffect(() => {
     if (!bulkModeFocus.current) return;
     bulkModeFocus.current = false;
-    if (bulkSelectMode) (selectAllRef.current ?? bulkCancelRef.current)?.focus();
+    const shownBox = [headerSelectAllRef.current, selectAllRef.current].find(el => !!el && el.getClientRects().length > 0);
+    if (bulkSelectMode) (shownBox ?? bulkCancelRef.current)?.focus();
     else document.getElementById('leads-more-actions')?.focus();
   }, [bulkSelectMode]);
   // A selection is only ever of rows on screen (enquiryOrder is what the list
@@ -4549,8 +4552,9 @@ export default function Dashboard() {
                 )}
                 {/* Bulk select all bar: selects the rows the list shows (its own
                     tabs filter them too), not the wider filteredLeads. */}
+                {/* Cards only: on the table the header's box selects all. */}
                 {bulkSelectMode && !showWinBack && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
+                  <div className="@min-[768px]:hidden flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" ref={selectAllRef}
                         checked={allShownSelected(selectedLeadIds, enquiryOrder)}
@@ -4616,6 +4620,13 @@ export default function Dashboard() {
                         space: (id: number) => (spaces ?? []).find((sp: any) => Number(sp?.id) === id)?.name,
                         owner: (id: number) => teamById.get(id)?.name,
                       }}
+                      teamById={teamById}
+                      // Select multiple: a box on each row; on the table the
+                      // header's box is SELECT ALL.
+                      selectMode={bulkSelectMode}
+                      selectedIds={selectedLeadIds}
+                      onSelectedChange={setSelectedLeadIds}
+                      selectAllRef={headerSelectAllRef}
                     />
                   )
                 )}

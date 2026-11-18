@@ -114,7 +114,15 @@ describe("A. views", () => {
     const l = lead({ status: "contacted", eventDate: dateOnly(2026, 12, 1) });
     const r = rowsOf([l], { clash: [l.id] })[0];
     expect(r.signal.kind).toBe("clash");
+    expect(r.clash).toBe(true);
     expect(viewsOf(r)).toEqual(["open", "all"]);
+  });
+  it("8b. a clash on an enquiry waiting for a reply is still marked (the row's date line says so)", () => {
+    const l = lead({ status: "new", respondedAt: null, createdAt: ago(2 * HOUR), eventDate: dateOnly(2026, 12, 1) });
+    const r = rowsOf([l], { clash: [l.id] })[0];
+    expect(r.signal.kind).toBe("waiting");
+    expect(r.clash).toBe(true);
+    expect(one({ status: "contacted" }).clash).toBe(false);
   });
   it("9. event 3 days ago → date passed, still open", () => {
     const r = one({ status: "contacted", eventDate: ago(3 * DAY) });

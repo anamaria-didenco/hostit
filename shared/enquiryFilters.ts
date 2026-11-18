@@ -97,6 +97,8 @@ export interface ListRow {
   eventDay: string;
   /** The day the enquiry came in, in the venue's zone. */
   cameDay: string;
+  /** Its date and space are already taken (shown whatever the signal says). */
+  clash?: boolean;
 }
 
 export interface ListCtx {
@@ -364,7 +366,8 @@ export function enrichRows(
       eventDateMs: ev ? ev.getTime() : null,
     });
     const came = toDate(lead.createdAt);
-    out.push({ lead, signal, eventDay: eventDayOf(lead.eventDate, ctx.tz), cameDay: came ? dayKeyAt(came.getTime(), ctx.tz) : "" });
+    const clash = (ctx.clashMap?.[lead.id]?.length ?? 0) > 0;
+    out.push({ lead, signal, eventDay: eventDayOf(lead.eventDate, ctx.tz), cameDay: came ? dayKeyAt(came.getTime(), ctx.tz) : "", clash });
   }
   return out;
 }

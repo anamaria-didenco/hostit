@@ -1,18 +1,14 @@
 import React from "react";
+import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
-  Clock, Bell, Hourglass, CornerUpLeft, Send, ArrowRight, CalendarClock,
-  CircleDashed, AlertTriangle, CheckCircle2, MinusCircle, Check,
-} from "lucide-react";
-import { enquiryAction, type SignalTone } from "@shared/enquirySignal";
-import {
-  EMPTY_FILTERS, SORT_OPTIONS, VIEWS, activeCount, describeFilters, isChipOn, isSearching, effectiveView, listRows, quickChips,
-  sortToParam, sortFromParam, toggleChip, viewCounts, viewInfo,
-  type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip,
+  SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, describeFilters, isChipOn, isSearching,
+  effectiveView, listRows, quickChips, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
+  type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
 } from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
-import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
-import { leadDatePassed } from "@shared/followUp";
+import { allShownSelected } from "@shared/bulkSelection";
 import MovedNote from "@/components/MovedNote";
+import EnquiryRow, { ROW_GRID, ROW_GRID_SELECT, FROM_L, FROM_XL, TABLE_ONLY, CARDS_ONLY, fullName } from "@/components/EnquiryRow";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
@@ -21,6 +17,11 @@ import { useFocusKeeper } from "@/hooks/useFocusKeeper";
  * so the most urgent rises to the top, with Reply / Nudge and an inline quick
  * reply. The rows, counts, filters and sort all come from
  * shared/enquiryFilters.ts; the state lives in useEnquiryListState.
+ *
+ * Layout follows the width of the Enquiries column (the @container around
+ * the toolbar and this list), not the window's: a table from 768px (fewer
+ * columns below 992px, Came in from 1148px), two-line cards below 768px. So
+ * at 400% zoom the table turns into cards by itself.
  */
 
 export interface EnquiryListCProps {
@@ -35,6 +36,8 @@ export interface EnquiryListCProps {
   onSortChange: (s: ListSort) => void;
   venueName: string;
   statusInfo: (status: string | null | undefined) => { label: string; dot: string };
+  /** Owner initials on the rows. */
+  teamById?: Map<number, { name: string }>;
   onOpen: (lead: any) => void;
   onSend: (args: { lead: any; subject: string; body: string }) => void;
   sending?: boolean;
@@ -51,48 +54,12 @@ export interface EnquiryListCProps {
   undoPendingId?: number | null;
   /** Names for the empty state ("No confirmed enquiries match Space: Courtyard"). */
   labels?: ChipLabels;
-}
-
-const TONE: Record<SignalTone, { fg: string; bg: string }> = {
-  red: { fg: "#c0392b", bg: "#fbecea" },
-  amber: { fg: "#8a5f18", bg: "#f7efdd" },
-  blue: { fg: "#2f5488", bg: "#e8edf6" },
-  green: { fg: "#3f7350", bg: "#e8f0e6" },
-  gray: { fg: "#6a6256", bg: "#f4efe6" },
-};
-
-const HEX = /^#[0-9a-f]{6}$/i;
-/** A status colour (#rrggbb) at a given alpha, for a light fill. Falls back to
- *  transparent if the venue's swatch isn't a plain hex value. */
-function tint(hex: string, alpha: string): string {
-  return HEX.test(hex) ? `${hex}${alpha}` : "transparent";
-}
-
-/** When the enquiry came in, in venue time: "Mon 2 Nov, 9:14am". */
-function fmtCameIn(value: unknown): string {
-  const d = value ? new Date(value as any) : null;
-  if (!d || isNaN(d.getTime())) return "";
-  const day = d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" });
-  const time = d.toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" });
-  return `${day}, ${time}`;
-}
-
-const ICON: Record<string, React.ComponentType<any>> = {
-  "circle-check": CheckCircle2, "circle-minus": MinusCircle, "circle-dashed": CircleDashed,
-  "corner-up-left": CornerUpLeft, clock: Clock, bell: Bell, hourglass: Hourglass,
-  "calendar-clock": CalendarClock, "triangle-alert": AlertTriangle, "arrow-right": ArrowRight,
-  send: Send,
-};
-function Icon({ name, size = 13 }: { name: string; size?: number }) {
-  const C = ICON[name] ?? ArrowRight;
-  return <C style={{ width: size, height: size }} strokeWidth={2.2} aria-hidden />;
-}
-
-// "Sat, 27 Nov" this year; "Sat, 27 Nov 2027" otherwise — a date without its
-// year is ambiguous once enquiries run into next year.
-function fmtListDate(d: Date, nowMs: number): string {
-  const sameYear = d.getFullYear() === new Date(nowMs).getFullYear();
-  return d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  /** "Select multiple": a box on each row, and a select-all box in the header. */
+  selectMode?: boolean;
+  selectedIds?: ReadonlySet<number>;
+  onSelectedChange?: (ids: Set<number>) => void;
+  /** The header's select-all box (where focus goes on "Select multiple" on a table). */
+  selectAllRef?: React.Ref<HTMLInputElement>;
 }
 
 /** Resolve the simple placeholders a quick reply can fill client-side; leave
@@ -122,16 +89,42 @@ const QUICK_FOR: Record<string, string[]> = {
   followup: ["Proposal follow-up", "Checking in"],
 };
 
-// Only say something when there is something to say: "No budget given" on
-// every row was noise.
-function moneyRange(lead: any): string {
-  const b = budgetRangeLabel(lead.budgetRange);
-  return b ? `Budget ${b}` : "";
+/** A value that settles: the live count is announced once typing stops. */
+function useSettled<T>(value: T, ms: number): T {
+  const [v, setV] = React.useState(value);
+  React.useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+// The column header's sort buttons. Each says which way it sorts when on.
+const HEAD: { key: SortKey; label: string; cls?: string; right?: boolean }[] = [
+  { key: "name", label: "Name" },
+  { key: "urgent", label: "Needs" },
+  { key: "status", label: "Status" },
+  { key: "event", label: "Event date" },
+  { key: "guests", label: "Guests", cls: FROM_L, right: true },
+  { key: "space", label: "Space", cls: FROM_L },
+  { key: "came", label: "Came in", cls: FROM_XL },
+];
+function headPhrase(key: SortKey, dir: "asc" | "desc"): string {
+  const def = dir === SORT_DEFAULT_DIR[key];
+  switch (key) {
+    case "urgent": return "most urgent first";
+    case "name": case "space": return def ? "A to Z" : "Z to A";
+    case "status": return def ? "in pipeline order" : "in reverse pipeline order";
+    case "event": return dir === "asc" ? "soonest first" : "latest first";
+    case "guests": return dir === "desc" ? "most first" : "fewest first";
+    case "came": return dir === "desc" ? "newest first" : "oldest first";
+  }
 }
 
 export default function EnquiryListC(props: EnquiryListCProps) {
   const { rows: allRows, ctx, state, venueName, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
-  const nowMs = ctx.nowMs;
+  const selectMode = !!props.selectMode;
+  const selectedIds = props.selectedIds ?? NO_IDS;
   const [confirmClose, setConfirmClose] = React.useState(false);
   const [replyId, setReplyId] = React.useState<number | null>(null);
   const [tplName, setTplName] = React.useState<string>("");
@@ -152,6 +145,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const searching = isSearching(state);
   const view = effectiveView(state);
   const filtered = searching || activeCount(state.filters) > 0;
+  const today = todayKey(ctx);
   // The list as shown right now: a key for "the same list".
   const listKey = `${view}|${JSON.stringify(state.filters)}|${state.q.trim()}`;
   // A just-moved row keeps its place in the list it was moved from, even though
@@ -188,36 +182,71 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   React.useEffect(() => { setConfirmClose(false); }, [passedOnly, rows.length]);
 
   const { onRowsChange } = props;
-  const orderKey = rows.map((r) => r.lead.id).join(",");
+  const ids = React.useMemo(() => rows.map((r) => r.lead.id), [rows]);
+  const orderKey = ids.join(",");
   React.useEffect(() => {
-    onRowsChange?.(rows.map((r) => r.lead.id));
+    onRowsChange?.(ids);
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
   // focus on that row (or the next one) instead of dropping it to the page.
   // When the last one goes, the view it was on ("Needs reply 0").
   const rowsRef = React.useRef<HTMLDivElement>(null);
+  const deskTabRef = React.useRef<HTMLButtonElement | null>(null);
+  const gridTabRef = React.useRef<HTMLButtonElement | null>(null);
+  // The active view button, whichever layout shows (the focus keeper's fallback).
   const tabRef = React.useMemo(() => ({
-    get current() { return [deskTabRefShared.current, gridTabRefShared.current].find(el => !!el && el.getClientRects().length > 0) ?? null; },
+    get current() { return [deskTabRef.current, gridTabRef.current].find(el => !!el && el.getClientRects().length > 0) ?? null; },
   }), []);
-  const deskTabRefShared = React.useRef<HTMLButtonElement | null>(null);
-  const gridTabRefShared = React.useRef<HTMLButtonElement | null>(null);
   useFocusKeeper(rowsRef, tabRef);
 
   const sortValue = sortToParam(state.sort);
   const baseCounts = React.useMemo(() => viewCounts(allRows, EMPTY_FILTERS, "", ctx), [allRows, ctx]);
   const nFilters = activeCount(state.filters);
-  const summary = summaryText(view, state, rows.length, baseCounts[view]);
+  const shownCount = counts[view] ?? 0;
+  const totalCount = baseCounts[view] ?? 0;
+  const summary = summaryText(view, state, shownCount, totalCount);
+  // What a screen reader hears when the table's count changes (once typing stops).
+  const liveText = useSettled(props.loaded === false ? "" : liveCountText(view, state, shownCount, totalCount), 500);
   const chips = quickChips(view);
   // Open enquiries left past their date, and forms nobody finished: each gets
   // a one-line way in, so neither needs a tab of its own.
   const passedCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "date_passed").length, [allRows]);
   const partialCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "partial").length, [allRows]);
-  const pinnedOutside = new Set(result.pinnedOutside);
-  // The active view button, whichever layout shows (the focus keeper's fallback).
-  const deskTabRef = deskTabRefShared;
-  const gridTabRef = gridTabRefShared;
-  const clearFilters = () => props.onFiltersChange(f => ({ ...EMPTY_FILTERS, status: [], space: [], source: [], needs: [], type: [], guests: [], budget: [], lostReason: [], client: [] }));
+  const pinnedOutside = React.useMemo(() => new Set(result.pinnedOutside), [result.pinnedOutside]);
+  const clearAllFilters = () => props.onFiltersChange(() => clearFilters());
 
+  // ── Select multiple ───────────────────────────────────────────────────────
+  const { onSelectedChange } = props;
+  const anchorRef = React.useRef<number | null>(null);
+  React.useEffect(() => { if (!selectMode) anchorRef.current = null; }, [selectMode]);
+  const idsRef = React.useRef(ids);
+  idsRef.current = ids;
+  const selectedRef = React.useRef(selectedIds);
+  selectedRef.current = selectedIds;
+  const onSelect = React.useCallback((id: number, checked: boolean, shift: boolean) => {
+    const next = new Set(selectedRef.current);
+    const order = idsRef.current;
+    const a = anchorRef.current != null ? order.indexOf(anchorRef.current) : -1;
+    const b = order.indexOf(id);
+    // Shift: every row shown between the last box clicked and this one.
+    if (shift && a >= 0 && b >= 0) {
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) { if (checked) next.add(order[i]); else next.delete(order[i]); }
+    } else if (checked) next.add(id); else next.delete(id);
+    anchorRef.current = id;
+    onSelectedChange?.(next);
+  }, [onSelectedChange]);
+  const allSelected = allShownSelected(selectedIds, ids);
+  const someSelected = !allSelected && ids.some(id => selectedIds.has(id));
+  const headBoxRef = React.useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => { if (headBoxRef.current) headBoxRef.current.indeterminate = someSelected; });
+  const { selectAllRef } = props;
+  const setHeadBox = React.useCallback((el: HTMLInputElement | null) => {
+    headBoxRef.current = el;
+    if (typeof selectAllRef === "function") selectAllRef(el);
+    else if (selectAllRef) (selectAllRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+  }, [selectAllRef]);
+
+  // ── Quick reply ───────────────────────────────────────────────────────────
   const startReply = (row: ListRow) => {
     const names = QUICK_FOR[row.signal.group] ?? [];
     const tpl = STARTER_TEMPLATES.find((t) => t.name === names[0]) ?? STARTER_TEMPLATES[0];
@@ -243,21 +272,48 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     setReplyId(null); setDraft("");
   };
 
+  // Reply / Nudge: open (or close) the quick reply under the row.
+  const onAction = (e: React.MouseEvent, row: ListRow) => {
+    // detail 0 = Enter/Space (a click or tap has 1 or more).
+    focusReplyBox.current = e.detail === 0;
+    if (replyId === row.lead.id) setReplyId(null); else startReply(row);
+  };
+
+  // A view change closes an untouched quick reply; one with text stays open
+  // (its row is kept, "Not in this view · kept while you reply").
+  const pickView = (v: EnquiryView) => { props.onViewChange(v); if (keepReply == null) setReplyId(null); };
+
+  const sortSelect = (cls: string) => (
+    <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
+      aria-label="Sort"
+      className={`${cls} rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-semibold text-foreground`}>
+      {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+
+  // A header button: sort by it, or turn it round when it's already on.
+  const sortBy = (key: SortKey) => {
+    const on = state.sort.key === key;
+    if (on && key === "urgent") return;
+    const dir = on ? (state.sort.dir === "asc" ? "desc" : "asc") : SORT_DEFAULT_DIR[key];
+    props.onSortChange({ key, dir });
+  };
+
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
-      <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
+      <div className="px-4 md:px-6 pt-3 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
         {/* View row (wide): "Matching:" while filtering or searching (each
             count is then what that view would show), the six views, the
             view's one-click shortcuts, and Sort. */}
-        <div className="hidden @min-[720px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
+        <div className="hidden @min-[768px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
           {filtered && <span className="pb-2.5 pr-1 font-sans text-[12.5px] font-bold text-muted-foreground">Matching:</span>}
           <div role="group" aria-label="Enquiry views" className="flex items-end flex-wrap -mb-px">
             {VIEWS.map((t) => {
               const on = view === t.id;
               return (
-                <button key={t.id} ref={on ? deskTabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? deskTabRef : undefined} onClick={() => pickView(t.id)}
                   aria-pressed={on}
-                  className={`relative px-2 @min-[1100px]:px-2.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
+                  className={`relative px-2 @min-[1148px]:px-2.5 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
                   {/* Full-strength muted ink: the /70 count was 2.9:1, under AA. A 0 stays full strength too. */}
                   <span className={`ml-1.5 text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
@@ -272,23 +328,19 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             </div>
           )}
           <label className="ml-auto self-center inline-flex items-center gap-2 py-1 font-sans text-[13px] text-muted-foreground">
-            <span className="@max-[1099px]:sr-only">Sort</span>
-            <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
-              aria-label="Sort"
-              className="h-8 max-w-[11.5rem] rounded-[6px] border-[1.5px] border-input bg-card px-1.5 font-sans text-[13px] font-semibold text-foreground">
-              {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <span className="@max-[1147px]:sr-only">Sort</span>
+            {sortSelect("h-8 max-w-[11.5rem] px-1.5")}
           </label>
         </div>
 
         {/* Narrow: all six views in a 2×3 grid (nothing off-screen), the
             shortcuts, then a summary line with Sort. */}
-        <div className="@min-[720px]:hidden flex flex-col gap-2">
+        <div className={`${CARDS_ONLY} flex flex-col gap-2`}>
           <div role="group" aria-label="Enquiry views" className="grid grid-cols-3 @max-[359px]:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-1.5">
             {VIEWS.map((t) => {
               const on = view === t.id;
               return (
-                <button key={t.id} ref={on ? gridTabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? gridTabRef : undefined} onClick={() => pickView(t.id)}
                   aria-pressed={on}
                   className={`h-9 px-1 rounded-[7px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]" : "bg-card border-border text-foreground"}`}>
                   {t.short}<span className={`ml-1.5 text-xs font-extrabold ${on ? "text-primary-foreground" : "text-muted-foreground"}`}>{counts[t.id] ?? 0}</span>
@@ -308,23 +360,14 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             <div className="font-sans text-[13px] text-muted-foreground min-w-0" aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</div>
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground shrink-0">
               <span className="sr-only">Sort</span>
-              <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
-                aria-label="Sort"
-                className="h-9 max-w-[11rem] rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
-                {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              {sortSelect("h-9 max-w-[11rem] px-2")}
             </label>
           </div>
         </div>
 
-        {/* Wide summary (and the screen-reader announcement of the count). */}
-        <div className="hidden @min-[720px]:block -mt-1.5 font-sans text-[13px] text-muted-foreground" aria-live="polite" aria-atomic="true">
-          {props.loaded === false ? "" : summary}
-        </div>
-
         {/* Open view: enquiries still open after their date. */}
         {view === "open" && !passedOnly && passedCount > 0 && (
-          <div className="flex items-center gap-2 flex-wrap min-h-8 px-3 py-1 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
+          <div className="flex items-center gap-2 flex-wrap min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
             <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
             <span>{passedCount === 1 ? "1 open enquiry is" : `${passedCount} open enquiries are`} past their event date.</span>
             <button type="button" onClick={() => props.onFiltersChange(f => ({ ...f, needs: ["passed"] }))}
@@ -357,200 +400,148 @@ export default function EnquiryListC(props: EnquiryListCProps) {
           </div>
         )}
 
-        {/* Rows */}
-        <div ref={rowsRef} className="flex flex-col gap-2">
-          {rows.length === 0 ? (
+        {rows.length > 0 ? (
+          // One bordered block with hairlines between rows. overflow:clip (not
+          // hidden) rounds the corners without breaking the sticky header.
+          <div className="rounded-[7px] border border-border bg-card [overflow:clip]">
+            {/* Column header (table layouts): select-all in select mode, the
+                sort buttons, and the count, which is also the live region. */}
+            <div className={`${TABLE_ONLY} ${selectMode ? ROW_GRID_SELECT : ROW_GRID} sticky top-0 z-[2] h-8 pl-[15px] pr-3 border-b border-border bg-muted`}>
+              {selectMode && (
+                <label className="flex items-center justify-center h-8 cursor-pointer">
+                  <input type="checkbox" ref={setHeadBox} checked={allSelected}
+                    aria-label={`Select all ${ids.length} shown`}
+                    onChange={(e) => onSelectedChange?.(e.target.checked ? new Set(ids) : new Set())}
+                    className="w-4 h-4 accent-[var(--primary)] cursor-pointer" />
+                </label>
+              )}
+              <div role="group" aria-label="Sort enquiries" className="contents">
+                {HEAD.map(h => {
+                  const on = state.sort.key === h.key;
+                  const Arrow = h.key === "urgent" || state.sort.dir === "desc" ? ArrowDown : ArrowUp;
+                  return (
+                    <div key={h.key} className={`${h.cls ?? ""} min-w-0 ${h.right ? "text-right" : ""}`}>
+                      <button type="button" onClick={() => sortBy(h.key)}
+                        aria-label={on ? `${h.label}, sorted ${headPhrase(h.key, state.sort.dir)}` : `Sort by ${h.label.toLowerCase()}`}
+                        className={`inline-flex items-center gap-1 h-8 max-w-full font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap hover:text-foreground ${on ? "text-primary" : "text-muted-foreground"}`}>
+                        {h.label}
+                        {on && <Arrow className="w-3 h-3 shrink-0" strokeWidth={2.6} aria-hidden="true" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-end font-sans text-[12px] font-bold tabular-nums text-muted-foreground whitespace-nowrap">
+                <span aria-hidden="true">{props.loaded === false ? "" : shownCount === totalCount && !searching ? totalCount : `${shownCount} of ${totalCount}`}</span>
+                <span className="sr-only" aria-live="polite" aria-atomic="true">{liveText}</span>
+              </div>
+            </div>
+
+            {/* Rows: each child is one enquiry (the focus keeper counts on it). */}
+            <div ref={rowsRef}>
+              {rows.map((row, i) => {
+                const { lead } = row;
+                const replying = replyId === lead.id;
+                return (
+                  <EnquiryRow key={lead.id}
+                    row={row} ctx={ctx} today={today} statusInfo={statusInfo} teamById={props.teamById}
+                    divider={dividerAt.get(i) ?? null}
+                    onOpen={onOpen} onAction={onAction}
+                    replying={replying} keptForReply={pinnedOutside.has(lead.id)}
+                    selectMode={selectMode} selected={selectMode && selectedIds.has(lead.id)} onSelect={onSelect}>
+                    {/* "Moved to … · Undo" — shown in place of the row vanishing
+                        after its status was changed from the drawer. */}
+                    {movedRows?.[lead.id] && (
+                      <div className="pl-[15px] pr-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <MovedNote toLabel={statusInfo(movedRows[lead.id].to).label}
+                          onUndo={() => onUndoMove?.(lead.id)} busy={undoPendingId === lead.id} />
+                      </div>
+                    )}
+                    {replying && (
+                      <QuickReply panelRef={replyPanelRef} boxRef={replyBoxRef} lead={lead} group={row.signal.group}
+                        tplName={tplName} draft={draft} setDraft={setDraft} sending={sending}
+                        onPick={(tpl) => pickTemplate(lead, tpl)} onCancel={() => setReplyId(null)}
+                        onOpen={() => onOpen(lead)} onSend={() => doSend(lead)} />
+                    )}
+                  </EnquiryRow>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Nothing in the list: still the rows' element (empty), so the
+                focus keeper falls back to the view's tab. */}
+            <div ref={rowsRef} />
             <div className="py-12 px-4 text-center font-sans text-sm text-muted-foreground">
               {props.loaded === false ? "Loading…" : searching ? (
-                <>
-                  <p>No enquiry matches ‘{state.q.trim()}’{nFilters > 0 && result.hiddenByFilters > 0 ? " with your filters" : ""}. Search looks at names, email, phone, company, event type and space.</p>
-                </>
+                <p>No enquiry matches ‘{state.q.trim()}’{nFilters > 0 && result.hiddenByFilters > 0 ? " with your filters" : ""}. Search looks at names, email, phone, company, event type and space.</p>
               ) : nFilters > 0 ? (
                 <>
                   <p>{EMPTY_MATCH[view]} {describeFilters(state.filters, props.labels ?? {})}.</p>
-                  <button type="button" onClick={clearFilters} className="mt-3 h-9 px-3 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-bold text-foreground hover:border-primary">Clear filters</button>
+                  <button type="button" onClick={clearAllFilters} className="mt-3 h-9 px-3 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-bold text-foreground hover:border-primary">Clear filters</button>
                 </>
               ) : viewInfo(view).empty}
             </div>
-          ) : rows.map((row, i) => {
-            const { lead, signal } = row;
-            const divider = dividerAt.get(i);
-            const tone = TONE[signal.tone];
-            const action = enquiryAction(signal.group);
-            const si = statusInfo(lead.status);
-            const replying = replyId === lead.id;
-            const dateClash = signal.kind === "clash";
-            const dateStr = lead.eventDate
-              ? fmtListDate(new Date(lead.eventDate), nowMs)
-              : (lead as any).dateFlexible ? "Date TBC" : "No date";
-            const whenStr = [
-              lead.eventDate ? new Date(lead.eventDate).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : null,
-              lead.guestCount ? `${lead.guestCount} guests` : null,
-              dateClash ? "date clash" : null,
-            ].filter(Boolean).join(" · ");
-            const sub = [lead.company, lead.eventType, eventFormatLabel((lead as any).eventFormat)].filter(Boolean).join(" · ");
-            const onAction = (e: React.MouseEvent) => {
-              e.stopPropagation();
-              // detail 0 = Enter/Space (a click or tap has 1 or more).
-              focusReplyBox.current = e.detail === 0;
-              if (action.reply) { replying ? setReplyId(null) : startReply(row); } else onOpen(lead);
-            };
-
-            return (
-              <div key={lead.id}>
-              {divider && (
-                <div role="heading" aria-level={3} className="pt-2 pb-1 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                  {divider.label} · {divider.count}
-                </div>
-              )}
-              <div className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
-                style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
-                {/* The whole box is filled with the enquiry's status colour: a
-                    light tint, with a solid border in the same colour. A brand-new
-                    enquiry is the one that needs you, so its tint is the strongest. */}
-                {/* Desktop: one dense signal-first row. A click anywhere opens
-                    it; for the keyboard the name is the button, so Reply isn't
-                    nested inside another button (Enter on Reply used to open
-                    the drawer too). */}
-                <div onClick={() => onOpen(lead)}
-                  className="hidden md:grid gap-4 items-center px-3.5 py-3 cursor-pointer hover:brightness-[0.97] md:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_104px] lg:grid-cols-[176px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_104px]">
-                  {/* Fixed-width signal and action columns, so the name and date
-                      columns line up from row to row whatever the chip says. */}
-                  <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-xs font-bold whitespace-nowrap justify-self-start max-w-full overflow-hidden text-ellipsis"
-                    style={{ background: tone.bg, color: tone.fg }}>
-                    <Icon name={signal.icon} />{signal.text}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 min-w-0">
-                      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(lead); }}
-                        className="min-w-0 truncate text-left font-serif text-[16.5px] font-semibold">
-                      <span className="font-serif text-[16.5px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
-                      </button>
-                      {/* Status in plain ink: the dot carries the status colour; the
-                          chip on the left already carries the urgency colour. */}
-                      <span className="inline-flex items-center gap-1.5 font-sans text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
-                      </span>
-                    </div>
-                    {sub && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5 whitespace-nowrap">Came in {fmtCameIn(lead.createdAt)}</div>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-serif text-[15px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
-                    {whenStr && <div className="font-sans text-[13px] text-muted-foreground truncate mt-0.5">{whenStr}</div>}
-                  </div>
-                  <div className="min-w-0 hidden lg:block">
-                    <div className="font-sans text-[13px] text-muted-foreground whitespace-nowrap">{moneyRange(lead)}</div>
-                  </div>
-                  <button onClick={onAction}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 w-full px-3 rounded-[6px] font-sans text-[13px] font-bold whitespace-nowrap border-[1.5px] transition-colors hover:border-primary"
-                    aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
-                    style={action.primary
-                      ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
-                      : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                    <Icon name={action.icon} size={14} />{action.label}
-                  </button>
-                </div>
-
-                {/* Mobile: a stacked card — signal + budget, then name, sub, then date + action */}
-                <div className="md:hidden">
-                  <div onClick={() => onOpen(lead)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onOpen(lead); } }}
-                    className="px-3.5 pt-3 pb-2.5 cursor-pointer">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 font-sans text-[12px] font-bold whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
-                        style={{ background: tone.bg, color: tone.fg }}>
-                        <Icon name={signal.icon} />{signal.text}
-                      </span>
-                      <span className="font-sans text-[12px] text-muted-foreground whitespace-nowrap flex-shrink-0">{budgetRangeLabel(lead.budgetRange) ?? ""}</span>
-                    </div>
-                    <div className="mt-2 flex items-baseline gap-2 min-w-0">
-                      <span className="font-serif text-[19px] font-semibold truncate" style={{ color: "#211d18" }}>{lead.firstName} {lead.lastName}</span>
-                      <span className="inline-flex items-center gap-1.5 font-sans text-[12px] font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: si.dot }} />{si.label}
-                      </span>
-                    </div>
-                    {sub && <div className="font-sans text-[13.5px] text-muted-foreground truncate mt-0.5">{sub}</div>}
-                    <div className="font-sans text-[12.5px] font-semibold text-foreground/80 mt-0.5">Came in {fmtCameIn(lead.createdAt)}</div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2.5 px-3.5 pb-2.5 pt-2 border-t" style={{ borderColor: "var(--vf-hair, #eee6d8)" }}>
-                    <div onClick={() => onOpen(lead)} className="min-w-0 cursor-pointer">
-                      <div className="font-serif text-[15.5px] font-semibold whitespace-nowrap" style={{ color: dateClash ? "#c0392b" : !lead.eventDate ? "#6b4710" : "var(--foreground)" }}>{dateStr}</div>
-                      {whenStr && <div className="font-sans text-[12px] text-muted-foreground truncate">{whenStr}</div>}
-                    </div>
-                    <button onClick={onAction}
-                      className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[6px] font-sans text-[14px] font-bold whitespace-nowrap border-[1.5px] flex-shrink-0"
-                      aria-label={`${action.label}${action.label === "Reply" ? " to" : ""} ${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()}
-                      style={action.primary
-                        ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
-                        : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                      <Icon name={action.icon} size={16} />{action.label}
-                    </button>
-                  </div>
-                </div>
-
-                {/* "Moved to … · Undo" — shown in place of the row vanishing
-                    after its status was changed from the drawer. */}
-                {movedRows?.[lead.id] && (
-                  <div className="px-3.5 pb-2.5" onClick={(e) => e.stopPropagation()}>
-                    <MovedNote toLabel={statusInfo(movedRows[lead.id].to).label}
-                      onUndo={() => onUndoMove?.(lead.id)} busy={undoPendingId === lead.id} />
-                  </div>
-                )}
-
-                {/* Inline quick reply */}
-                {replying && (
-                  <div ref={replyPanelRef} className="border-t px-3.5 pt-3 pb-3.5" style={{ borderColor: "var(--vf-hair, #eee6d8)", background: "#fff" }}>
-                    <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                      <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
-                      {(QUICK_FOR[signal.group] ?? []).map((name) => {
-                        const on = tplName === name;
-                        const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
-                        if (!tpl) return null;
-                        return (
-                          <button key={name} aria-pressed={on} onClick={() => pickTemplate(lead, tpl)}
-                            className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
-                            style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
-                            {name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <textarea ref={replyBoxRef} aria-label={`Reply to ${[lead.firstName, lead.lastName].filter(Boolean).join(" ")}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
-                      className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
-                      style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
-                    <div className="mt-2 flex items-center justify-end gap-2">
-                      <button onClick={() => setReplyId(null)} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
-                      <button onClick={() => onOpen(lead)} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px]" style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }}>Open enquiry</button>
-                      <button onClick={() => doSend(lead)} disabled={sending || !draft.trim()}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-bold disabled:opacity-50"
-                        style={{ background: "var(--primary)", color: "#fff" }}>
-                        <Send style={{ width: 14, height: 14 }} />{sending ? "Sending…" : "Send"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              </div>
-            );
-          })}
-        </div>
+          </>
+        )}
 
         {/* While searching: matches the filters hide, one click away. */}
         {searching && nFilters > 0 && result.hiddenByFilters > 0 && (
           <p className="font-sans text-[13px] text-muted-foreground">
             {result.hiddenByFilters} more match{result.hiddenByFilters === 1 ? "es" : ""} but {result.hiddenByFilters === 1 ? "is" : "are"} hidden by your filters.{" "}
-            <button type="button" onClick={clearFilters} className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
+            <button type="button" onClick={clearAllFilters} className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
           </p>
         )}
         {/* Needs reply: forms people started but never sent. */}
         {view === "reply" && !searching && partialCount > 0 && (
           <p className="font-sans text-[13px] text-muted-foreground">
             {partialCount === 1 ? "1 person" : `${partialCount} people`} started the form but didn't finish.{" "}
-            <button type="button" onClick={() => { props.onViewChange("open"); props.onFiltersChange(() => ({ ...EMPTY_FILTERS, status: [], space: [], source: [], type: [], guests: [], budget: [], lostReason: [], client: [], needs: ["partial"] })); }}
+            <button type="button" onClick={() => { props.onViewChange("open"); props.onFiltersChange(() => ({ ...clearFilters(), needs: ["partial"] })); }}
               className="font-bold text-primary underline underline-offset-[3px]">Show them</button>
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+const NO_IDS: ReadonlySet<number> = new Set();
+
+/** The inline quick reply under a row: template chips, the text, Send. */
+function QuickReply({ panelRef, boxRef, lead, group, tplName, draft, setDraft, sending, onPick, onCancel, onOpen, onSend }: {
+  panelRef: React.Ref<HTMLDivElement>; boxRef: React.Ref<HTMLTextAreaElement>; lead: any; group: string;
+  tplName: string; draft: string; setDraft: (s: string) => void; sending?: boolean;
+  onPick: (tpl: (typeof STARTER_TEMPLATES)[number]) => void; onCancel: () => void; onOpen: () => void; onSend: () => void;
+}) {
+  return (
+    <div ref={panelRef} className="border-t border-border pl-[15px] pr-3 pt-3 pb-3.5 bg-card" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mr-1">Quick reply to {lead.firstName}</span>
+        {(QUICK_FOR[group] ?? []).map((name) => {
+          const on = tplName === name;
+          const tpl = STARTER_TEMPLATES.find((t) => t.name === name);
+          if (!tpl) return null;
+          return (
+            <button key={name} aria-pressed={on} onClick={() => onPick(tpl)}
+              className="h-[26px] px-2.5 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px] transition-colors"
+              style={on ? { background: "var(--accent)", borderColor: "var(--primary)", color: "var(--primary)" } : { background: "var(--card)", borderColor: "var(--input)", color: "var(--foreground)" }}>
+              {name}
+            </button>
+          );
+        })}
+      </div>
+      <textarea ref={boxRef} aria-label={`Reply to ${fullName(lead)}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={6}
+        className="w-full resize-y rounded-[4px] border-[1.5px] px-3 py-2.5 font-sans text-[13px] leading-relaxed outline-none focus:border-primary"
+        style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }} />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button onClick={onCancel} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
+        <button onClick={onOpen} className="h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-semibold border-[1.5px]" style={{ borderColor: "var(--input)", background: "var(--card)", color: "var(--foreground)" }}>Open enquiry</button>
+        <button onClick={onSend} disabled={sending || !draft.trim()}
+          className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[4px] font-sans text-[12px] font-bold disabled:opacity-50"
+          style={{ background: "var(--primary)", color: "#fff" }}>
+          <Send style={{ width: 14, height: 14 }} />{sending ? "Sending…" : "Send"}
+        </button>
       </div>
     </div>
   );
@@ -578,6 +569,10 @@ const EMPTY_MATCH: Record<EnquiryView, string> = {
 const NOUN: Record<EnquiryView, string> = {
   reply: "waiting on you", followup: "follow-ups due", open: "open", confirmed: "confirmed", closed: "closed", all: "enquiries",
 };
+const NOUN_LONG: Record<EnquiryView, string> = {
+  reply: "enquiries waiting on a reply", followup: "follow-ups due", open: "open enquiries",
+  confirmed: "confirmed enquiries", closed: "closed enquiries", all: "enquiries",
+};
 function sortPhrase(view: EnquiryView, s: ListSort): string {
   switch (s.key) {
     case "urgent": return view === "reply" ? "longest first" : view === "followup" ? "most overdue first" : "most urgent first";
@@ -594,4 +589,10 @@ export function summaryText(view: EnquiryView, state: ListState, shown: number, 
   if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’ · ${sortPhrase(view, state.sort)}`;
   if (activeCount(state.filters) > 0) return `Showing ${shown} of ${total} ${NOUN[view]}`;
   return `${shown} ${NOUN[view]} · ${sortPhrase(view, state.sort)}`;
+}
+/** "92 of 98 open enquiries shown. Sorted soonest event first." */
+function liveCountText(view: EnquiryView, state: ListState, shown: number, total: number): string {
+  const sorted = `Sorted ${sortPhrase(view, state.sort)}.`;
+  if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’. ${sorted}`;
+  return `${shown === total ? shown : `${shown} of ${total}`} ${NOUN_LONG[view]} shown. ${sorted}`;
 }
