@@ -4,7 +4,7 @@
  * Skipped without DATABASE_URL; cleans up after itself.
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
@@ -65,5 +65,36 @@ describe.skipIf(!HAS_DB)("daily checklists: edit the list, reorder items (DB)", 
     // Another venue can't reorder it.
     await expect(b.dailyChecklists.reorderItems({ checklistId: cl.id, ids: [two.id, one.id] })).rejects.toThrow();
     expect((await a.dailyChecklists.get({ id: cl.id }))?.items.map(i => i.text)).toEqual(["Three", "One", "Two", "Four"]);
+  });
+
+  it("two quick moves end in the order of the last one, even when the first is held up", async () => {
+    const db = (await getDb())!;
+    const cl = await a.dailyChecklists.create({ name: "Quick moves" });
+    const ids: number[] = [];
+    for (const [i, text] of ["One", "Two", "Three", "Four"].entries()) {
+      ids.push((await a.dailyChecklists.addItem({ checklistId: cl.id, text, sortOrder: i })).id);
+    }
+    const [one, two, three, four] = ids;
+    await a.dailyChecklists.reorderItems({ checklistId: cl.id, ids: [two, three, four, one] });
+
+    // Something else has Three's row for a moment, so the first move waits.
+    let release!: () => void;
+    let isHeld!: () => void;
+    const held = new Promise<void>(r => { isHeld = r; });
+    const holder = db.transaction(async tx => {
+      await tx.select({ id: dailyChecklistItems.id }).from(dailyChecklistItems).where(eq(dailyChecklistItems.id, three)).for("update");
+      isHeld();
+      await new Promise<void>(r => { release = r; });
+    });
+    await held;
+    const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+    // Move Three up (Three, Two, …), then straight back down (Two, Three, …).
+    const first = a.dailyChecklists.reorderItems({ checklistId: cl.id, ids: [three, two, four, one] });
+    await pause(200);
+    const last = a.dailyChecklists.reorderItems({ checklistId: cl.id, ids: [two, three, four, one] });
+    await pause(200);
+    release();
+    await Promise.all([holder, first, last]);
+    expect((await a.dailyChecklists.get({ id: cl.id }))?.items.map(i => i.text)).toEqual(["Two", "Three", "Four", "One"]);
   });
 });

@@ -143,8 +143,12 @@ export default function DailyChecklists() {
   // ─── Move items up / down ─────────────────────────────────────────────────
   const utils = trpc.useUtils();
   const [moveNote, setMoveNote] = useState("");
+  // Reload the list once the last of several quick moves is saved, not after
+  // each one (an earlier one's reload would show the item jump back).
+  const movesInFlight = useRef(0);
   const reorderMut = trpc.dailyChecklists.reorderItems.useMutation({
-    onSettled: () => refetchExpanded(),
+    onMutate: () => { movesInFlight.current += 1; },
+    onSettled: () => { movesInFlight.current -= 1; if (movesInFlight.current === 0) refetchExpanded(); },
     onError: () => toast.error("Couldn't move the item — please try again."),
   });
   function moveItem(checklistId: number, itemId: number, delta: -1 | 1) {

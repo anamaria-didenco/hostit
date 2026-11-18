@@ -10012,12 +10012,19 @@ Return ONLY valid JSON.`;
         const { assertAllOwned } = await import('./ownership');
         await assertAllOwned({ dailyChecklist: input.checklistId }, ctx.user.id);
         const { getDb } = await import('./db');
-        const { dailyChecklistItems } = await import('../drizzle/schema');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq, and, asc } = await import('drizzle-orm');
         const { applyOrder } = await import('@shared/listOrder');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         await db.transaction(async (tx) => {
+          // One reorder of a list at a time: Move down then Move up tapped
+          // quickly must end in the order of the last tap. Without this the
+          // second could read the rows before the first had written them,
+          // skip them as already in place, and finish first.
+          await tx.select({ id: dailyChecklists.id }).from(dailyChecklists)
+            .where(and(eq(dailyChecklists.id, input.checklistId), eq(dailyChecklists.ownerId, ctx.user.id)))
+            .for('update');
           const rows = await tx.select({ id: dailyChecklistItems.id, sortOrder: dailyChecklistItems.sortOrder })
             .from(dailyChecklistItems)
             .where(and(eq(dailyChecklistItems.checklistId, input.checklistId), eq(dailyChecklistItems.ownerId, ctx.user.id)))
