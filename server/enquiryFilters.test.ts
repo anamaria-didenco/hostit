@@ -910,6 +910,42 @@ describe("L. kept rows and the opening view", () => {
     expect(fewAfter.rows.map(r => r.lead.id)).toEqual([300, 310, 320, 330]);
     expect(heads(fewAfter)).toEqual(["No date yet · 1 @3"]);
   });
+  it("while searching, a moved row stays in the search group it was in", () => {
+    const waiting = { status: "new", respondedAt: null } as const;
+    const leads = [
+      lead({ id: 601, ...waiting, createdAt: ago(3 * DAY) }), lead({ id: 602, ...waiting, createdAt: ago(DAY) }),
+      lead({ id: 611, status: "proposal_sent", followUpDate: ago(3 * DAY) }), lead({ id: 612, status: "proposal_sent", followUpDate: ago(DAY) }),
+      lead({ id: 621, eventDate: dateOnly(2026, 12, 4) }), lead({ id: 622, eventDate: dateOnly(2026, 12, 8) }), lead({ id: 623, eventDate: dateOnly(2026, 12, 12) }),
+      lead({ id: 631, status: "booked", eventDate: dateOnly(2026, 12, 2) }), lead({ id: 632, status: "booked", eventDate: dateOnly(2026, 12, 6) }),
+      lead({ id: 641, status: "lost", lostReason: "price" }),
+    ];
+    const search = state({ q: "example.test" });
+    const before = listRows(rowsOf(leads), search, ctx);
+    const ids = before.rows.map(r => r.lead.id);
+    expect(heads(before)).toEqual(["Needs reply · 2 @0", "Follow-up due · 2 @2", "In progress · 3 @4", "Confirmed · 2 @7", "Closed · 1 @9"]);
+    expect(before.groups.slice(3, 6)).toEqual(["followup", "progress", "progress"]);
+    // The first, a middle and the last row of In progress, moved to Lost: each stays under In progress, in place.
+    for (const id of [ids[4], ids[5], ids[6]]) {
+      const res = move(leads, search, [id]).res;
+      expect(res.rows.map(r => r.lead.id)).toEqual(ids);
+      // (Counts are of the rows that belong: the moved one counts nowhere until the list lets it go.)
+      expect(heads(res)).toEqual(["Needs reply · 2 @0", "Follow-up due · 2 @2", "In progress · 2 @4", "Confirmed · 2 @7", "Closed · 1 @9"]);
+      expect(under(res).get(id)).toBe("In progress");
+    }
+    // The first Confirmed one, cancelled: still under Confirmed, not at the end of In progress.
+    const conf = move(leads, search, [ids[7]], { status: "cancelled" }).res;
+    expect(under(conf).get(ids[7])).toBe("Confirmed");
+    expect(conf.rows.map(r => r.lead.id)).toEqual(ids);
+    // The only closed one, reopened: Closed keeps its heading, counting none.
+    const reopened = move(leads, search, [641], { status: "contacted", lostReason: null }).res;
+    expect(heads(reopened)).toEqual(["Needs reply · 2 @0", "Follow-up due · 2 @2", "In progress · 3 @4", "Confirmed · 2 @7", "Closed · 0 @9"]);
+    expect(reopened.rows.map(r => r.lead.id)).toEqual(ids);
+    // Answering the first one waiting on a reply, then a new enquiry arriving: it stays under Needs reply.
+    const answered = move(leads, search, [ids[0]], { status: "contacted", respondedAt: ago(0) });
+    const arrived = answered.again([...answered.leads, lead({ id: 650, ...waiting, createdAt: ago(HOUR) })]);
+    expect(under(arrived).get(ids[0])).toBe("Needs reply");
+    expect(heads(arrived)[0]).toBe("Needs reply · 2 @0");
+  });
   it("a row kept after a status change goes when the sort changes, as when the view, filters or search do", () => {
     const base = state({ view: "open", sort: { key: "event", dir: "asc" } });
     const key = shownListKey(base);

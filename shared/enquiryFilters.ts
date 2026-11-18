@@ -615,7 +615,7 @@ export interface ListDivider {
   label: string;
   /** Rows that belong under it (rows kept after a status change not counted). */
   count: number;
-  /** The group: a month ("2026-12"), "none" or "past" when sorted by event date. */
+  /** The group: a month ("2026-12"), "none" or "past" when sorted by event date; a search group ("progress") while searching. */
   key: string;
   /** A shared month heading ("February – July 2027"): its last month in list order. */
   until?: string;
@@ -771,6 +771,12 @@ export function listRows(
       dividers.push({ at: out.length, label: p.label, count: group.length, key: p.id });
       out.push(...group);
     });
+    // A search group is kept while searching: a row moved out of "In
+    // progress" stays under it, though its new status files it elsewhere.
+    const pileAt = (key: string) => PILES.findIndex(p => p.id === key);
+    groupKey = r => PILES[pileOf(r)]?.id ?? null;
+    groupBefore = (a, b) => pileAt(a) < pileAt(b);
+    headFor = key => { const p = PILES[pileAt(key)]; return p ? { at: 0, label: p.label, count: 0, key } : null; };
   } else {
     out = shown.sort(cmp);
     if (s.sort.key === "event") {
