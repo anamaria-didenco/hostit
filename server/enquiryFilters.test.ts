@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, clearFacet, clearFilters, compareRows, dayKeyRange,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, boardRows, clearFacet, clearFilters, compareRows, dayKeyRange,
   defaultView, enrichRows, facetCounts, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
   quickChips, rowDatePassed, rowNeeds, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow, type ListState,
@@ -580,5 +580,25 @@ describe("L. kept rows and the opening view", () => {
     expect(defaultView({ ...c, reply: 2, followup: 3 })).toBe("reply");
     expect(defaultView({ ...c, followup: 3 })).toBe("followup");
     expect(defaultView(c)).toBe("open");
+  });
+});
+
+describe("M. the Board", () => {
+  const rows = fixture();
+  const ids = (r: ListRow[]) => r.map(x => x.lead.id).sort((a, b) => a - b);
+  it("shows every enquiry when nothing is filtered (the columns sort them by status)", () => {
+    expect(boardRows(rows, { filters: clearFilters(), q: "" }, ctx)).toHaveLength(rows.length);
+  });
+  it("ignores the Status filter (the columns are the statuses) but applies the others", () => {
+    const f = withF({ status: ["booked"], date: { preset: "this_month" } });
+    const got = ids(boardRows(rows, { filters: f, q: "" }, ctx));
+    expect(got).toEqual(ids(rows.filter(r => r.eventDay >= "2026-11-01" && r.eventDay <= "2026-11-30")));
+    expect(got).toContain(101); // a New Enquiry in November, though Status says Confirmed
+  });
+  it("search reaches every status, lost ones included", () => {
+    const got = boardRows(rows, { filters: clearFilters(), q: "Evans" }, ctx);
+    expect(got.map(r => r.lead.id)).toEqual([101]);
+    const lost = boardRows(rows, { filters: clearFilters(), q: "example.test" }, ctx).filter(r => r.lead.status === "lost");
+    expect(lost.map(r => r.lead.id).sort()).toEqual([115, 118]);
   });
 });

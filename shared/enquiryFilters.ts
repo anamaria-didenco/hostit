@@ -678,6 +678,16 @@ export function listRows(
   return { rows: out, dividers, hiddenByFilters, pinnedOutside };
 }
 
+/**
+ * The Board's cards: every enquiry the search and the filters let through,
+ * whatever the view. Status is left out: the Board's columns are the statuses.
+ */
+export function boardRows(rows: readonly ListRow[], s: Pick<ListState, "filters" | "q">, ctx: ListCtx): ListRow[] {
+  const q = s.q.trim();
+  const today = todayKey(ctx);
+  return rows.filter(r => (!q || leadMatchesSearch(r.lead as any, q)) && matchesExcept(r, s.filters, ctx, today, "status"));
+}
+
 export function viewCounts(rows: readonly ListRow[], filters: EnquiryFilters, q: string, ctx: ListCtx): Record<EnquiryView, number> {
   const out: Record<EnquiryView, number> = { reply: 0, followup: 0, open: 0, confirmed: 0, closed: 0, all: 0 };
   const today = todayKey(ctx);

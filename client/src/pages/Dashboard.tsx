@@ -98,9 +98,10 @@ import MovedNote from "@/components/MovedNote";
 import { useNow } from "@/hooks/useNow";
 import { useEnquiryListState } from "@/hooks/useEnquiryListState";
 import {
-  EMPTY_FILTERS, LIST_PARAM_KEYS, effectiveView, enrichRows, listRows, viewCounts, viewDefaultSort,
-  type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx,
+  EMPTY_FILTERS, LIST_PARAM_KEYS, activeCount, boardRows, effectiveView, enrichRows, listRows, rowNeeds, viewCounts, viewDefaultSort,
+  type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow,
 } from "@shared/enquiryFilters";
+import { ROW_INK, Icon as RowIcon } from "@/components/EnquiryRow";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
@@ -3556,6 +3557,26 @@ export default function Dashboard() {
     () => viewCounts(enquiryRows, listState.filters, listState.q, listCtx)[effectiveView(listState)],
     [enquiryRows, listState, listCtx],
   );
+  // The Board: every enquiry the search and filters (not Status) let through.
+  const boardRowById = React.useMemo(() => {
+    const m = new Map<number, ListRow>();
+    if (leadViewMode !== "kanban") return m;
+    for (const r of boardRows(enquiryRows, listState, listCtx)) m.set(r.lead.id, r);
+    return m;
+  }, [leadViewMode, enquiryRows, listState, listCtx]);
+  const boardNarrowed = !!listState.q.trim() || activeCount({ ...listState.filters, status: [] }) > 0;
+  // Matches in columns the Board isn't showing (Lost and Cancelled, unless shown).
+  const boardHidden = React.useMemo(() => {
+    const shownKeys = new Set(kanbanStages.map(st => st.key));
+    const byStage = new Map<string, number>();
+    for (const r of boardRowById.values()) {
+      const k = String(r.lead.status ?? '');
+      if (!shownKeys.has(k)) byStage.set(k, (byStage.get(k) ?? 0) + 1);
+    }
+    const labels = Array.from(byStage.keys()).map(k => getStatusInfo(k).label);
+    return { total: Array.from(byStage.values()).reduce((a, b) => a + b, 0), labels };
+  }, [boardRowById, kanbanStages]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boardShownCount = boardRowById.size - boardHidden.total;
   // Needs reply in "most urgent" order, for the Overview card.
   const replyRows = React.useMemo(
     () => listRows(enquiryRows, { view: "reply", filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort("reply") }, listCtx).rows,
@@ -4532,10 +4553,12 @@ export default function Dashboard() {
                 </div>
 
                 {/* Row 2: search and filters (not in Win back). Each filter you
-                    pick stays on screen as a chip with its own ×. */}
-                {leadViewMode !== "kanban" && !showWinBack && (
+                    pick stays on screen as a chip with its own ×. The Board
+                    has the same row without Status (its columns are the
+                    statuses). */}
+                {(leadViewMode === "kanban" || !showWinBack) && (
                   <EnquiryFilterBar
-                    mode="list"
+                    mode={leadViewMode === "kanban" ? "board" : "list"}
                     rows={enquiryRows}
                     ctx={listCtx}
                     state={listState}
@@ -4544,7 +4567,7 @@ export default function Dashboard() {
                     statuses={pipelineStages}
                     spaces={(spaces ?? []).filter((sp: any) => sp?.id != null).map((sp: any) => ({ id: Number(sp.id), name: String(sp.name ?? '') }))}
                     team={(teamList ?? []).map((m: any) => ({ id: Number(m.id), name: String(m.name ?? '') }))}
-                    shownCount={listShownCount}
+                    shownCount={leadViewMode === "kanban" ? boardShownCount : listShownCount}
                   />
                 )}
                 {listState.q.trim() && !isStaff && leadViewMode !== "kanban" && !showWinBack && (
@@ -4638,20 +4661,30 @@ export default function Dashboard() {
                       Confirmed/Lost sat off-screen with nothing hinting they
                       exist. The fade sits over the 24px right padding. */}
                   <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10 bg-gradient-to-l from-background to-transparent" />
+                  {/* A search reaches every status: say when some of what it
+                      found is in a column that isn't showing. */}
+                  {listState.q.trim() && boardHidden.total > 0 && (
+                    <p className="px-6 pt-3 font-sans text-[13px] text-muted-foreground bg-background">
+                      {boardHidden.total} match{boardHidden.total === 1 ? '' : 'es'} in {boardHidden.labels.join(' and ')}{' · '}
+                      {kanbanStagePrefs ? (
+                        <button type="button" onClick={() => setKanbanSettingsOpen(true)} className="font-bold text-primary underline underline-offset-[3px]">Show columns</button>
+                      ) : (
+                        <button type="button" onClick={() => setShowClosedStages(true)} className="font-bold text-primary underline underline-offset-[3px]">Show lost</button>
+                      )}
+                    </p>
+                  )}
                   <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
-                        // The board shows the WHOLE pipeline grouped by stage —
-                        // not the list view's new/all subtab, search, partial,
-                        // follow-up or date filters (none of which have a
-                        // control in board mode). Using filteredLeads here left
-                        // the board showing only the active subset (e.g. just
-                        // "new" leads), so most columns looked empty.
+                        // The board shows the whole pipeline grouped by stage,
+                        // not the list's views: only the search and the filters
+                        // in the row above narrow it (boardRowById), so its
+                        // column counts and totals are of what is shown.
                         // "Needs you first": overdue follow-ups, then upcoming events by
                         // date, then undated, then past; newest enquiry breaks ties.
                         const nowTs = Date.now();
                         const needsYou = (l: any) => leadFollowUpState(l, nowTs).reason === 'overdue';
-                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key).sort((a: any, b: any) => {
+                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key && boardRowById.has(l.id)).sort((a: any, b: any) => {
                           const oa = needsYou(a) ? 0 : 1, ob = needsYou(b) ? 0 : 1;
                           if (oa !== ob) return oa - ob;
                           // upcoming (soonest first) → undated → already past
@@ -4690,7 +4723,9 @@ export default function Dashboard() {
                             <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                const fuReason = leadFollowUpState(lead, nowTs).reason;
+                                // The same words as the list's Needs column.
+                                const boardRow = boardRowById.get(lead.id);
+                                const needs = boardRow ? rowNeeds(boardRow, listCtx) : null;
                                 return (
                                   <button key={lead.id}
                                     onClick={() => openEventDrawer({ ...lead, _isLead: true })}
@@ -4727,21 +4762,15 @@ export default function Dashboard() {
                                         ) : null}
                                       </div>
                                     )}
-                                    {/* Footer — serif value + age / overdue flag */}
-                                    {/* Footer — value (only when there is one) + age / overdue flag.
-                                        An em dash on every card without a value was noise. */}
+                                    {/* Footer — value (only when there is one), then what the
+                                        enquiry needs, in the list's words ("Waiting 6d 13h"),
+                                        so the Board and the list never disagree. */}
                                     <div className="flex items-baseline justify-between gap-2 pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? ''}</span>
-                                      {leadDatePassed(lead, nowTs) ? (
-                                        <span className="text-xs font-semibold" style={{ color: '#6a6256' }}>Date passed</span>
-                                      ) : fuReason === 'overdue' ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
-                                      ) : fuReason === 'idle' ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
-                                      ) : leadNeedsReply(lead) ? (
-                                        <span className="text-[12px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
-                                      ) : (
-                                        <span className="text-[12px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
+                                      {needs && (
+                                        <span className="inline-flex items-center gap-1 min-w-0 text-right text-[12px] font-semibold" style={{ color: ROW_INK[needs.tone] }}>
+                                          <RowIcon name={needs.icon} size={12} className="shrink-0" />{needs.text}
+                                        </span>
                                       )}
                                     </div>
                                   </button>
@@ -4749,7 +4778,7 @@ export default function Dashboard() {
                               })}
                               {stageLeads.length === 0 && (
                                 <div className="shrink-0 rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
-                                  <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>No leads</p>
+                                  <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>{boardNarrowed ? 'No matches' : 'No leads'}</p>
                                 </div>
                               )}
                               <button
