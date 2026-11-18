@@ -302,7 +302,7 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
             Space only when it has focus itself); Reply is its sibling. In
             select mode the text block is the box's label instead. ── */}
         <div onClick={selectMode ? undefined : () => onOpen(lead)}
-          className={`${CARDS_ONLY} flex items-center gap-2.5 min-h-[59px] py-[9px] pl-[15px] pr-2.5 ${selectMode ? "" : "cursor-pointer"}`}>
+          className={`${CARDS_ONLY} flex items-center gap-2 min-h-[59px] py-1.5 pl-[15px] pr-2.5 ${selectMode ? "" : "cursor-pointer"}`}>
           {selectMode && (
             <span className="-ml-2 -my-1 w-11 h-11 shrink-0 grid place-items-center">
               {checkbox("w-5 h-5")}
@@ -315,7 +315,7 @@ function EnquiryRowImpl(props: EnquiryRowProps) {
                   <span className="min-w-0 font-serif text-[16.5px] leading-5 font-semibold [overflow-wrap:anywhere]" style={{ color: "#211d18" }}>{name}</span>
                   <span className="shrink-0 font-sans text-[13.5px] font-bold whitespace-nowrap" style={{ color: dateInk }}>{cardDateText}</span>
                 </span>
-                <span className="block mt-0.5 font-sans text-[12px] leading-[17px] text-muted-foreground">
+                <span className="block mt-0.5 font-sans text-[12px] leading-4 text-muted-foreground">
                   <span className="whitespace-nowrap font-bold" style={{ color: needsInk }}>
                     <Icon name={needs.icon} size={12} className="inline-block -mt-0.5 mr-[3px]" />{needs.text}
                   </span>{" "}

@@ -302,7 +302,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
-      <div className="px-4 md:px-6 pt-3 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
+      <div className="px-3 md:px-6 pt-2 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
         {/* View row (wide): "Matching:" while filtering or searching (each
             count is then what that view would show), the six views, the
             view's one-click shortcuts, and Sort. The filter bar's popovers
@@ -360,7 +360,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent" />
             </div>
           )}
-          <div className="flex items-center justify-between gap-3 min-h-10">
+          <div className="flex items-center justify-between gap-3 min-h-9">
             <div className="font-sans text-[13px] text-muted-foreground min-w-0" aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</div>
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground shrink-0">
               <span className="sr-only">Sort</span>
@@ -371,9 +371,11 @@ export default function EnquiryListC(props: EnquiryListCProps) {
 
         {/* Open view: enquiries still open after their date. */}
         {view === "open" && !passedOnly && passedCount > 0 && (
-          <div className="flex items-center gap-2 flex-wrap min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
+          <div className="flex items-center gap-2 flex-wrap min-h-7 @min-[768px]:min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
             <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-            <span>{passedCount} {filtered ? "matching" : "open"} {passedCount === 1 ? "enquiry is" : "enquiries are"} past their event date.</span>
+            {/* One line on a phone too: the short wording there. */}
+            <span className="@max-[767px]:hidden">{passedCount} {filtered ? "matching" : "open"} {passedCount === 1 ? "enquiry is" : "enquiries are"} past their event date.</span>
+            <span className={CARDS_ONLY}>{`${passedCount}${filtered ? " matching" : ""} ${passedCount === 1 ? "is past its" : "are past their"} event date.`}</span>
             <button type="button" onClick={() => props.onFiltersChange(reviewPassedFilters)}
               className="font-bold text-primary underline underline-offset-[3px]">Review them</button>
           </div>
