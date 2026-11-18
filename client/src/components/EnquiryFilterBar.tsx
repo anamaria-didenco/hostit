@@ -59,6 +59,8 @@ const visible = (el: Element) => (el as HTMLElement).getClientRects().length > 0
  * the panel would drop over one of the list's shortcuts ("This month", "Next
  * month": EnquiryListC's [data-quick-chip] in its [data-view-row]), below
  * that row instead, so the shortcut can still be clicked with a filter open.
+ * Wherever it opens, the panel is never taller than the room left below it
+ * (POP_MAX_H): it scrolls inside instead of running off the screen.
  */
 function dropOffset(trigger: Element | null | undefined, width: number): number {
   const row = Array.from(document.querySelectorAll("[data-view-row]")).find(visible);
@@ -67,6 +69,9 @@ function dropOffset(trigger: Element | null | undefined, width: number): number 
   const r = row.getBoundingClientRect();
   // Only when the row sits just below (not scrolled away, nothing in between).
   if (r.bottom <= t.bottom || r.top - t.bottom > 100) return 6;
+  // A very short window: a panel squeezed under the views would be too small
+  // to use, so it opens under its button after all.
+  if (window.innerHeight - r.bottom < 200) return 6;
   const left = Math.max(0, Math.min(t.left, window.innerWidth - width));
   const inTheWay = Array.from(row.querySelectorAll("[data-quick-chip]")).some(c => {
     const b = c.getBoundingClientRect();
@@ -74,6 +79,11 @@ function dropOffset(trigger: Element | null | undefined, width: number): number 
   });
   return inTheWay ? Math.round(r.bottom - t.bottom) + 6 : 6;
 }
+
+/** Space kept between an open filter and the bottom of the window. */
+const POP_MARGIN = 8;
+/** A filter panel is at most this tall, and never taller than the room below where it opens (Radix measures it). */
+const POP_MAX_H = "max-h-[min(520px,var(--radix-popover-content-available-height,70vh))]";
 
 export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
   const { mode, rows, ctx, state, onFiltersChange, onQChange, statuses, spaces, team } = props;
@@ -290,18 +300,22 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
             </button>
           </span>
         ) : trigger}
-        <PopoverContent align="start" sideOffset={popOffset} className="w-[300px] max-h-[min(70vh,520px)] overflow-y-auto p-0 bg-card border-border"
+        <PopoverContent align="start" sideOffset={popOffset} collisionPadding={POP_MARGIN}
+          className={`w-[300px] ${POP_MAX_H} flex flex-col overflow-hidden p-0 bg-card border-border`}
           aria-label={`Filter by ${FACET_LABELS[facet].toLowerCase()}`}
           // An outside click closes without taking focus back, so a quick chip
           // or a row can be clicked straight from an open filter.
           onCloseAutoFocus={e => { if (document.activeElement && document.activeElement !== document.body) e.preventDefault(); }}>
-          <fieldset className="p-3 pb-2">
-            <legend className={`${LEGEND} px-1 pb-1`}>{FACET_LABELS[facet]}</legend>
-            {facet === "status" ? statusList(c)
-              : facet === "date" ? dateChoice("date", c, { idPrefix: "pop" })
-              : checkList(facet, c)}
-          </fieldset>
-          <div className="border-t border-border px-3 py-1.5 flex justify-end">
+          {/* The options scroll; Clear stays in view under them. */}
+          <div className="min-h-0 overflow-y-auto">
+            <fieldset className="p-3 pb-2">
+              <legend className={`${LEGEND} px-1 pb-1`}>{FACET_LABELS[facet]}</legend>
+              {facet === "status" ? statusList(c)
+                : facet === "date" ? dateChoice("date", c, { idPrefix: "pop" })
+                : checkList(facet, c)}
+            </fieldset>
+          </div>
+          <div className="shrink-0 border-t border-border px-3 py-1.5 flex justify-end">
             <button type="button" onClick={() => onFiltersChange(clearFacet(f, facet))} disabled={!isFacetActive(f, facet)}
               className="h-8 px-2 font-sans text-[13px] font-bold text-primary underline underline-offset-[3px] disabled:no-underline disabled:text-muted-foreground disabled:cursor-default">
               Clear
@@ -322,7 +336,8 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
             More<ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={popOffset} className="w-[320px] max-h-[min(70vh,560px)] overflow-y-auto p-0 bg-card border-border" aria-label="More filters"
+        <PopoverContent align="start" sideOffset={popOffset} collisionPadding={POP_MARGIN}
+          className={`w-[320px] ${POP_MAX_H} overflow-y-auto p-0 bg-card border-border`} aria-label="More filters"
           onCloseAutoFocus={e => { if (document.activeElement && document.activeElement !== document.body) e.preventDefault(); }}>
           {open && moreFacets.map(facet => {
             const c = counts(facet);
