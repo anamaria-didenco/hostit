@@ -383,7 +383,7 @@ describe("D. event-date sort and dividers", () => {
     expect(formatMonthRange("2026-12", "2027-02")).toBe("December 2026 – February 2027");
     expect(formatMonthRange("2026-12", "2026-12")).toBe("December 2026");
   });
-  it("31i. rows spread thinly (busy months hold half the rows or fewer): no month headings", () => {
+  it("31i. latest first, rows spread thinly (busy months hold half the rows or fewer): no month headings", () => {
     const lost = (id: number, y: number, m: number, n: number) =>
       Array.from({ length: n }, (_, i) => lead({ id: id + i, lastName: `L${m}-${i}`, status: "lost", eventDate: dateOnly(y, m, 1 + i) }));
     const closed = (r: ListRow[]) => listRows(r, state({ view: "closed", sort: { key: "event", dir: "desc" } }), ctx).dividers.map(d => `${d.label} · ${d.count}`);
@@ -392,6 +392,60 @@ describe("D. event-date sort and dividers", () => {
     // Exactly half in busy months: still none. More than half: headings.
     expect(closed(rowsOf([...lost(100, 2026, 11, 4), ...lost(104, 2026, 10, 2), ...lost(106, 2026, 9, 2)]))).toEqual([]);
     expect(closed(rowsOf([...lost(110, 2026, 11, 5), ...lost(115, 2026, 10, 2), ...lost(117, 2026, 9, 2)]))).toEqual(["November 2026 · 5", "September – October 2026 · 4"]);
+  });
+  it("31k. Confirmed, soonest first, keeps the headings of months that still hold several bookings as the weeks go by", () => {
+    // Five in early November, then 3 in December, 4 in January and six more
+    // over February to July. The data stays the same; only the clock moves.
+    const days: [number, number, number[]][] = [
+      [2026, 11, [2, 5, 9, 12, 14]], [2026, 12, [15, 18, 22]], [2027, 1, [5, 8, 16, 23]],
+      [2027, 2, [6, 20]], [2027, 3, [13]], [2027, 4, [10]], [2027, 5, [8]], [2027, 7, [17]],
+    ];
+    let id = 800;
+    const booked = days.flatMap(([y, m, ds]) => ds.map(d => lead({ id: ++id, status: "booked", eventDate: dateOnly(y, m, d) })));
+    const heads = (c: ListCtx, dir: "asc" | "desc" = "asc") =>
+      listRows(rowsOf(booked, {}, c), state({ view: "confirmed", sort: { key: "event", dir } }), c).dividers.map(d => `${d.label} · ${d.count}`);
+    // 14 December: December 3 and January 4 keep their headings, even though
+    // January is the only month of 4 or more (it holds under half the 13 to come).
+    const at14Dec = ctxAt(Date.UTC(2026, 11, 13, 21, 0));
+    expect(heads(at14Dec)).toEqual(["December 2026 · 3", "January 2027 · 4", "February – July 2027 · 6", "Already happened · 5"]);
+    // 20 December: one December booking left. Three month headings would hold
+    // 11 rows, under 4 each on average, so there are none.
+    const at20Dec = ctxAt(Date.UTC(2026, 11, 19, 21, 0));
+    expect(heads(at20Dec)).toEqual(["Already happened · 7"]);
+    // 10 January: no month holds 4 any more; the eight still to come share one heading.
+    const at10Jan = ctxAt(Date.UTC(2027, 0, 9, 21, 0));
+    expect(heads(at10Jan)).toEqual(["January – July 2027 · 8", "Already happened · 10"]);
+    // The same rows latest first follow the latest-first rule: the busy
+    // months (November and January) hold only half the rows, so no month headings.
+    expect(heads(at14Dec, "desc")).toEqual([]);
+  });
+  it("31l. Closed, latest first: a few busy months among many thin ones still get no month headings", () => {
+    const STATUS = ["lost", "finished", "cancelled"] as const;
+    let id = 900;
+    const spread = (shape: [number, number, number][], status?: string) => shape.flatMap(([y, m, n]) =>
+      Array.from({ length: n }, (_, i) => lead({ id: ++id, lastName: `C${y}-${m}-${i}`, status: status ?? STATUS[id % 3], eventDate: dateOnly(y, m, 1 + i) })));
+    // Every closed enquiry: November 6, October 4, September 4, and one to
+    // three a month either side (42 rows, 14 of them in the busy months).
+    const closedAll = spread([
+      [2027, 2, 1], [2027, 1, 1], [2026, 12, 3], [2026, 11, 6], [2026, 10, 4], [2026, 9, 4], [2026, 8, 3], [2026, 7, 2], [2026, 6, 2],
+      [2026, 5, 3], [2026, 4, 2], [2026, 3, 2], [2026, 1, 3], [2025, 12, 2], [2025, 11, 1], [2025, 10, 1], [2025, 9, 1], [2025, 7, 1],
+    ]);
+    // Lost this year: no month holds 4.
+    const lostThisYear = spread([
+      [2027, 2, 1], [2027, 1, 1], [2026, 12, 3], [2026, 11, 3], [2026, 10, 2], [2026, 9, 2], [2026, 8, 2], [2026, 7, 1], [2026, 6, 1], [2026, 5, 1], [2026, 4, 1],
+    ], "lost");
+    const at14Dec = ctxAt(Date.UTC(2026, 11, 13, 21, 0));
+    for (const c of [ctx, at14Dec]) {
+      for (const leads of [closedAll, lostThisYear]) {
+        const res = listRows(rowsOf(leads, {}, c), state({ view: "closed", sort: { key: "event", dir: "desc" } }), c);
+        expect(res.rows).toHaveLength(leads.length);
+        expect(res.dividers).toEqual([]);
+      }
+    }
+    // Sorted soonest first instead, Closed follows the soonest-first rule:
+    // December to February share a heading, then Already happened.
+    const asc = listRows(rowsOf(closedAll), state({ view: "closed", sort: { key: "event", dir: "asc" } }), ctx);
+    expect(asc.dividers.map(d => `${d.label} · ${d.count}`)).toEqual(["December 2026 – February 2027 · 5", "Already happened · 37"]);
   });
   it("31f. search keeps its pile headings however few rows each holds", () => {
     const piles = rowsOf([

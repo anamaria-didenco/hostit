@@ -633,20 +633,29 @@ export function formatMonthRange(a: string, b: string): string {
  * MONTH_HEADING_MIN_ROWS keeps its heading; next-door months holding fewer
  * share one heading ("February – July 2027 · 6"); a quiet month between two
  * busy ones keeps its own. No month gets a heading (the Event date column
- * already names it) when the busy months hold no more than half the dated rows
- * (lost enquiries spread thinly over many months), or when the headings left
- * would hold fewer than MONTH_HEADING_MIN_ROWS rows each on average. Because
- * quiet months next to each other share one heading, a few far-off months with
- * one booking each never take the headings away from the busy months. Other
- * headings ("No date yet", "Already happened") are left as they are.
+ * already names it) when the headings left would hold fewer than
+ * MONTH_HEADING_MIN_ROWS rows each on average. Because quiet months next to
+ * each other share one heading, a few far-off months with one booking each
+ * never take the headings away from the busy months.
+ *
+ * Sorted latest first (Closed), a list whose busy months hold no more than
+ * half the dated rows gets no month headings either: lost and finished
+ * enquiries spread thinly over many months read better without them. Sorted
+ * soonest first (Confirmed), that check is left out: as the weeks go by the
+ * busy months move into "Already happened" and the months ahead thin out, and
+ * a month that still holds several bookings keeps its heading.
+ *
+ * Other headings ("No date yet", "Already happened") are left as they are.
  */
-function groupQuietMonths<G extends { key: string; divider: { at: number; label: string; count: number } }>(groups: G[]): G[] {
+function groupQuietMonths<G extends { key: string; divider: { at: number; label: string; count: number } }>(groups: G[], dir: ListSort["dir"]): G[] {
   const isQuiet = (g: G) => isMonthKey(g.key) && g.divider.count < MONTH_HEADING_MIN_ROWS;
   const months = groups.filter(g => isMonthKey(g.key));
   const dated = months.reduce((n, g) => n + g.divider.count, 0);
-  const inBusy = months.reduce((n, g) => n + (isQuiet(g) ? 0 : g.divider.count), 0);
   const noMonths = () => groups.filter(g => !isMonthKey(g.key));
-  if (inBusy * 2 <= dated) return noMonths();
+  if (dir === "desc") {
+    const inBusy = months.reduce((n, g) => n + (isQuiet(g) ? 0 : g.divider.count), 0);
+    if (inBusy * 2 <= dated) return noMonths();
+  }
   const out: G[] = [];
   for (let i = 0; i < groups.length;) {
     let j = i;
@@ -721,9 +730,9 @@ export function listRows(
       const month = filterMonth(s.filters.date, today);
       if (month) groups = groups.filter(g => g.key !== month);
       // Month headings only help when they group several rows: quiet months
-      // next to each other share one heading, and a list whose rows are spread
-      // thinly over many months (lost enquiries) has none.
-      groups = groupQuietMonths(groups);
+      // next to each other share one heading, and a list sorted latest first
+      // whose rows are spread thinly over many months (lost enquiries) has none.
+      groups = groupQuietMonths(groups, s.sort.dir);
       dividers = groups.map(g => g.divider);
     }
   }
