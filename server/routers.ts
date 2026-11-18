@@ -21,6 +21,8 @@ import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
+import { normaliseTaskPriority } from "@shared/taskFields";
+import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -4904,7 +4906,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({
         name: z.string(),
         description: z.string().optional(),
-        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), required: z.boolean().optional() })),
+        items: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), required: z.boolean().optional() })),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -4919,7 +4921,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         id: z.number(),
         name: z.string().optional(),
         description: z.string().optional(),
-        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), required: z.boolean().optional() })).optional(),
+        items: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), required: z.boolean().optional() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -5022,7 +5024,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // a leadId — stamped on the checklist so /checklist finds it.
         bookingId: z.number().optional(),
         name: z.string().optional(),
-        defaultItems: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean() })).optional(),
+        defaultItems: z.array(z.object({ id: z.string(), text: z.string().max(CHECKLIST_ITEM_MAX_CHARS), category: z.string().optional(), checked: z.boolean() })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { assertAllOwned } = await import('./ownership');
@@ -5058,17 +5060,101 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1);
-        if (!instance) throw new Error('Checklist not found');
-        const items = ((instance.items as any[]) ?? []).map(item =>
-          item.id === input.itemId
-            ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
-            : item
-        );
-        await db.update(checklistInstances).set({ items, updatedAt: new Date() }).where(eq(checklistInstances.id, instance.id));
-        return { success: true, items };
+        // Locked read-change-write, like the run sheet's item edits, so a
+        // tick and an edit made at the same moment don't undo each other.
+        return db.transaction(async (tx) => {
+          const [instance] = await tx.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1).for('update');
+          if (!instance) throw new Error('Checklist not found');
+          const items = ((instance.items as any[]) ?? []).map(item =>
+            item.id === input.itemId
+              ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
+              : item
+          );
+          await tx.update(checklistInstances).set({ items, updatedAt: new Date() }).where(eq(checklistInstances.id, instance.id));
+          return { success: true, items };
+        });
       }),
 
+    // The run sheet's checklist, one change at a time (see changeRunsheetChecklist):
+    // add items, remove one, edit one item's words / category / notes / photo,
+    // put the items in a new order, or rename the list. Each returns the list
+    // as saved, staff ticks included.
+    addItemsForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        items: z.array(z.object({
+          id: z.string().min(1).max(100),
+          text: z.string().trim().min(1, 'An item needs some words').max(CHECKLIST_ITEM_MAX_CHARS),
+          category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
+        })).min(1).max(1000),
+        // Leave out items whose words are already on the list (PULL BAR DRINKS).
+        skipSameText: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { addEventChecklistItems } = await import('@shared/eventChecklistEdit');
+        let added = 0;
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => {
+          const r = addEventChecklistItems(
+            (inst.items ?? []) as any[],
+            input.items.map(i => ({ id: i.id, text: i.text, category: i.category ?? 'other', checked: false })),
+            { skipSameText: input.skipSameText },
+          );
+          added = r.added.length;
+          return { items: r.items };
+        });
+        return { items: saved.items, name: saved.name, added };
+      }),
+    removeItemForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), itemId: z.string().max(100) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { removeEventChecklistItem } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => ({
+          items: removeEventChecklistItem((inst.items ?? []) as any[], input.itemId),
+        }));
+        return { items: saved.items, name: saved.name };
+      }),
+    editItemForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        itemId: z.string().max(100),
+        text: z.string().trim().min(1, 'An item needs some words').max(CHECKLIST_ITEM_MAX_CHARS).optional(),
+        category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
+        notes: z.string().max(CHECKLIST_ITEM_MAX_CHARS).optional(),
+        // A photo from /api/upload-image (or "" to take it off).
+        imageUrl: z.string().max(2000).regex(/^(|\/(?!\/)\S*|https:\/\/\S+)$/, 'Not a photo address').optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { editEventChecklistItem } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => {
+          const items = editEventChecklistItem((inst.items ?? []) as any[], input.itemId, { text: input.text, category: input.category, notes: input.notes, imageUrl: input.imageUrl });
+          return items ? { items } : null;
+        });
+        return { items: saved.items, name: saved.name };
+      }),
+    reorderItemsForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), ids: z.array(z.string().max(100)).max(5000) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { reorderEventChecklist } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => ({
+          items: reorderEventChecklist((inst.items ?? []) as any[], input.ids),
+        }));
+        return { items: saved.items, name: saved.name };
+      }),
+    renameForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), name: z.string().trim().min(1, 'Give the checklist a name').max(255) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, () => ({ name: input.name }));
+        return { items: saved.items, name: saved.name };
+      }),
+
+    // The whole list at once. The run sheet no longer uses this (it would
+    // undo a tick made on the staff link after the sheet loaded its copy):
+    // it is kept for a tab still open on an older version of the page.
     saveItemsForRunsheet: protectedProcedure
       .input(z.object({
         runsheetId: z.number(),
@@ -7356,8 +7442,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(tasks.ownerId, ctx.user.id), about.length ? or(...about) : undefined))
           .orderBy(desc(tasks.createdAt));
         const filter = input?.filter ?? 'all';
-        if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < now);
-        else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= now);
+        // Overdue from the day after it was due, as the rows say ("Due today"
+        // all of its day): before the start of today in the venue's zone.
+        let overdueBefore = now;
+        if (filter === 'overdue' || filter === 'upcoming') {
+          const { venueSettings } = await import('../drizzle/schema');
+          const { taskOverdueBefore } = await import('@shared/taskFields');
+          const [vs] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+          overdueBefore = taskOverdueBefore(vs?.tz, now);
+        }
+        if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < overdueBefore);
+        else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= overdueBefore);
         else if (filter === 'completed') rows = rows.filter(t => t.completed);
         else if (filter === 'mine') {
           // Open tasks assigned to the signed-in person (by name, as assignedTo
@@ -7477,7 +7572,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         title: z.string().optional(),
         description: z.string().optional(),
         dueDate: z.number().nullable().optional(),
-        priority: z.enum(['low', 'normal', 'high']).optional(),
+        // low / normal / high. Older tasks can hold another word ("medium");
+        // it's read as normal rather than refused, so the task stays editable.
+        priority: z.string().max(20).transform(normaliseTaskPriority).optional(),
         linkedLeadId: z.number().nullable().optional(),
         linkedBookingId: z.number().nullable().optional(),
         assignedTo: z.string().max(255).nullable().optional(),
@@ -9188,24 +9285,14 @@ Return ONLY valid JSON.`;
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnbRaw = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
         const fnb = showMoney ? fnbRaw : fnbRaw.map((f: any) => ({ ...f, unitPrice: null }));
-        const { checklistInstances } = await import('../drizzle/schema');
-        const cryptoMod = await import('crypto');
-        let [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
-        if (!checklistInstance) {
-          const shareToken = cryptoMod.randomBytes(24).toString('hex');
-          const [created] = await db.insert(checklistInstances).values({
-            runsheetId: link.runsheetId,
-            ownerId: link.ownerId,
-            name: runsheet.title ? `${runsheet.title} — Staff Checklist` : 'Staff Checklist',
-            items: [],
-            shareToken,
-          }).returning();
-          checklistInstance = created;
-        } else if (!checklistInstance.shareToken) {
-          const shareToken = cryptoMod.randomBytes(24).toString('hex');
-          await db.update(checklistInstances).set({ shareToken }).where(eq(checklistInstances.id, checklistInstance.id));
-          checklistInstance = { ...checklistInstance, shareToken };
-        }
+        // The run sheet's checklist, made (with a share token) if it has none.
+        // Through the same locked path as the run sheet, so a staff member
+        // opening the link while the owner opens the sheet can't make a second
+        // list, and nothing is written when the list is already set up.
+        const { getOrCreateRunsheetChecklist } = await import('./eventChecklist');
+        const checklistInstance = await getOrCreateRunsheetChecklist(runsheet.ownerId, link.runsheetId, {
+          name: runsheet.title ? `${runsheet.title} — Staff Checklist` : undefined,
+        });
         // Contact info: the runsheet's own saved value wins (an edit made in
         // the Runsheet Builder must show up here, not the original lead's
         // stale details), then the linked lead, then the linked booking —
@@ -9677,7 +9764,7 @@ Return ONLY valid JSON.`;
         if (!checklist) return null;
         const items = await db.select().from(dailyChecklistItems)
           .where(eq(dailyChecklistItems.checklistId, input.id))
-          .orderBy(asc(dailyChecklistItems.sortOrder));
+          .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
         return { ...checklist, items };
       }),
 
@@ -9695,7 +9782,7 @@ Return ONLY valid JSON.`;
         if (!checklist) return null;
         const items = await db.select().from(dailyChecklistItems)
           .where(eq(dailyChecklistItems.checklistId, checklist.id))
-          .orderBy(asc(dailyChecklistItems.sortOrder));
+          .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
         const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name })
           .from(venueSettings).where(eq(venueSettings.ownerId, checklist.ownerId)).limit(1);
         return { ...checklist, items, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null };
@@ -9780,10 +9867,13 @@ Return ONLY valid JSON.`;
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        name: z.string().optional(),
+        name: z.string().trim().min(1, 'Give the checklist a name').max(255).optional(),
+        // No length limit, like creating a list: a long description saved
+        // then must still save when the list is renamed.
         description: z.string().optional(),
-        category: z.string().optional(),
-        assignedDate: z.string().nullable().optional(),
+        category: z.string().max(50).optional(),
+        // yyyy-mm-dd, or null to clear it.
+        assignedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -9912,6 +10002,42 @@ Return ONLY valid JSON.`;
         const { id, ...rest } = input;
         await db.update(dailyChecklistItems).set(rest)
           .where(and(eq(dailyChecklistItems.id, id), eq(dailyChecklistItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    // Put a checklist's items in this order (the up / down buttons). Items
+    // added or removed meanwhile (the staff link can add) are kept / ignored.
+    reorderItems: protectedProcedure
+      .input(z.object({ checklistId: z.number(), ids: z.array(z.number()).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        const { assertAllOwned } = await import('./ownership');
+        await assertAllOwned({ dailyChecklist: input.checklistId }, ctx.user.id);
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const { applyOrder } = await import('@shared/listOrder');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.transaction(async (tx) => {
+          // One reorder of a list at a time: Move down then Move up tapped
+          // quickly must end in the order of the last tap. Without this the
+          // second could read the rows before the first had written them,
+          // skip them as already in place, and finish first.
+          await tx.select({ id: dailyChecklists.id }).from(dailyChecklists)
+            .where(and(eq(dailyChecklists.id, input.checklistId), eq(dailyChecklists.ownerId, ctx.user.id)))
+            .for('update');
+          const rows = await tx.select({ id: dailyChecklistItems.id, sortOrder: dailyChecklistItems.sortOrder })
+            .from(dailyChecklistItems)
+            .where(and(eq(dailyChecklistItems.checklistId, input.checklistId), eq(dailyChecklistItems.ownerId, ctx.user.id)))
+            .orderBy(asc(dailyChecklistItems.sortOrder), asc(dailyChecklistItems.id));
+          const order = applyOrder(rows.map(r => r.id), input.ids);
+          const was = new Map(rows.map(r => [r.id, r.sortOrder]));
+          for (const [i, id] of order.entries()) {
+            if (was.get(id) === i) continue;
+            await tx.update(dailyChecklistItems).set({ sortOrder: i })
+              .where(and(eq(dailyChecklistItems.id, id), eq(dailyChecklistItems.checklistId, input.checklistId)));
+          }
+        });
         return { success: true };
       }),
 
