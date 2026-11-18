@@ -44,6 +44,10 @@ describe.skipIf(!HAS_DB)("daily checklists: edit the list, reorder items (DB)", 
     const got = await a.dailyChecklists.get({ id: cl.id });
     expect(got).toMatchObject({ name: "Bar close down", category: "closing", assignedDate: null, description: "" });
     await expect(a.dailyChecklists.update({ id: cl.id, name: "   " })).rejects.toThrow();
+    // A long description (creating a list takes any length) still saves when the list is edited.
+    const long = "Wipe every shelf, then the bar top. ".repeat(100);
+    await a.dailyChecklists.update({ id: cl.id, name: "Bar close down", description: long });
+    expect((await a.dailyChecklists.get({ id: cl.id }))?.description).toBe(long);
     // Another venue can't rename it.
     await b.dailyChecklists.update({ id: cl.id, name: "Not yours" });
     expect((await a.dailyChecklists.get({ id: cl.id }))?.name).toBe("Bar close down");

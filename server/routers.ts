@@ -9868,7 +9868,9 @@ Return ONLY valid JSON.`;
       .input(z.object({
         id: z.number(),
         name: z.string().trim().min(1, 'Give the checklist a name').max(255).optional(),
-        description: z.string().max(2000).optional(),
+        // No length limit, like creating a list: a long description saved
+        // then must still save when the list is renamed.
+        description: z.string().optional(),
         category: z.string().max(50).optional(),
         // yyyy-mm-dd, or null to clear it.
         assignedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
