@@ -747,6 +747,34 @@ describe("L. kept rows and the opening view", () => {
     const res = listRows(rows, state({ view: "reply" }), ctx, { keepAt: new Map([[2, 1]]) });
     expect(res.rows.map(r => r.lead.id)).toEqual([1, 2, 3]);
   });
+  it("a row just moved stays under its own month heading, first or last in the month", () => {
+    // Five open enquiries in each of November, December and January, soonest first.
+    const day = (m: number, d: number) => (m === 1 ? dateOnly(2027, 1, d) : dateOnly(2026, m, d));
+    const leads = [11, 12, 1].flatMap((m, i) => [20, 22, 24, 26, 28].map((d, k) => lead({ id: 200 + i * 10 + k, eventDate: day(m, d) })));
+    const s = state({ view: "open", sort: { key: "event", dir: "asc" } });
+    const before = listRows(rowsOf(leads), s, ctx);
+    const heads = (res: ReturnType<typeof listRows>) => res.dividers.map(d => `${d.label} @${d.at}`);
+    expect(heads(before)).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
+    const moveToLost = (id: number) => {
+      const at = before.rows.findIndex(r => r.lead.id === id);
+      const after = rowsOf(leads.map(l => (l.id === id ? { ...l, status: "lost", lostReason: "price" } : l)));
+      return listRows(after, s, ctx, { keepAt: new Map([[id, at]]) });
+    };
+    // The first December row (index 5) stays under December.
+    const first = moveToLost(210);
+    expect(first.rows.map(r => r.lead.id)).toEqual(before.rows.map(r => r.lead.id));
+    expect(first.dividers.map(d => `${d.label} · ${d.count} @${d.at}`)).toEqual(["November 2026 · 5 @0", "December 2026 · 4 @5", "January 2027 · 5 @10"]);
+    // The last November row (index 4) stays under November.
+    const last = moveToLost(204);
+    expect(last.dividers.map(d => `${d.label} · ${d.count} @${d.at}`)).toEqual(["November 2026 · 4 @0", "December 2026 · 5 @5", "January 2027 · 5 @10"]);
+    // Both at once, and the very first row of the list.
+    const both = (() => {
+      const after = rowsOf(leads.map(l => ([204, 210].includes(l.id) ? { ...l, status: "lost", lostReason: "price" } : l)));
+      return listRows(after, s, ctx, { keepAt: new Map([[204, 4], [210, 5]]) });
+    })();
+    expect(heads(both)).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
+    expect(heads(moveToLost(200))).toEqual(["November 2026 @0", "December 2026 @5", "January 2027 @10"]);
+  });
   it("75. the opening view: reply, else follow-up, else open", () => {
     const c = { reply: 0, followup: 0, open: 0, confirmed: 4, closed: 1, all: 5 };
     expect(defaultView({ ...c, reply: 2, followup: 3 })).toBe("reply");

@@ -647,7 +647,7 @@ export function formatMonthRange(a: string, b: string): string {
  *
  * Other headings ("No date yet", "Already happened") are left as they are.
  */
-function groupQuietMonths<G extends { key: string; divider: { at: number; label: string; count: number } }>(groups: G[], dir: ListSort["dir"]): G[] {
+function groupQuietMonths<G extends { key: string; until?: string; divider: { at: number; label: string; count: number } }>(groups: G[], dir: ListSort["dir"]): G[] {
   const isQuiet = (g: G) => isMonthKey(g.key) && g.divider.count < MONTH_HEADING_MIN_ROWS;
   const months = groups.filter(g => isMonthKey(g.key));
   const dated = months.reduce((n, g) => n + g.divider.count, 0);
@@ -662,7 +662,7 @@ function groupQuietMonths<G extends { key: string; divider: { at: number; label:
     if (isQuiet(groups[i])) while (j + 1 < groups.length && isQuiet(groups[j + 1])) j++;
     if (j === i) { out.push(groups[i]); i++; continue; }
     const count = groups.slice(i, j + 1).reduce((n, g) => n + g.divider.count, 0);
-    out.push({ ...groups[i], divider: { at: groups[i].divider.at, label: formatMonthRange(groups[i].key, groups[j].key), count } });
+    out.push({ ...groups[i], until: groups[j].key, divider: { at: groups[i].divider.at, label: formatMonthRange(groups[i].key, groups[j].key), count } });
     i = j + 1;
   }
   // A shared heading keeps its first month's key, so this counts every month heading left.
@@ -701,6 +701,8 @@ export function listRows(
   const cmp = compareRows(s.sort, ctx);
   let out: ListRow[];
   let dividers: ListResult["dividers"] = [];
+  /** Whether a row belongs under this heading (month headings only). */
+  let heads: (d: ListResult["dividers"][number], r: ListRow) => boolean = () => false;
   if (q && view === "all") {
     out = [];
     PILES.forEach((p, i) => {
@@ -717,7 +719,7 @@ export function listRows(
         if (s.sort.dir === "asc" && r.eventDay < today) return { key: "past", label: "Already happened" };
         return { key: r.eventDay.slice(0, 7), label: formatMonthLong(r.eventDay.slice(0, 7)) };
       };
-      let groups: { key: string; divider: ListResult["dividers"][number] }[] = [];
+      let groups: { key: string; until?: string; divider: ListResult["dividers"][number] }[] = [];
       out.forEach((r, i) => {
         const g = groupOf(r);
         if (g.key !== groups[groups.length - 1]?.key) groups.push({ key: g.key, divider: { at: i, label: g.label, count: 0 } });
@@ -734,14 +736,23 @@ export function listRows(
       // whose rows are spread thinly over many months (lost enquiries) has none.
       groups = groupQuietMonths(groups, s.sort.dir);
       dividers = groups.map(g => g.divider);
+      const span = new Map(groups.map(g => [g.divider, g.until ? [g.key, g.until].sort() : [g.key, g.key]]));
+      heads = (d, r) => {
+        const sp = span.get(d);
+        const key = groupOf(r).key;
+        return !!sp && (key === sp[0] || (isMonthKey(key) && key >= sp[0] && key <= sp[1]));
+      };
     }
   }
-  // Rows kept in place after a status change go back where they were.
+  // Rows kept in place after a status change go back where they were. A kept
+  // row that lands where a heading starts goes under that heading when it
+  // belongs there (it was the month's first row), else above it (the month
+  // before's last row).
   kept.sort((a, b) => (keepAt.get(a.lead.id)! - keepAt.get(b.lead.id)!));
   for (const r of kept) {
     const at = Math.min(Math.max(0, keepAt.get(r.lead.id)!), out.length);
     out.splice(at, 0, r);
-    for (const d of dividers) if (d.at >= at) d.at++;
+    for (const d of dividers) if (d.at > at || (d.at === at && !heads(d, r))) d.at++;
   }
   return { rows: out, dividers, hiddenByFilters, pinnedOutside };
 }
