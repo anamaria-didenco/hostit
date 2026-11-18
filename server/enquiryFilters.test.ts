@@ -602,3 +602,11 @@ describe("M. the Board", () => {
     expect(lost.map(r => r.lead.id).sort()).toEqual([115, 118]);
   });
 });
+
+describe("N. the Needs line for a lost enquiry", () => {
+  it("names the reason, in words even for an old reason key", () => {
+    expect(rowNeeds(one({ status: "lost", lostReason: "price" }), ctx).text).toBe("Lost · Price / budget");
+    expect(rowNeeds(one({ status: "lost", lostReason: "went_elsewhere" }), ctx).text).toBe("Lost · Went elsewhere");
+    expect(rowNeeds(one({ status: "lost", lostReason: null }), ctx).text).toBe("Lost");
+  });
+});

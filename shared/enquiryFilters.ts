@@ -785,7 +785,9 @@ export function rowNeeds(row: ListRow, ctx: ListCtx): { text: string; tone: Sign
     }
     case "closed": {
       const st = normStatus(lead.status);
-      const reason = st === "lost" ? lostReasonLabel(lead.lostReason as string | null) : null;
+      // An older or imported reason key ("went_elsewhere") reads as words, not code.
+      const raw = st === "lost" ? lostReasonLabel(lead.lostReason as string | null) : null;
+      const reason = raw && /_/.test(raw) ? raw.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()) : raw;
       const text = st === "lost" ? (reason ? `Lost · ${reason}` : "Lost") : st === "finished" ? "Finished" : st === "cancelled" ? "Cancelled" : "Closed";
       return { text, tone: "gray", icon: "circle-minus" };
     }
