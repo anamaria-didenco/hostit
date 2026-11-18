@@ -375,7 +375,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
           <div className="flex items-center gap-2 flex-wrap min-h-7 @min-[768px]:min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
             <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
             {/* One line on a phone too: the short wording there. */}
-            <span className="@max-[767px]:hidden">{passedCount} {filtered ? "matching" : "open"} {passedCount === 1 ? "enquiry is" : "enquiries are"} past their event date.</span>
+            <span className="@max-[767px]:hidden">{`${passedCount} ${filtered ? "matching" : "open"} ${passedCount === 1 ? "enquiry is past its" : "enquiries are past their"} event date.`}</span>
             <span className={CARDS_ONLY}>{`${passedCount}${filtered ? " matching" : ""} ${passedCount === 1 ? "is past its" : "are past their"} event date.`}</span>
             <button type="button" onClick={() => props.onFiltersChange(reviewPassedFilters)}
               className="font-bold text-primary underline underline-offset-[3px]">Review them</button>
