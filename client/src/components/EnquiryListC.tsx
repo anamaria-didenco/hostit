@@ -305,8 +305,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       <div className="px-3 md:px-6 pt-2 @min-[768px]:pt-0.5 pb-10 flex flex-col gap-2">
         {/* View row (wide): "Matching:" while filtering or searching (each
             count is then what that view would show), the six views, the
-            view's one-click shortcuts, and Sort. The filter bar's popovers
-            open below it (data-view-row), so a shortcut stays clickable. */}
+            view's one-click shortcuts, and Sort. A filter bar popover that
+            would cover a shortcut opens below this row (data-view-row,
+            data-quick-chip), so the shortcut stays clickable. */}
         <div data-view-row className="hidden @min-[768px]:flex items-end gap-x-2 gap-y-1 flex-wrap border-b border-border/60">
           {filtered && <span className="pb-2.5 pr-1 font-sans text-[12.5px] font-bold text-muted-foreground">Matching:</span>}
           <div role="group" aria-label="Enquiry views" className="flex items-end flex-wrap -mb-px">
@@ -559,7 +560,7 @@ function QuickReply({ panelRef, boxRef, lead, group, tplName, draft, setDraft, s
 /** A one-click shortcut ("This month", "Lost this year"): navy with a tick when on. */
 function QuickChipButton({ chip, on, onClick, big }: { chip: QuickChip; on: boolean; onClick: () => void; big?: boolean }) {
   return (
-    <button type="button" aria-pressed={on} onClick={onClick}
+    <button type="button" data-quick-chip aria-pressed={on} onClick={onClick}
       className={`inline-flex items-center gap-1.5 ${big ? "h-9 px-3.5" : "h-8 px-3"} rounded-full border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap shrink-0 transition-colors ${on ? "bg-primary border-primary text-primary-foreground forced-colors:border-[CanvasText]" : "bg-card border-input text-foreground hover:border-primary"}`}>
       {on && <Check className="w-3.5 h-3.5" strokeWidth={2.6} aria-hidden="true" />}
       {chip.label}

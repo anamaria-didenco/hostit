@@ -55,22 +55,24 @@ const COUNT = "ml-auto pl-3 font-sans text-[12px] font-bold text-muted-foregroun
 const visible = (el: Element) => (el as HTMLElement).getClientRects().length > 0;
 
 /**
- * How far below its button a filter opens: past the rest of this bar and,
- * when it sits right underneath, the list's row of views and shortcuts
- * (EnquiryListC's [data-view-row]). Dropping over that row hid "This month"
- * and "Next month", which are meant to be clickable with a filter open.
+ * How far below its button a filter opens. Normally just under it; but when
+ * the panel would drop over one of the list's shortcuts ("This month", "Next
+ * month": EnquiryListC's [data-quick-chip] in its [data-view-row]), below
+ * that row instead, so the shortcut can still be clicked with a filter open.
  */
-function dropOffset(trigger: Element | null | undefined, bar: HTMLElement | null): number {
-  if (!trigger || !bar) return 6;
-  const t = trigger.getBoundingClientRect();
-  // The bar's last line of buttons (its bottom padding is 12px).
-  let bottom = bar.getBoundingClientRect().bottom - 12;
+function dropOffset(trigger: Element | null | undefined, width: number): number {
   const row = Array.from(document.querySelectorAll("[data-view-row]")).find(visible);
-  if (row) {
-    const r = row.getBoundingClientRect();
-    if (r.top >= t.bottom - 1 && r.top - bottom < 48 && r.bottom > bottom) bottom = r.bottom;
-  }
-  return Math.max(6, Math.round(bottom - t.bottom) + 6);
+  if (!trigger || !row) return 6;
+  const t = trigger.getBoundingClientRect();
+  const r = row.getBoundingClientRect();
+  // Only when the row sits just below (not scrolled away, nothing in between).
+  if (r.bottom <= t.bottom || r.top - t.bottom > 100) return 6;
+  const left = Math.max(0, Math.min(t.left, window.innerWidth - width));
+  const inTheWay = Array.from(row.querySelectorAll("[data-quick-chip]")).some(c => {
+    const b = c.getBoundingClientRect();
+    return b.width > 0 && b.top >= t.bottom - 1 && b.right > left && b.left < left + width;
+  });
+  return inTheWay ? Math.round(r.bottom - t.bottom) + 6 : 6;
 }
 
 export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
@@ -80,7 +82,7 @@ export default function EnquiryFilterBar(props: EnquiryFilterBarProps) {
   const barRef = React.useRef<HTMLDivElement>(null);
   const [openFacet, setOpenFacet] = React.useState<Facet | "more" | null>(null);
   const [popOffset, setPopOffset] = React.useState(6);
-  const measureDrop = (key: Facet | "more") => dropOffset(barRef.current?.querySelector(`[data-facet-trigger="${key}"]`), barRef.current);
+  const measureDrop = (key: Facet | "more") => dropOffset(barRef.current?.querySelector(`[data-facet-trigger="${key}"]`), key === "more" ? 320 : 300);
   const openPopover = (key: Facet | "more", open: boolean) => {
     if (open) setPopOffset(measureDrop(key));
     setOpenFacet(open ? key : null);
