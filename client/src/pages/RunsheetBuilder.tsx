@@ -41,6 +41,7 @@ import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import { isOncePerEvent } from "@shared/nowNext";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import { moveAnnouncement, moveInList } from "@shared/listOrder";
+import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 import { EVENT_CHECKLIST_CATEGORIES, eventChecklistCategoryLabel } from "@shared/eventChecklistEdit";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
@@ -1241,7 +1242,9 @@ export default function RunsheetBuilder() {
   const checklistFocusTargets = useRef(new Map<string, HTMLElement>());
   const checklistFocusRef = (key: string) => (el: HTMLElement | null) => { if (el) checklistFocusTargets.current.set(key, el); else checklistFocusTargets.current.delete(key); };
   const [checklistRefocus, setChecklistRefocus] = useState<string | null>(null);
-  useEffect(() => {
+  // A layout effect, declared before the focus keeper below, so the keeper
+  // sees focus already placed and doesn't move it first.
+  React.useLayoutEffect(() => {
     if (!checklistRefocus) return;
     const el = checklistFocusTargets.current.get(checklistRefocus);
     if (!el) return;
@@ -1257,6 +1260,11 @@ export default function RunsheetBuilder() {
   const rereadChecklist = () => {
     if (sheetId) getOrCreateChecklist.mutate({ runsheetId: sheetId }, { onSuccess: inst => { if (inst) applySavedChecklist(inst); } });
   };
+  // When an item leaves (removed here, or found removed on save), keyboard
+  // focus goes to the row now in its place, or to the add box.
+  const checklistRowsRef = useRef<HTMLDivElement>(null);
+  const checklistAddRef = useRef<HTMLInputElement>(null);
+  useFocusKeeper(checklistRowsRef, checklistAddRef);
   const addChecklistItemsMut = trpc.checklists.addItemsForRunsheet.useMutation({
     onSuccess: r => applySavedChecklist(r),
     onError: (err) => { toast.error(err.data?.code === "NOT_FOUND" ? "The checklist hasn't loaded yet — please try again." : "Couldn't add to the checklist — please try again."); rereadChecklist(); },
@@ -1275,6 +1283,8 @@ export default function RunsheetBuilder() {
     onError: (err) => {
       if (err.data?.code === "CONFLICT") {
         // Deleted meanwhile (on another screen): show the list as it is now.
+        // The focus keeper moves focus off the closed form, then off the
+        // removed row once the fresh list is in.
         toast.error(err.message);
         setEditingChecklistItem(null);
         rereadChecklist();
@@ -5853,7 +5863,7 @@ export default function RunsheetBuilder() {
             </div>
 
             <p className="sr-only" role="status" aria-live="polite">{checklistMoveNote}</p>
-            <div className="divide-y divide-gold/20">
+            <div ref={checklistRowsRef} className="divide-y divide-gold/20">
               {checklistItems.map((item, itemIndex) => (
                 <div key={item.id} className="px-5 py-3 group hover:bg-linen/50 transition-colors">
                   {editingChecklistItem === item.id ? (
@@ -5994,6 +6004,7 @@ export default function RunsheetBuilder() {
             {/* Add checklist item */}
             <div className="px-5 py-4 border-t border-gold/20 flex gap-2 no-print">
               <Input
+                ref={checklistAddRef}
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
                 aria-label="Add a checklist item"
