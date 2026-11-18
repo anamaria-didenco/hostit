@@ -4030,8 +4030,10 @@ export default function Dashboard() {
               {item.icon}
               <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
               {item.id === "enquiries" && replyCount !== 0 && (
-                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {replyBadge(9)}
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-600 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                  {/* The same number as the Needs reply tab ("24"), not "9+";
+                      red-600, as white on red-500 was 3.8:1. */}
+                  {replyBadge(99)}
                 </span>
               )}
             </button>

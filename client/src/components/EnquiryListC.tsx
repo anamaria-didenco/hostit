@@ -400,6 +400,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
           </div>
         )}
 
+        {/* A heading for the list itself (screen readers jump by headings);
+            the month and pile dividers inside it are level 3. */}
+        <h2 className="sr-only">{searching ? "Search results" : viewInfo(view).label}</h2>
         {rows.length > 0 ? (
           // One bordered block with hairlines between rows. overflow:clip (not
           // hidden) rounds the corners without breaking the sticky header.
