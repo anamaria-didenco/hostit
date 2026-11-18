@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTERS, LIST_PARAM_KEYS, activeChips, activeCount, boardRows, clearFacet, clearFilters, compareRows, dayKeyRange,
-  defaultView, enrichRows, facetCounts, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
-  quickChips, rowDatePassed, rowNeeds, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
+  datePassedCount, defaultView, enrichRows, facetCounts, guestBand, inView, isChipOn, listRows, matchesFilters, needsKind,
+  quickChips, reviewPassedFilters, rowDatePassed, rowNeeds, stateFromParams, stateToParams, toggleChip, viewCounts, viewDefaultSort,
   type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx, type ListRow, type ListState,
 } from "@shared/enquiryFilters";
 import { DEFAULT_STATUSES } from "@shared/enquiryStatuses";
@@ -608,5 +608,29 @@ describe("N. the Needs line for a lost enquiry", () => {
     expect(rowNeeds(one({ status: "lost", lostReason: "price" }), ctx).text).toBe("Lost · Price / budget");
     expect(rowNeeds(one({ status: "lost", lostReason: "went_elsewhere" }), ctx).text).toBe("Lost · Went elsewhere");
     expect(rowNeeds(one({ status: "lost", lostReason: null }), ctx).text).toBe("Lost");
+  });
+});
+
+describe("O. the Open view's Date passed notice", () => {
+  const rows = fixture();
+  // What "Review them" shows: the same filters and search, Needs = Date passed.
+  const review = (s: ListState) => listRows(rows, { ...s, filters: reviewPassedFilters(s.filters) }, ctx).rows.map(r => r.lead.id);
+  it("with nothing filtered, counts every open enquiry past its date", () => {
+    const s = state({ view: "open" });
+    expect(datePassedCount(rows, s, ctx)).toBe(1);
+    expect(review(s)).toEqual([109]);
+  });
+  it("counts only what the filters let through, so the notice never promises rows Review them won't show", () => {
+    const insta = state({ view: "open", filters: withF({ source: ["instagram"] }) });
+    expect(datePassedCount(rows, insta, ctx)).toBe(0);
+    expect(review(insta)).toEqual([]);
+    // A Needs filter is replaced by Date passed, as Review them does.
+    const nov = state({ view: "open", filters: withF({ date: { preset: "this_month" }, needs: ["reply"] }) });
+    expect(datePassedCount(rows, nov, ctx)).toBe(1);
+    expect(review(nov)).toEqual([109]);
+  });
+  it("counts only what the search finds", () => {
+    expect(datePassedCount(rows, state({ view: "open", searchIn: true, q: "Client109" }), ctx)).toBe(1);
+    expect(datePassedCount(rows, state({ view: "open", searchIn: true, q: "Evans" }), ctx)).toBe(0);
   });
 });

@@ -1,8 +1,8 @@
 import React from "react";
 import { Send, CalendarClock, Check, ArrowDown, ArrowUp } from "lucide-react";
 import {
-  SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, describeFilters, isChipOn, isSearching,
-  effectiveView, listRows, quickChips, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
+  SORT_DEFAULT_DIR, SORT_OPTIONS, VIEWS, activeCount, clearFilters, datePassedCount, describeFilters, isChipOn, isSearching,
+  effectiveView, listRows, quickChips, reviewPassedFilters, sortToParam, sortFromParam, todayKey, toggleChip, viewCounts, viewInfo, EMPTY_FILTERS,
   type ChipLabels, type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState, type QuickChip, type SortKey,
 } from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
@@ -209,8 +209,9 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const liveText = useSettled(props.loaded === false ? "" : liveCountText(view, state, shownCount, totalCount), 500);
   const chips = quickChips(view);
   // Open enquiries left past their date, and forms nobody finished: each gets
-  // a one-line way in, so neither needs a tab of its own.
-  const passedCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "date_passed").length, [allRows]);
+  // a one-line way in, so neither needs a tab of its own. The date-passed
+  // count is of the rows your filters and search show: what "Review them" lists.
+  const passedCount = React.useMemo(() => datePassedCount(allRows, { filters: state.filters, q: state.q }, ctx), [allRows, state.filters, state.q, ctx]);
   const partialCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "partial").length, [allRows]);
   const pinnedOutside = React.useMemo(() => new Set(result.pinnedOutside), [result.pinnedOutside]);
   const clearAllFilters = () => props.onFiltersChange(() => clearFilters());
@@ -369,8 +370,8 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         {view === "open" && !passedOnly && passedCount > 0 && (
           <div className="flex items-center gap-2 flex-wrap min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
             <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-            <span>{passedCount === 1 ? "1 open enquiry is" : `${passedCount} open enquiries are`} past their event date.</span>
-            <button type="button" onClick={() => props.onFiltersChange(f => ({ ...f, needs: ["passed"] }))}
+            <span>{passedCount} {filtered ? "matching" : "open"} {passedCount === 1 ? "enquiry is" : "enquiries are"} past their event date.</span>
+            <button type="button" onClick={() => props.onFiltersChange(reviewPassedFilters)}
               className="font-bold text-primary underline underline-offset-[3px]">Review them</button>
           </div>
         )}

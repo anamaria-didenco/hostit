@@ -700,6 +700,16 @@ export function viewCounts(rows: readonly ListRow[], filters: EnquiryFilters, q:
   return out;
 }
 
+/** The Open view's "Review them": the filters you have, with Needs set to Date passed. */
+export const reviewPassedFilters = (f: EnquiryFilters): EnquiryFilters => ({ ...f, needs: ["passed"] });
+/**
+ * The Open view's "N open enquiries are past their event date": the ones your
+ * filters and search let through, so the number is what "Review them" shows.
+ */
+export function datePassedCount(rows: readonly ListRow[], s: Pick<ListState, "filters" | "q">, ctx: ListCtx): number {
+  return viewCounts(rows, reviewPassedFilters(s.filters), s.q, ctx).open;
+}
+
 /** Count key for "any value" in facetCounts. */
 export const FACET_TOTAL = "*";
 
