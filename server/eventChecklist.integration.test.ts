@@ -214,6 +214,53 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
     expect((await a.checklists.getForBooking({ bookingId: bk.id })).instance?.name).toBe("Bar crew — Noah's dinner");
   });
 
+  it("adds, removes and sets a photo on the server without wiping a staff tick made meanwhile", async () => {
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Mia Example — Drinks", bookingId: bk.id } as any);
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Mia Example — Drinks — Staff Checklist" });
+    let res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [
+      { id: "c-1", text: "Chill the bubbles by 5pm", category: "bar" },
+      { id: "c-2", text: "Light candles" },
+    ] });
+    expect((res.items as any[]).map(i => [i.id, i.category, i.checked])).toEqual([["c-1", "bar", false], ["c-2", "other", false]]);
+    expect(res.added).toBe(2);
+
+    // The run sheet has that copy open; a staff member ticks the bubbles.
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-1", checked: true });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-3", text: "Set up the photo booth" }] });
+    expect((res.items as any[]).map(i => [i.text, i.checked])).toEqual([
+      ["Chill the bubbles by 5pm", true], ["Light candles", false], ["Set up the photo booth", false],
+    ]);
+
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-2", checked: true });
+    const removed = await a.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-3" });
+    expect((removed.items as any[]).map(i => [i.text, i.checked])).toEqual([["Chill the bubbles by 5pm", true], ["Light candles", true]]);
+    // Removing it again (a second tab) changes nothing.
+    expect((await a.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-3" })).items).toEqual(removed.items);
+
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-2", checked: false });
+    const photo = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "/uploads/bubbles.jpg" });
+    expect((photo.items as any[]).map(i => [i.id, i.checked, i.imageUrl ?? null])).toEqual([["c-1", true, "/uploads/bubbles.jpg"], ["c-2", false, null]]);
+    const off = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "" });
+    expect((off.items as any[])[0]).not.toHaveProperty("imageUrl");
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "javascript:alert(1)" })).rejects.toThrow();
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-3", imageUrl: "/uploads/x.jpg" })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // PULL BAR DRINKS twice: drinks already on the list (as stored now) are skipped.
+    const drinks = [{ id: "d-1", text: "Stock bar: Prosecco", category: "bar" as const }, { id: "d-2", text: "Stock bar: Pinot Gris", category: "bar" as const }];
+    expect((await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: drinks, skipSameText: true })).added).toBe(2);
+    const again = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: drinks.map(d => ({ ...d, id: d.id + "b" })), skipSameText: true });
+    expect(again.added).toBe(0);
+    expect((again.items as any[]).map(i => i.text)).toEqual(["Chill the bubbles by 5pm", "Light candles", "Stock bar: Prosecco", "Stock bar: Pinot Gris"]);
+
+    // Blank words are refused; another venue can't add or remove.
+    await expect(a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: "   " }] })).rejects.toThrow();
+    await expect(b.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: "Mine" }] })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(b.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const staff = await pub.checklists.getByShareToken({ token: inst.shareToken! });
+    expect((staff!.items as any[]).map(i => i.id)).toEqual(["c-1", "c-2", "d-1", "d-2"]);
+  });
+
   it("another venue can't read, create or fill an event's checklist", async () => {
     const bk = await newBooking();
     const rs = await a.runsheets.create({ title: "Private", bookingId: bk.id } as any);

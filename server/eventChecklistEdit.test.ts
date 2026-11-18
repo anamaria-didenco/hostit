@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { editEventChecklistItem, eventChecklistCategoryLabel, reorderEventChecklist } from "../shared/eventChecklistEdit";
+import {
+  addEventChecklistItems, editEventChecklistItem, eventChecklistCategoryLabel, removeEventChecklistItem, reorderEventChecklist,
+} from "../shared/eventChecklistEdit";
 
 type Item = { id: string; text: string; category?: string; checked: boolean; checkedAt?: string; notes?: string; imageUrl?: string };
 
@@ -43,6 +45,55 @@ describe("editEventChecklistItem", () => {
     const copy = JSON.parse(JSON.stringify(stored));
     editEventChecklistItem(stored, "a", { text: "Changed" });
     expect(stored).toEqual(copy);
+  });
+});
+
+describe("editEventChecklistItem: photo", () => {
+  it("sets and takes off an item's photo, keeping its tick", () => {
+    const out = editEventChecklistItem(stored, "b", { imageUrl: "/uploads/ice.jpg" })!;
+    expect(out[1]).toEqual({ ...stored[1], imageUrl: "/uploads/ice.jpg" });
+    const off = editEventChecklistItem(stored, "c", { imageUrl: "" })!;
+    expect("imageUrl" in off[2]).toBe(false);
+    expect(off[1]).toBe(stored[1]);
+  });
+});
+
+describe("addEventChecklistItems", () => {
+  it("adds after the list as stored now, keeping a staff tick made meanwhile", () => {
+    const r = addEventChecklistItems(stored, [{ id: "c-9", text: "Set up the photo booth", checked: false }]);
+    expect(r.items.map(i => i.id)).toEqual(["a", "b", "c", "c-9"]);
+    expect(r.items[1]).toBe(stored[1]);
+    expect(r.added.map(i => i.text)).toEqual(["Set up the photo booth"]);
+  });
+
+  it("gives a taken id a suffix", () => {
+    const r = addEventChecklistItems(stored, [{ id: "a", text: "Another", checked: false }, { id: "a", text: "And another", checked: false }]);
+    expect(r.items.slice(3).map(i => i.id)).toEqual(["a-2", "a-3"]);
+  });
+
+  it("with skipSameText, leaves out words already on the list (any case) or repeated", () => {
+    const r = addEventChecklistItems(stored, [
+      { id: "x1", text: "ice in WELLS ", checked: false },
+      { id: "x2", text: "Stock bar: Prosecco", checked: false },
+      { id: "x3", text: "Stock bar: Prosecco", checked: false },
+    ], { skipSameText: true });
+    expect(r.added.map(i => i.id)).toEqual(["x2"]);
+    expect(r.items).toHaveLength(4);
+    // Without it, the same words can go on twice.
+    expect(addEventChecklistItems(stored, [{ id: "x1", text: "Ice in wells", checked: false }]).added).toHaveLength(1);
+  });
+
+  it("doesn't change the list it was given", () => {
+    const copy = JSON.parse(JSON.stringify(stored));
+    addEventChecklistItems(stored, [{ id: "z", text: "New", checked: false }]);
+    expect(stored).toEqual(copy);
+  });
+});
+
+describe("removeEventChecklistItem", () => {
+  it("removes only that item; one already gone leaves the list as it is", () => {
+    expect(removeEventChecklistItem(stored, "a").map(i => i.id)).toEqual(["b", "c"]);
+    expect(removeEventChecklistItem(stored, "gone")).toEqual(stored);
   });
 });
 

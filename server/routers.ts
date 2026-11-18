@@ -5076,8 +5076,45 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
 
     // The run sheet's checklist, one change at a time (see changeRunsheetChecklist):
-    // edit one item's words / category / notes, put the items in a new order,
-    // or rename the list. Each returns the list as saved, staff ticks included.
+    // add items, remove one, edit one item's words / category / notes / photo,
+    // put the items in a new order, or rename the list. Each returns the list
+    // as saved, staff ticks included.
+    addItemsForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        items: z.array(z.object({
+          id: z.string().min(1).max(100),
+          text: z.string().trim().min(1, 'An item needs some words').max(500),
+          category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
+        })).min(1).max(200),
+        // Leave out items whose words are already on the list (PULL BAR DRINKS).
+        skipSameText: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { addEventChecklistItems } = await import('@shared/eventChecklistEdit');
+        let added = 0;
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => {
+          const r = addEventChecklistItems(
+            (inst.items ?? []) as any[],
+            input.items.map(i => ({ id: i.id, text: i.text, category: i.category ?? 'other', checked: false })),
+            { skipSameText: input.skipSameText },
+          );
+          added = r.added.length;
+          return { items: r.items };
+        });
+        return { items: saved.items, name: saved.name, added };
+      }),
+    removeItemForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), itemId: z.string().max(100) }))
+      .mutation(async ({ input, ctx }) => {
+        const { changeRunsheetChecklist } = await import('./eventChecklist');
+        const { removeEventChecklistItem } = await import('@shared/eventChecklistEdit');
+        const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => ({
+          items: removeEventChecklistItem((inst.items ?? []) as any[], input.itemId),
+        }));
+        return { items: saved.items, name: saved.name };
+      }),
     editItemForRunsheet: protectedProcedure
       .input(z.object({
         runsheetId: z.number(),
@@ -5085,12 +5122,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         text: z.string().trim().min(1, 'An item needs some words').max(500).optional(),
         category: z.enum(EVENT_CHECKLIST_CATEGORIES).optional(),
         notes: z.string().max(2000).optional(),
+        // A photo from /api/upload-image (or "" to take it off).
+        imageUrl: z.string().max(2000).regex(/^(|\/(?!\/)\S*|https:\/\/\S+)$/, 'Not a photo address').optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { changeRunsheetChecklist } = await import('./eventChecklist');
         const { editEventChecklistItem } = await import('@shared/eventChecklistEdit');
         const saved = await changeRunsheetChecklist(ctx.user.id, input.runsheetId, inst => {
-          const items = editEventChecklistItem((inst.items ?? []) as any[], input.itemId, { text: input.text, category: input.category, notes: input.notes });
+          const items = editEventChecklistItem((inst.items ?? []) as any[], input.itemId, { text: input.text, category: input.category, notes: input.notes, imageUrl: input.imageUrl });
           return items ? { items } : null;
         });
         return { items: saved.items, name: saved.name };
@@ -5113,6 +5152,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return { items: saved.items, name: saved.name };
       }),
 
+    // The whole list at once. The run sheet no longer uses this (it would
+    // undo a tick made on the staff link after the sheet loaded its copy):
+    // it is kept for a tab still open on an older version of the page.
     saveItemsForRunsheet: protectedProcedure
       .input(z.object({
         runsheetId: z.number(),

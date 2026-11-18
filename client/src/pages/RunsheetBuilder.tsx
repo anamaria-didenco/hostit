@@ -1226,12 +1226,11 @@ export default function RunsheetBuilder() {
     },
   });
 
-  const saveChecklistItems = trpc.checklists.saveItemsForRunsheet.useMutation();
-
-  // ─── Editing the event checklist: an item's words and category, its place,
-  // the list's name. Each is one change made on the server to the list as it
-  // is now (a whole-list save could undo a tick a staff member just made from
-  // their link), and the saved list comes back, their ticks included.
+  // ─── Changing the event checklist: adding and removing items, an item's
+  // words, category and photo, its place, the list's name. Each is one change
+  // made on the server to the list as it is now (a whole-list save could undo
+  // a tick a staff member just made from their link), and the saved list
+  // comes back, their ticks included.
   const [editingChecklistItem, setEditingChecklistItem] = useState<string | null>(null);
   const [checklistEdit, setChecklistEdit] = useState<{ text: string; category: string }>({ text: "", category: "other" });
   const [renamingChecklist, setRenamingChecklist] = useState(false);
@@ -1253,6 +1252,23 @@ export default function RunsheetBuilder() {
     setChecklistItems((r.items ?? []) as any);
     setChecklistInstance((inst: any) => inst ? { ...inst, name: r.name, items: r.items } : inst);
   };
+  // Shows the list as it is on the server now (after a change failed, or the
+  // owner comes back to this tab): staff ticks made meanwhile appear.
+  const rereadChecklist = () => {
+    if (sheetId) getOrCreateChecklist.mutate({ runsheetId: sheetId }, { onSuccess: inst => { if (inst) applySavedChecklist(inst); } });
+  };
+  const addChecklistItemsMut = trpc.checklists.addItemsForRunsheet.useMutation({
+    onSuccess: r => applySavedChecklist(r),
+    onError: (err) => { toast.error(err.data?.code === "NOT_FOUND" ? "The checklist hasn't loaded yet — please try again." : "Couldn't add to the checklist — please try again."); rereadChecklist(); },
+  });
+  const removeChecklistItemMut = trpc.checklists.removeItemForRunsheet.useMutation({
+    onSuccess: r => applySavedChecklist(r),
+    onError: () => { toast.error("Couldn't remove the item — please try again."); rereadChecklist(); },
+  });
+  const setChecklistImageMut = trpc.checklists.editItemForRunsheet.useMutation({
+    onSuccess: r => applySavedChecklist(r),
+    onError: (err) => { toast.error(err.data?.code === "CONFLICT" ? err.message : "Couldn't save the photo — please try again."); rereadChecklist(); },
+  });
   const closeChecklistItemEdit = (itemId: string) => { setEditingChecklistItem(null); setChecklistRefocus(`edit-${itemId}`); };
   const editChecklistItemMut = trpc.checklists.editItemForRunsheet.useMutation({
     onSuccess: (r, vars) => { applySavedChecklist(r); closeChecklistItemEdit(vars.itemId); toast.success("Checklist item saved"); },
@@ -1261,7 +1277,7 @@ export default function RunsheetBuilder() {
         // Deleted meanwhile (on another screen): show the list as it is now.
         toast.error(err.message);
         setEditingChecklistItem(null);
-        if (sheetId) getOrCreateChecklist.mutate({ runsheetId: sheetId });
+        rereadChecklist();
         return;
       }
       toast.error("Couldn't save the item — please try again.");
@@ -1269,7 +1285,7 @@ export default function RunsheetBuilder() {
   });
   const reorderChecklistMut = trpc.checklists.reorderItemsForRunsheet.useMutation({
     onSuccess: r => applySavedChecklist(r),
-    onError: () => toast.error("Couldn't move the item — please try again."),
+    onError: () => { toast.error("Couldn't move the item — please try again."); rereadChecklist(); },
   });
   const renameChecklistMut = trpc.checklists.renameForRunsheet.useMutation({
     onSuccess: r => { applySavedChecklist(r); setRenamingChecklist(false); setChecklistRefocus("rename"); toast.success("Checklist renamed"); },
@@ -1322,6 +1338,8 @@ export default function RunsheetBuilder() {
     },
     onError: (err: any) => toast.error(err?.message || "AI parse failed"),
   });
+  const checklistCategory = (c: string) => (EVENT_CHECKLIST_CATEGORIES as readonly string[]).includes(c)
+    ? c as (typeof EVENT_CHECKLIST_CATEGORIES)[number] : 'other' as const;
   function applyChecklistParsed() {
     if (!checklistParsed) return;
     const selected = checklistParsed.items.filter(i => i._selected && i.text.trim());
@@ -1332,9 +1350,9 @@ export default function RunsheetBuilder() {
       checked: false,
       category: it.category || 'other',
     }));
-    const updated = [...checklistItems, ...additions];
-    setChecklistItems(updated);
-    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    if (checklistNotReady()) return;
+    setChecklistItems([...checklistItems, ...additions]);
+    if (sheetId) addChecklistItemsMut.mutate({ runsheetId: sheetId, items: additions.map(a => ({ ...a, category: checklistCategory(a.category) })) });
     setShowChecklistPaste(false);
     setChecklistPasteText("");
     setChecklistParsed(null);
@@ -1344,6 +1362,7 @@ export default function RunsheetBuilder() {
     onSuccess: (data) => {
       if (data?.items) setChecklistItems(data.items as any);
     },
+    onError: () => { toast.error("Couldn't save the tick — please try again."); rereadChecklist(); },
   });
 
 
@@ -1729,10 +1748,23 @@ export default function RunsheetBuilder() {
     getOrCreateChecklist.mutate({
       runsheetId: sheetId,
       name: sheetTitle ? `${sheetTitle} — Staff Checklist` : 'Staff Checklist',
-      defaultItems: [],
+      // Items added before a new sheet was first saved start its checklist
+      // (only used when the sheet has no checklist yet).
+      defaultItems: checklistItems.map(i => ({ id: i.id, text: i.text, category: i.category, checked: false })),
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetId, existing]);
+  // Coming back to this tab: show ticks staff made on their link meanwhile.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || !checklistInstance || getOrCreateChecklist.isPending) return;
+      if (addChecklistItemsMut.isPending || removeChecklistItemMut.isPending || setChecklistImageMut.isPending
+        || editChecklistItemMut.isPending || reorderChecklistMut.isPending || renameChecklistMut.isPending || toggleByToken.isPending) return;
+      rereadChecklist();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  });
   // A runsheet opened from the "My runsheets" list (or a bookmark) has no
   // leadId in the URL but usually has one on the record — resolve the lead
   // from either so the client contact still prefills.
@@ -2849,34 +2881,44 @@ export default function RunsheetBuilder() {
   }
 
   function toggleChecklistItem(id: string) {
+    if (checklistNotReady()) return;
     const updated = checklistItems.map(item => item.id === id ? { ...item, checked: !item.checked, checkedAt: !item.checked ? new Date().toISOString() : undefined } : item);
     setChecklistItems(updated);
+    // Ticks go through the same one-item route as the staff link. (Every
+    // saved sheet's checklist has a link; before it has loaded there's
+    // nothing on the server to tick yet.)
     if (checklistInstance?.shareToken) {
       const item = checklistItems.find(i => i.id === id);
       toggleByToken.mutate({ token: checklistInstance.shareToken, itemId: id, checked: item ? !item.checked : true });
-    } else if (sheetId) {
-      saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
     }
   }
 
+  // A sheet that hasn't been saved yet keeps its checklist here; it goes to
+  // the server with the sheet's first save (getOrCreate's defaultItems).
+  const checklistNotReady = () => {
+    if (sheetId && !checklistInstance) { toast.error("The checklist hasn't loaded yet — please try again."); return true; }
+    return false;
+  };
+
   function addChecklistItem() {
-    if (!newChecklistText.trim()) return;
-    const updated = [...checklistItems, { id: `c-${Date.now()}`, text: newChecklistText.trim(), checked: false, category: "other" }];
-    setChecklistItems(updated);
+    const text = newChecklistText.trim();
+    if (!text || checklistNotReady()) return;
+    const item = { id: `c-${Date.now()}`, text, checked: false, category: "other" };
+    setChecklistItems([...checklistItems, item]);
     setNewChecklistText("");
-    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    if (sheetId) addChecklistItemsMut.mutate({ runsheetId: sheetId, items: [{ id: item.id, text, category: "other" }] });
   }
 
   function removeChecklistItem(id: string) {
-    const updated = checklistItems.filter(item => item.id !== id);
-    setChecklistItems(updated);
-    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    if (checklistNotReady()) return;
+    setChecklistItems(checklistItems.filter(item => item.id !== id));
+    if (sheetId) removeChecklistItemMut.mutate({ runsheetId: sheetId, itemId: id });
   }
 
   function setChecklistItemImage(id: string, imageUrl: string) {
-    const updated = checklistItems.map(item => item.id === id ? { ...item, imageUrl: imageUrl || undefined } : item);
-    setChecklistItems(updated);
-    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    if (checklistNotReady()) return;
+    setChecklistItems(checklistItems.map(item => item.id === id ? { ...item, imageUrl: imageUrl || undefined } : item));
+    if (sheetId) setChecklistImageMut.mutate({ runsheetId: sheetId, itemId: id, imageUrl });
   }
 
   async function handleChecklistPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2917,10 +2959,17 @@ export default function RunsheetBuilder() {
       toast.info('All drinks are already in the checklist.');
       return;
     }
-    const updated = [...checklistItems, ...toAdd];
-    setChecklistItems(updated);
-    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
-    toast.success(`Added ${toAdd.length} bar stock item${toAdd.length !== 1 ? 's' : ''} to the checklist`);
+    if (checklistNotReady()) return;
+    const said = (n: number) => n === 0
+      ? toast.info('All drinks are already in the checklist.')
+      : toast.success(`Added ${n} bar stock item${n !== 1 ? 's' : ''} to the checklist`);
+    setChecklistItems([...checklistItems, ...toAdd]);
+    if (!sheetId) { said(toAdd.length); return; }
+    // The server skips any already on the list as it is now.
+    addChecklistItemsMut.mutate(
+      { runsheetId: sheetId, items: toAdd.map(a => ({ id: a.id, text: a.text, category: 'bar' as const })), skipSameText: true },
+      { onSuccess: r => said(r.added) },
+    );
   }
 
   // Format event date for display
