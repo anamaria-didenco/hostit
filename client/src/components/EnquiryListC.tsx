@@ -214,6 +214,21 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   const passedCount = React.useMemo(() => datePassedCount(allRows, { filters: state.filters, q: state.q }, ctx), [allRows, state.filters, state.q, ctx]);
   const partialCount = React.useMemo(() => allRows.filter(r => r.signal.kind === "partial").length, [allRows]);
   const pinnedOutside = React.useMemo(() => new Set(result.pinnedOutside), [result.pinnedOutside]);
+  const showPassed = view === "open" && !passedOnly && passedCount > 0 && props.loaded !== false;
+  // "Review them" goes away once pressed: focus moves on to "Close all N as
+  // Lost" (or, for staff, the view's tab) instead of dropping to the page.
+  const closeNoteId = React.useId();
+  const closeAllRef = React.useRef<HTMLButtonElement>(null);
+  const focusAfterReview = React.useRef(false);
+  React.useEffect(() => {
+    if (!passedOnly || !focusAfterReview.current) return;
+    focusAfterReview.current = false;
+    (closeAllRef.current ?? tabRef.current)?.focus();
+  }, [passedOnly, tabRef]);
+  const reviewPassed = (
+    <button type="button" onClick={() => { focusAfterReview.current = true; props.onFiltersChange(reviewPassedFilters); }}
+      className="font-bold text-primary underline underline-offset-[3px] whitespace-nowrap">Review them</button>
+  );
   const clearAllFilters = () => props.onFiltersChange(() => clearFilters());
 
   // ── Select multiple ───────────────────────────────────────────────────────
@@ -330,10 +345,21 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               {chips.map(c => <QuickChipButton key={c.id} chip={c} on={isChipOn(state.filters, c)} onClick={() => props.onFiltersChange(f => toggleChip(f, c))} />)}
             </div>
           )}
-          <label className="ml-auto self-center inline-flex items-center gap-2 py-1 font-sans text-[13px] text-muted-foreground">
-            <span className="@max-[1147px]:sr-only">Sort</span>
-            {sortSelect("h-8 max-w-[11.5rem] px-1.5")}
-          </label>
+          <div className="ml-auto self-center flex items-center gap-x-4 py-1">
+            {/* Open view: enquiries still open after their date, beside Sort
+                rather than on a line of their own. */}
+            {showPassed && (
+              <p data-passed-note className="inline-flex items-center gap-1.5 whitespace-nowrap font-sans text-[13px] text-foreground">
+                <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                {passedText(passedCount, filtered, "long")}{"\u00a0·"}
+                {reviewPassed}
+              </p>
+            )}
+            <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
+              <span className="@max-[1147px]:sr-only">Sort</span>
+              {sortSelect("h-8 max-w-[11.5rem] px-1.5")}
+            </label>
+          </div>
         </div>
 
         {/* Narrow: all six views in a 2×3 grid (nothing off-screen), the
@@ -362,7 +388,17 @@ export default function EnquiryListC(props: EnquiryListCProps) {
             </div>
           )}
           <div className="flex items-center justify-between gap-3 min-h-9">
-            <div className="font-sans text-[13px] text-muted-foreground min-w-0" aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</div>
+            {/* The count, and on Open how many are past their date ("Showing 22
+                of 98 open · 3 matching are past their date · Review them").
+                Only the count is announced as it changes. */}
+            <p className={`font-sans text-[13px] text-muted-foreground min-w-0 ${showPassed ? "leading-4" : ""}`}>
+              <span aria-live="polite" aria-atomic="true">{props.loaded === false ? "" : summary}</span>
+              {showPassed && (
+                <span data-passed-note>
+                  {"\u00a0· "}{passedText(passedCount, filtered, "short")}{"\u00a0· "}{reviewPassed}
+                </span>
+              )}
+            </p>
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground shrink-0">
               <span className="sr-only">Sort</span>
               {sortSelect("h-9 max-w-[11rem] px-2")}
@@ -370,24 +406,12 @@ export default function EnquiryListC(props: EnquiryListCProps) {
           </div>
         </div>
 
-        {/* Open view: enquiries still open after their date. */}
-        {view === "open" && !passedOnly && passedCount > 0 && (
-          <div className="flex items-center gap-2 flex-wrap min-h-7 @min-[768px]:min-h-8 px-3 py-0.5 rounded-[6px] border border-border bg-card font-sans text-[13px] text-foreground">
-            <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-            {/* One line on a phone too: the short wording there. */}
-            <span className="@max-[767px]:hidden">{`${passedCount} ${filtered ? "matching" : "open"} ${passedCount === 1 ? "enquiry is past its" : "enquiries are past their"} event date.`}</span>
-            <span className={CARDS_ONLY}>{`${passedCount}${filtered ? " matching" : ""} ${passedCount === 1 ? "is past its" : "are past their"} event date.`}</span>
-            <button type="button" onClick={() => props.onFiltersChange(reviewPassedFilters)}
-              className="font-bold text-primary underline underline-offset-[3px]">Review them</button>
-          </div>
-        )}
-
         {/* Only the date-passed ones showing: close the lot in one go, they
             can't be won any more (Lost, reason "other" with a note, so
             Reports' lost-reason split stays true). */}
         {passedOnly && rows.length > 0 && onCloseAsLost && !props.isStaff && (
           <div className="flex items-center justify-between gap-3 flex-wrap rounded-[6px] border border-border bg-card px-3.5 py-2.5">
-            <p className="font-sans text-[13px] text-foreground">
+            <p id={closeNoteId} className="font-sans text-[13px] text-foreground">
               {rows.length === 1 ? "1 enquiry" : `${rows.length} enquiries`} can't go ahead on the date asked. Close {rows.length === 1 ? "it" : "them"} as Lost to keep the pipeline honest.
             </p>
             {confirmClose ? (
@@ -399,7 +423,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                 </button>
               </div>
             ) : (
-              <button onClick={() => setConfirmClose(true)}
+              <button ref={closeAllRef} onClick={() => setConfirmClose(true)} aria-describedby={closeNoteId}
                 className="h-9 px-3 rounded-[6px] font-sans text-[13px] font-bold border-[1.5px] border-input bg-card text-foreground hover:border-primary">
                 Close {rows.length === 1 ? "it" : `all ${rows.length}`} as Lost
               </button>
@@ -594,6 +618,19 @@ function sortPhrase(view: EnquiryView, s: ListSort): string {
     case "space": return "by space";
   }
 }
+/**
+ * The Open view's date-passed note. Long (laptop, beside Sort): "6 open
+ * enquiries are past their event date", "3 matching are past their event
+ * date". Short (phone, after the count): "6 are past their date", "3 matching
+ * are past their date". One: "is past its".
+ */
+export function passedText(n: number, filtered: boolean, form: "long" | "short"): string {
+  const verb = n === 1 ? "is past its" : "are past their";
+  if (form === "short") return `${n}\u00a0${filtered ? "matching " : ""}${verb} date`;
+  if (filtered) return `${n}\u00a0matching ${verb} event date`;
+  return `${n}\u00a0open ${n === 1 ? "enquiry" : "enquiries"} ${verb} event date`;
+}
+
 /** "24 waiting on you · longest first", "Showing 27 of 98 open", "4 matches for ‘ellingham’". */
 export function summaryText(view: EnquiryView, state: ListState, shown: number, total: number): string {
   if (isSearching(state)) return `${shown} match${shown === 1 ? "" : "es"} for ‘${state.q.trim()}’ · ${sortPhrase(view, state.sort)}`;
