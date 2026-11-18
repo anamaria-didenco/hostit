@@ -496,11 +496,11 @@ export default function DailyChecklists() {
                                   if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT" && editItemText.trim() && !updateItemMut.isPending) { e.preventDefault(); updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() }); }
                                 }}
                               >
-                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} aria-label="Task text" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
-                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" aria-label="Task note (optional)" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-xs text-[#83745b] focus:outline-none focus:border-[#2f5488]" />
+                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} aria-label="Task text" className="w-full bg-white border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
+                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" aria-label="Task note (optional)" className="w-full bg-white border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-xs text-[#83745b] focus:outline-none focus:border-[#2f5488]" />
                                 <div className="flex gap-2">
                                   <button onClick={() => { if (editItemText.trim()) updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() }); }} disabled={!editItemText.trim() || updateItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-1.5 min-h-[32px] pointer-coarse:min-h-[44px] bg-[#2f5488] text-white rounded disabled:opacity-50">SAVE</button>
-                                  <button onClick={() => closeItemEdit(item.id)} className="font-bebas tracking-widest text-xs px-4 py-1.5 min-h-[32px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#83745b] rounded">CANCEL</button>
+                                  <button onClick={() => closeItemEdit(item.id)} className="font-bebas tracking-widest text-xs px-4 py-1.5 min-h-[32px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#75674f] rounded">CANCEL</button>
                                 </div>
                               </div>
                             ) : (
@@ -991,7 +991,9 @@ function ChecklistDetailsForm({ checklist, saving, onSave, onCancel }: {
     onSave({ name: name.trim(), category, assignedDate: date || null, description: description.trim() });
   };
   const field = "w-full border border-[#c9a84c]/30 rounded px-3 py-2 pointer-coarse:min-h-[44px] font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white";
-  const label = "font-bebas text-xs tracking-widest text-[#83745b] block mb-1";
+  // A darker muted ink than the create form's: on this tinted panel #83745b
+  // is 4.3:1, under the 4.5:1 small text needs; this is 5.2:1.
+  const label = "font-bebas text-xs tracking-widest text-[#75674f] block mb-1";
   // Categories saved before this list existed still show as themselves.
   const options = CATEGORIES.some(c => c.value === category) ? CATEGORIES : [...CATEGORIES, { value: category, label: category, color: "" }];
   return (
@@ -1037,7 +1039,7 @@ function ChecklistDetailsForm({ checklist, saving, onSave, onCancel }: {
           {saving ? "SAVING..." : "SAVE"}
         </button>
         <button type="button" onClick={onCancel}
-          className="font-bebas tracking-widest text-sm px-6 py-2 min-h-[36px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#83745b] rounded hover:bg-white">
+          className="font-bebas tracking-widest text-sm px-6 py-2 min-h-[36px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#75674f] rounded hover:bg-white">
           CANCEL
         </button>
       </div>
