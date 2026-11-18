@@ -24,7 +24,10 @@ function readUrl() {
  *  - Closing a record that this hook opened goes Back, so no stray entry is left.
  *  - Back/Forward (popstate) re-applies the URL: tab, and record open or closed.
  *
- * Other query params (?sub=, ?rtab=, ...) are left exactly as they are.
+ * Other query params (?sub=, ?rtab=, ...) are left exactly as they are, except
+ * a tab's own params (`tabParams`, e.g. the Enquiries list's ?view=&status=),
+ * which are dropped while another tab is showing so they never leak onto it.
+ * That tab writes and reads them itself (useEnquiryListState).
  * The Dashboard itself restores a ?leadId= on first load (once its leads have
  * arrived); this hook restores ?bookingId=, and everything on popstate.
  */
@@ -41,6 +44,8 @@ export function useDashboardHistory<T extends string>(opts: {
   openBooking: (id: number) => Promise<boolean> | boolean;
   /** The leads have loaded, so the Dashboard's own ?leadId= restore has had its chance. */
   leadsLoaded: boolean;
+  /** Params that belong to one tab only: removed from the address on every other tab. */
+  tabParams?: { tab: T; keys: readonly string[] };
 }) {
   const o = useRef(opts);
   o.current = opts;
@@ -78,6 +83,8 @@ export function useDashboardHistory<T extends string>(opts: {
     const qp = new URLSearchParams(url.search);
     // The default tab keeps the bare /dashboard URL.
     if (tab === "overview") qp.delete("tab"); else qp.set("tab", tab);
+    const own = o.current.tabParams;
+    if (own && tab !== own.tab) for (const k of own.keys) qp.delete(k);
     qp.delete("leadId"); qp.delete("bookingId");
     if (drawer) qp.set(drawer.kind === "lead" ? "leadId" : "bookingId", String(drawer.id));
     const qs = qp.toString();

@@ -3,9 +3,11 @@ import {
   Clock, Bell, Hourglass, CornerUpLeft, Send, ArrowRight, CalendarClock,
   CircleDashed, AlertTriangle, CheckCircle2, MinusCircle, SlidersHorizontal, X,
 } from "lucide-react";
+import { enquiryAction, type SignalTone } from "@shared/enquirySignal";
 import {
-  enquirySignal, enquiryAction, type SignalTone, type EnquiryGroup,
-} from "@shared/enquirySignal";
+  EMPTY_FILTERS, SORT_OPTIONS, VIEWS, activeCount, isSearching, effectiveView, listRows, sortToParam, sortFromParam, viewCounts, viewInfo,
+  type EnquiryFilters, type EnquiryView, type ListCtx, type ListRow, type ListSort, type ListState,
+} from "@shared/enquiryFilters";
 import { STARTER_TEMPLATES } from "@shared/starterTemplates";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { leadDatePassed } from "@shared/followUp";
@@ -13,21 +15,24 @@ import MovedNote from "@/components/MovedNote";
 import { useFocusKeeper } from "@/hooks/useFocusKeeper";
 
 /**
- * The Option-C enquiries list: one signal-first list where every row leads with
- * what the enquiry needs from you (a toned chip — "Waiting 2d 1h", "Follow-up
- * overdue", "Gone quiet"), sorted so the most urgent rises to the top, with a
- * context-aware action (Reply / Nudge / Open) and an inline quick-reply.
+ * The Enquiries list: six views (Needs reply, Follow-up due, Open, Confirmed,
+ * Closed, All), each row leading with what the enquiry needs from you, sorted
+ * so the most urgent rises to the top, with Reply / Nudge and an inline quick
+ * reply. The rows, counts, filters and sort all come from
+ * shared/enquiryFilters.ts; the state lives in useEnquiryListState.
  */
 
-type ReplyStatus = Map<number, { direction: string; at: Date }>;
-
 export interface EnquiryListCProps {
-  leads: any[];
-  nowMs: number;
+  /** Every enquiry, already enriched (enrichRows). */
+  rows: ListRow[];
+  ctx: ListCtx;
+  /** The enquiries have loaded (an empty list means "none", not "not yet"). */
+  loaded?: boolean;
+  state: ListState;
+  onViewChange: (v: EnquiryView) => void;
+  onFiltersChange: (f: EnquiryFilters | ((f: EnquiryFilters) => EnquiryFilters)) => void;
+  onSortChange: (s: ListSort) => void;
   venueName: string;
-  replyStatus: ReplyStatus;
-  clashMap?: Record<number, any[]>;
-  isPartial: (lead: any) => boolean;
   statusInfo: (status: string | null | undefined) => { label: string; dot: string };
   onOpen: (lead: any) => void;
   onSend: (args: { lead: any; subject: string; body: string }) => void;
@@ -39,7 +44,7 @@ export interface EnquiryListCProps {
   onCloseAsLost?: (ids: number[]) => void;
   closing?: boolean;
   /** Enquiries whose status was just changed — kept in place with a "Moved to
-      … · Undo" note instead of vanishing from the tab they no longer match. */
+      … · Undo" note instead of vanishing from the view they no longer match. */
   movedRows?: Record<number, { from: string; to: string; at: number }>;
   onUndoMove?: (id: number) => void;
   undoPendingId?: number | null;
@@ -52,15 +57,6 @@ const TONE: Record<SignalTone, { fg: string; bg: string }> = {
   green: { fg: "#3f7350", bg: "#e8f0e6" },
   gray: { fg: "#6a6256", bg: "#f4efe6" },
 };
-
-/** How the list is ordered. "urgent" is the signal order (default). */
-type SortKey = "urgent" | "newest" | "oldest" | "event";
-const SORTS: { id: SortKey; label: string; note: string }[] = [
-  { id: "urgent", label: "Most urgent", note: "" },
-  { id: "newest", label: "Came in: newest first", note: "Newest enquiries first" },
-  { id: "oldest", label: "Came in: oldest first", note: "Oldest enquiries first" },
-  { id: "event", label: "Event date: soonest", note: "Soonest event first" },
-];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 /** A status colour (#rrggbb) at a given alpha, for a light fill. Falls back to
@@ -88,17 +84,6 @@ function Icon({ name, size = 13 }: { name: string; size?: number }) {
   const C = ICON[name] ?? ArrowRight;
   return <C style={{ width: size, height: size }} strokeWidth={2.2} aria-hidden />;
 }
-
-type ListTab = EnquiryGroup | "all" | "passed";
-
-const TABS: { id: ListTab; label: string }[] = [
-  { id: "reply", label: "Needs reply" },
-  { id: "followup", label: "Follow-up due" },
-  { id: "confirmed", label: "Confirmed" },
-  { id: "all", label: "All" },
-  // Only shown when there's something in it.
-  { id: "passed", label: "Date passed" },
-];
 
 // "Sat, 27 Nov" this year; "Sat, 27 Nov 2027" otherwise — a date without its
 // year is ambiguous once enquiries run into next year.
@@ -142,15 +127,10 @@ function moneyRange(lead: any): string {
 }
 
 export default function EnquiryListC(props: EnquiryListCProps) {
-  const { leads, nowMs, venueName, replyStatus, clashMap, isPartial, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
-  // null = not chosen yet: open on the first tab that has something in it,
-  // rather than an empty "Needs reply 0" while follow-ups are due.
-  const [pickedTab, setTab] = React.useState<ListTab | null>(null);
+  const { rows: allRows, ctx, state, venueName, statusInfo, onOpen, onSend, sending, onCloseAsLost, closing, movedRows, onUndoMove, undoPendingId } = props;
+  const nowMs = ctx.nowMs;
   const [confirmClose, setConfirmClose] = React.useState(false);
   const [replyId, setReplyId] = React.useState<number | null>(null);
-  // Order the list by when enquiries came in, or by event date, so it's easy to
-  // see who to follow up on first. "urgent" keeps the signal-first order.
-  const [sortBy, setSortBy] = React.useState<SortKey>("urgent");
   const [tplName, setTplName] = React.useState<string>("");
   const [draft, setDraft] = React.useState("");
   // Opening a quick reply brings it into view and, when it was opened from the
@@ -165,49 +145,16 @@ export default function EnquiryListC(props: EnquiryListCProps) {
     if (focusReplyBox.current) replyBoxRef.current?.focus({ preventScroll: true });
     focusReplyBox.current = false;
   }, [replyId]);
-  // A just-moved row keeps its place in the tab it was moved from, even though
-  // its new status no longer matches it. We remember which tab each move was
-  // pinned to; the pin drops when the parent clears the mark (undo, or a
-  // search/filter change) so it doesn't leak into other tabs.
-  const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, ListTab>>(new Map());
 
-  const enriched = React.useMemo(() => leads.map((lead) => {
-    const id = lead.id as number;
-    const rs = replyStatus.get(id);
-    const signal = enquirySignal(lead, {
-      nowMs,
-      partial: isPartial(lead),
-      clientRepliedAtMs: rs?.direction === "in" ? rs.at.getTime() : null,
-      hasClash: (clashMap?.[id]?.length ?? 0) > 0,
-      holdUntilMs: lead.holdUntil ? new Date(lead.holdUntil).getTime() : null,
-      eventDateMs: lead.eventDate ? new Date(lead.eventDate).getTime() : null,
-    });
-    return { lead, signal };
-  }), [leads, nowMs, replyStatus, clashMap, isPartial]);
-
-  const isPassed = React.useCallback((lead: any) => leadDatePassed(lead, nowMs), [nowMs]);
-
-  const counts = React.useMemo(() => {
-    const c: Record<string, number> = { reply: 0, followup: 0, confirmed: 0, all: 0, passed: 0 };
-    for (const { lead, signal } of enriched) {
-      if (signal.group !== "closed") c.all++;
-      if (signal.group in c) c[signal.group]++;
-      // Not the ones a client has just written to: those need a reply first.
-      if (signal.group === "progress" && isPassed(lead)) c.passed++;
-    }
-    return c;
-  }, [enriched, isPassed]);
-
-  const defaultTab: ListTab = counts.reply ? "reply" : counts.followup ? "followup" : "all";
-  const tab: ListTab = pickedTab ?? defaultTab;
-  // Settle the opening tab once the list has loaded, so a refetch (a reply
-  // sent, a new enquiry in) doesn't flip the view under you.
-  React.useEffect(() => {
-    if (pickedTab === null && enriched.length > 0) setTab(defaultTab);
-  }, [pickedTab, enriched.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Track which tab each moved row is pinned to, and drop pins the parent has
-  // cleared (undo, or a search/filter change empties movedRows).
+  const searching = isSearching(state);
+  const view = effectiveView(state);
+  const filtered = searching || activeCount(state.filters) > 0;
+  // The list as shown right now: a key for "the same list".
+  const listKey = `${view}|${JSON.stringify(state.filters)}|${state.q.trim()}`;
+  // A just-moved row keeps its place in the list it was moved from, even though
+  // its new status no longer matches it. The pin drops when the parent clears
+  // the mark (undo, or any view / filter / search change).
+  const [pinnedMoves, setPinnedMoves] = React.useState<Map<number, string>>(new Map());
   React.useEffect(() => {
     const moved = movedRows ?? {};
     setPinnedMoves((prev) => {
@@ -216,27 +163,26 @@ export default function EnquiryListC(props: EnquiryListCProps) {
       for (const id of next.keys()) if (!(id in moved)) { next.delete(id); changed = true; }
       for (const key of Object.keys(moved)) {
         const id = Number(key);
-        if (!next.has(id)) { next.set(id, tab); changed = true; }
+        if (!next.has(id)) { next.set(id, listKey); changed = true; }
       }
       return changed ? next : prev;
     });
-  }, [movedRows, tab]);
+  }, [movedRows, listKey]);
 
-  const rows = React.useMemo(() => {
-    const picked = enriched.filter(({ lead, signal }) =>
-      pinnedMoves.get(lead.id) === tab ? true
-      : tab === "passed" ? signal.group === "progress" && isPassed(lead)
-      : tab === "all" ? signal.group !== "closed" : signal.group === tab);
-    const cameIn = (l: any) => new Date(l.createdAt).getTime() || 0;
-    const eventAt = (l: any) => (l.eventDate ? new Date(l.eventDate).getTime() : Infinity);
-    if (sortBy === "newest") return picked.sort((a, b) => cameIn(b.lead) - cameIn(a.lead));
-    if (sortBy === "oldest") return picked.sort((a, b) => cameIn(a.lead) - cameIn(b.lead));
-    if (sortBy === "event") return picked.sort((a, b) => eventAt(a.lead) - eventAt(b.lead));
-    return picked.sort((a, b) => b.signal.sortKey - a.signal.sortKey);
-  }, [enriched, tab, isPassed, pinnedMoves, sortBy]);
+  const counts = React.useMemo(() => viewCounts(allRows, state.filters, state.q, ctx), [allRows, state.filters, state.q, ctx]);
+  // An unsent quick reply is never hidden by a filter change: its row stays.
+  const keepReply = replyId != null && draft.trim() ? replyId : null;
+  const result = React.useMemo(() => {
+    const keepAt = new Map<number, number>();
+    for (const [id, key] of pinnedMoves) if (key === listKey && movedRows?.[id]) keepAt.set(id, movedRows[id].at);
+    return listRows(allRows, state, ctx, { alwaysInclude: keepReply != null ? [keepReply] : [], keepAt });
+  }, [allRows, state, ctx, keepReply, pinnedMoves, listKey, movedRows]);
+  const rows = result.rows;
+  const dividerAt = React.useMemo(() => new Map(result.dividers.map(d => [d.at, d])), [result.dividers]);
+  const passedOnly = state.filters.needs.length === 1 && state.filters.needs[0] === "passed";
 
-  // Leaving the "Date passed" tab (or emptying it) cancels a pending confirm.
-  React.useEffect(() => { setConfirmClose(false); }, [tab, counts.passed]);
+  // Leaving the Date passed list (or emptying it) cancels a pending confirm.
+  React.useEffect(() => { setConfirmClose(false); }, [passedOnly, rows.length]);
 
   const { onRowsChange } = props;
   const orderKey = rows.map((r) => r.lead.id).join(",");
@@ -245,27 +191,25 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   }, [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Send / Cancel on a quick reply, or a row leaving the list: keep keyboard
   // focus on that row (or the next one) instead of dropping it to the page.
-  // When the last one goes, the tab it was on ("Needs reply 0").
+  // When the last one goes, the view it was on ("Needs reply 0").
   const rowsRef = React.useRef<HTMLDivElement>(null);
   const tabRef = React.useRef<HTMLButtonElement>(null);
   useFocusKeeper(rowsRef, tabRef);
 
-  const summary = tab === "reply" ? `${counts.reply} waiting on you · longest first`
-    : tab === "followup" ? "Quoted or gone quiet · most overdue first"
-    : tab === "confirmed" ? "Booked in · soonest event first"
-    : tab === "passed" ? "Still open, but the event date has gone by"
-    : `${counts.all} enquiries`;
-  const emptyText = tab === "reply" ? "Nobody is waiting on a reply."
-    : tab === "followup" ? "No follow-ups due. Everyone's been looked after."
-    : tab === "passed" ? "No enquiries left open past their date."
-    : "Nothing here.";
+  const sortValue = sortToParam(state.sort);
+  const baseCounts = React.useMemo(() => viewCounts(allRows, EMPTY_FILTERS, "", ctx), [allRows, ctx]);
+  const summary = filtered
+    ? `Showing ${rows.length} of ${baseCounts[view]} ${view === "all" ? "enquiries" : viewInfo(view).label.toLowerCase()}`
+    : view === "reply" ? `${counts.reply} waiting on you · longest first`
+    : `${rows.length} ${view === "all" ? "enquiries" : viewInfo(view).label.toLowerCase()}`;
+  const emptyText = viewInfo(view).empty;
 
-  const startReply = (lead: any) => {
-    const names = QUICK_FOR[enquirySignal(lead, { nowMs }).group] ?? [];
+  const startReply = (row: ListRow) => {
+    const names = QUICK_FOR[row.signal.group] ?? [];
     const tpl = STARTER_TEMPLATES.find((t) => t.name === names[0]) ?? STARTER_TEMPLATES[0];
-    setReplyId(lead.id);
+    setReplyId(row.lead.id);
     setTplName(tpl.name);
-    setDraft(resolveTemplate(tpl.body, lead, venueName));
+    setDraft(resolveTemplate(tpl.body, row.lead, venueName));
   };
 
   // A template chip replaces the reply. If the reply has been typed into (it is no
@@ -288,15 +232,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
   return (
     <div className="vf-pane-scroll flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="px-4 md:px-6 pt-4 pb-10 flex flex-col gap-3.5">
-        {/* View tabs */}
+        {/* View tabs. While filtering or searching each count is what that
+            view would show, so they start with "Matching:". */}
         <div className="flex items-end justify-between gap-4 flex-wrap">
-          {/* One line of tabs that scrolls sideways on a phone, rather than
-              wrapping "Follow-up due" and cutting off "Date passed". */}
-          <div className="flex items-center gap-1 border-b border-border/60 -mb-px max-w-full overflow-x-auto">
-            {TABS.filter((t) => t.id !== "passed" || counts.passed > 0 || tab === "passed").map((t) => {
-              const on = tab === t.id;
+          <div className="flex items-center gap-1 border-b border-border/60 -mb-px max-w-full flex-wrap">
+            {filtered && <span className="px-1 py-2 font-sans text-sm font-semibold text-muted-foreground">Matching:</span>}
+            {VIEWS.map((t) => {
+              const on = view === t.id;
               return (
-                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { setTab(t.id); setReplyId(null); }}
+                <button key={t.id} ref={on ? tabRef : undefined} onClick={() => { props.onViewChange(t.id); setReplyId(null); }}
                   aria-pressed={on}
                   className={`relative px-3 py-2 font-sans text-sm font-semibold whitespace-nowrap shrink-0 transition-colors border-b-2 ${on ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`}>
                   {t.label}
@@ -309,21 +253,19 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         </div>
         {rows.length > 0 && (
           <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
-            <div className="font-sans text-[13px] text-muted-foreground">
-              {sortBy === "urgent" ? summary : SORTS.find((s) => s.id === sortBy)?.note}
-            </div>
+            <div className="font-sans text-[13px] text-muted-foreground">{summary}</div>
             <label className="inline-flex items-center gap-2 font-sans text-[13px] text-muted-foreground">
-              Sort by
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}
+              Sort
+              <select value={sortValue} onChange={(e) => { const s = sortFromParam(e.target.value); if (s) props.onSortChange(s); }}
                 className="h-8 rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[13px] font-semibold text-foreground">
-                {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
           </div>
         )}
 
         {/* Close the lot in one go: they can't be won any more. */}
-        {tab === "passed" && rows.length > 0 && onCloseAsLost && !props.isStaff && (
+        {passedOnly && rows.length > 0 && onCloseAsLost && !props.isStaff && (
           <div className="flex items-center justify-between gap-3 flex-wrap rounded-[6px] border border-border bg-card px-3.5 py-2.5">
             <p className="font-sans text-[13px] text-foreground">
               {rows.length === 1 ? "1 enquiry" : `${rows.length} enquiries`} can't go ahead on the date asked. Close {rows.length === 1 ? "it" : "them"} as Lost to keep the pipeline honest.
@@ -348,13 +290,15 @@ export default function EnquiryListC(props: EnquiryListCProps) {
         {/* Rows */}
         <div ref={rowsRef} className="flex flex-col gap-2">
           {rows.length === 0 ? (
-            <div className="py-12 text-center font-sans text-sm text-muted-foreground">{emptyText}</div>
-          ) : rows.map(({ lead, signal }) => {
+            <div className="py-12 text-center font-sans text-sm text-muted-foreground">{props.loaded === false ? "Loading…" : emptyText}</div>
+          ) : rows.map((row, i) => {
+            const { lead, signal } = row;
+            const divider = dividerAt.get(i);
             const tone = TONE[signal.tone];
             const action = enquiryAction(signal.group);
             const si = statusInfo(lead.status);
             const replying = replyId === lead.id;
-            const dateClash = (clashMap?.[lead.id]?.length ?? 0) > 0;
+            const dateClash = signal.kind === "clash";
             const dateStr = lead.eventDate
               ? fmtListDate(new Date(lead.eventDate), nowMs)
               : (lead as any).dateFlexible ? "Date TBC" : "No date";
@@ -368,11 +312,17 @@ export default function EnquiryListC(props: EnquiryListCProps) {
               e.stopPropagation();
               // detail 0 = Enter/Space (a click or tap has 1 or more).
               focusReplyBox.current = e.detail === 0;
-              if (action.reply) { replying ? setReplyId(null) : startReply(lead); } else onOpen(lead);
+              if (action.reply) { replying ? setReplyId(null) : startReply(row); } else onOpen(lead);
             };
 
             return (
-              <div key={lead.id} className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
+              <div key={lead.id}>
+              {divider && (
+                <div role="heading" aria-level={3} className="pt-2 pb-1 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                  {divider.label} · {divider.count}
+                </div>
+              )}
+              <div className="rounded-[6px] overflow-hidden border-[1.5px] transition-colors"
                 style={{ background: tint(si.dot, lead.status === "new" ? "2b" : "26"), borderColor: replying ? "var(--primary)" : si.dot }}>
                 {/* The whole box is filled with the enquiry's status colour: a
                     light tint, with a solid border in the same colour. A brand-new
@@ -499,6 +449,7 @@ export default function EnquiryListC(props: EnquiryListCProps) {
                     </div>
                   </div>
                 )}
+              </div>
               </div>
             );
           })}

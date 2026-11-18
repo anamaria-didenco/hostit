@@ -48,7 +48,6 @@ import EnquiryListC from "@/components/EnquiryListC";
 import EnquiryDrawerExtras from "@/components/EnquiryDrawerExtras";
 import TodayPanel, { type UpcomingEventRow } from "@/components/TodayPanel";
 import UpcomingEventsCard from "@/components/UpcomingEventsCard";
-import { isOpenEnquiry } from "@shared/needsToday";
 import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
@@ -78,7 +77,7 @@ import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import LinkedTasks from "@/components/LinkedTasks";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { formatEventDate } from "@shared/eventDate";
+import { formatEventDate, DEFAULT_VENUE_TZ } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -95,7 +94,12 @@ import { HoldPanel, HoldTag, DateClashChip, DoubleBookedTag, holdState, fmtHoldD
 import GlobalFinder from "@/components/GlobalFinder";
 import EventSearchResults from "@/components/EventSearchResults";
 import MovedNote from "@/components/MovedNote";
-import { leadMatchesSearch } from "@/lib/leadSearch";
+import { useNow } from "@/hooks/useNow";
+import { useEnquiryListState } from "@/hooks/useEnquiryListState";
+import {
+  EMPTY_FILTERS, LIST_PARAM_KEYS, enrichRows, listRows, viewCounts, viewDefaultSort,
+  type EnquiryFilters, type EnquiryView, type LeadLike, type ListCtx,
+} from "@shared/enquiryFilters";
 import { singleKeyShortcutAllowed, readCalendarShortcutsOn, writeCalendarShortcutsOn } from "@/lib/shortcutGuard";
 import { useDashboardHistory } from "@/hooks/useDashboardHistory";
 
@@ -983,24 +987,6 @@ export default function Dashboard() {
   };
   const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
-  const [leadSearch, setLeadSearch] = useState("");
-  // Multi-select status filter — empty array means "All Statuses".
-  const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>([]);
-  // Leads the embed autosaved after step 1 but that never completed step 2 —
-  // real, contactable, but easy to miss among finished enquiries otherwise.
-  const [showPartialOnly, setShowPartialOnly] = useState(false);
-  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
-  const statusFilterRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!statusFilterOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (statusFilterRef.current && !statusFilterRef.current.contains(e.target as Node)) {
-        setStatusFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [statusFilterOpen]);
   // Secondary enquiry actions (CSV import, bulk select) live in a "⋯" menu so
   // "Add enquiry" reads as the single primary action in the toolbar.
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -1017,40 +1003,16 @@ export default function Dashboard() {
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, [actionsMenuOpen]);
-  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // WIN BACK replaces the list with the win-back panel (lost and quiet
+  // enquiries, last year's clients).
+  const [showWinBack, setShowWinBack] = useState(false);
   // Enquiries whose status was just changed inline: kept in the list, marked
-  // "Moved to <Status> · Undo", until the next tab / filter / search change.
+  // "Moved to <Status> · Undo", until the next view / filter / search change.
   const [movedRows, setMovedRows] = useState<Record<number, { from: string; to: string; at: number }>>({});
-  const rowPosRef = useRef<Map<number, number>>(new Map());
   const statusPriorRef = useRef<Record<number, string>>({});
   const statusRowAtRef = useRef<Record<number, number>>({});
   const undoingRef = useRef<Set<number>>(new Set());
-  // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
-  const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
-  // ── Events table display prefs — persisted to localStorage ────────────────
-  const LEAD_TABLE_PREFS_KEY = "vf_lead_table_prefs_v1";
-  const _savedLTP = (() => { try { const r = localStorage.getItem(LEAD_TABLE_PREFS_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } })();
-  const [leadSortBy, setLeadSortByRaw] = useState<"enquiry_date"|"event_date"|"status">(_savedLTP.sortBy ?? "event_date");
-  const [leadSortDir, setLeadSortDirRaw] = useState<"asc"|"desc">(_savedLTP.sortDir ?? "asc");
-  const [leadDateFilter, setLeadDateFilterRaw] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">(_savedLTP.dateFilter ?? "future");
-  // Closed/dead statuses are hidden from the default "All" view (no explicit
-  // status filter, no follow-up/partial focus) so the list leads with live
-  // work. Picking a status chip — including Lost — overrides this.
-  const DEFAULT_HIDDEN = React.useMemo(() => ["lost", "cancelled", "finished"], []);
-
-  // Persist whenever any pref changes
-  useEffect(() => {
-    try { localStorage.setItem(LEAD_TABLE_PREFS_KEY, JSON.stringify({ sortBy: leadSortBy, sortDir: leadSortDir, dateFilter: leadDateFilter })); } catch {}
-  }, [leadSortBy, leadSortDir, leadDateFilter]);
-
-  // Wrapped setters (same signature as original so all existing callsites work unchanged)
-  const setLeadSortBy = (v: "enquiry_date"|"event_date"|"status") => setLeadSortByRaw(v);
-  const setLeadSortDir = (fn: "asc"|"desc" | ((d: "asc"|"desc") => "asc"|"desc")) =>
-    setLeadSortDirRaw(prev => typeof fn === "function" ? fn(prev) : fn);
-  const setLeadDateFilter = (v: "all"|"future"|"today"|"weekend"|"month"|"year"|"custom") => setLeadDateFilterRaw(v);
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
   // One responsive enquiry view plus an optional Board. The user toggles only
   // List ↔ Board; the List view renders as the full table on desktop and as a
   // stacked card layout on phones (the 7-column table needs ~700px and would
@@ -1071,14 +1033,9 @@ export default function Dashboard() {
   useEffect(() => {
     setLeadViewMode(prev => prev === "kanban" ? prev : (isDesktop ? "table" : "list"));
   }, [isDesktop]);
-  // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
-  const [followUpOnly, setFollowUpOnly] = useState(false);
   // The enquiry ids in the order the list shows them, so the drawer can page
   // prev/next through the same sequence.
   const [enquiryOrder, setEnquiryOrder] = useState<number[]>([]);
-  useEffect(() => {
-    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
-  }, [tab, leadsSubTab, leadStatusFilter, leadDateFilter, followUpOnly, showPartialOnly, leadOwnerFilter, leadSearch, leadViewMode]);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -1269,7 +1226,7 @@ export default function Dashboard() {
   // shows): a tab, search or filter change drops the ones it takes away, so a
   // bulk Delete or Set status can't reach an enquiry that isn't shown. Win
   // back and the Board replace the list, so nothing stays selected there.
-  const selectable = selectableIds(enquiryOrder, leadViewMode, leadsSubTab);
+  const selectable = selectableIds(enquiryOrder, leadViewMode, showWinBack ? "winback" : "list");
   React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, selectable)); }, [selectable]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
@@ -1712,10 +1669,11 @@ export default function Dashboard() {
   // Jump to a filtered enquiries / calendar view, open an event, or run a tile
   // action. Shared by the Overview tiles and the calendar's "Needs you today"
   // panel, so they live at component scope rather than inside the Overview body.
-  const showEnquiries = (o: { sub: 'new' | 'all'; status?: string[]; followUp?: boolean }) => {
-    setLeadDateFilter('all'); setLeadOwnerFilter('all'); setLeadSearch(''); setShowPartialOnly(false);
-    setLeadStatusFilter(o.status ?? []); setFollowUpOnly(!!o.followUp); setLeadsSubTab(o.sub); setSelectedLead(null);
-    setTab('enquiries');
+  // Lands on exactly the list a tile or badge counted: that view, with its own
+  // sort, no search and only the filters given (shared/enquiryFilters.ts).
+  const showEnquiries = (o: { view: EnquiryView; filters?: Partial<EnquiryFilters> }) => {
+    setShowWinBack(false); setLeadViewMode(prev => prev === "kanban" ? (isDesktop ? "table" : "list") : prev); setSelectedLead(null);
+    enquiryList.showEnquiries(o);
   };
   const showCalendarList = () => { setCalDate(new Date()); setCalendarView('list'); setEventTablePrefs({ upcomingOnly: true }); setTab('calendar'); };
   const openBookingById = async (id: number) => {
@@ -1725,12 +1683,12 @@ export default function Dashboard() {
   };
   const tileAction = (id: string) => {
     switch (id) {
-      case 'needs_followup': return showEnquiries({ sub: 'all', followUp: true });
+      case 'needs_followup': return showEnquiries({ view: 'followup' });
       case 'overdue_tasks': setTasksOpenFilter('overdue'); return setTab('tasks');
       case 'deposits_due': setPaymentsOpenFilter('deposits_due'); return setTab('payments');
-      case 'active_enquiries': return showEnquiries({ sub: 'all', status: pipelineStages.map(st => st.key).filter(isOpenEnquiry) });
+      case 'active_enquiries': return showEnquiries({ view: 'open' });
       case 'upcoming_events': return showCalendarList();
-      case 'proposals_sent': return showEnquiries({ sub: 'all', status: ['proposal_sent'] });
+      case 'proposals_sent': return showEnquiries({ view: 'open', filters: { status: ['proposal_sent'] } });
       // Revenue with bookings missing a total opens exactly those bookings, so
       // the number can be fixed rather than trusted.
       case 'revenue_month':
@@ -1974,7 +1932,7 @@ export default function Dashboard() {
     return ordered.filter(s => !visible.length || visible.includes(s.key));
   }, [pipelineStages, kanbanStagePrefs, showClosedStages]);
 
-  const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
+  const { data: spaces, refetch: refetchSpaces, isFetched: spacesFetched } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   // Keep the name→custom-colour map current so spaceColor() (defined earlier)
   // picks up the venue's chosen colours.
   spaceColorRef.current = React.useMemo(() => {
@@ -2500,8 +2458,9 @@ export default function Dashboard() {
     mutate: (vars: UpdateStatusVars, callOpts?: Parameters<typeof updateStatusMut.mutate>[1]) => {
       const priorStatus: string | undefined = (allLeads ?? []).find((x: any) => x?.id === vars.id)?.status;
       if (priorStatus) statusPriorRef.current[vars.id] = priorStatus;
-      const rowAt = rowPosRef.current.get(vars.id);
-      if (rowAt !== undefined) statusRowAtRef.current[vars.id] = rowAt;
+      // Where the row is in the list as shown, so it can stay there ("Moved to … · Undo").
+      const rowAt = enquiryOrder.indexOf(vars.id);
+      if (rowAt >= 0) statusRowAtRef.current[vars.id] = rowAt;
       if (vars.status === 'lost' && vars.lostReason === undefined) {
         const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
         setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
@@ -2635,7 +2594,7 @@ export default function Dashboard() {
   function openLeadById(id: number) {
     const l: any = (allLeads ?? []).find((x: any) => x?.id === id);
     if (!l) { refetchLeads(); toast("That enquiry isn't loaded yet. Try again in a moment."); return; }
-    if (leadViewMode === "list" && !selectedBooking && leadsSubTab !== "winback") { selectLead(l); return; }
+    if (leadViewMode === "list" && !selectedBooking && !showWinBack) { selectLead(l); return; }
     openEventDrawer({ ...l, _isLead: true });
   }
   function openEventDrawer(item: any) {
@@ -2738,6 +2697,7 @@ export default function Dashboard() {
     openLead: openLeadFromUrlOrFinder,
     openBooking: openBookingFromUrl,
     leadsLoaded: !!allLeads,
+    tabParams: { tab: "enquiries", keys: LIST_PARAM_KEYS },
   });
 
   const parseEnquiryMutation = trpc.leads.parseEnquiryText.useMutation({
@@ -3539,138 +3499,59 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [user?.id]);
 
-  // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries.
   // Filter out any null/undefined entries defensively — a single bad row from
   // the API would otherwise crash every downstream `.map(l => l.id)` and
   // break the whole dashboard render.
-  const CONFIRMED_STATUSES = ['booked', 'confirmed'];
-  const allEnquiries = (allLeads ?? []).filter(Boolean).filter((l: any) => l && typeof l === 'object' && l.id != null);
-  const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
-  const newEnquiries = activeEnquiries
-    // Exclude synthetic health-check pings (same as the server's stats), which
-    // otherwise inflate the badge with enquiries that aren't real.
-    .filter((l: any) => l.status === "new" && l.source !== "healthcheck")
-    .slice()
-    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  // The sidebar badge counts NEW enquiries (status "new"), exactly the NEW tab
-  // and the Overview "New Enquiries" card. It used to count only the unopened
-  // ones, which never matched either. Definitions: shared/needsToday.ts.
-  const unreadCount = newEnquiries.length;
-  const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
+  const allEnquiries = React.useMemo(
+    () => (allLeads ?? []).filter((l: any) => l && typeof l === 'object' && l.id != null),
+    [allLeads],
+  );
 
-  // Auto-switch to "all" when there are no new enquiries
-  // (Not while a just-moved row is pinned: switching tabs would unpin it.)
-  const movedCount = Object.keys(movedRows).length;
+  // ── The Enquiries list's rows and counts, worked out once ─────────────────
+  // The sidebar badge, the Overview tiles and cards, Today, and the list's own
+  // tabs all count from these, so they always agree (shared/enquiryFilters.ts).
+  const listNowMs = useNow(60_000);
+  const venueTz = (venueSettings as any)?.timezone || DEFAULT_VENUE_TZ;
+  const listCtx = React.useMemo<ListCtx>(() => ({
+    nowMs: listNowMs,
+    tz: venueTz,
+    statusOrder: pipelineStages.map(st => st.key),
+    spaceNames: new Map((spaces ?? []).filter((sp: any) => sp?.id != null).map((sp: any) => [Number(sp.id), String(sp.name ?? '')])),
+  }), [listNowMs, venueTz, pipelineStages, spaces]);
+  const enquiryRows = React.useMemo(
+    () => enrichRows(allEnquiries as LeadLike[], { ...listCtx, replyStatus: replyStatus as any, clashMap: clashMap as any, isPartial: isPartialLead }),
+    [allEnquiries, listCtx, replyStatus, clashMap],
+  );
+  const baseCounts = React.useMemo(() => viewCounts(enquiryRows, EMPTY_FILTERS, "", listCtx), [enquiryRows, listCtx]);
+  const baseCountsRef = useRef(baseCounts);
+  baseCountsRef.current = baseCounts;
+  const listAllowedRef = useRef({ statuses: [] as string[], spaceIds: [] as number[] });
+  listAllowedRef.current = { statuses: pipelineStages.map(st => st.key), spaceIds: (spaces ?? []).map((sp: any) => Number(sp.id)) };
+  const enquiryList = useEnquiryListState({
+    tab,
+    setTab: setTab as (t: "enquiries") => void,
+    ready: !!allLeads && venueSettingsFetched && spacesFetched,
+    getCounts: () => baseCountsRef.current,
+    getAllowed: () => listAllowedRef.current,
+  });
+  const listState = enquiryList.state;
+  // A just-moved row ("Moved to … · Undo") stays only until the list changes.
   useEffect(() => {
-    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new" && movedCount === 0) {
-      setLeadsSubTab("all");
-    }
-  }, [newEnquiries.length, allLeads, movedCount]);
-
-  function applyDateFilter(list: any[]) {
-    if (leadDateFilter === "all") return list;
-    const now = new Date();
-    return list.filter((l: any) => {
-      const d = l.eventDate ? new Date(l.eventDate) : null;
-      // An enquiry with no date yet is not "past": it needs a date decided,
-      // and hiding it from Upcoming made no-date enquiries vanish from the
-      // default view entirely. It belongs in Upcoming; the specific-window
-      // filters (today / weekend / this month) still exclude it.
-      if (!d) return leadDateFilter === "future";
-      if (leadDateFilter === "future") {
-        const today = new Date(); today.setHours(0,0,0,0);
-        return d >= today;
-      }
-      if (leadDateFilter === "today") {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-      }
-      if (leadDateFilter === "weekend") {
-        // Find the upcoming Saturday and Sunday
-        const dayOfWeek = now.getDay(); // 0=Sun,1=Mon,...,6=Sat
-        const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek);
-        const sat = new Date(now); sat.setDate(now.getDate() + daysToSat); sat.setHours(0,0,0,0);
-        const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
-        const dNorm = new Date(d); dNorm.setHours(0,0,0,0);
-        return dNorm.getTime() === sat.getTime() || dNorm.getTime() === sun.getTime();
-      }
-      if (leadDateFilter === "month") {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      }
-      if (leadDateFilter === "year") {
-        return d.getFullYear() === now.getFullYear();
-      }
-      if (leadDateFilter === "custom") {
-        const from = customDateFrom ? new Date(customDateFrom) : null;
-        const to = customDateTo ? new Date(customDateTo) : null;
-        if (from && d < from) return false;
-        if (to) { const toEnd = new Date(to); toEnd.setHours(23,59,59,999); if (d > toEnd) return false; }
-        return true;
-      }
-      return true;
-    });
-  }
-
-  // When the user has picked one or more statuses, fetch+filter from the full
-  // enquiry set. Multiple selections OR together.
-  // Typing in the search box searches EVERYTHING: every status, every date,
-  // every filter. (It used to search only the current tab and date window, so
-  // a past or already-quoted client was "not found" under New + Upcoming.)
-  const searching = leadSearch.trim().length > 0;
-  // Rows just moved to another status stay put (marked "Moved to … · Undo")
-  // until the next tab/filter/search change, instead of vanishing: they are
-  // taken out of the filtered list and put back at the row they were on.
-  const pinnedMoves = allEnquiries.filter((l: any) => movedRows[l.id]);
-  const leadsToShow = searching
-    ? allEnquiries
-    : leadStatusFilter.length > 0
-    ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
-    // Follow-up covers every open enquiry, "new" ones included (the tab's badge counts them).
-    : followUpOnly ? applyDateFilter(allEnquiries)
-    // The "New" tab is NOT date-filtered: its badge counts every new enquiry,
-    // so date-filtering the list (default "Upcoming") hid past-date ones and
-    // left the badge pointing at an empty list — "a new enquiry waiting" with
-    // nothing to show. Show all new enquiries so the count always matches, and
-    // you can action/clear the old ones. The date filter still applies to the
-    // Replied/All tabs, where you browse events by when they happen.
-    : leadsSubTab === "new" ? newEnquiries : applyDateFilter(repliedLeads);
-  const followUpNowMs = Date.now();
-  const sortedLeads = leadsToShow
-    .filter((l: any) => !movedRows[l.id])
-    .filter((l: any) => searching ? true : (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
-    .filter((l: any) => searching || !showPartialOnly || isPartialLead(l))
-    .filter((l: any) => searching || !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
-    .filter((l: any) => searching || (leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter))
-    .filter((l: any) => !searching || leadMatchesSearch(l, leadSearch))
-    .slice()
-    .sort((a: any, b: any) => {
-      let cmp = 0;
-      if (leadSortBy === 'enquiry_date') {
-        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      } else if (leadSortBy === 'event_date') {
-        // An enquiry with no event date yet has nothing to sort on. It used to
-        // count as 1970, so ascending order floated every undated lead to the
-        // TOP of an "Upcoming" list. Park them last in either direction.
-        if (!a.eventDate && !b.eventDate) return 0;
-        if (!a.eventDate) return 1;
-        if (!b.eventDate) return -1;
-        cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
-      } else if (leadSortBy === 'status') {
-        const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
-        // indexOf returns -1 (not undefined) for unknown/custom statuses, so
-        // `?? 99` was dead code and custom statuses sorted to the very top.
-        const rank = (s: string) => { const i = order.indexOf(s); return i < 0 ? 99 : i; };
-        cmp = rank(a.status) - rank(b.status);
-      }
-      return leadSortDir === 'asc' ? cmp : -cmp;
-    });
-  const filteredLeads = pinnedMoves.length === 0 ? sortedLeads : (() => {
-    const out = sortedLeads.slice();
-    pinnedMoves.slice().sort((a: any, b: any) => movedRows[a.id].at - movedRows[b.id].at)
-      .forEach((l: any) => out.splice(Math.min(movedRows[l.id].at, out.length), 0, l));
-    return out;
-  })();
-  rowPosRef.current = new Map(filteredLeads.map((l: any, i: number) => [l.id, i]));
-  const followUpCount = allEnquiries.filter((l: any) => leadFollowUpState(l, followUpNowMs).needs).length;
+    setMovedRows(prev => Object.keys(prev).length ? {} : prev);
+  }, [tab, listState.view, enquiryList.filtersKey, listState.q, leadViewMode, showWinBack]);
+  // The badge number: everyone waiting on a reply (Needs reply), not just
+  // status New. Definitions: shared/needsToday.ts.
+  const replyCount = allLeads ? baseCounts.reply : null;
+  // The badge itself: the count, capped, or a dash until the enquiries load
+  // (never a number from somewhere else that then jumps).
+  const replyBadge = (cap: number) => replyCount === null
+    ? <span aria-hidden="true">–</span>
+    : <>{replyCount > cap ? `${cap}+` : replyCount}<span className="sr-only"> waiting on a reply</span></>;
+  // Needs reply in "most urgent" order, for the Overview card.
+  const replyRows = React.useMemo(
+    () => listRows(enquiryRows, { view: "reply", filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort("reply") }, listCtx).rows,
+    [enquiryRows, listCtx],
+  );
 
   // Calendar
   const year = calDate.getFullYear();
@@ -4009,9 +3890,9 @@ export default function Dashboard() {
               }`}
             >
               {item.label}
-              {item.id === "enquiries" && unreadCount > 0 && (
+              {item.id === "enquiries" && replyCount !== 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-700 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {replyBadge(99)}
                 </span>
               )}
             </button>
@@ -4118,9 +3999,9 @@ export default function Dashboard() {
               {indicator}
               {item.icon}
               <span className="text-[12px] font-inter font-medium leading-none">{item.label}</span>
-              {item.id === "enquiries" && unreadCount > 0 && (
+              {item.id === "enquiries" && replyCount !== 0 && (
                 <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[16px] h-4 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+                  {replyBadge(9)}
                 </span>
               )}
             </button>
@@ -4174,8 +4055,8 @@ export default function Dashboard() {
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
-                {item.id === "enquiries" && unreadCount > 0 && (
-                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+                {item.id === "enquiries" && replyCount !== 0 && (
+                  <span className="text-[12px] font-bold px-1.5 py-px rounded-[3px] text-white" style={{ background: "rgba(0,0,0,0.22)" }}>{replyBadge(99)}</span>
                 )}
               </button>
             );
@@ -4214,8 +4095,13 @@ export default function Dashboard() {
             // The action tiles come first, the vanity numbers sit in a collapsed
             // "Performance" row. Every count below is the one the list it opens
             // shows (definitions: shared/needsToday.ts).
-            const openEnquiryCount = allLeads ? allEnquiries.filter((l: any) => isOpenEnquiry(l.status)).length : (stats?.newLeads ?? 0);
-            const followUpTileCount = allLeads ? followUpCount : (stats?.needsFollowUp ?? 0);
+            // Counted from the same rows as the list: each tile opens exactly the
+            // view it counts. A dash until the enquiries load, never the
+            // server's older rule flashing first.
+            const listLoaded = !!allLeads;
+            const openEnquiryCount = baseCounts.open;
+            const followUpTileCount = listLoaded ? baseCounts.followup : 0;
+            const atProposalSent = allEnquiries.filter((l: any) => l.status === 'proposal_sent').length;
             const overdueTaskCount = stats?.overdueTasks ?? 0;
             const depositsDueCount = stats?.depositsDue ?? 0;
             // Never show a confident $0 when the real problem is missing totals.
@@ -4223,13 +4109,13 @@ export default function Dashboard() {
             const revenueRounded = Math.round(stats?.revenueThisMonth ?? 0);
             const revenueValue = revenueRounded === 0 && missingTotals > 0 ? "—" : `$${revenueRounded.toLocaleString()}`;
             const allStats = [
-              { id: "needs_followup", label: "Needs Follow-up", value: followUpTileCount, sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
+              { id: "needs_followup", label: "Needs Follow-up", value: listLoaded ? followUpTileCount : "–", sub: followUpTileCount > 0 ? "due or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${followUpTileCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: followUpTileCount > 0 ? 'warn' as const : undefined },
               { id: "overdue_tasks", label: "Overdue Tasks", value: overdueTaskCount, sub: overdueTaskCount > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${overdueTaskCount > 0 ? 'text-destructive' : 'text-muted-foreground/40'}`} />, alert: overdueTaskCount > 0 ? 'danger' as const : undefined },
               { id: "deposits_due", label: "Deposits Due", value: depositsDueCount, sub: depositsDueCount > 0 ? "confirmed, unpaid" : "all received", icon: <DollarSign className={`w-5 h-5 ${depositsDueCount > 0 ? 'text-gold-deep' : 'text-muted-foreground/40'}`} />, alert: depositsDueCount > 0 ? 'warn' as const : undefined },
-              { id: "active_enquiries", label: "Open Enquiries", value: openEnquiryCount, sub: `${newEnquiries.length} new · rest in progress`, icon: <MessageSquare className="w-5 h-5 text-primary" /> },
+              { id: "active_enquiries", label: "Open Enquiries", value: listLoaded ? openEnquiryCount : "–", sub: listLoaded ? `${baseCounts.reply} need${baseCounts.reply === 1 ? "s" : ""} a reply` : "", icon: <MessageSquare className="w-5 h-5 text-primary" /> },
               { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-primary" /> },
               { id: "revenue_month", label: "Revenue This Month", value: revenueValue, sub: missingTotals > 0 ? `${missingTotals} booking${missingTotals === 1 ? "" : "s"} not counted — no total` : "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-gold-deep" />, alert: missingTotals > 0 ? 'warn' as const : undefined },
-              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: listLoaded ? `${atProposalSent} enquir${atProposalSent === 1 ? "y" : "ies"} at Proposal Sent` : "sent, viewed or accepted", icon: <FileText className="w-5 h-5 text-primary" />, perf: true },
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "of last 12 months' enquiries", icon: <TrendingUp className="w-5 h-5 text-primary" />, perf: true },
             ];
             // Land on exactly the records a tile counted: clear the date, owner,
@@ -4311,8 +4197,8 @@ export default function Dashboard() {
                   className="lg:w-[360px]"
                   onOpenEvent={openOverviewEvent}
                   onCalendar={() => setTab('calendar')}
-                  newEnquiries={newEnquiries.length}
-                  onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                  newEnquiries={replyCount ?? 0}
+                  onNewEnquiries={() => showEnquiries({ view: 'reply' })}
                 />
               )}
 
@@ -4457,32 +4343,35 @@ export default function Dashboard() {
                     statusInfo={(st) => getStatusInfo(st)}
                   />
 
-                  {/* New Enquiries */}
+                  {/* Needs reply: the same people as the badge and the list's
+                      Needs reply tab, longest wait first. */}
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <SectionHead title="Needs reply" meta={replyCount ? `${replyCount} waiting` : undefined} className="flex-1" />
+                      <button onClick={() => showEnquiries({ view: 'reply' })} aria-label="View all enquiries that need a reply" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
-                    {newEnquiries.length === 0 ? (
+                    {replyCount === null ? (
+                      <p className="px-4 py-3 font-dm text-sm text-sage">Loading…</p>
+                    ) : replyRows.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
                         <CheckCircle className="w-8 h-8 text-forest/20 mx-auto mb-2" />
-                        <p className="font-dm text-xs text-sage/50">All caught up!</p>
+                        <p className="font-dm text-xs text-muted-foreground">All caught up!</p>
                       </div>
                     ) : (
                       <div className="divide-y divide-border max-h-56 overflow-auto">
-                        {newEnquiries.slice(0, 6).map((lead: any) => (
+                        {replyRows.slice(0, 6).map(({ lead, signal }: any) => (
                           <button key={lead.id} onClick={() => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${lead.id}`); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
                               <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(lead.status).label}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
+                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{signal.text}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
-                        {newEnquiries.length > 6 && (
-                          <button onClick={() => showEnquiries({ sub: 'new' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
-                            +{newEnquiries.length - 6} more new enquiries {'\u2192'}
+                        {replyRows.length > 6 && (
+                          <button onClick={() => showEnquiries({ view: 'reply' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
+                            +{replyRows.length - 6} more waiting on a reply {'\u2192'}
                           </button>
                         )}
                       </div>
@@ -4541,11 +4430,11 @@ export default function Dashboard() {
                         Confirmed / All), so the one thing left here is the
                         separate Win-back panel for lost and quiet enquiries. */}
                     {leadViewMode !== "kanban" && (
-                      <button onClick={() => { setLeadsSubTab(leadsSubTab === "winback" ? "all" : "winback"); setLeadStatusFilter([]); setFollowUpOnly(false); setShowPartialOnly(false); setSelectedLead(null); }}
-                        aria-pressed={leadsSubTab === "winback"}
+                      <button onClick={() => { setShowWinBack(v => !v); setSelectedLead(null); }}
+                        aria-pressed={showWinBack}
                         title="Lost and quiet enquiries, and last year's clients, to invite back"
                         className="vf-btn vf-btn-secondary">
-                        <RotateCcw className="w-3.5 h-3.5" /> {leadsSubTab === "winback" ? "ENQUIRIES" : "WIN BACK"}
+                        <RotateCcw className="w-3.5 h-3.5" /> {showWinBack ? "ENQUIRIES" : "WIN BACK"}
                       </button>
                     )}
                   </div>
@@ -4623,20 +4512,21 @@ export default function Dashboard() {
                 </div>
 
                 {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
-                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                {leadViewMode !== "kanban" && !showWinBack && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
                     {/* Search + owner feed the list; status / date / sort now live
                         in the list's own view tabs and signal ordering. */}
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
-                      <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
+                      <Input value={listState.q} onChange={e => enquiryList.setQ(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Escape" && listState.q) { e.preventDefault(); enquiryList.setQ(""); } }}
                         aria-label="Search enquiries" data-search-box
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
                     {(teamList ?? []).length > 0 && (
-                      <select value={String(leadOwnerFilter)} aria-label="Filter by owner" title="Filter by owner"
-                        onChange={e => { const v = e.target.value; setLeadOwnerFilter(v === "all" || v === "unassigned" ? v : Number(v)); }}
-                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${leadOwnerFilter !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
+                      <select value={String(listState.filters.owner)} aria-label="Filter by owner" title="Filter by owner"
+                        onChange={e => { const v = e.target.value; enquiryList.setFilters(f => ({ ...f, owner: v === "all" || v === "unassigned" ? v : Number(v) })); }}
+                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${listState.filters.owner !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
                         <option value="all">All owners</option>
                         <option value="unassigned">Unassigned</option>
                         {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -4644,12 +4534,12 @@ export default function Dashboard() {
                     )}
                   </div>
                 )}
-                {searching && !isStaff && leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
-                  <EventSearchResults query={leadSearch} onOpenEvent={id => setLocation(`/event/${id}`)} />
+                {listState.q.trim() && !isStaff && leadViewMode !== "kanban" && !showWinBack && (
+                  <EventSearchResults query={listState.q} onOpenEvent={id => setLocation(`/event/${id}`)} />
                 )}
                 {/* Bulk select all bar: selects the rows the list shows (its own
                     tabs filter them too), not the wider filteredLeads. */}
-                {bulkSelectMode && leadsSubTab !== "winback" && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
+                {bulkSelectMode && !showWinBack && leadViewMode !== "kanban" && enquiryOrder.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" ref={selectAllRef}
@@ -4668,13 +4558,13 @@ export default function Dashboard() {
               <div ref={enquiryContentRef} className="flex flex-1 overflow-hidden" style={bulkBarCover ? { paddingBottom: bulkBarCover } : undefined}>
 
                 {/* ── WIN BACK ──────────────────────────────────────── */}
-                {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
+                {showWinBack && leadViewMode !== "kanban" && (
                   <WinBackPanel onOpenLead={openLeadById} />
                 )}
 
                 {/* ── ENQUIRY LIST (Option C) — signal-first rows, replaces the
                        old table + phone list; Board (kanban) is the alternative view ── */}
-                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
+                {leadViewMode !== "kanban" && !showWinBack && (
                   leadsError ? (
                     <div className="flex-1 p-8 text-center">
                       <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
@@ -4683,16 +4573,14 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <EnquiryListC
-                      leads={(() => {
-                        const ql = leadSearch.trim().toLowerCase();
-                        const base = allEnquiries.filter((l: any) => leadOwnerFilter === 'all' ? true : leadOwnerFilter === 'unassigned' ? !l.assignedTo : l.assignedTo === leadOwnerFilter);
-                        return ql ? base.filter((l: any) => `${l.firstName ?? ''} ${l.lastName ?? ''} ${l.company ?? ''} ${l.email ?? ''} ${l.eventType ?? ''}`.toLowerCase().includes(ql)) : base;
-                      })()}
-                      nowMs={followUpNowMs}
+                      rows={enquiryRows}
+                      ctx={listCtx}
+                      loaded={!!allLeads}
+                      state={listState}
+                      onViewChange={enquiryList.setView}
+                      onFiltersChange={enquiryList.setFilters}
+                      onSortChange={enquiryList.setSort}
                       venueName={(venueSettings as any)?.name ?? 'the venue'}
-                      replyStatus={replyStatus}
-                      clashMap={clashMap as any}
-                      isPartial={(l: any) => isPartialLead(l)}
                       isStaff={isStaff}
                       // getStatusInfo maps the retired 'booked'/'confirmed' keys to one label,
                       // so a confirmed enquiry reads "Confirmed", not raw "confirmed".
@@ -6338,7 +6226,7 @@ export default function Dashboard() {
                 onOpenLink={(link) => { void openAlertLink(link); }}
                 onGoCalendarList={showCalendarList}
                 onGoTasksOverdue={() => tileAction('overdue_tasks')}
-                onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                onGoEnquiries={(view) => showEnquiries({ view: view === 'new' ? 'reply' : 'followup' })}
                 onGoDeposits={() => tileAction('deposits_due')}
               />
             </div>

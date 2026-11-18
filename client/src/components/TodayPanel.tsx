@@ -17,6 +17,7 @@ export const rowOf = (e: UpcomingEventRow) => e.row as { eventType?: string | nu
 export default function TodayPanel(p: {
   onOpenEvent: (e: UpcomingEventRow) => void;
   onCalendar: () => void;
+  /** Enquiries waiting on a reply (the Needs reply view and the badge). */
   newEnquiries: number;
   onNewEnquiries: () => void;
   className?: string;
@@ -55,7 +56,7 @@ export default function TodayPanel(p: {
       {p.newEnquiries > 0 && (
         <button onClick={p.onNewEnquiries}
           className="w-full text-left px-4 py-3 min-h-[44px] border-t border-border font-dm text-sm font-semibold text-forest hover:bg-linen">
-          {p.newEnquiries} new enquir{p.newEnquiries === 1 ? "y" : "ies"} waiting {"→"}
+          {p.newEnquiries} waiting on a reply {"→"}
         </button>
       )}
     </section>
