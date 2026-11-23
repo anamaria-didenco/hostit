@@ -106,6 +106,11 @@ import { smtpSettingsErrors, venueDetailsErrors } from "@shared/settingsValidati
 import { focusFirstError, useFieldErrorAria } from "@/lib/fieldErrorAria";
 import { closeMenuOnEscape, onArrowChoose } from "@/lib/rovingKeys";
 import { holdTyping } from "@/lib/sessionExpiry";
+// Overview + Calendar redesign pieces.
+import { AlertTriangle } from "lucide-react";
+import { hhmmLabel } from "@/lib/overviewDates";
+import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
+import { OverviewSummaryStrip, OverviewNeedsToday, OverviewWeekStrip, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1273,8 +1278,7 @@ export default function Dashboard() {
   React.useEffect(() => { setSelectedLeadIds(prev => keepShown(prev, selectable)); }, [selectable]);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
-  // Overview calendar: start at this week (default) or show the whole month.
-  const [overviewShowPast, setOverviewShowPast] = useState(false);
+  // Calendar view: month (default), week, day or list.
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   // "Needs you today" used to sit at the top of the Overview; it now lives
   // under the calendar as an opt-in panel, off by default and remembered per
@@ -3744,210 +3748,6 @@ export default function Dashboard() {
     </div>
   );
 
-  // The Overview calendar looks ahead on the current month (see below).
-  const isCurrentCalMonth = year === new Date().getFullYear() && month === new Date().getMonth();
-  const overviewRolling = isCurrentCalMonth && !overviewShowPast;
-  const monthCalendarCard = (
-                  <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
-                    <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
-                    <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
-                    <div className="flex-1 min-w-[6rem] relative">
-                      <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            title="Click to jump to a different month"
-                            className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
-                            <span className="truncate">{MONTHS[month]} {year}</span>
-                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
-                          <div className="flex items-center justify-between mb-3">
-                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
-                          </div>
-                          <div className="grid grid-cols-3 gap-1 mb-3">
-                            {MONTHS.map((m, i) => {
-                              const isCurrent = i === month;
-                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
-                              return (
-                                <button key={m}
-                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
-                              );
-                            })}
-                          </div>
-                          <div className="flex gap-2 pt-2 border-t border-gold/15">
-                            <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
-                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                            <input type="date" aria-label="Jump to date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
-                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {isCurrentCalMonth && (
-                      <button onClick={() => setOverviewShowPast(v => !v)} aria-pressed={overviewShowPast}
-                        title={overviewShowPast ? "Start at this week" : "Show the weeks already gone this month"}
-                        className="hidden sm:inline-flex flex-shrink-0 whitespace-nowrap font-sans text-xs font-semibold px-2 sm:px-3 py-1.5 text-sage hover:text-ink transition-colors">
-                        {overviewShowPast ? "From this week" : "Earlier weeks"}
-                      </button>
-                    )}
-                    <button onClick={() => setCalDate(new Date())} className="vf-btn vf-btn-secondary">TODAY</button>
-                    <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print week: every run sheet for a week"
-                      className="vf-btn vf-btn-secondary"><Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">PRINT WEEK</span></button>
-                    <button onClick={() => setTab('calendar' as any)} className="vf-btn vf-btn-secondary"><span className="hidden sm:inline">FULL </span>VIEW</button>
-                  </div>
-                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
-                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                      <div key={d} className={`text-center font-bebas tracking-widest text-xs py-2 border-r border-border last:border-r-0 ${
-                        d === 'SAT' || d === 'SUN' ? 'text-forest bg-linen/40' : 'text-sage'
-                      }`}>{d}</div>
-                    ))}
-                  </div>
-                  <div className="overflow-auto" style={{ minHeight: 340 }}>
-                    {(() => {
-                      const firstDayOfMonth = new Date(year, month, 1).getDay();
-                      const mondayOffset = (firstDayOfMonth + 6) % 7;
-                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
-                      const nxtYear = adjNextMonthDate.getFullYear();
-                      const nxtMonth = adjNextMonthDate.getMonth();
-                      const adjBLIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
-                      // Only this month and next are loaded, so the window stops at
-                      // the end of next month (never a made-up "32 Dec").
-                      const daysInNextMonth = new Date(nxtYear, nxtMonth + 1, 0).getDate();
-                      const cellAt = (i: number) => {
-                        const dayNum = i - mondayOffset + 1;
-                        if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
-                        if (dayNum > daysInMonth && dayNum - daysInMonth <= daysInNextMonth) return { day: dayNum - daysInMonth, isOverflow: true };
-                        return null;
-                      };
-                      // On the current month the Overview looks ahead: it starts at
-                      // this week and runs five weeks on (into next month), instead
-                      // of opening on weeks that are already over.
-                      const startCell = overviewRolling ? Math.floor((mondayOffset + new Date().getDate() - 1) / 7) * 7 : 0;
-                      const cellCount = overviewRolling ? 35 : totalCells;
-                      const cells = Array.from({ length: cellCount }, (_, k) => cellAt(startCell + k));
-                      const weeks = [];
-                      for (let i = 0; i < cells.length; i += 7) {
-                        const wk = cells.slice(i, i + 7);
-                        if (wk.some(Boolean)) weeks.push(wk); // drop weeks past the loaded range
-                      }
-                      const numWeeks = weeks.length;
-                      return weeks.map((week, wi) => (
-                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
-                          {week.map((cell, di) => {
-                            if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
-                            const { day, isOverflow } = cell;
-                            // In the look-ahead view next month's days are real,
-                            // usable days, not greyed-out spill-over.
-                            const muted = isOverflow && !overviewRolling;
-                            const cellYear = isOverflow ? nxtYear : year;
-                            const cellMonth = isOverflow ? nxtMonth : month;
-                            const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
-                            const isPastDay = new Date(cellYear, cellMonth, day, 23, 59, 59).getTime() < Date.now();
-                            const isWeekend = di >= 5;
-                            const dayBookings = isOverflow
-                              ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
-                              : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                            const dayLeads = isOverflow
-                              ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
-                              : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
-                            const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                            return (
-                              <div key={di}
-                                aria-current={isToday ? "date" : undefined}
-                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  muted || isPastDay ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!muted ? 'hover:bg-linen/30 transition-colors' : ''}`}
-                                onDragOver={!muted ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
-                                onDragLeave={!muted ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
-                                onDrop={!muted ? (e) => {
-                                  e.preventDefault(); setDragOverDate(null);
-                                  try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
-                                } : undefined}
-                              >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span aria-hidden={muted ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'vf-today w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
-                                  }`}>{day}{day === 1 && isOverflow && overviewRolling ? <span className="hidden sm:inline"> {adjNextMonthDate.toLocaleDateString('en-NZ', { month: 'short' })}</span> : null}</span>
-                                  {!muted && (
-                                    <span className="flex items-center">
-                                    {editDayTitle && !dayTitles.get(dateStr) && (
-                                      <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
-                                    )}
-                                    <button
-                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
-                                      aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
-                                      title="Add event">
-                                      <Plus className="w-3 h-3 text-forest" />
-                                    </button>
-                                    </span>
-                                  )}
-                                </div>
-                                <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
-                                {dayBookings.slice(0, 2).map((b: any) => (
-                                  <button key={b.id}
-                                    draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { setSelectedBooking(b); }}
-                                    style={spaceCardStyle(b.spaceName)}
-                                    className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : calCardClasses(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
-                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{b.firstName} {b.lastName}</div>
-                                    <div className="hidden sm:block">
-                                      <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                      {(b.guestCount || b.spaceName) && (
-                                        <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
-                                      )}
-                                      {/* The status wraps only at spaces: on a narrow chip its text shrinks (11px down to 7px) and the side padding drops to 2px, just enough for the longest word to fit (shared/statusBandFit.ts). A word that still can't fit (wider letter spacing set by the user, a very long custom status) breaks rather than being hidden under the next day. */}
-                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(b.status, false, b.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(b.status).label, '2 * var(--bp)') }}>{getStatusInfo(b.status).label.toUpperCase()}</span></div>
-                                    </div>
-                                    {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
-                                  </button>
-                                ))}
-                                {dayLeads.slice(0, 1).map((l: any) => (
-                                  <button key={l.id}
-                                    draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
-                                    style={spaceCardStyle(l.spaceName)}
-                                    className={`w-full text-left rounded font-dm ${calCardClasses(l.status, isOverdueLead(l))} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
-                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
-                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{l.firstName} {l.lastName}</div>
-                                    <div className="hidden sm:block">
-                                      <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                      {l.guestCount && (
-                                        <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
-                                      )}
-                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(l.status).label, '2 * var(--bp)') }}>{getStatusInfo(l.status).label.toUpperCase()}</span></div>
-                                    </div>
-                                    {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
-                                  </button>
-                                ))}
-                                {(dayBookings.length + dayLeads.length) > 3 && (
-                                  <span className="font-dm text-[12px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
-    );
 
   // Side-panel Cancel / Delete. Cancel is non-destructive (booking → Cancelled,
   // enquiry → Lost; the record is kept and the date freed); Delete is for good.
@@ -4240,49 +4040,47 @@ export default function Dashboard() {
               const full = allLeads?.find((l: any) => l.id === e.id) ?? e.row;
               openEventDrawer({ ...(full as any), _isLead: true });
             };
-            const renderTile = (s: (typeof allStats)[number]) => {
-              // When an action tile has a non-zero count it raises an alert: a
-              // brand-coloured left edge + wash (via .stat-tile[data-alert]) and
-              // a matching figure colour, so the eye lands on what needs doing.
+            // Summary strip: the tiles are the same counts, each still opens
+            // exactly the records it counted. The last one is the inverted cell.
+            const toTile = (s: (typeof allStats)[number]) => {
               const alert = (s as any).alert as 'danger' | 'warn' | undefined;
-              const numClass = alert === 'danger' ? 'text-destructive' : alert === 'warn' ? 'text-gold-deep' : 'text-foreground';
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => tileAction(s.id)}
-                  data-alert={alert}
-                  className="dante-card stat-tile p-3 md:p-4 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                >
-                  <div className="mb-2">{s.icon}</div>
-                  <div className={`font-serif text-2xl md:text-3xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
-                  <div className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
-                  <div className="font-sans text-[12px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
-                </button>
-              );
+              return { id: s.id, label: s.label, value: s.value, note: s.sub, noteTone: alert === 'danger' ? 'red' as const : alert === 'warn' ? 'amber' as const : undefined };
             };
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             const actionStats = visibleStats.filter(s => !(s as any).perf);
             const perfStats = visibleStats.filter(s => (s as any).perf);
+            const firstName = (user?.name ?? '').trim().split(/\s+/)[0];
+            const setupSteps = [
+              { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
+              { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
+              { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); setMenuSettingsSection('catalogue'); } },
+              { key: 'email', label: 'Connect your email', sub: 'Email — so replies and proposals send from you', go: () => { setTab('settings'); setSettingsSubTab('email'); } },
+              { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
+            ];
+            const setupTodo = setupStatus ? setupSteps.filter(st => !(setupStatus as any)[st.key]) : [];
             return (
-            <div className="p-6 space-y-6">
-              {/* Header */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h1 className="font-cormorant text-3xl font-semibold text-ink">Overview</h1>
-                  <p className="font-dm text-sm text-sage mt-0.5">Your venue at a glance</p>
+            <div className="px-4 md:px-8 pt-5 md:pt-7 pb-10 flex flex-col gap-5">
+              {/* Greeting header */}
+              <header className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                  <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+                    {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  </span>
+                  <h1 className="m-0 font-sans text-[26px] md:text-[30px] font-semibold tracking-[-0.015em] text-foreground leading-tight">
+                    Kia ora{firstName ? `, ${firstName}` : ''}<span className="sr-only"> — Overview</span>
+                  </h1>
                 </div>
                 <div className="flex items-center gap-2">
                   <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
                     <PopoverTrigger asChild>
-                      <button className="vf-btn vf-btn-secondary">
-                        <Settings className="w-3.5 h-3.5" /> CUSTOMISE
+                      <button className={calBtn}>
+                        <Settings className="w-3.5 h-3.5" aria-hidden /> Customise
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" sideOffset={4} aria-label="Customise overview: show or hide cards" className="bg-white border border-border shadow-lg p-3 w-52">
-                      <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
+                    <PopoverContent align="end" sideOffset={4} aria-label="Customise overview: show or hide cards" className="bg-card border-[1.5px] border-border rounded-[8px] shadow-lg p-3 w-56 font-sans">
+                      <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mb-2">Show / hide numbers</div>
                       {allStats.map(s => (
-                        <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
+                        <label key={s.id} className="flex items-center gap-2 py-1 px-1 rounded-[4px] cursor-pointer hover:bg-accent">
                           <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
                             setHiddenStats(prev => {
                               const next = new Set(prev);
@@ -4290,223 +4088,95 @@ export default function Dashboard() {
                               localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
                               return next;
                             });
-                          }} className="w-3.5 h-3.5 accent-forest" />
-                          <span className="font-dm text-xs text-ink">{s.label}</span>
+                          }} className="w-3.5 h-3.5 accent-primary" />
+                          <span className="text-[13px] text-foreground">{s.label}</span>
                         </label>
                       ))}
                     </PopoverContent>
                   </Popover>
                   <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                    className="vf-btn vf-btn-primary">
-                    <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
+                    className={calBtnPrimary}>
+                    <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
                   </button>
                 </div>
-              </div>
+              </header>
 
-              {/* Today's events. "Needs you today" used to sit alongside this;
-                  it now lives as an opt-in panel under the calendar. */}
-              {!isStaff && (
-                <TodayPanel
-                  className="lg:w-[360px]"
-                  onOpenEvent={openOverviewEvent}
-                  onCalendar={() => setTab('calendar')}
-                  newEnquiries={newEnquiries.length}
-                  onNewEnquiries={() => showEnquiries({ sub: 'new' })}
-                />
-              )}
-
-              {/* Setup steps for a new venue — hidden once everything is done. */}
-              {setupStatus && (() => {
-                const steps = [
-                  { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
-                  { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
-                  { key: 'menu', label: 'Add your menu', sub: 'Menu & Catalogue', go: () => { setTab('settings'); setSettingsSubTab('menu'); setMenuSettingsSection('catalogue'); } },
-                  { key: 'email', label: 'Connect your email', sub: 'Email — so replies and proposals send from you', go: () => { setTab('settings'); setSettingsSubTab('email'); } },
-                  { key: 'notifications', label: 'Where should new enquiries be sent?', sub: 'Venue → notification email', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
-                ] as const;
-                const todo = steps.filter(st => !(setupStatus as any)[st.key]);
-                if (todo.length === 0) return null;
-                return (
-                  <section aria-label="Set up your venue" className="dante-card overflow-hidden">
-                    <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
-                      <SectionHead title="Set up your venue" meta={`${steps.length - todo.length} of ${steps.length} done`} className="flex-1" />
-                    </div>
-                    <div className="divide-y divide-border">
-                      {todo.map(st => (
-                        <button key={st.key} onClick={st.go} className="w-full text-left px-4 py-3 min-h-[44px] hover:bg-linen flex items-center justify-between gap-3">
-                          <span className="min-w-0">
-                            <span className="block font-dm text-sm font-semibold text-ink">{st.label}</span>
-                            <span className="block font-dm text-xs text-ink/70">{st.sub}</span>
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-ink/50 flex-shrink-0" aria-hidden />
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })()}
-
-              {/* Start times to check — hidden when there are none. */}
-              {startTimeMismatches && startTimeMismatches.length > 0 && (
-                <section aria-label="Start times to check" className="dante-card overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border">
-                    <SectionHead title="Start times to check" meta={`${startTimeMismatches.length} event${startTimeMismatches.length !== 1 ? 's' : ''}`} />
-                    <p className="font-dm text-xs text-ink/70 mt-1">The event and its run sheet have different start times. Pick the right one and both will match.</p>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {startTimeMismatches.map(m => {
-                      const busy = alignStartTime.isPending && alignStartTime.variables?.runsheetId === m.runsheetId;
-                      return (
-                        <div key={m.runsheetId} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                          <button onClick={() => setLocation(`/runsheet?id=${m.runsheetId}`)} className="min-w-0 flex-1 text-left hover:underline">
-                            <span className="block font-dm text-sm font-semibold text-ink break-words">{[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}</span>
-                            <span className="block font-dm text-xs text-ink/70">{formatEventDate(m.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })} · event {fmtHhmm(m.bookingTime)}, run sheet {fmtHhmm(m.runsheetTime)}</span>
-                          </button>
-                          <div className="flex gap-2 shrink-0">
-                            <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'event' })}
-                              aria-label={`Use ${fmtHhmm(m.bookingTime)} (the event's time) for ${[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}`}
-                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
-                              USE {fmtHhmm(m.bookingTime).toUpperCase()}
-                            </button>
-                            <button disabled={busy} onClick={() => alignStartTime.mutate({ runsheetId: m.runsheetId, keep: 'runsheet' })}
-                              aria-label={`Use ${fmtHhmm(m.runsheetTime)} (the run sheet's time) for ${[m.firstName, m.lastName].filter(Boolean).join(' ') || m.title}`}
-                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
-                              USE {fmtHhmm(m.runsheetTime).toUpperCase()}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* Double-bookings to resolve — events kept on a taken date and
-                  space ("Save anyway"). Hidden when there are none. */}
-              {!isStaff && doubleBookings && doubleBookings.length > 0 && (
-                <section aria-label="Double-bookings to resolve" className="dante-card overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border">
-                    {/* The count is left off on a phone: with this long title it ran off the card. */}
-                    <SectionHead title="Double-bookings to resolve" meta={<span className="hidden sm:inline">{doubleBookings.length} clash{doubleBookings.length !== 1 ? 'es' : ''}</span>} />
-                    <p className="font-dm text-xs text-ink/70 mt-1">These events share a date and space. Move one, or mark it resolved once you've sorted it out.</p>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {doubleBookings.map(pair => {
-                      const busy = resolveClash.isPending && resolveClash.variables?.id === pair.a.bookingId;
-                      const side = (x: NonNullable<typeof pair.b>) => x.bookingId
-                        ? <button onClick={() => setLocation(`/event/${x.bookingId}`)} className="font-dm text-sm font-semibold text-ink hover:underline text-left break-words">{x.name}</button>
-                        : <span className="font-dm text-sm font-semibold text-ink break-words">{x.name} <span className="font-normal text-ink/70">({x.kind === 'hold' ? 'date on hold' : 'enquiry'})</span></span>;
-                      return (
-                        <div key={pair.key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                          <div className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-baseline gap-x-1.5">
-                              {side(pair.a)}
-                              {pair.b && <><span className="font-dm text-xs text-ink/60">and</span>{side(pair.b)}</>}
-                            </span>
-                            <span className="block font-dm text-xs text-ink/70">
-                              {formatEventDate(pair.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}{pair.spaceName ? ` · ${pair.spaceName}` : ''}{!pair.b ? ` · ${pair.summary}` : ''}
-                            </span>
-                          </div>
-                          <div className="flex gap-2 shrink-0">
-                            <button disabled={busy} onClick={() => pair.a.bookingId && resolveClash.mutate({ id: pair.a.bookingId })}
-                              className="font-bebas tracking-widest text-xs px-3 min-h-[44px] border border-forest text-forest hover:bg-linen disabled:opacity-50">
-                              {busy ? 'SAVING…' : 'MARK RESOLVED'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* KPI tiles — action tiles first, each opens exactly the records it
-                  counted. The vanity numbers wait in a collapsed Performance row. */}
-              {actionStats.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
-                  {actionStats.map(renderTile)}
-                </div>
-              )}
+              {/* Summary strip — action counts first; each opens exactly the
+                  records it counted. The vanity numbers wait in a collapsed row. */}
+              <OverviewSummaryStrip tiles={actionStats.map(toTile)} onTile={tileAction} />
               {perfStats.length > 0 && (
-                <details className="group">
-                  <summary className="cursor-pointer select-none list-none inline-flex items-center gap-1.5 min-h-[44px] font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                <details className="group -mt-2">
+                  <summary className="cursor-pointer select-none list-none inline-flex items-center gap-1.5 min-h-[40px] font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
                     <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" aria-hidden /> Performance
-                    <span className="font-semibold normal-case tracking-normal">{perfStats.map(s => `${s.label} ${s.value}`).join(' · ')}</span>
+                    <span className="font-semibold normal-case tracking-normal tabular-nums">{perfStats.map(s => `${s.label} ${s.value}`).join(' · ')}</span>
                   </summary>
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4 mt-2">
-                    {perfStats.map(renderTile)}
+                  <div className="mt-1">
+                    <OverviewSummaryStrip label="Performance" tiles={perfStats.map(toTile)} onTile={tileAction} />
                   </div>
                 </details>
               )}
 
-              {/* Since your last visit — what changed since this user last loaded the dashboard (non-staff). */}
-              {!isStaff && <SinceLastVisit />}
-
-              {/* Calendar + Sidebar */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Calendar card */}
-                {monthCalendarCard}
-
-                {/* Sidebar cards */}
-                <div className="space-y-4">
-                  {/* Upcoming Events — the next 14 days from today, whatever month the calendar shows. */}
-                  <UpcomingEventsCard
-                    onOpenEvent={openOverviewEvent}
-                    onSeeAll={showCalendarList}
-                    statusInfo={(st) => getStatusInfo(st)}
-                  />
-
-                  {/* New Enquiries */}
-                  <div className="dante-card overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                      <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => showEnquiries({ sub: 'new' })} aria-label="View all new enquiries" className="shrink-0 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
-                    </div>
-                    {newEnquiries.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-6 text-center">
-                        <CheckCircle className="w-8 h-8 text-forest/20 mx-auto mb-2" />
-                        <p className="font-dm text-xs text-sage/50">All caught up!</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border max-h-56 overflow-auto">
-                        {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${lead.id}`); }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(lead.status).label}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
-                            </div>
-                          </button>
-                        ))}
-                        {newEnquiries.length > 6 && (
-                          <button onClick={() => showEnquiries({ sub: 'new' })} className="w-full text-left px-4 py-2 min-h-[44px] font-dm text-xs font-semibold text-forest hover:bg-linen">
-                            +{newEnquiries.length - 6} more new enquiries {'\u2192'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+                <div className="flex flex-col gap-7 min-w-0">
+                  {/* Needs you today — clashes, overdue tasks and replies,
+                      deposits, missing run sheets, start times to check. */}
+                  {!isStaff && (
+                    <OverviewNeedsToday
+                      onOpenBooking={openBookingById}
+                      onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                      onOpenLink={(link) => { void openAlertLink(link); }}
+                      onGoCalendarList={showCalendarList}
+                      onGoTasksOverdue={() => tileAction('overdue_tasks')}
+                      onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
+                      onGoDeposits={() => tileAction('deposits_due')}
+                      clashes={doubleBookings}
+                      onResolveClash={(id) => resolveClash.mutate({ id })}
+                      resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
+                      mismatches={startTimeMismatches}
+                      onAlignStartTime={(runsheetId, keep) => alignStartTime.mutate({ runsheetId, keep })}
+                      aligningRunsheetId={alignStartTime.isPending ? (alignStartTime.variables?.runsheetId ?? null) : null}
+                      fmtDay={(d) => formatEventDate(d, { weekday: 'short', day: 'numeric', month: 'short' })}
+                      fmtTime={fmtHhmm}
+                    />
+                  )}
+                  {/* The next seven days from today, whatever month the calendar shows. */}
+                  <OverviewWeekStrip onOpenEvent={openOverviewEvent} onSeeAll={showCalendarList} />
                 </div>
+
+                <aside aria-label="At a glance" className="flex flex-col gap-5 min-w-0">
+                  {!isStaff && (
+                    <OverviewToday
+                      onOpenEvent={openOverviewEvent}
+                      onCalendar={() => setTab('calendar')}
+                      newEnquiries={newEnquiries.length}
+                      onNewEnquiries={() => showEnquiries({ sub: 'new' })}
+                      statusLabel={(st) => statusWords(getStatusInfo(st).label)}
+                    />
+                  )}
+                  {/* Setup steps for a new venue — hidden once everything is done. */}
+                  <OverviewSetup total={setupSteps.length} todo={setupTodo} />
+                  {/* What changed since this user last loaded the dashboard (non-staff). */}
+                  {!isStaff && <SinceLastVisit />}
+                </aside>
               </div>
 
               {/* ── Record Actual Spend — collapsible, bottom of overview ─────── */}
-              <div className="mt-4 border border-gold/20 bg-white overflow-hidden">
+              <div className="rounded-[8px] border-[1.5px] border-border bg-card overflow-hidden">
                 <button
                   onClick={() => setSpendSectionOpen(v => !v)}
                   aria-expanded={spendSectionOpen}
                   aria-controls="record-actual-spend-content"
-                  className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-linen/40 transition-colors"
+                  className="w-full flex items-center justify-between gap-3 px-4 md:px-[18px] min-h-[48px] text-left hover:bg-accent/40 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-forest/60" />
-                    <span className="font-bebas tracking-widest text-sm text-ink/70">RECORD ACTUAL SPEND</span>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-ink/65 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
+                  <span className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-primary" aria-hidden />
+                    <span className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">Record actual spend</span>
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} aria-hidden />
                 </button>
                 {spendSectionOpen && (
-                  <div id="record-actual-spend-content" className="border-t border-gold/20">
+                  <div id="record-actual-spend-content" className="border-t-[1.5px] border-border">
                     <PostEventSpendPrompt />
                   </div>
                 )}
@@ -4514,7 +4184,6 @@ export default function Dashboard() {
             </div>
             );
           })()}
-
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
             <div className="vf-pane flex h-full overflow-hidden">
@@ -5171,81 +4840,20 @@ export default function Dashboard() {
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
             <div className={`vf-pane flex flex-col ${showCalendarNeeds ? '' : 'h-full overflow-hidden'}`}>
-              {/* Every other tab has a page-level <h1> (Overview, Pipeline,
-                  Contacts, Tasks, Settings, …) — Calendar was the one
-                  exception, which matters most here since a restricted staff
-                  account lands on this tab by default and can't navigate
-                  by heading at all otherwise. Visually hidden since "Sep
-                  2026" in the toolbar already reads as the page's title. */}
-              {/* Same page header as Overview, Enquiries, Payments and Tasks:
-                  the title on the left, the page's actions on the right. The
-                  navigation toolbar sits underneath. */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-6 pt-4 pb-1 bg-cream flex-shrink-0">
-                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Calendar</h1>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button onClick={toggleCalendarNeeds}
-                    aria-pressed={showCalendarNeeds}
-                    title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
-                    className="vf-btn vf-btn-secondary">
-                    <Bell className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEEDS TODAY</span>
-                  </button>
-                  <button onClick={() => setShowPrintWeek(true)}
-                    title="Print every event's run sheet for a week, in one PDF"
-                    aria-label="Print week: every run sheet for a week"
-                    className="vf-btn vf-btn-secondary">
-                    <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
-                  </button>
-                  <button onClick={() => setShowCancelledOnCal(v => !v)} aria-pressed={showCancelledOnCal}
-                    aria-label={showCancelledOnCal ? "Hide cancelled events" : "Show cancelled events"}
-                    title="Cancelled events are hidden from the calendar. Show them to find one to restore."
-                    className="vf-btn vf-btn-secondary">
-                    <span className="hidden sm:inline">{showCancelledOnCal ? "HIDE CANCELLED" : "SHOW CANCELLED"}</span>
-                    {/* An eye, not the cryptic "CXL", on a phone. */}
-                    <span className="sm:hidden" aria-hidden="true">{showCancelledOnCal ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</span>
-                  </button>
-                  {/* Staff are read-only server-side, so hide create. */}
-                  {!isStaff && (
-                    <button onClick={() => setShowAddLead(true)} className="vf-btn vf-btn-primary">
-                      <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-              {monthBookingsError && (
-                <div className="flex items-center justify-center gap-3 px-4 py-2 bg-red-50 border-b border-red-200">
-                  <AlertCircle className="w-4 h-4 text-red-500/80 flex-shrink-0" />
-                  <span className="font-dm text-xs text-ink">Couldn't load calendar events.</span>
-                  <button
-                    onClick={() => refetchMonthBookings()}
-                    className="font-bebas tracking-widest text-[11px] px-3 py-1 rounded-md bg-forest text-cream hover:opacity-90"
-                  >
-                    RETRY
-                  </button>
-                </div>
-              )}
-              {/* Calendar Toolbar */}
-              <div className="border-b border-gold/15 bg-cream flex-shrink-0">
-                {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
-                <div className="flex flex-wrap items-center gap-2 px-3 md:px-6 py-3">
-                  {/* Desktop-only prev/next/today on row 1 */}
-                  <button onClick={() => navCalendar(-1)} aria-label="Previous" title="Previous (←)"
-                    className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                  <button onClick={() => navCalendar(1)} aria-label="Next" title="Next (→)"
-                    className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                  <button onClick={navCalendarToday} title="Today (T)"
-                    className="vf-btn vf-btn-secondary hidden! md:inline-flex!">TODAY</button>
-                  <button onClick={() => setTab('enquiries')} className="vf-btn vf-btn-secondary hidden! sm:inline-flex!" title="Go to enquiries list">
-                    <List className="w-3.5 h-3.5" /> ENQUIRIES
-                  </button>
-                  {/* Never narrower than "Nov 2026": below that the buttons wrap
-                      to a second line instead (it used to shrink to nothing). */}
-                  <div className="flex-1 min-w-[6rem] relative">
+              {/* Page header: an eyebrow, then the period in view as the <h1>
+                  (it is also the jump-to-date control). A restricted staff
+                  account lands on this tab, so the heading has to be there. */}
+              <div className="flex flex-wrap items-end justify-between gap-3 px-3 md:px-8 pt-5 md:pt-7 pb-1 bg-background flex-shrink-0">
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <span aria-hidden="true" className="font-sans text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Calendar</span>
+                  <h1 className="m-0 font-sans text-[24px] md:text-[30px] font-semibold tracking-[-0.015em] text-foreground leading-tight min-w-0">
+                    <span className="sr-only">Calendar, </span>
                     <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
                       <PopoverTrigger asChild>
                         <button
                           type="button"
                           title="Click to jump to a different month"
-                          className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                          className="inline-flex items-center gap-1.5 max-w-full text-left hover:text-primary transition-colors rounded-[4px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                           <span className="truncate">
                             {calendarView === 'week' ? (() => {
                               const dow = (calDate.getDay() + 6) % 7;
@@ -5256,17 +4864,17 @@ export default function Dashboard() {
                               ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
                               : `${MONTHS[month]} ${year}`}
                           </span>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-5 h-5 flex-shrink-0 text-muted-foreground transition-transform ${showJumpDate ? 'rotate-180' : ''}`} aria-hidden />
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent id="cal-jump-popover" align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                      <PopoverContent id="cal-jump-popover" align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-card border-[1.5px] border-border rounded-[8px] shadow-lg p-3 font-sans">
                         {/* Year stepper */}
                         <div className="flex items-center justify-between mb-3">
                           <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                          <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                            className="w-8 h-8 grid place-items-center rounded-[6px] border-[1.5px] border-input hover:border-primary text-foreground"><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="text-[16px] font-semibold tabular-nums text-foreground">{year}</span>
                           <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
+                            className="w-8 h-8 grid place-items-center rounded-[6px] border-[1.5px] border-input hover:border-primary text-foreground"><ChevronRight className="w-4 h-4" /></button>
                         </div>
                         {/* Month grid */}
                         <div className="grid grid-cols-3 gap-1 mb-3">
@@ -5276,167 +4884,207 @@ export default function Dashboard() {
                             return (
                               <button key={m}
                                 onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                  isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                  : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                  : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                }`}>{m.slice(0, 3).toUpperCase()}</button>
+                                aria-current={isCurrent ? "true" : undefined}
+                                className={`text-[13px] font-semibold py-2 rounded-[6px] border-[1.5px] transition-colors ${
+                                  isCurrent ? 'bg-primary text-primary-foreground border-primary'
+                                  : isThisMonth ? 'border-primary text-primary hover:bg-accent'
+                                  : 'border-input text-foreground hover:bg-accent'
+                                }`}>{m.slice(0, 3)}</button>
                             );
                           })}
                         </div>
                         {/* Quick actions */}
-                        <div className="flex gap-2 pt-2 border-t border-gold/15">
+                        <div className="flex gap-2 pt-2 border-t border-border">
                           <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
-                            className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                            className="flex-1 text-[13px] font-semibold h-8 rounded-[6px] border-[1.5px] border-input text-foreground hover:border-primary">Today</button>
                           <input type="date" aria-label="Jump to date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
                             onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                            className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                            className="flex-1 text-[13px] px-2 h-8 rounded-[6px] border-[1.5px] border-input text-foreground focus:outline-none focus:border-primary" />
                         </div>
-                        <p className="hidden md:block font-dm text-[12px] text-sage/60 mt-3 leading-snug">
-                          Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
+                        <p className="hidden md:block text-[12px] text-muted-foreground mt-3 leading-snug">
+                          Tip: use <kbd className="px-1 border border-border rounded-[3px] bg-background">←</kbd> <kbd className="px-1 border border-border rounded-[3px] bg-background">→</kbd> to navigate, <kbd className="px-1 border border-border rounded-[3px] bg-background">T</kbd> for today, <kbd className="px-1 border border-border rounded-[3px] bg-background">M/W/D/L</kbd> to switch views.
                         </p>
                         {/* Off for speech input and anyone who sets keys off by accident; kept per browser. */}
-                        <label className="hidden md:flex items-center gap-2 mt-2 font-dm text-[12px] text-ink/80 cursor-pointer">
+                        <label className="hidden md:flex items-center gap-2 mt-2 text-[12px] text-foreground cursor-pointer">
                           <input type="checkbox" checked={calShortcutsOn}
                             onChange={e => { setCalShortcutsOn(e.target.checked); writeCalendarShortcutsOn(e.target.checked); }}
-                            className="accent-forest w-3.5 h-3.5" />
+                            className="accent-primary w-3.5 h-3.5" />
                           Single-key shortcuts on
                         </label>
                       </PopoverContent>
                     </Popover>
+                  </h1>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => setShowPrintWeek(true)}
+                    title="Print every event's run sheet for a week, in one PDF"
+                    aria-label="Print week: every run sheet for a week"
+                    className={calBtn}>
+                    <Printer className="w-3.5 h-3.5" aria-hidden /> <span className="hidden sm:inline">Print week</span>
+                  </button>
+                  {/* Staff are read-only server-side, so hide create. */}
+                  {!isStaff && (
+                    <button onClick={() => setShowAddLead(true)} className={calBtnPrimary}>
+                      <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> <span className="hidden sm:inline">Add enquiry</span><span className="sm:hidden">Add</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              {monthBookingsError && (
+                <div role="alert" className="mx-3 md:mx-8 mt-3 flex items-center gap-3 rounded-[8px] border-[1.5px] px-3.5 py-2.5"
+                  style={{ background: '#fbecea', borderColor: '#f0c7c2', color: '#c0392b' }}>
+                  <AlertTriangle className="w-[18px] h-[18px] flex-shrink-0" aria-hidden />
+                  <span className="font-sans text-[13px] font-semibold text-foreground flex-1">Couldn't load calendar events.</span>
+                  <button onClick={() => refetchMonthBookings()} className={calBtnSmall}>Retry</button>
+                </div>
+              )}
+              {/* Calendar toolbar: navigation, the view switch, filters, legend. */}
+              <div className="bg-background flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-2.5 px-3 md:px-8 py-3">
+                  {/* Desktop prev/next/today */}
+                  <div className="hidden md:flex">
+                    <button onClick={() => navCalendar(-1)} aria-label="Previous" title="Previous (←)"
+                      className={`${calBtn} !px-2.5 !rounded-r-none`}><ChevronLeft className="w-4 h-4" aria-hidden /></button>
+                    <button onClick={() => navCalendar(1)} aria-label="Next" title="Next (→)"
+                      className={`${calBtn} !px-2.5 !rounded-l-none -ml-[1.5px]`}><ChevronRight className="w-4 h-4" aria-hidden /></button>
                   </div>
-                  {/* Desktop-only view switcher on row 1 */}
-                  <div role="group" aria-label="Calendar view" className="hidden md:flex border border-gold/30">
+                  <button onClick={navCalendarToday} title="Today (T)" className={`${calBtn} hidden! md:inline-flex!`}>Today</button>
+                  {/* Desktop view switcher */}
+                  <div role="group" aria-label="Calendar view" className="hidden md:flex rounded-[6px] border-[1.5px] border-input bg-card overflow-hidden">
                     {(["month","week","day","list"] as const).map(v => (
                       <button key={v}
                         onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
-                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
-                          calendarView === v ? 'bg-forest-dark text-cream forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/60 hover:bg-linen'
-                        }`}>{v.toUpperCase()}</button>
+                        className={`font-sans text-[13px] font-semibold px-3.5 h-[35px] capitalize transition-colors ${
+                          calendarView === v ? 'bg-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-foreground hover:bg-accent'
+                        }`}>{v}</button>
                     ))}
                   </div>
+                  <span aria-hidden className="hidden md:block w-[1.5px] h-6 bg-input mx-1" />
+                  <button onClick={() => setShowCancelledOnCal(v => !v)} aria-pressed={showCancelledOnCal}
+                    aria-label={showCancelledOnCal ? "Hide cancelled events" : "Show cancelled events"}
+                    title="Cancelled events are hidden from the calendar. Show them to find one to restore."
+                    className={calPill(showCancelledOnCal)}>
+                    <span aria-hidden="true">{showCancelledOnCal ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}</span>
+                    <span className="hidden sm:inline">{showCancelledOnCal ? "Showing cancelled" : "Show cancelled"}</span>
+                  </button>
+                  <button onClick={toggleCalendarNeeds}
+                    aria-pressed={showCalendarNeeds}
+                    title={showCalendarNeeds ? "Hide the 'Needs you today' panel below the calendar" : "Show the 'Needs you today' panel below the calendar"}
+                    className={calPill(showCalendarNeeds)}>
+                    <Bell className="w-3.5 h-3.5" aria-hidden /> <span className="hidden sm:inline">Needs you today</span>
+                  </button>
+                  <button onClick={() => setTab('enquiries')} className={`${calPill(false)} hidden! sm:inline-flex!`} title="Go to enquiries list">
+                    <List className="w-3.5 h-3.5" aria-hidden /> Enquiries
+                  </button>
                   <SpaceAvailability />
+                  <div className="w-full lg:w-auto lg:ml-auto">
+                    <CalendarLegend showCancelled={showCancelledOnCal} />
+                  </div>
                 </div>
-                {/* Row 2 (mobile only): Big tap-friendly nav controls */}
+                {/* Mobile: big tap-friendly nav controls */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-3">
                   <button onClick={() => navCalendar(-1)} aria-label="Previous"
-                    className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                    className={`${calBtn} flex-1 !h-11`}><ChevronLeft className="w-5 h-5" aria-hidden /></button>
                   <button onClick={navCalendarToday}
-                    className="flex-1 font-bebas tracking-widest text-xs py-2.5 border border-gold/30 text-ink/80 hover:bg-linen transition-colors">TODAY</button>
+                    className={`${calBtn} flex-1 !h-11`}>Today</button>
                   <button onClick={() => navCalendar(1)} aria-label="Next"
-                    className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronRight className="w-5 h-5" /></button>
+                    className={`${calBtn} flex-1 !h-11`}><ChevronRight className="w-5 h-5" aria-hidden /></button>
                 </div>
-                {/* Row 3 (mobile only): View switcher full-width */}
-                <div role="group" aria-label="Calendar view" className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
+                {/* Mobile: view switcher full-width */}
+                <div role="group" aria-label="Calendar view" className="md:hidden grid grid-cols-4 mx-3 mb-3 rounded-[6px] border-[1.5px] border-input bg-card overflow-hidden">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
                       onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
-                      className={`font-bebas tracking-widest text-xs py-2 border border-gold/30 -ml-px first:ml-0 transition-colors ${
-                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-ink/70 hover:bg-linen'
-                      }`}>{v.toUpperCase()}</button>
+                      className={`font-sans text-[13px] font-semibold h-10 capitalize transition-colors ${
+                        calendarView === v ? 'bg-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-foreground hover:bg-accent'
+                      }`}>{v}</button>
                   ))}
                 </div>
               </div>
-
-              {/* Legend — scrolls horizontally on narrow screens; without
-                  tabIndex a keyboard or switch-access user has no way to
-                  reach the content past the visible edge. */}
-              <div
-                role="region"
-                aria-label="Status colour legend"
-                tabIndex={0}
-                className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest"
-              >
-                {pipelineStages.map(s => {
-                  // Matches the card colours: confirmed green, proposal sent yellow.
-                  // The icon is the same one the month chips show for the status.
-                  const fill = ({ proposal_sent: "#fef08a", booked: "#047857", confirmed: "#047857" } as Record<string, string>)[s.key] ?? s.swatch;
-                  return (
-                    <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
-                      <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: fill, color: readableOn(fill) }}>
-                        <CalendarStatusIcon status={s.key} className="w-3 h-3" />
-                      </div>
-                      <span>{s.label}</span>
-                    </div>
-                  );
-                })}
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="vf-swatch w-4 h-4 rounded-sm grid place-items-center" style={{ backgroundColor: "#991b1b", color: "#fff" }}>
-                    <CalendarStatusIcon status="" overdue className="w-3 h-3" />
-                  </div>
-                  <span>Overdue</span>
-                </div>
-                {/* Spaces: the coloured stripe on each day and the left edge of each
-                    event. Without this key the second colour system was a guess. */}
-                {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).length > 0 && (
-                  <>
-                    <span aria-hidden className="w-px h-4 bg-border flex-shrink-0" />
-                    <span className="font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground flex-shrink-0">Spaces</span>
-                    {(spaces ?? []).filter((sp: any) => sp?.isActive !== false && sp?.name).map((sp: any) => (
-                      <div key={`space-${sp.id}`} className="flex items-center gap-1.5 flex-shrink-0">
-                        <div className="vf-swatch w-4 h-1.5 rounded-sm" style={{ backgroundColor: spaceColor(sp.name) ?? '#c9a84c' }} />
-                        <span>{sp.name}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-
               {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
               <div className={`vf-pane-scroll flex flex-col ${showCalendarNeeds ? '' : 'flex-1 overflow-hidden'}`} onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
 
-              {/* Month View — desktop grid */}
-              {calendarView === "month" && (
+              {/* Month View — desktop grid, with the selected day beside it */}
+              {calendarView === "month" && (() => {
+                // Build weeks array (Mon-Sun)
+                const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Sun
+                const mondayOffset = (firstDayOfMonth + 6) % 7; // offset from Monday
+                const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                const nextYear = adjNextMonthDate.getFullYear();
+                const nextMonth = adjNextMonthDate.getMonth();
+                const adjBookedLeadIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
+                // Each cell: { day, isOverflow } — overflow = belongs to next month
+                const cells = Array.from({ length: totalCells }, (_, i) => {
+                  const dayNum = i - mondayOffset + 1;
+                  if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
+                  if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                  return null; // leading blank (prev month)
+                });
+                const weeks = [];
+                for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                // The one day in the Tab order (see onMonthGridKeyDown). It is
+                // also the selected day the side panel shows.
+                const shownDays = cells.filter(Boolean).map(c => {
+                  const y = c!.isOverflow ? nextYear : year, m = c!.isOverflow ? nextMonth : month;
+                  return `${y}-${String(m + 1).padStart(2, '0')}-${String(c!.day).padStart(2, '0')}`;
+                });
+                const todayYmd = ymdLocalD(new Date());
+                const activeDay = monthFocusDay && shownDays.includes(monthFocusDay) ? monthFocusDay : monthGridDefaultDay(year, month, todayYmd);
+                const eventsOn = (day: number, isOverflow: boolean) => ({
+                  dayBookings: isOverflow
+                    ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                    : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day),
+                  dayLeads: isOverflow
+                    ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
+                    : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost'),
+                });
+                // One signal per event: the colour says what it means (legend).
+                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
+                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
+                });
+                const sortedEvents = (dayBookings: any[], dayLeads: any[]) => [
+                  ...dayBookings.map((b: any) => ({ ...b, _kind: 'booking' as const })),
+                  ...dayLeads.map((l: any) => ({ ...l, _kind: 'lead' as const })),
+                ].sort((a: any, z: any) => String(a.startTime ?? a.eventTime ?? '').localeCompare(String(z.startTime ?? z.eventTime ?? '')));
+
+                // ── Selected-day panel data ──
+                const [selY, selM, selD] = activeDay.split('-').map(Number);
+                const selOverflow = !(selY === year && selM - 1 === month);
+                const selSet = eventsOn(selD, selOverflow);
+                const selEvents: CalDayEvent[] = sortedEvents(selSet.dayBookings, selSet.dayLeads).map((ev: any) => {
+                  const isLead = ev._kind === 'lead';
+                  const s = signalOf(ev, isLead);
+                  const t = ev.startTime ?? ev.eventTime ?? null;
+                  return { ev, isLead, tone: s.tone, label: s.label, time: t ? (hhmmLabel(String(t)) || String(t)) : null };
+                });
+                // Clashes on that day, from the same double-booking check the
+                // Overview uses (staff can't load it; they get the flag alone).
+                const selClashes: CalDayClash[] = (doubleBookings ?? [])
+                  .filter(pair => ymdLocalD(new Date(pair.eventDate)) === activeDay)
+                  .map(pair => ({ key: pair.key, spaceName: pair.spaceName, summary: pair.summary, aName: pair.a.name, bName: pair.b?.name ?? null, bookingId: pair.a.bookingId }));
+                const selFlagged = selSet.dayBookings.filter((b: any) => b.clashFlaggedAt && b.status !== 'cancelled').length;
+                const selDate = new Date(selY, selM - 1, selD);
+                return (
+              <div className={`hidden md:flex items-start gap-5 px-3 md:px-8 pt-1 pb-6 ${calFill}`}>
               <div ref={monthGridRef} role="grid" aria-label={new Date(year, month, 1).toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })} onKeyDown={onMonthGridKeyDown}
-                className={`hidden md:block ${calFill}`} style={{ minHeight: '600px' }}>
-                {/* Day headers - Mon to Sun like Function Tracker */}
-                <div role="row" className="grid grid-cols-7 border-b border-border">
+                className="flex-1 min-w-0 rounded-[8px] border-[1.5px] border-border bg-card overflow-hidden" style={{ minHeight: '600px' }}>
+                {/* Day headers, Mon to Sun */}
+                <div role="row" className="grid grid-cols-7 border-b-[1.5px] border-input">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map((d, i) => (
-                    <div key={d} role="columnheader" aria-label={["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][i]} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
-                      d === 'SAT' || d === 'SUN' ? 'text-muted-foreground bg-[#f4efe6]/50' : 'text-primary'
-                    }`}>{d}</div>
+                    <div key={d} role="columnheader" aria-label={["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][i]}
+                      className="px-2 py-2 font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground border-r-[1.5px] border-[#ececed] last:border-r-0">{d}</div>
                   ))}
                 </div>
-                {/* Calendar grid */}
-                {(() => {
-                  // Build weeks array (Mon-Sun)
-                  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Sun
-                  const mondayOffset = (firstDayOfMonth + 6) % 7; // offset from Monday
-                  const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
-                  const nextYear = adjNextMonthDate.getFullYear();
-                  const nextMonth = adjNextMonthDate.getMonth();
-                  const adjBookedLeadIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
-                  // Each cell: { day, isOverflow } — overflow = belongs to next month
-                  const cells = Array.from({ length: totalCells }, (_, i) => {
-                    const dayNum = i - mondayOffset + 1;
-                    if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
-                    if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
-                    return null; // leading blank (prev month)
-                  });
-                  const weeks = [];
-                  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-                  const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
-                  // The one day in the Tab order (see onMonthGridKeyDown).
-                  const shownDays = cells.filter(Boolean).map(c => {
-                    const y = c!.isOverflow ? nextYear : year, m = c!.isOverflow ? nextMonth : month;
-                    return `${y}-${String(m + 1).padStart(2, '0')}-${String(c!.day).padStart(2, '0')}`;
-                  });
-                  const activeDay = monthFocusDay && shownDays.includes(monthFocusDay) ? monthFocusDay : monthGridDefaultDay(year, month, ymdLocalD(new Date()));
-                  return weeks.map((week, wi) => (
-                    <div key={wi} role="row" className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
+                {weeks.map((week, wi) => (
+                    <div key={wi} role="row" className="grid grid-cols-7 border-b-[1.5px] border-[#ececed] last:border-b-0 min-h-[96px] sm:min-h-[118px]">
                       {week.map((cell, di) => {
-                        if (!cell) return <div key={di} role="gridcell" className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
+                        if (!cell) return <div key={di} role="gridcell" className="border-r-[1.5px] border-[#ececed] last:border-r-0 bg-[#fafafb]" />;
                         const { day, isOverflow } = cell;
                         const cellYear = isOverflow ? nextYear : year;
                         const cellMonth = isOverflow ? nextMonth : month;
                         const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                         const isWeekend = di >= 5;
-                        const dayBookings = isOverflow
-                          ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
-                          : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                        const dayLeads = isOverflow
-                          ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
-                          : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                        const { dayBookings, dayLeads } = eventsOn(day, isOverflow);
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         const isActive = dateStr === activeDay;
                         // Controls inside a day are only in the Tab order on the focused day.
@@ -5448,6 +5096,7 @@ export default function Dashboard() {
                             ...dayLeads.map((l: any) => ({ name: [l.firstName, l.lastName].filter(Boolean).join(' '), status: statusWords(getStatusInfo(l.status).label) })),
                           ],
                         });
+                        const dragOver = dragOverDate === dateStr;
                         return (
                           <div key={di}
                             role="gridcell"
@@ -5455,13 +5104,17 @@ export default function Dashboard() {
                             tabIndex={isActive ? 0 : -1}
                             aria-label={cellLabel}
                             aria-current={isToday ? "date" : undefined}
+                            aria-selected={isActive}
                             onFocus={() => setMonthFocusDay(dateStr)}
                             // A click on the day's background doesn't take focus (only
-                            // its buttons do), so mouse use is exactly as before.
+                            // its buttons do), but it does select the day for the panel.
                             onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, a')) e.preventDefault(); }}
-                            className={`group focus-visible:!outline-offset-[-2px] border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
-                            isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
-                          } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
+                            onClick={() => setMonthFocusDay(dateStr)}
+                            className="group focus-visible:!outline-offset-[-2px] border-r-[1.5px] border-[#ececed] last:border-r-0 p-1.5 flex flex-col gap-1 min-w-0 cursor-default"
+                            style={{
+                              background: dragOver ? 'rgba(47,84,136,0.10)' : isToday ? 'var(--accent)' : isWeekend || isOverflow ? '#fafafb' : 'var(--card)',
+                              boxShadow: isActive ? 'inset 0 0 0 2px var(--primary)' : dragOver ? 'inset 0 0 0 2px rgba(47,84,136,0.4)' : undefined,
+                            }}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                             onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
                             onDrop={!isOverflow ? (e) => {
@@ -5469,104 +5122,47 @@ export default function Dashboard() {
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
                             <div className="flex items-center justify-between">
-                            <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                              isToday ? 'vf-today bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
+                            <span aria-hidden={isOverflow ? true : undefined}
+                              className={`w-6 h-6 rounded-full inline-flex items-center justify-center font-sans text-[12.5px] font-bold tabular-nums leading-none ${
+                              isToday ? 'vf-today bg-primary text-primary-foreground' : isOverflow ? 'text-muted-foreground' : 'text-foreground'
                             }`}>{day}</span>
                             {editDayTitle && !isOverflow && !dayTitles.get(dateStr) && (
                               <DayTitleAddButton tabIndex={innerTab} dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
                             )}
                             </div>
                             <DayTitleText tabIndex={innerTab} title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
-                            {/* Space-split stripe — one coloured segment per distinct space
-                                booked that day (bookings + live leads), widths proportional
-                                to the event count. So a day with 1 bar event and 1 restaurant
-                                event renders as a literal half-and-half bar. */}
-                            {(() => {
-                              const counts = new Map<string, number>();
-                              for (const b of dayBookings) {
-                                const n = b.spaceName || 'Unassigned';
-                                counts.set(n, (counts.get(n) ?? 0) + 1);
-                              }
-                              for (const l of dayLeads) {
-                                const n = l.spaceName || 'Unassigned';
-                                counts.set(n, (counts.get(n) ?? 0) + 1);
-                              }
-                              if (counts.size === 0) return null;
-                              const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
-                              const segs = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-                              return (
-                                <div
-                                  className="flex w-full h-1.5 rounded-sm overflow-hidden mb-0.5"
-                                  title={segs.map(([n, c]) => `${n}: ${c}`).join(' · ')}>
-                                  {segs.map(([name, c]) => (
-                                    <div
-                                      key={name}
-                                      style={{
-                                        width: `${(c / total) * 100}%`,
-                                        background: spaceColor(name) ?? '#c9a84c',
-                                      }} />
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                            {/* Event chips — bookings + live enquiries, merged and
-                                sorted by start time. A month cell shows at most
-                                MONTH_CHIP_CAP compact one-line chips (time + name,
-                                status as the chip colour, space as the left stripe);
-                                the rest collapse into a "+N more" that opens the Day
-                                view. The full detail (type, guests, space, status
-                                label) lives on hover and in the Week/Day views, so a
-                                busy Friday no longer blows the whole row to full height. */}
+                            {/* Event chips — bookings + live enquiries, sorted by start
+                                time. At most MONTH_CHIP_CAP one-line chips, each a single
+                                status dot + name (red-tinted when double-booked); the rest
+                                collapse into "+N more" that opens the Day view. */}
                             {(() => {
                               const MONTH_CHIP_CAP = 3;
-                              const dayEvents = [
-                                ...dayBookings.map((b: any) => ({ ...b, _kind: 'booking' as const })),
-                                ...dayLeads.map((l: any) => ({ ...l, _kind: 'lead' as const })),
-                              ].sort((a: any, z: any) => String(a.startTime ?? a.eventTime ?? '').localeCompare(String(z.startTime ?? z.eventTime ?? '')));
+                              const dayEvents = sortedEvents(dayBookings, dayLeads);
                               const shown = dayEvents.slice(0, MONTH_CHIP_CAP);
                               const extra = dayEvents.length - shown.length;
                               return (
                                 <>
                                   {shown.map((ev: any) => {
                                     const isLead = ev._kind === 'lead';
-                                    // A held date draws as a dashed, hatched "HOLD" chip, never a solid booking.
                                     const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
                                     const overdue = isLead && isOverdueLead(ev);
-                                    const band = statusBandStyle(ev.status, overdue, ev.spaceName);
+                                    const sig = signalOf(ev, isLead);
                                     return (
-                                      <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
+                                      <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full min-w-0">
                                         <button
                                           tabIndex={innerTab}
                                           draggable
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
-                                          style={spaceCardStyle(ev.spaceName)}
-                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : ev.status === 'finished' ? PAST_CHIP : statusCard(ev.status, isLead && isOverdueLead(ev))} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
+                                          style={calChipStyle(sig.tone)}
+                                          className={`w-full text-left rounded-[4px] border-[1.5px] font-sans hover:border-primary transition-colors cursor-move h-6 px-1.5 flex items-center gap-1.5 min-w-0 ${ev.status === 'cancelled' ? 'line-through' : ''}`}
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
-                                          {isHold && <span className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug">HOLD</span>}
-                                          {time && <span className="shrink-0 text-[12px] tabular-nums opacity-70 leading-snug">{time}</span>}
-                                          {/* Status in words too, not only the chip colour. (Screen
-                                              readers get the full status in the sr-only text below.) */}
-                                          {!isHold && monthChipTag(ev) && <span aria-hidden="true" className="shrink-0 font-bebas text-[11px] tracking-widest leading-snug opacity-80">{monthChipTag(ev)}</span>}
-                                          {!isLead && <DoubleBookedTag flaggedAt={ev.clashFlaggedAt} compact />}
-                                          {/* Full name (it used to be cut to "Pam S."); the cell truncates it only if it must. */}
-                                          <span className="truncate font-semibold text-[12px] leading-snug">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          <span className="sr-only">{`, ${statusWords(getStatusInfo(ev.status).label)}${overdue ? ', follow-up overdue' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
-                                          {/* Status end-cap: the status colour (distinct from the space
-                                              colour the chip wears) and the status's icon, so it isn't
-                                              colour alone. Without a space colour the whole chip is the
-                                              status colour and the cap is just the icon. */}
-                                          {(band || !isHold) && (
-                                            <span aria-hidden="true" title={getStatusInfo(ev.status).label} style={band}
-                                              className={`ml-auto shrink-0 self-stretch -my-0.5 -mr-1.5 w-4 grid place-items-center ${band ? 'vf-swatch rounded-r border-l-2 border-white' : ''}`}>
-                                              {!isHold && <CalendarStatusIcon status={ev.status} overdue={overdue} className="w-2.5 h-2.5" />}
-                                            </span>
-                                          )}
+                                          <CalDot tone={sig.tone} />
+                                          {time && <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground leading-none">{time}</span>}
+                                          <span className="truncate font-semibold text-[11.5px] leading-none">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
+                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusWords(getStatusInfo(ev.status).label) ? ` (${statusWords(getStatusInfo(ev.status).label)})` : ''}${overdue && sig.label !== 'Follow-up overdue' ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
                                         </button>
-                                        {/* The hover-only 14px "×" delete that used to sit on every chip is gone:
-                                            it was a pixel-sized, destructive control on top of the event name.
-                                            Cancel and Delete now live in the event panel's labelled "⋯" menu. */}
                                       </div>
                                     );
                                   })}
@@ -5574,7 +5170,7 @@ export default function Dashboard() {
                                     <button
                                       tabIndex={innerTab}
                                       onClick={() => { setCalDate(new Date(cellYear, cellMonth, day)); setCalendarView('day'); }}
-                                      className="w-full text-left font-dm font-semibold text-[12px] text-primary hover:underline px-1.5 h-6 flex items-center transition-colors"
+                                      className="w-full text-left font-sans font-semibold text-[12px] text-primary hover:underline px-1.5 h-6 flex items-center"
                                       title={`View all ${dayEvents.length} events on this day`}>
                                       +{extra} more
                                     </button>
@@ -5588,10 +5184,10 @@ export default function Dashboard() {
                               <button key={`wt-${w.id}`}
                                 tabIndex={innerTab}
                                 onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
-                                className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
+                                className="w-full text-left rounded-[4px] h-6 px-1.5 flex items-center gap-1.5 border-[1.5px] border-dashed border-input bg-card text-foreground hover:border-primary transition-colors min-w-0"
                                 title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
-                                <span className="shrink-0 text-[12px] tabular-nums text-stone leading-snug">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
-                                <span className="truncate font-semibold text-[12px] leading-snug">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
+                                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground leading-none">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
+                                <span className="truncate font-semibold text-[11.5px] leading-none">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
                               </button>
                             ))}
                             {/* Add enquiry on this day — opens the dated quick-create
@@ -5603,7 +5199,7 @@ export default function Dashboard() {
                                 tabIndex={innerTab}
                                 onClick={() => setQuickCreateDate(dateStr)}
                                 aria-label={`Add enquiry on ${friendlyDay(dateStr)}`}
-                                className="self-start mt-auto text-forest/50 hover:text-forest transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                                className="self-start mt-auto text-primary/70 hover:text-primary transition-all w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                                 title="Add enquiry on this day">
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -5612,11 +5208,26 @@ export default function Dashboard() {
                         );
                       })}
                     </div>
-                  ));
-                })()}
+                ))}
               </div>
-              )}
-
+              {/* The selected day: its bookings, any clash, a way into each one. */}
+              <div className="hidden lg:block w-[300px] flex-shrink-0 sticky top-0">
+                <CalendarDayPanel
+                  dayLabel={selDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'long' })}
+                  isToday={activeDay === todayYmd}
+                  events={selEvents}
+                  clashes={selClashes}
+                  flaggedOnly={selFlagged}
+                  onOpen={(e) => e.isLead ? openEventDrawer({ ...e.ev, _isLead: true }) : setSelectedBooking(e.ev)}
+                  onResolve={!isStaff ? (id) => resolveClash.mutate({ id }) : undefined}
+                  resolvingId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
+                  onDayView={() => { setCalDate(selDate); setCalendarView('day'); }}
+                  onAdd={!isStaff && !selOverflow ? () => setQuickCreateDate(activeDay) : undefined}
+                />
+              </div>
+              </div>
+                );
+              })()}
               {/* Month View — mobile agenda (grouped by day, only days with events) */}
               {calendarView === "month" && (
                 <div className={`md:hidden ${calFill} p-3 space-y-3`}>
@@ -5630,10 +5241,10 @@ export default function Dashboard() {
                     const titledDays = Array.from(dayTitles.keys()).filter(k => k.startsWith(monthPrefix));
                     if (allEvents.length === 0 && titledDays.length === 0) {
                       return (
-                        <div className="border border-dashed border-gold/30 p-8 text-center bg-white">
-                          <Calendar className="w-8 h-8 text-sage/40 mx-auto mb-2" />
-                          <p className="font-dm text-sm text-sage">No events in {MONTHS[month]}</p>
-                          <button onClick={() => setShowAddLead(true)} className="mt-3 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-3 py-1.5">+ ADD ENQUIRY</button>
+                        <div className="rounded-[8px] border-[1.5px] border-dashed border-input p-8 text-center bg-card">
+                          <Calendar className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" aria-hidden />
+                          <p className="font-sans text-[14px] text-muted-foreground m-0">No events in {MONTHS[month]}</p>
+                          <button onClick={() => setShowAddLead(true)} className={`${calBtn} mt-3`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add enquiry</button>
                         </div>
                       );
                     }
@@ -5655,49 +5266,49 @@ export default function Dashboard() {
                     const visibleDays = pastDays.length && !showPastAgenda ? days.filter(([k]) => k >= todayKey) : days;
                     const pastToggle = pastDays.length > 0 ? (
                       <button key="past-toggle" type="button" onClick={() => setShowPastAgenda(v => !v)}
-                        className="w-full min-h-[44px] font-bebas tracking-widest text-xs text-forest border border-dashed border-gold/40 bg-white hover:bg-linen">
-                        {showPastAgenda ? 'HIDE EARLIER DAYS' : `SHOW ${pastDays.length} EARLIER DAY${pastDays.length !== 1 ? 'S' : ''} · ${pastEvents} EVENT${pastEvents !== 1 ? 'S' : ''}`}
+                        className="w-full min-h-[44px] rounded-[8px] font-sans text-[13px] font-semibold text-primary border-[1.5px] border-dashed border-input bg-card hover:border-primary">
+                        {showPastAgenda ? 'Hide earlier days' : `Show ${pastDays.length} earlier day${pastDays.length !== 1 ? 's' : ''} · ${pastEvents} event${pastEvents !== 1 ? 's' : ''}`}
                       </button>
                     ) : null;
                     if (visibleDays.length === 0) return [pastToggle, (
-                      <p key="none-ahead" className="font-dm text-sm text-sage text-center py-6">Nothing else on this month.</p>
+                      <p key="none-ahead" className="font-sans text-[14px] text-muted-foreground text-center py-6 m-0">Nothing else on this month.</p>
                     )];
                     return [pastToggle, ...visibleDays.map(([key, events]) => {
                       const d = new Date(key + 'T00:00:00');
                       const isToday = key === todayKey;
                       return (
-                        <div key={key} className="bg-white border border-gold/20 overflow-hidden">
-                          <div className={`px-3 py-2 border-b border-gold/15 flex items-center justify-between ${isToday ? 'bg-forest text-cream' : 'bg-linen/50'}`}>
-                            <div className="font-bebas tracking-widest text-xs">
-                              {d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
-                              {isToday && <span className="ml-2 opacity-80">· TODAY</span>}
+                        <div key={key} className="bg-card rounded-[8px] border-[1.5px] border-border overflow-hidden">
+                          <div className="px-3.5 py-2 border-b-[1.5px] border-[#ececed] flex items-center justify-between"
+                            style={isToday ? { background: 'var(--accent)' } : undefined}>
+                            <div className={`font-sans text-[12px] uppercase tracking-[0.06em] ${isToday ? 'font-extrabold text-primary' : 'font-bold text-muted-foreground'}`}>
+                              {d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+                              {isToday && <span> · Today</span>}
                             </div>
-                            <div className={`text-[12px] font-dm ${isToday ? 'opacity-80' : 'text-ink/65'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
+                            <div className="font-sans text-[12px] text-muted-foreground tabular-nums">{events.length} event{events.length !== 1 ? 's' : ''}</div>
                           </div>
                           {dayTitles.get(key) && (
                             <div className="px-3 pt-1.5 pb-1"><DayTitleText title={dayTitles.get(key)} onEdit={editDayTitle ? () => editDayTitle(key) : undefined} className="!text-xs" /></div>
                           )}
-                          <div className="divide-y divide-gold/10">
+                          <div className="divide-y-[1.5px] divide-[#ececed]">
                             {events.map((e: any) => (
                               <button key={`${e._kind}-${e.id}`}
                                 onClick={() => e._kind === 'booking' ? setSelectedBooking(e) : openEventDrawer({ ...e, _isLead: true })}
-                                className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-linen/40 active:bg-linen/60 transition-colors"
-                                style={{ borderLeft: `3px solid ${getStatusInfo(e.status).swatch}` }}>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-cormorant font-semibold text-base text-ink truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-dm text-xs text-ink/60 truncate">
-                                    {e.eventType ?? (e._kind === 'lead' ? 'Enquiry' : 'Event')}
-                                    {fmtEventTime(e.eventDate) && ` · ${fmtEventTime(e.eventDate)}`}
-                                    {e.guestCount ? ` · ${e.guestCount} guests` : ''}
-                                    {e.spaceName ? ` · ${e.spaceName}` : ''}
-                                  </div>
-                                </div>
-                                {e._kind === 'booking' && <DoubleBookedTag flaggedAt={e.clashFlaggedAt} />}
-                                {e._kind === 'lead' && holdState(e) === 'held' ? <HoldTag until={e.holdUntil} /> : (
-                                <span className={`font-bebas text-[11px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
-                                  {getStatusInfo(e.status).label.toUpperCase()}
+                                className="w-full flex flex-col gap-1 px-3.5 py-3 text-left hover:bg-accent/40 active:bg-accent/60 transition-colors"
+                                style={(() => { const s = calSignal(e, { isLead: e._kind === 'lead', overdue: e._kind === 'lead' && isOverdueLead(e), statusLabel: '' }); return s.tone === 'red' ? { background: CAL_TONE.red.bg } : undefined; })()}>
+                                <span className="flex items-baseline justify-between gap-2 min-w-0">
+                                  <span className="font-sans font-semibold text-[15px] text-foreground truncate">{e.firstName} {e.lastName}</span>
+                                  {e.guestCount ? <span className="font-sans text-[13px] font-semibold tabular-nums text-foreground flex-shrink-0">{e.guestCount}<span className="sr-only"> guests</span></span> : null}
                                 </span>
-                                )}
+                                <span className="font-sans text-[12px] text-muted-foreground truncate">
+                                  {e.eventType ?? (e._kind === 'lead' ? 'Enquiry' : 'Event')}
+                                  {fmtEventTime(e.eventDate) && ` · ${fmtEventTime(e.eventDate)}`}
+                                  {e.spaceName ? ` · ${e.spaceName}` : ''}
+                                </span>
+                                {(() => {
+                                  const isLead = e._kind === 'lead';
+                                  const sig = calSignal(e, { isLead, overdue: isLead && isOverdueLead(e), statusLabel: statusWords(getStatusInfo(e.status).label) });
+                                  return <CalSig tone={sig.tone}>{isLead && holdState(e) === 'held' ? `On hold · to ${fmtHoldDay(e.holdUntil)}` : sig.label}</CalSig>;
+                                })()}
                               </button>
                             ))}
                           </div>
@@ -5710,9 +5321,9 @@ export default function Dashboard() {
 
               {/* List View */}
               {calendarView === "list" && (
-              <div className={`${calFill} p-6`}>
+              <div className={`${calFill} px-3 md:px-8 pt-1 pb-6`}>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All enquiries — {MONTHS[month]} {year}</h2>
+                  <h2 className="m-0 font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">All enquiries — {MONTHS[month]} {year}</h2>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => setShowWeeklyModal(true)}
@@ -5944,12 +5555,13 @@ export default function Dashboard() {
                                 </div>
                                 {/* Status (+ deposit for bookings) */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  {item._type === 'lead' && holdState(item) === 'held'
-                                    ? <HoldTag until={item.holdUntil} />
-                                    : <span className="font-bebas text-[11px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
-                                  {item._type === 'booking' && <DoubleBookedTag flaggedAt={item.clashFlaggedAt} />}
+                                  {(() => {
+                                    const isLead = item._type === 'lead';
+                                    const sig = calSignal(item, { isLead, overdue: isLead && isOverdueLead(item), statusLabel: statusWords(si.label) });
+                                    return <CalSig tone={sig.tone}>{isLead && holdState(item) === 'held' ? `On hold · to ${fmtHoldDay(item.holdUntil)}` : sig.label}</CalSig>;
+                                  })()}
                                   {item._type === 'booking' && item.depositRequired !== false && (
-                                    <span className={`font-bebas text-[11px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-800'}`}>{item.depositPaid ? '· DEPOSIT PAID' : '· DEPOSIT PENDING'}</span>
+                                    <span className="font-sans text-[12px] text-muted-foreground">{item.depositPaid ? '· Deposit paid' : '· Deposit pending'}</span>
                                   )}
                                 </div>
                                 {/* Actions */}
@@ -6001,30 +5613,52 @@ export default function Dashboard() {
                   return d;
                 });
                 const todayStr = new Date().toDateString();
-                const statusCard = (status: string, overdue = false) => calCardClasses(status, overdue);
-                const statusLabel = (s: string) => getStatusInfo(s).label.toUpperCase();
+                // One signal per event, the same as the month grid and legend.
+                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
+                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
+                });
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []).filter(Boolean), ...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
                 const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
                 const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
+                const weekCard = (ev: any, isLead: boolean, onClick: () => void) => {
+                  const sig = signalOf(ev, isLead);
+                  const isHeld = isLead && holdState(ev) === 'held';
+                  return (
+                    <button key={`${isLead ? 'l' : 'b'}-${ev.id}`}
+                      onClick={onClick}
+                      style={calChipStyle(sig.tone)}
+                      className="w-full text-left rounded-[4px] border-[1.5px] px-2 py-1.5 font-sans text-[12px] leading-snug hover:border-primary transition-colors flex flex-col gap-0.5 min-w-0">
+                      <span className={`font-semibold truncate ${ev.status === 'cancelled' ? 'line-through' : ''}`}>{ev.firstName} {ev.lastName}</span>
+                      {ev.eventType && <span className="text-muted-foreground truncate">{ev.eventType}</span>}
+                      {!isLead && ev.startTime && <span className="text-muted-foreground tabular-nums">{ev.startTime}{ev.endTime ? ` – ${ev.endTime}` : ''}</span>}
+                      {ev.guestCount && <span className="text-muted-foreground tabular-nums">{ev.guestCount} guests</span>}
+                      <span className="mt-0.5 inline-flex items-center gap-1.5 font-bold text-[11.5px] min-w-0" style={{ color: CAL_TONE[sig.tone].fg }}>
+                        <CalDot tone={sig.tone} />
+                        <span className="truncate">{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</span>
+                      </span>
+                    </button>
+                  );
+                };
                 return (
-                <div className={calFill || undefined}>
-                  <div className="md:min-w-0 min-w-[700px]">
+                <div className={`${calFill || ''} px-3 md:px-8 pt-1 pb-6`}>
+                  <div className="md:min-w-0 min-w-[700px] rounded-[8px] border-[1.5px] border-border bg-card overflow-hidden">
                   {/* Day column headers */}
-                  <div className="grid grid-cols-7 border-b border-gold/15 sticky top-0 bg-cream z-10">
+                  <div className="grid grid-cols-7 border-b-[1.5px] border-input sticky top-0 bg-card z-10">
                     {days.map((d, i) => {
                       const isToday = d.toDateString() === todayStr;
                       return (
                         <button
                           key={i}
                           onClick={() => { setCalDate(d); setCalendarView('day'); }}
-                          className={`text-center py-2 border-r border-gold/10 last:border-r-0 hover:bg-linen/60 transition-colors w-full ${isToday ? 'bg-gold/10' : ''}`}
+                          className="text-center py-2 border-r-[1.5px] border-[#ececed] last:border-r-0 hover:bg-accent/60 transition-colors w-full"
+                          style={isToday ? { background: 'var(--accent)' } : undefined}
                           title={d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}>
-                          <div className="font-bebas tracking-widest text-[11px] text-ink/70">
+                          <div className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                             {['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}
                           </div>
-                          <div className={`font-serif text-lg font-semibold leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                            isToday ? 'text-primary-foreground bg-primary rounded-full w-7 h-7 flex items-center justify-center mx-auto' : 'text-ink hover:text-forest'
+                          <div className={`font-sans text-[15px] font-bold leading-tight tabular-nums mt-0.5 ${
+                            isToday ? 'text-primary-foreground bg-primary rounded-full w-7 h-7 flex items-center justify-center mx-auto' : 'text-foreground'
                           }`}>
                             {d.getDate()}
                           </div>
@@ -6036,7 +5670,7 @@ export default function Dashboard() {
                     })}
                   </div>
                   {/* Event cells */}
-                  <div className="grid grid-cols-7 min-h-[calc(100vh-16rem)]">
+                  <div className="grid grid-cols-7 min-h-[calc(100vh-18rem)]">
                     {days.map((d, i) => {
                       const isToday = d.toDateString() === todayStr;
                       const isWeekend = i >= 5;
@@ -6052,34 +5686,14 @@ export default function Dashboard() {
                         return ld.getFullYear() === d.getFullYear() && ld.getMonth() === d.getMonth() && ld.getDate() === d.getDate();
                       });
                       return (
-                        <div key={i} className={`border-r border-gold/10 last:border-r-0 p-1.5 flex flex-col gap-1 min-h-[140px] ${
-                          isWeekend ? 'bg-linen/20' : 'bg-white'
-                        } ${isToday ? 'ring-2 ring-inset ring-gold/40' : ''}`}>
-                          {dayBookings.map((b: any) => (
-                            <button key={b.id}
-                              onClick={() => setSelectedBooking(b)}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[12px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
-                              <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                              {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
-                              {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                              {b.guestCount && <div className="opacity-95">{b.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{statusLabel(b.status)}</div>
-                            </button>
-                          ))}
-                          {dayLeads.map((l: any) => (
-                            <button key={l.id}
-                              onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[12px] leading-snug font-dm ${holdState(l) === 'held' ? 'vf-hold-chip' : statusCard(l.status)} hover:opacity-80 transition-opacity`}>
-                              <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                              {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
-                              {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[11px] mt-0.5">{holdState(l) === 'held' ? `HOLD · TO ${fmtHoldDay(l.holdUntil).toUpperCase()}` : statusLabel(l.status)}</div>
-                            </button>
-                          ))}
+                        <div key={i} className="border-r-[1.5px] border-[#ececed] last:border-r-0 p-1.5 flex flex-col gap-1.5 min-h-[140px] min-w-0"
+                          style={{ background: isToday ? 'var(--accent)' : isWeekend ? '#fafafb' : 'var(--card)' }}>
+                          {dayBookings.map((b: any) => weekCard(b, false, () => setSelectedBooking(b)))}
+                          {dayLeads.map((l: any) => weekCard(l, true, () => openEventDrawer({ ...l, _isLead: true })))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
                             <button
                               onClick={() => setQuickCreateDate(ds)}
-                              className="text-forest/50 hover:text-forest transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                              className="text-primary/70 hover:text-primary transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
                               aria-label={`Add enquiry on ${d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                               title="Add enquiry">
                               <Plus className="w-3.5 h-3.5" />
@@ -6093,15 +5707,14 @@ export default function Dashboard() {
                 </div>
                 );
               })()}
-
               {/* ── DAY VIEW ────────────────────────────────────────────────────── */}
               {calendarView === "day" && (() => {
                 const todayStr = new Date().toDateString();
                 const isToday = calDate.toDateString() === todayStr;
-                const statusCard = (status: string) => getStatusInfo(status).dayClasses;
-                const statusDot = (s: string) => {
-                  return getStatusInfo(s).barClasses;
-                };
+                // One signal per event, the same as the month grid and legend.
+                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
+                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
+                });
                 const allBookings: any[] = [...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
                 const allLeads: any[] = [...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)];
                 const dayBookings = allBookings.filter((b: any) => {
@@ -6116,126 +5729,112 @@ export default function Dashboard() {
                 });
                 const ds = `${calDate.getFullYear()}-${String(calDate.getMonth()+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`;
                 const totalEvents = dayBookings.length + dayLeads.length;
+                // Clashes that day, from the same double-booking check the Overview uses.
+                const dayClashes = (doubleBookings ?? []).filter(pair => ymdLocalD(new Date(pair.eventDate)) === ds);
+                const dayRow = (ev: any, isLead: boolean, onClick: () => void) => {
+                  const sig = signalOf(ev, isLead);
+                  const isHeld = isLead && holdState(ev) === 'held';
+                  return (
+                    <button key={`${isLead ? 'l' : 'b'}-${ev.id}`}
+                      onClick={onClick}
+                      className="w-full text-left rounded-[8px] border-[1.5px] px-4 py-3 hover:border-primary transition-colors grid gap-3 md:gap-4 items-center grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[150px_minmax(0,1fr)_auto]"
+                      style={sig.tone === 'red' ? { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border } : { background: 'var(--card)', borderColor: 'var(--border)' }}>
+                      <span className="hidden md:flex flex-col gap-[3px] min-w-0">
+                        <CalSig tone={sig.tone}>{isHeld ? 'On hold' : sig.label}</CalSig>
+                        {isHeld && <span className="font-sans text-[12px] text-muted-foreground">to {fmtHoldDay(ev.holdUntil)}</span>}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className={`font-sans text-[15px] font-semibold text-foreground ${ev.status === 'cancelled' ? 'line-through' : ''}`}>{ev.firstName} {ev.lastName}</span>
+                        </span>
+                        <span className="flex items-center gap-x-3 gap-y-0.5 mt-0.5 font-sans text-[13px] text-muted-foreground flex-wrap">
+                          {!isLead && ev.startTime && <span className="tabular-nums font-semibold text-foreground">{ev.startTime}{ev.endTime ? ` – ${ev.endTime}` : ''}</span>}
+                          {ev.eventType && <span>{ev.eventType}</span>}
+                          {ev.spaceName && <span>{ev.spaceName}</span>}
+                        </span>
+                        <span className="md:hidden mt-1 flex"><CalSig tone={sig.tone}>{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</CalSig></span>
+                      </span>
+                      <span className="font-sans text-[15px] font-semibold tabular-nums text-foreground">{ev.guestCount ? <>{ev.guestCount}<span className="sr-only"> guests</span></> : ''}</span>
+                    </button>
+                  );
+                };
                 return (
-                <div className={`${calFill} p-4 md:p-6`}>
-                  <div className="max-w-3xl mx-auto">
+                <div className={`${calFill} px-3 md:px-8 pt-1 pb-6`}>
+                  <div className="max-w-3xl mx-auto flex flex-col gap-4">
                     {/* Day header */}
-                    <div className={`flex items-center gap-3 mb-6 pb-4 border-b ${isToday ? 'border-gold/40' : 'border-gold/15'}`}>
-                      <div className={`text-5xl font-serif font-light [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isToday ? 'text-primary' : 'text-ink/70'}`}>
+                    <div className="flex items-center gap-4 pb-4 border-b-[1.5px] border-input">
+                      <div className={`w-14 h-14 rounded-full grid place-items-center font-sans text-[26px] font-semibold tabular-nums flex-shrink-0 ${isToday ? 'bg-primary text-primary-foreground' : 'bg-card border-[1.5px] border-border text-foreground'}`}>
                         {calDate.getDate()}
                       </div>
-                      <div>
-                        <div className="font-bebas tracking-widest text-sm text-ink/70">
-                          {calDate.toLocaleDateString('en-NZ', { weekday: 'long' }).toUpperCase()}
+                      <div className="min-w-0">
+                        <div className="font-sans text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+                          {calDate.toLocaleDateString('en-NZ', { weekday: 'long' })}{isToday ? ' · Today' : ''}
                         </div>
-                        <div className="font-cormorant text-xl text-ink">
+                        <div className="font-sans text-[20px] font-semibold text-foreground">
                           {calDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}
                         </div>
-                        {isToday && <div className="font-bebas tracking-widest text-[11px] text-forest mt-0.5">TODAY</div>}
                         {dayTitles.get(ds) ? (
                           <DayTitleText title={dayTitles.get(ds)} onEdit={editDayTitle ? () => editDayTitle(ds) : undefined} className="!text-sm mt-1" />
                         ) : editDayTitle ? (
-                          <button onClick={() => editDayTitle(ds)} className="mt-1 font-dm text-xs text-[#7a5a12] hover:underline min-h-[32px]">+ Add a title for this day</button>
+                          <button onClick={() => editDayTitle(ds)} className="mt-1 font-sans text-[12px] font-semibold text-primary hover:underline min-h-[32px]">+ Add a title for this day</button>
                         ) : null}
                       </div>
-                      <div className="ml-auto flex items-center gap-3">
+                      <div className="ml-auto flex items-center gap-4">
                         <div className="text-right">
-                          <div className="font-bebas tracking-widest text-2xl text-ink/80">{totalEvents}</div>
-                          <div className="font-dm text-[12px] text-ink/65 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
+                          <div className="font-sans text-[26px] font-semibold tabular-nums text-foreground leading-tight">{totalEvents}</div>
+                          <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Event{totalEvents !== 1 ? 's' : ''}</div>
                         </div>
                         <button
                           onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
-                          className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1">
-                          <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
+                          className={calBtnPrimary}>
+                          <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
                         </button>
                       </div>
                     </div>
 
+                    {/* Clash callouts */}
+                    {dayClashes.map(pair => {
+                      const busy = resolveClash.isPending && resolveClash.variables?.id === pair.a.bookingId;
+                      return (
+                        <div key={pair.key} role="note" className="flex gap-3 rounded-[8px] border-[1.5px] px-3.5 py-3"
+                          style={{ background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border, color: CAL_TONE.red.fg }}>
+                          <AlertTriangle className="w-[18px] h-[18px] flex-shrink-0 mt-px" strokeWidth={2} aria-hidden />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-sans text-[14px] font-bold">{pair.b ? `Double-booked${pair.spaceName ? ` in ${pair.spaceName}` : ''}` : 'Flagged as double-booked'}</div>
+                            <div className="font-sans text-[13px] text-foreground mt-0.5">
+                              {pair.b ? `${pair.a.name} and ${pair.b.name} share this date and space. Move one, or mark it resolved once it's sorted.` : `${pair.a.name}: ${pair.summary}`}
+                            </div>
+                          </div>
+                          {!isStaff && pair.a.bookingId != null && (
+                            <button disabled={busy} onClick={() => resolveClash.mutate({ id: pair.a.bookingId! })} className={`${calBtnSmall} self-center`}>
+                              {busy ? 'Saving…' : 'Mark resolved'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
                     {/* Events */}
                     {totalEvents === 0 ? (
-                      <div className="text-center py-16">
-                        <div className="font-cormorant text-3xl text-ink/20 mb-2">No events</div>
-                        <p className="font-dm text-sm text-ink/65">Nothing scheduled for this day.</p>
+                      <div className="text-center py-14 rounded-[8px] border-[1.5px] border-dashed border-input bg-card">
+                        <div className="font-sans text-[20px] font-semibold text-foreground mb-1">Nothing booked</div>
+                        <p className="font-sans text-[13px] text-muted-foreground m-0">Nothing scheduled for this day.</p>
                         <button
                           onClick={() => setQuickCreateDate(ds)}
-                          className="mt-4 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-4 py-2 hover:bg-forest/5 transition-colors">
-                          + ADD AN ENQUIRY
+                          className={`${calBtn} mt-4`}>
+                          <Plus className="w-3.5 h-3.5" aria-hidden /> Add an enquiry
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        {dayBookings.map((b: any) => (
-                          <button key={b.id}
-                            onClick={() => setSelectedBooking(b)}
-                            className={`w-full text-left p-4 ${statusCard(b.status)} hover:opacity-90 transition-opacity`}>
-                            <div className="flex items-start gap-3">
-                              <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(b.status)}`} />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-cormorant text-lg font-semibold text-ink">
-                                    {b.firstName} {b.lastName}
-                                  </span>
-                                  {b.eventType && (
-                                    <span className="font-bebas tracking-widest text-[11px] text-gold bg-gold/15 px-1.5 py-0.5">
-                                      {b.eventType}
-                                    </span>
-                                  )}
-                                  <DoubleBookedTag flaggedAt={b.clashFlaggedAt} />
-                                </div>
-                                <div className="flex items-center gap-3 mt-1 text-xs font-dm text-ink/60 flex-wrap">
-                                  {b.startTime && (
-                                    <span className="flex items-center gap-1">
-                                      <span className="font-semibold">{b.startTime}</span>
-                                      {b.endTime && <span>– {b.endTime}</span>}
-                                    </span>
-                                  )}
-                                  {b.guestCount && <span>{b.guestCount} guests</span>}
-                                  {b.spaceName && <span>{b.spaceName}</span>}
-                                </div>
-                              </div>
-                              <div className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(b.status).calClasses}`}>
-                                {getStatusInfo(b.status).label.toUpperCase()}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                        {dayLeads.map((l: any) => (
-                          <button key={l.id}
-                            onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                            className={`w-full text-left p-4 ${holdState(l) === 'held' ? 'vf-hold-chip rounded-sm' : statusCard(l.status)} hover:opacity-90 transition-opacity`}>
-                            <div className="flex items-start gap-3">
-                              <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(l.status)}`} />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-cormorant text-lg font-semibold text-ink">
-                                    {l.firstName} {l.lastName}
-                                  </span>
-                                  {l.eventType && (
-                                    <span className="font-bebas tracking-widest text-[11px] text-gold bg-gold/15 px-1.5 py-0.5">
-                                      {l.eventType}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-3 mt-1 text-xs font-dm text-ink/60 flex-wrap">
-                                  {l.guestCount && <span>{l.guestCount} guests</span>}
-                                  {l.spaceName && <span>{l.spaceName}</span>}
-                                </div>
-                              </div>
-                              {holdState(l) === 'held' ? <HoldTag until={l.holdUntil} /> : (
-                              <div className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
-                                {getStatusInfo(l.status).label.toUpperCase()}
-                              </div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                      <div className="flex flex-col gap-2">
+                        {dayBookings.map((b: any) => dayRow(b, false, () => setSelectedBooking(b)))}
+                        {dayLeads.map((l: any) => dayRow(l, true, () => openEventDrawer({ ...l, _isLead: true })))}
                       </div>
                     )}
                   </div>
                 </div>
                 );
               })()}
-
               <div className="dante-card p-6 max-w-2xl hidden">
                 <div className="flex items-center justify-between mb-4">
                   <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-linen transition-colors text-forest">
@@ -6332,8 +5931,8 @@ export default function Dashboard() {
               hides itself when there is nothing to do, so an empty panel never
               shows. */}
           {tab === "calendar" && showCalendarNeeds && !isStaff && (
-            <div id="calendar-needs-today" className="px-4 md:px-6 py-5 bg-linen/30 border-t border-gold/15">
-              <NeedsYouToday
+            <div id="calendar-needs-today" className="px-3 md:px-8 pt-5 pb-8 bg-background border-t-[1.5px] border-border">
+              <OverviewNeedsToday
                 onOpenBooking={openBookingById}
                 onOpenLead={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
                 onOpenLink={(link) => { void openAlertLink(link); }}
@@ -6341,6 +5940,13 @@ export default function Dashboard() {
                 onGoTasksOverdue={() => tileAction('overdue_tasks')}
                 onGoEnquiries={(view) => (view === 'new' ? showEnquiries({ sub: 'new' }) : showEnquiries({ sub: 'all', followUp: true }))}
                 onGoDeposits={() => tileAction('deposits_due')}
+                clashes={doubleBookings}
+                onResolveClash={(id) => resolveClash.mutate({ id })}
+                resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
+                onAlignStartTime={(runsheetId, keep) => alignStartTime.mutate({ runsheetId, keep })}
+                aligningRunsheetId={alignStartTime.isPending ? (alignStartTime.variables?.runsheetId ?? null) : null}
+                fmtDay={(d) => formatEventDate(d, { weekday: 'short', day: 'numeric', month: 'short' })}
+                fmtTime={fmtHhmm}
               />
             </div>
           )}
