@@ -11,6 +11,7 @@ import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { canReuseLead, enquiryStorageKeys, normaliseEmail, parseProgress, pickFormToken, resumeFrom, serializeProgress } from "@/lib/enquiryProgress";
 
 const EVENT_TYPES = [
@@ -1130,19 +1131,7 @@ export default function LeadForm() {
     // submits via onClick, where native form validation never runs at all
     // (even for eventType's <select>). Guest count gets its own check below
     // since "filled" isn't the same as "a valid number".
-    const requiredGroups: Array<[FormFieldDef[], boolean]> = [
-      [eventFields, false],
-      [detailFields, false],
-      [customFields, true],
-      [sourceField ? [sourceField] : [], false],
-      [messageField ? [messageField] : [], false],
-    ];
-    const invalid: FormFieldDef[] = [];
-    for (const [group, isCustom] of requiredGroups) {
-      for (const f of group) {
-        if (!isFieldFilled(f, isCustom)) invalid.push(f);
-      }
-    }
+    const invalid = requiredInOrder().filter(([f, isCustom]) => !isFieldFilled(f, isCustom)).map(([f]) => f);
     if (invalid.length > 0) {
       setTouchedInvalid(new Set(invalid.map(f => f.id)));
       setSubmitError("");
@@ -1153,8 +1142,15 @@ export default function LeadForm() {
       if (!isEmbed) toast.error(fieldErrorMessage(invalid[0]), { id: "lead-form-invalid", duration: 4000 });
       // Land keyboard/screen-reader focus right on the first problem field —
       // the toast alone is easy to miss, especially for a screen reader user
-      // who isn't looking at the corner of the screen it appears in.
-      requestAnimationFrame(() => { document.getElementById(fieldElId(invalid[0]))?.focus(); });
+      // who isn't looking at the corner of the screen it appears in. In the
+      // embed it can be far above SUBMIT, so bring it (and its label) into
+      // view as well.
+      requestAnimationFrame(() => {
+        const el = document.getElementById(fieldElId(invalid[0]));
+        if (!el) return;
+        el.focus({ preventScroll: isEmbed });
+        if (isEmbed) el.scrollIntoView({ block: "center", behavior: scrollBehavior() });
+      });
       return;
     }
     setTouchedInvalid(new Set());
@@ -1194,6 +1190,15 @@ export default function LeadForm() {
     });
   };
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSubmit(); };
+  // Every field SUBMIT checks, in the order they're checked (the first one
+  // missing gets focus), each with whether it's a custom field.
+  const requiredInOrder = (): Array<[FormFieldDef, boolean]> => [
+    ...eventFields.map(f => [f, false] as [FormFieldDef, boolean]),
+    ...detailFields.map(f => [f, false] as [FormFieldDef, boolean]),
+    ...customFields.map(f => [f, true] as [FormFieldDef, boolean]),
+    ...(sourceField ? [[sourceField, false] as [FormFieldDef, boolean]] : []),
+    ...(messageField ? [[messageField, false] as [FormFieldDef, boolean]] : []),
+  ];
 
   /**
    * Whether a field marked `required` in the venue's Lead Form settings is
@@ -1707,6 +1712,16 @@ export default function LeadForm() {
     const guestField = eventFields.find(f => f.id === 'guestCount');
     const formatField = eventFields.find(f => f.id === 'eventFormat');
     const budgetRangeField = eventFields.find(f => f.id === 'budgetRange');
+    // What SUBMIT found missing, said again just above it: each field shows
+    // its own message, but in the frame SUBMIT is often a screen below it.
+    // Goes as soon as they're answered, like the field messages.
+    const missing = requiredInOrder().filter(([f, isCustom]) => fieldHasError(f, isCustom)).map(([f]) => f);
+    const missingNoteId = `${formId}-missing`;
+    const missingNote = missing.length === 0 ? ""
+      : `${fieldErrorMessage(missing[0])}${missing.length === 1 ? "" : missing.length === 2 ? " One more answer is missing above." : ` ${missing.length - 1} more answers are missing above.`}`;
+    const renderMissingNote = () => missingNote
+      ? <p id={missingNoteId} className="text-red-700 text-xs">{missingNote}</p>
+      : null;
 
     // Capped at a card-like width: the widget fills whatever the host page's
     // iframe/container gives it, and some site builders give a "custom HTML"
@@ -1839,8 +1854,10 @@ export default function LeadForm() {
               </div>
             )}
             {renderTurnstile()}
+            {renderMissingNote()}
             {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
             <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
+              aria-describedby={missingNote ? missingNoteId : undefined}
               className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
@@ -2003,11 +2020,13 @@ export default function LeadForm() {
 
                   {renderHoneypot()}
                   {renderTurnstile()}
+                  {renderMissingNote()}
                   {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
                     <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
+                      aria-describedby={missingNote ? missingNoteId : undefined}
                       className="vf-submit flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                       style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                       {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
