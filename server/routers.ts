@@ -169,10 +169,9 @@ export const appRouter = router({
         //  - a STAFF/TEAM-LINK session, which runs under the owner's id (so it
         //    looks like "self") but must never be handed stored SMTP/NBI
         //    credentials or internal config.
-        // Use the canonical VENUE_SECRET_FIELDS list so this can't drift out of
-        // sync with the sibling public endpoints (previously it omitted
-        // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
-        // info leak).
+        // Anyone else gets only the public allow-list (server/publicVenue.ts),
+        // the same as the public enquiry form and proposal page; the venue's
+        // own team and staff logins get the row minus VENUE_SECRET_FIELDS.
         const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember && !ctx.isStaff;
         if (isRealOwner) return vs;
         // Someone else's venue (no login, or another venue's login): only what
