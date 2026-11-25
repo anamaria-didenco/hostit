@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
 import { ENV } from "./_core/env";
 import { formStartToken } from "./enquiryConversion";
+import { alertUnfinishedEnquiries } from "./partialEnquiries";
 import { leads, leadActivity, tasks, venueNotifications, venueSettings } from "../drizzle/schema";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 
@@ -17,6 +18,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 const HAS_DB = !!process.env.DATABASE_URL;
 const d = HAS_DB ? describe : describe.skip;
 const OWNER = 930000 + Math.floor(Math.random() * 9999);
+const OTHER_OWNER = OWNER + 10000;
 
 const randIp = () => `10.${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}`;
 function publicCaller(ip = randIp()) {
@@ -52,7 +54,7 @@ d("enquiry form after a reload (DB)", () => {
 
   afterAll(async () => {
     const db = (await getDb())!;
-    const owners = [OWNER];
+    const owners = [OWNER, OTHER_OWNER];
     const ids = (await db.select({ id: leads.id }).from(leads).where(inArray(leads.ownerId, owners))).map(r => r.id);
     if (ids.length) await db.delete(leadActivity).where(inArray(leadActivity.leadId, ids));
     await db.delete(tasks).where(inArray(tasks.ownerId, owners));
@@ -155,3 +157,40 @@ d("enquiry form after a reload (DB)", () => {
   });
 });
 
+d("unfinished-enquiry alerts when the person came back (DB)", () => {
+  // Far in the future, so only these rows fall in the alert window.
+  const T0 = new Date("2031-03-01T00:00:00Z").getTime();
+  const at = (min: number) => new Date(T0 + min * 60_000);
+  const base = { ownerId: OWNER, firstName: "Mere", lastName: "Testwell", status: "new", source: "lead_form" } as const;
+  const partial = (email: string, min: number) => ({ ...base, email, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(min), updatedAt: at(min) });
+  const complete = (email: string, min: number, ownerId = OWNER) => ({ ...base, ownerId, email, internalNotes: null, guestCount: 30, createdAt: at(min), updatedAt: at(min) });
+
+  it("skips a partial when a newer lead for the same venue and email exists, and alerts the rest", async () => {
+    const db = (await getDb())!;
+    const t = tag();
+    const ins = async (v: any) => (await db.insert(leads).values(v).returning({ id: leads.id }))[0].id;
+    const finishedLater = await ins(partial(`Kim.${t}@Example.test`, 0));
+    await ins(complete(`  kim.${t}@example.test`, 5));                 // came back and finished (other case, spaces)
+    const restartedFirst = await ins(partial(`ora.${t}@example.test`, 0));
+    const restartedSecond = await ins(partial(`ORA.${t}@example.test`, 3)); // started again
+    const neverBack = await ins(partial(`lee.${t}@example.test`, 0));
+    const olderOnly = await ins(partial(`max.${t}@example.test`, 2));
+    await ins(complete(`max.${t}@example.test`, -60));                  // an older enquiry doesn't count
+    const otherVenue = await ins(partial(`ngaio.${t}@example.test`, 0));
+    await ins(complete(`ngaio.${t}@example.test`, 6, OTHER_OWNER));     // same email, another venue
+    const before = (await db.select({ n: sql<number>`count(*)::int` }).from(leads).where(or(eq(leads.ownerId, OWNER), eq(leads.ownerId, OTHER_OWNER))))[0].n;
+
+    await alertUnfinishedEnquiries(at(30));
+
+    const alerted = (await db.select({ leadId: venueNotifications.leadId }).from(venueNotifications)
+      .where(and(eq(venueNotifications.ownerId, OWNER), eq(venueNotifications.kind, "partial_enquiry")))).map(r => r.leadId);
+    expect(alerted).toEqual(expect.arrayContaining([restartedSecond, neverBack, olderOnly, otherVenue]));
+    expect(alerted).not.toContain(finishedLater);
+    expect(alerted).not.toContain(restartedFirst);
+    // Nothing merged or deleted; the left-behind partials stay as they were.
+    const after = (await db.select({ n: sql<number>`count(*)::int` }).from(leads).where(or(eq(leads.ownerId, OWNER), eq(leads.ownerId, OTHER_OWNER))))[0].n;
+    expect(after).toBe(before);
+    const [left] = await db.select().from(leads).where(eq(leads.id, finishedLater));
+    expect(left.internalNotes).toBe(PARTIAL_LEAD_NOTE);
+  });
+});
