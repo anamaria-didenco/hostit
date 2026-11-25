@@ -1074,7 +1074,10 @@ export default function LeadForm() {
       // and phone, for Google's enhanced conversions, go only to the venue's
       // own website (its domain over https); any other page gets the message
       // without them.
-      if (parentOrigin) {
+      // An id of 0 is the server's pretend success for a submission its bot
+      // check dropped: nothing was saved, so it is not a conversion (the
+      // venue's page would record an ad conversion "vf-0").
+      if (parentOrigin && typeof data?.id === "number" && data.id > 0) {
         const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
         postEnquiryToParent({
           type: "vf-enquiry-submitted",
