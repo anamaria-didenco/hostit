@@ -349,9 +349,17 @@ export function checkFormStartToken(token: string | null | undefined, ownerId: n
  * was filled in, or the form was sent back faster than a person could, or its
  * timing token was forged. A missing token is let through so a page loaded
  * before this shipped (cached, or a long-open tab) can still submit.
+ *
+ * `timingPassed`: the caller is finishing an enquiry whose step 1 this server
+ * already accepted (a verified, still-partial lead — see leads.submit), so it
+ * passed the timing check back then. The token check is skipped: the venue's
+ * own website reloads the form when a date or guest count is picked on the
+ * page, which hands the form a brand-new token seconds before SUBMIT. The
+ * honeypot is still checked.
  */
-export function looksLikeBot(opts: { honeypot?: string | null; formToken?: string | null; ownerId: number; now: number; secret: string }): { bot: boolean; reason?: string } {
+export function looksLikeBot(opts: { honeypot?: string | null; formToken?: string | null; ownerId: number; now: number; secret: string; timingPassed?: boolean }): { bot: boolean; reason?: string } {
   if ((opts.honeypot ?? "").trim()) return { bot: true, reason: "honeypot" };
+  if (opts.timingPassed) return { bot: false };
   const t = checkFormStartToken(opts.formToken, opts.ownerId, opts.now, opts.secret);
   if (t === "too_fast" || t === "invalid") return { bot: true, reason: t };
   return { bot: false };

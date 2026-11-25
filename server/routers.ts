@@ -94,7 +94,12 @@ const validDateString = z
 // Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
 // ownerId), shared by leads.submit AND leads.startCapture — a bot hammering
 // startCapture without ever calling submit still burns the same budget,
-// rather than getting a second, unlimited quota. Skipped under
+// rather than getting a second, unlimited quota. One write is not counted:
+// a submit that completes the caller's own still-partial lead (its leadToken
+// verifies). That is the second half of one enquiry whose first half,
+// startCapture, already counted — and it inserts nothing — so three people
+// on one office connection no longer have the third refused at SUBMIT, while
+// rows created per bucket stay capped at 5. Skipped under
 // `NODE_ENV=test` because the vitest suite calls these many times from the
 // same (unknown IP, ownerId 1) bucket.
 async function enforceLeadRateLimit(ctx: any, ownerId: number) {
@@ -799,10 +804,24 @@ export const appRouter = router({
         turnstileToken: z.string().max(2048).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        await enforceLeadRateLimit(ctx, input.ownerId);
+        // The visitor's OWN autosaved step-1 lead, when this completes one:
+        // the token must match, and the row must still be an untouched
+        // partial. Any enquiry staff have since worked on is left alone.
+        // The token is an HMAC the server only hands out with a lead it saved
+        // (startCapture, after its own rate limit and bot checks), so the DB
+        // is read only for a real one.
+        const claimed = input.leadId && isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
+          ? await getLeadById(input.leadId, input.ownerId)
+          : undefined;
+        const ownPartial = claimed && claimed.internalNotes === PARTIAL_LEAD_NOTE && claimed.status === "new" ? claimed : undefined;
+        // Finishing your own partial doesn't count against the limit (see
+        // enforceLeadRateLimit); anything else does.
+        if (!ownPartial) await enforceLeadRateLimit(ctx, input.ownerId);
         const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
         // A bot gets a convincing success and nothing is stored or sent.
-        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+        // Finishing your own partial skips the timing token: step 1 already
+        // passed it, and the venue's page may have reloaded the form since.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken, { timingPassed: !!ownPartial })) return { id: 0, leadToken: "" } as any;
         if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
           throw new Error("Please complete the quick security check above the button, then send again.");
         }
@@ -851,26 +870,18 @@ export const appRouter = router({
         };
 
         let lead = null;
-        if (input.leadId) {
+        if (ownPartial) {
           // Completing a lead startCapture already created at step 1 —
           // update that row rather than insert a second one, and clear the
           // "Partial" marker (unless a staff member already overwrote it
           // with a real note in the meantime — that's theirs, not ours to
-          // erase).
-          // Only ever complete the visitor's OWN autosaved draft: the token
-          // must match, and the row must still be an untouched partial. Any
-          // enquiry staff have since worked on is left alone.
-          const existing = isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
-            ? await getLeadById(input.leadId, input.ownerId)
-            : undefined;
-          if (existing && existing.internalNotes === PARTIAL_LEAD_NOTE && existing.status === "new") {
-            await updateLead(input.leadId, input.ownerId, {
-              ...leadData,
-              internalNotes: null,
-              updatedAt: new Date(),
-            });
-            lead = await getLeadById(input.leadId, input.ownerId);
-          }
+          // erase: ownPartial is only set while the row is untouched).
+          await updateLead(ownPartial.id, input.ownerId, {
+            ...leadData,
+            internalNotes: null,
+            updatedAt: new Date(),
+          });
+          lead = await getLeadById(ownPartial.id, input.ownerId);
         }
         if (!lead) {
           // No leadId (or its row vanished) — startCapture never ran, or

@@ -54,9 +54,13 @@ export async function verifyTurnstile(token: string | null | undefined, ip: stri
   }
 }
 
-/** Honeypot + timing token. True means: pretend it worked, store nothing. */
-export function isBotSubmission(ownerId: number, honeypot?: string | null, formToken?: string | null): boolean {
-  const r = looksLikeBot({ honeypot, formToken, ownerId, now: Date.now(), secret: ENV.cookieSecret });
+/**
+ * Honeypot + timing token. True means: pretend it worked, store nothing.
+ * `timingPassed` skips the timing token for a visitor finishing their own
+ * verified step-1 lead (see looksLikeBot); the honeypot always counts.
+ */
+export function isBotSubmission(ownerId: number, honeypot?: string | null, formToken?: string | null, opts: { timingPassed?: boolean } = {}): boolean {
+  const r = looksLikeBot({ honeypot, formToken, ownerId, now: Date.now(), secret: ENV.cookieSecret, timingPassed: opts.timingPassed });
   if (r.bot) console.log(`[EnquirySpam] dropped a submission for owner ${ownerId} (${r.reason})`);
   return r.bot;
 }
