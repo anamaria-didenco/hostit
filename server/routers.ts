@@ -6,11 +6,12 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
+import { enforceRateLimit, getRequestIp, rateLimit } from "./_core/rateLimit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE, POSSIBLE_SPAM_NOTE } from "@shared/leadConstants";
 import { fitFnbItems } from "@shared/fnbFit";
 import { smtpTls } from "./smtpTls";
+import { SMTP_TIMEOUTS } from "@shared/emailDelivery";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
 import { followUpsRouter } from "./followUpsRouter";
@@ -456,6 +457,7 @@ export const appRouter = router({
           host: vs.smtpHost, port, secure,
           auth: { user: vs.smtpUser, pass: vs.smtpPass },
           tls: smtpTls(),
+          ...SMTP_TIMEOUTS,
         } as any);
         await transporter.verify();
         await transporter.sendMail({
@@ -867,8 +869,9 @@ export const appRouter = router({
           !!row && row.internalNotes == null && row.status === "new" && sameEmail(row.email, input.email)
           && new Date(row.updatedAt).getTime() >= Date.now() - IDEMPOTENT_SUBMIT_MS;
         const repeatAnswer = async (row: NonNullable<typeof claimed>) => {
-          enforceRateLimit('enquiry-submit-repeat', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 30, 10 * 60_000,
-            "Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
+          if (!rateLimit('enquiry-submit-repeat', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 30, 10 * 60_000)) {
+            throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there." });
+          }
           const { autoReplyNoteFor } = await import('./enquiryEmails');
           const autoReply = await autoReplyNoteFor(row.id);
           const { internalNotes: _notes, ...shown } = row;
@@ -1036,7 +1039,9 @@ export const appRouter = router({
         leadToken: z.string().max(64),
       }))
       .mutation(async ({ input, ctx }): Promise<{ alive: boolean }> => {
-        enforceRateLimit('enquiry-partial-ping', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 60, 10 * 60_000);
+        if (!rateLimit('enquiry-partial-ping', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 60, 10 * 60_000)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Please slow down and try again in a few minutes." });
+        }
         if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) return { alive: false };
         const { alive } = await touchPartialLead(input.leadId, input.ownerId, new Date());
         return { alive };
@@ -2302,6 +2307,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                       secure: (vs!.smtpSecure ?? 0) === 1 || (vs!.smtpPort ?? 587) === 465,
                       auth: { user: vs!.smtpUser!, pass: vs!.smtpPass! },
                       tls: smtpTls(),
+                      ...SMTP_TIMEOUTS,
                     });
                     const proposalUrl = `${publicBaseUrl()}/proposal/${proposal.publicToken}`;
                     const fromName = vs!.smtpFromName ?? vs!.name ?? 'VenueFlowHQ';
@@ -3648,6 +3654,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           secure: (settings.smtpSecure ?? 0) === 1 || (settings.smtpPort ?? 587) === 465,
           auth: { user: settings.smtpUser, pass: settings.smtpPass },
           tls: smtpTls(),
+          ...SMTP_TIMEOUTS,
         });
 
         // Resolve the chosen signature profile (if any). The workspace has one
@@ -4174,6 +4181,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
             auth: { user: vs.smtpUser, pass: vs.smtpPass },
             tls: smtpTls(),
+            ...SMTP_TIMEOUTS,
           } as any);
           const fromName2 = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
           const fromEmail2 = vs.smtpFromEmail ?? vs.smtpUser!;
@@ -4319,6 +4327,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
           auth: { user: vs.smtpUser, pass: vs.smtpPass },
           tls: smtpTls(),
+          ...SMTP_TIMEOUTS,
         } as any);
         const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
         const fromEmail = vs.smtpFromEmail ?? vs.smtpUser!;

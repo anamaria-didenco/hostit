@@ -319,7 +319,7 @@ d("leads.* on the public enquiry form (DB)", () => {
         const pub = publicCaller(randIp());
         const a = await pub.leads.startCapture({ ...person(OWNER, `limit.${tag()}@example.test`), formToken: opened(OWNER, 30_000) }); // write 1
         for (let i = 0; i < 60; i++) await pub.leads.touchPartial({ ownerId: OWNER, leadId: a.leadId, leadToken: a.leadToken });
-        await expect(pub.leads.touchPartial({ ownerId: OWNER, leadId: a.leadId, leadToken: a.leadToken })).rejects.toThrow(/Too many requests/);
+        await expect(pub.leads.touchPartial({ ownerId: OWNER, leadId: a.leadId, leadToken: a.leadToken })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS", message: expect.stringMatching(/Too many requests/) });
         for (let i = 0; i < 4; i++) await pub.leads.startCapture({ ...person(OWNER, `limit${i}.${tag()}@example.test`), formToken: opened(OWNER, 30_000) }); // writes 2..5
       });
     });
@@ -365,7 +365,7 @@ d("leads.* on the public enquiry form (DB)", () => {
           const r: any = await pub.leads.submit({ ...person(OWNER, email), ...step2, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(OWNER, 30_000) });
           expect(r.repeat).toBe(true);
         }
-        await expect(pub.leads.submit({ ...person(OWNER, email), ...step2, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(OWNER, 30_000) })).rejects.toThrow(/Too many submissions/);
+        await expect(pub.leads.submit({ ...person(OWNER, email), ...step2, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(OWNER, 30_000) })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS", message: expect.stringMatching(/Too many submissions/) });
         for (let i = 0; i < 4; i++) await pub.leads.startCapture({ ...person(OWNER, `rl${i}.${tag()}@example.test`), formToken: opened(OWNER, 30_000) }); // writes 2..5
         expect(await leadsFor(email)).toHaveLength(1);
       });
