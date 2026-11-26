@@ -23,6 +23,11 @@
  *     if the visitor never finishes), pushes a separate, lighter dataLayer
  *     event/gtag call — a secondary signal for the ads to learn from while
  *     full submissions are rare, distinct from a real conversion
+ *   - window.VenueFlow.prefill({ eventType, date, guests, format, fields },
+ *     frameId?) changes the form's event answers without reloading it (sent
+ *     as a vf-prefill message once the form says vf-ready). Answers the
+ *     visitor changed in the form stay as they are, and only choices are
+ *     taken (never the message or other free text).
  *
  * Supports multiple venue script tags on one page. Safe to load once.
  */
@@ -145,6 +150,10 @@
       var v = parentParams.get(p);
       if (v) iframeParams.set(p, v);
     });
+    // The page the form is on, on every load (a cross-site frame's referrer
+    // is usually only the site's origin): "Enquiry Received!" comes back
+    // after a reload only on the page it was sent from.
+    iframeParams.set("vf_page", window.location.origin + window.location.pathname);
 
     var prefillEventType = script.getAttribute("data-event-type");
     var prefillDate = script.getAttribute("data-date");
@@ -364,6 +373,9 @@
       gadsLabel: script.getAttribute("data-gads-label") || null,
       origin: baseOrigin,
       frameId: frameId,
+      // vf-ready seen (the form takes vf-prefill), and a prefill asked for before then.
+      ready: false,
+      pendingPrefill: null,
     });
   }
 
@@ -380,6 +392,24 @@
 
     if (data.type === "vf-embed-height" && data.height) {
       inst.iframe.style.height = data.height + "px";
+      return;
+    }
+
+    if (data.type === "vf-ready") {
+      inst.ready = true;
+      if (inst.pendingPrefill) { sendPrefill(inst, inst.pendingPrefill); inst.pendingPrefill = null; }
+      return;
+    }
+
+    if (data.type === "vf-prefill-applied") {
+      window.VenueFlow = window.VenueFlow || {};
+      if (typeof window.VenueFlow.onPrefillApplied === "function") {
+        try {
+          window.VenueFlow.onPrefillApplied({ frameId: inst.frameId || null, applied: data.applied || [], kept: data.kept || [], ignored: data.ignored || [] });
+        } catch (e) {
+          console.error("[VenueFlow embed.js] window.VenueFlow.onPrefillApplied threw:", e);
+        }
+      }
       return;
     }
 
@@ -466,7 +496,29 @@
     }
   }
 
+  function sendPrefill(inst, values) {
+    var msg = { type: "vf-prefill", frameId: inst.frameId || undefined };
+    ["eventType", "date", "guests", "format", "fields"].forEach(function (k) {
+      if (values[k] !== undefined && values[k] !== null) msg[k] = values[k];
+    });
+    try { inst.iframe.contentWindow.postMessage(msg, inst.origin); } catch (e) { /* frame gone */ }
+  }
+
   window.VenueFlow = window.VenueFlow || {};
+  // Change the event answers in the form(s) on this page without reloading
+  // them: { eventType, date: "YYYY-MM-DD", guests, format, fields: { id: value } }
+  // (fields: budgetRange, spaceId, eventTime or source).
+  // Pass a frameId to reach one form only. Before the form is ready the
+  // values wait, and the latest call wins.
+  window.VenueFlow.prefill = function (values, frameId) {
+    if (!values || typeof values !== "object") return;
+    for (var i = 0; i < instances.length; i++) {
+      var inst = instances[i];
+      if (frameId && inst.frameId !== frameId) continue;
+      if (inst.ready) sendPrefill(inst, values);
+      else inst.pendingPrefill = values;
+    }
+  };
   window.addEventListener("message", handleMessage);
 
   var scripts = document.querySelectorAll("script[data-venue]");

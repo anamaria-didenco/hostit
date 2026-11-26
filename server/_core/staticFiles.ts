@@ -9,6 +9,20 @@ export function defaultDistPath(): string {
     : path.resolve(import.meta.dirname, "public");
 }
 
+/**
+ * A build file whose name carries Vite's content hash ("assets/index-Ba-O4ySP.js"):
+ * a new build gives changed content a new name, so the file under this name
+ * never changes.
+ */
+export function isHashedAsset(filePath: string): boolean {
+  return /[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/.test(filePath);
+}
+
+const NO_CACHE = "no-cache";
+// A year, and no revalidation: each reload of the embedded form used to ask
+// the server about every bundle again (max-age=0) before it could show.
+const IMMUTABLE = "public, max-age=31536000, immutable";
+
 /** Serve the built client. `distPath` is overridable so tests can point at a temp folder. */
 export function serveStatic(app: Express, distPath: string = defaultDistPath()) {
   if (!fs.existsSync(distPath)) {
@@ -18,11 +32,14 @@ export function serveStatic(app: Express, distPath: string = defaultDistPath()) 
   }
 
   app.use(express.static(distPath, {
-    // The service worker, manifest and offline page must never be served from a stale
-    // cache, or a fix to them would not reach phones that already have the app.
     setHeaders: (res, filePath) => {
-      if (/[\\/](sw\.js|manifest\.webmanifest|offline\.html)$/.test(filePath)) {
-        res.setHeader("Cache-Control", "no-cache");
+      // The page itself, the service worker, manifest and offline page must never be
+      // served from a stale cache, or a deploy (or a fix to them) would not reach phones
+      // that already have the app.
+      if (/[\\/](index\.html|sw\.js|manifest\.webmanifest|offline\.html)$/.test(filePath)) {
+        res.setHeader("Cache-Control", NO_CACHE);
+      } else if (isHashedAsset(filePath)) {
+        res.setHeader("Cache-Control", IMMUTABLE);
       }
     },
   }));
@@ -37,6 +54,7 @@ export function serveStatic(app: Express, distPath: string = defaultDistPath()) 
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
+    res.setHeader("Cache-Control", NO_CACHE);
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

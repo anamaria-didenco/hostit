@@ -403,7 +403,7 @@ describe("bulk status update", () => {
     const lead1 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk1", email: "bulk1@test.com" });
     const lead2 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk2", email: "bulk2@test.com" });
     const lead3 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk3", email: "bulk3@test.com" });
-    expect(lead1.status).toBe("new");
+    expect((await caller.leads.get({ id: lead1.id }))?.status).toBe("new");
     // Bulk update all 3 to "contacted"
     const result = await caller.leads.bulkUpdateStatus({ ids: [lead1.id, lead2.id, lead3.id], status: "contacted" });
     expect(result.updated).toBe(3);

@@ -13,6 +13,7 @@ import { handleXeroWebhook } from "../xeroWebhook";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { logTrpcError } from "./trpcErrorLog";
 import { serveStatic, setupVite } from "./vite";
 import path from "path";
 import fs from "fs";
@@ -552,20 +553,9 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
-      // Unexpected failures used to leave no trace at all. Expected outcomes
-      // (bad input, not found, not allowed) aren't errors worth logging.
-      onError({ error, path, type, ctx }) {
-        if (["BAD_REQUEST", "NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "CONFLICT", "PRECONDITION_FAILED", "TOO_MANY_REQUESTS"].includes(error.code)) return;
-        console.error(JSON.stringify({
-          level: "error", source: "trpc", path, type, code: error.code,
-          ownerId: (ctx as any)?.user?.id ?? null,
-          // A failed query's message ends with the submitted values — keep
-          // the SQL and the database's reason, drop the params.
-          message: error.message.split(/\nparams:/)[0],
-          dbReason: (error.cause as any)?.cause?.message ?? (error.cause as any)?.detail ?? undefined,
-          stack: ((error.cause as any)?.stack ?? error.stack)?.split(/\nparams:/)[0],
-        }));
-      },
+      // Unexpected failures used to leave no trace at all; the enquiry
+      // form's refusals are logged too, without what was typed (trpcErrorLog.ts).
+      onError: logTrpcError,
     })
   );
   // development mode uses Vite, production mode uses static files

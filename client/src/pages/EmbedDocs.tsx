@@ -28,7 +28,7 @@ const OPTIONS: Opt[] = [
   { name: "data-event-type", value: "Wedding", desc: "Preselect the event type." },
   { name: "data-date", value: "2026-12-05", desc: "Preselect the event date (YYYY-MM-DD)." },
   { name: "data-guests", value: "120", desc: "Preselect the guest count." },
-  { name: "data-format", value: "seated", desc: "Preselect the event format." },
+  { name: "data-format", value: "seated", desc: "Preselect the event format: seated, standing (or cocktail), or both." },
   { name: "data-prefill", value: '{"company":"Acme"}', desc: "Preselect any field by id, as JSON (keeps exact camelCase ids)." },
   { name: "data-gads-label", value: "AW-123/abc", desc: "Google Ads conversion label, fired on a completed enquiry." },
   { name: "data-frame-id", value: "weddings", desc: "A stable id for this frame, echoed on every message. Auto-generated if omitted." },
@@ -43,9 +43,13 @@ const MESSAGES: Msg[] = [
   { name: "vf-enquiry-submitted", when: "On a completed enquiry. Sent only to the embedding page's exact origin.", payload: "{ enquiryId, eventType, guestCount, budgetRange, eventFormat, source } — plus email and phone when the page is on the venue's own website (for Google enhanced conversions)" },
   { name: "vf-walkthrough-requested", when: "When the enquirer asks for a walkthrough on the thank-you screen (the venue confirms the time later).", payload: "{}" },
   { name: "vf-close-widget", when: "Floating placement only — the card's × button.", payload: "{}" },
+  { name: "vf-ready", when: "Once the form is showing and can take a vf-prefill message (below).", payload: "{ prefill: 1 }" },
+  { name: "vf-prefill-applied", when: "After each vf-prefill: which fields now hold your values, which the visitor had changed (left as they were), and which were refused.", payload: "{ applied, kept, ignored } — lists of field ids" },
 ];
 
 const CHANGELOG: { date: string; note: string }[] = [
+  { date: "2026-11-26", note: "embed.js passes the page the form is on (vf_page), so \"Enquiry Received!\" comes back after a reload of the page it was sent from, and only there. The ad landing page (vf_landing) is used for attribution only." },
+  { date: "2026-11-26", note: "vf-prefill: change the form's event answers from your page without reloading the frame (vf-ready, vf-prefill-applied, VenueFlow.prefill in embed.js). Prefilled values no longer overwrite answers the visitor changed in the form, and data-format accepts \"standing\". vf-prefill takes choices only, never free text." },
   { date: "2026-09-30", note: "Width control — data-width and data-max-width (default 520px; none/full for a full-bleed form that fills its container)." },
   { date: "2026-09-30", note: "Styling API (bg/transparent, text/label/border colours, font inherit, radius, shadow, button style); data-prefill for any field; vf-step-changed; frame ids on every message; documented, origin-pinned messages." },
   { date: "earlier", note: "One-line loader, auto-resize, floating placement, accent/font, UTM & click-id capture, conversion events." },
@@ -234,6 +238,36 @@ export default function EmbedDocs() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* Host → form */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold mb-2">Changing the answers from your page</h2>
+          <p className="text-sm text-gray-600 mb-3">
+            If your page has its own date picker, guest slider or seated/standing choice, send the form a message instead of changing the iframe's <Code>src</Code>. Reloading the frame adds a Back-button step for every change and costs a reload each time. Wait for <Code>vf-ready</Code>, then post to the frame:
+          </p>
+          <pre className="bg-gray-900 text-gray-100 text-[13px] rounded-lg p-4 overflow-x-auto mb-3"><code>{`iframe.contentWindow.postMessage({
+  type: "vf-prefill",
+  frameId: "weddings",      // optional: only the frame with this id
+  eventType: "Wedding Reception",
+  date: "2026-12-05",       // YYYY-MM-DD
+  guests: 120,              // or "100-120"
+  format: "standing",       // seated, standing / cocktail, both
+  fields: { budgetRange: "10_20k" }  // budgetRange, spaceId, eventTime or source
+}, "${origin}");`}</code></pre>
+          <ul className="text-sm text-gray-600 list-disc pl-5 space-y-1">
+            <li>Only messages from the page that embeds the frame are taken, and only in an embedded form.</li>
+            <li>A field takes your value when it is empty, or when the value is different from the last one you sent for it. Sending the same value again never overwrites what the visitor typed.</li>
+            <li>Only the choices are taken: event type, date, guests, format, and in <Code>fields</Code> the budget range, space, time and how they heard about you. The visitor's own words (the message, the occasion, who to invoice) and their name, email, phone and company are never changed this way, and the form never moves step or submits.</li>
+            <li>With <Code>embed.js</Code>, call <Code>{`VenueFlow.prefill({ date: "2026-12-05", guests: 120 })`}</Code>; it waits for <Code>vf-ready</Code> for you. <Code>VenueFlow.onPrefillApplied</Code> receives the reply.</li>
+            <li>An older form never sends <Code>vf-ready</Code>: if none arrives, keep changing <Code>src</Code> as before (use <Code>iframe.contentWindow.location.replace(url)</Code> so Back still leaves your page).</li>
+          </ul>
+          <p className="text-sm text-gray-600 mt-3">
+            After "Enquiry Received!", the form shows it again for an hour if the frame is reloaded, or the visitor reloads the page it was sent from, with "Send another enquiry" below. On any other page it shows the form with a line saying when their enquiry was sent. <Code>embed.js</Code> tells the form which page it is on. A plain iframe usually tells it only your site's address, so a whole-page reload counts as another page; add <Code>referrerpolicy="no-referrer-when-downgrade"</Code> to the iframe to fix that.
+          </p>
+          <p className="text-sm text-gray-600 mt-3">
+            When a visitor's browser blocks the frame's storage (some Safari and Firefox settings), the form keeps what they have typed, for up to an hour, in the frame's own window name, so a reload of the frame doesn't wipe it. A page that navigates the frame elsewhere could read that name, so only point the frame at the form.
+          </p>
         </section>
 
         {/* Tracking */}

@@ -7,12 +7,20 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { halfHourSlots, initialSlotIndex, matchSlot, moveSlot } from "@shared/timeSlots";
-import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { canReuseLead, enquiryStorageKeys, formTokenToSend, normaliseEmail, parseProgress, pickFormToken, resumeFrom, serializeProgress } from "@/lib/enquiryProgress";
+import { canReuseLead, enquiryStorageKeys, holdsSentConfirmation, leadForSubmit, leadToSupersede, normaliseEmail, formPageKey, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
+import { NO_DATE_KEY, applyPrefill, draftHasOwnAnswers, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom } from "@/lib/enquiryPrefill";
+import { autoReplyNote, autoReplyState, buildEnquiryMessage, eventDateForWire, guestCountError, guestCountNote, guestCountToConfirm, guestCountValue, type AutoReplyState } from "@/lib/enquiryFields";
+import { describeEnquiryError } from "@/lib/enquiryErrors";
+import { isEnquiryTimeout } from "@/lib/requestTimeout";
+import { clearNameDraft, frameTag, readNameDraft, writeNameDraft } from "@/lib/framedDraft";
+import { createPartialPinger, type PingTarget } from "@/lib/partialPing";
+import { ENQUIRY_LIMITS, STEP_ONE_FIELDS, isValidEnquiryEmail, tidyEnquiryEmail } from "@shared/enquiryRules";
+import { isRealDateKey, isWallTime, wallDateKeyInTz } from "@shared/enquiryWallTime";
+import { CLIENT_MIN_TOKEN_AGE_MS, PARTIAL_PING_EVERY_MS, SENT_CONFIRMATION_KEEP_MS, SUBMIT_WAITS_FOR_CAPTURE_MS } from "@shared/enquiryTiming";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -36,14 +44,14 @@ const AUTOCOMPLETE: Record<string, string> = {
   company: "organization",
 };
 
-// The longest value each contact field can hold (matches the server's
-// limits), so a very long entry stops at the field instead of failing on send.
+// The longest value each field can hold (the server's own limits), so a very
+// long entry stops at the field instead of failing on send.
 const MAX_LENGTH: Record<string, number> = {
-  firstName: 100,
-  lastName: 100,
-  email: 254,
-  phone: 40,
-  company: 200,
+  firstName: ENQUIRY_LIMITS.firstName,
+  lastName: ENQUIRY_LIMITS.lastName,
+  email: ENQUIRY_LIMITS.email,
+  phone: ENQUIRY_LIMITS.phone,
+  company: ENQUIRY_LIMITS.company,
 };
 
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@shared/enquiryCopy";
@@ -78,6 +86,15 @@ const EVENT_EXTRA: Record<string, { label: string; opts?: string[]; text?: boole
   "Cocktail Function": { label: "Food", opts: ["Canapés", "Grazing table"] },
   "Other": { label: "What's the occasion?", text: true },
 };
+// These two follow-ups ask the venue's own Format question again (and could
+// store "Standing & canapés" beside a seated format): only shown when the
+// form doesn't ask Format itself.
+const FORMAT_FOLLOW_UPS = new Set(["Birthday Celebration", "Christmas Party"]);
+function eventExtraFor(eventType: string | undefined, formatAsked: boolean) {
+  const extra = EVENT_EXTRA[eventType ?? ''];
+  if (!extra || (formatAsked && FORMAT_FOLLOW_UPS.has(eventType ?? ''))) return null;
+  return extra;
+}
 const MESSAGE_PLACEHOLDER: Record<string, string> = {
   "Wedding Reception": "Speeches, first dance, cake cutting, dietaries…",
   "Corporate Dinner": "Agenda, branding, invoicing details, dietaries…",
@@ -111,9 +128,9 @@ function suggestEmailFix(email: string): string | null {
 
 // Budget bracket ÷ guest count, shown live so people self-qualify rather
 // than guessing whether their number is "too small to ask about".
-function perGuestBudget(budgetRange: string, guestCount: string): string | null {
+function perGuestBudget(budgetRange: string, guests: number | null): string | null {
   const b = BUDGET_RANGE_OPTIONS.find(x => x.value === budgetRange);
-  const n = parseInt(guestCount, 10);
+  const n = guests ?? 0;
   if (!b || !(n >= 1)) return null;
   const f = (x: number) => "$" + Math.round(x / n).toLocaleString("en-NZ");
   return b.hi ? `≈ ${f(b.lo)}–${f(b.hi)} per guest` : `from ≈ ${f(b.lo)} per guest`;
@@ -131,22 +148,19 @@ function isLight(hex: string) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128;
 }
 
-// Prefill params (embed.js's data-event-type="christmas-party" etc.) come
-// from whatever a venue typed into a script tag, not a dropdown, so they're
-// matched loosely against the real option strings — case/punctuation/spacing
-// insensitive — rather than requiring an exact string. No match, no prefill;
-// never a crash or a silently-wrong selection.
-const normLoose = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
-function fuzzyMatch(raw: string | null, options: readonly string[]): string | undefined {
-  if (!raw) return undefined;
-  const target = normLoose(raw);
-  return options.find(o => normLoose(o) === target);
-}
-function fuzzyMatchOption(raw: string | null, options: ReadonlyArray<{ value: string; label: string }>): string | undefined {
-  if (!raw) return undefined;
-  const target = normLoose(raw);
-  return options.find(o => normLoose(o.value) === target || normLoose(o.label) === target)?.value;
-}
+// Prefill params (embed.js's data-event-type="christmas-party" etc.) are read
+// in lib/enquiryPrefill.ts: matched loosely, and no match means no prefill.
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+const NO_HELD: HeldLead = { leadId: null, leadToken: null, leadEmail: null, leadAt: null, fromThisPage: false };
+const EMAIL_INVALID = "Enter a valid email address, like name@example.com.";
+// The venue lookup is retried with backoff before the frame says it couldn't
+// load, and keeps trying every 20 s after that.
+const VENUE_RETRY = {
+  retry: 3,
+  retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 8000),
+  refetchInterval: (query: { state: { status: string } }) => (query.state.status === "error" ? 20_000 : false as const),
+};
 
 /* ── Custom date/time pickers ──────────────────────────────────────────
    Native <input type="date">/<input type="time"> only open their picker
@@ -500,20 +514,26 @@ const WALKTHROUGH_TIME_OPTIONS = [
 type WalkthroughTimeKey = typeof WALKTHROUGH_TIME_OPTIONS[number]['key'];
 const MAX_WALKTHROUGH_DAYS = 5;
 
-function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, onRequested }: {
-  ownerId: number; leadId: number; leadToken: string; clientEmail: string; big: boolean;
-  accentColor: string; accentTextColor: string; onRequested: () => void;
+function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, requested, onRequested }: {
+  ownerId: number; leadId: number;
+  /** Null after a reload outside the tab that sent it: what was asked for is shown, nothing can be changed. */
+  leadToken: string | null;
+  clientEmail: string; big: boolean;
+  accentColor: string; accentTextColor: string;
+  /** Already asked for (kept with the sent enquiry, shown after a reload). */
+  requested?: string | null;
+  onRequested: (summary: string) => void;
 }) {
   const optionsQ = trpc.leads.walkthroughOptions.useQuery({ ownerId }, { staleTime: 60_000, refetchOnWindowFocus: false });
   const [dates, setDates] = useState<string[]>([]);
   const [timeOfDay, setTimeOfDay] = useState<WalkthroughTimeKey>('any');
   const [note, setNote] = useState('');
-  const [done, setDone] = useState<{ summary: string; emailed: boolean } | null>(null);
+  const [done, setDone] = useState<{ summary: string; emailed: boolean } | null>(() => requested ? { summary: requested, emailed: false } : null);
   const [changing, setChanging] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = trpc.leads.requestWalkthrough.useMutation({
-    onSuccess: (r) => { setDone({ summary: r.summary, emailed: r.emailed }); setChanging(false); setError(null); onRequested(); },
+    onSuccess: (r) => { setDone({ summary: r.summary, emailed: r.emailed }); setChanging(false); setError(null); onRequested(r.summary); },
     onError: () => setError("We couldn't send that just now — please try again."),
   });
   const days = optionsQ.data?.days ?? [];
@@ -537,16 +557,21 @@ function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, acce
           </div>
           <p className="text-xs text-gray-600 mt-1 leading-snug">
             You suggested {done.summary}.{' '}
-            {done.emailed && <>We&rsquo;ve emailed a copy to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>}
+            {/* After a reload the confirmation shows no personal details, so no address either. */}
+            {done.emailed && (clientEmail
+              ? <>We&rsquo;ve emailed a copy to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>
+              : <>We&rsquo;ve emailed you a copy.</>)}
           </p>
-          <button type="button" onClick={() => setChanging(true)}
-            className="mt-2 whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change my request</button>
+          {leadToken && (
+            <button type="button" onClick={() => setChanging(true)}
+              className="mt-2 whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change my request</button>
+          )}
         </div>
       </div>
     );
   }
 
-  if (optionsQ.isLoading || !optionsQ.data?.enabled) return null;
+  if (!leadToken || optionsQ.isLoading || !optionsQ.data?.enabled) return null;
 
   return (
     <div className={wrap}>
@@ -601,7 +626,7 @@ function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, acce
       {error && <p role="alert" className="text-xs text-red-700 mt-2">{error}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <button type="button" disabled={request.isPending}
-          onClick={() => request.mutate({ ownerId, leadId, leadToken, dates, timeOfDay, note: note.trim() || undefined })}
+          onClick={() => leadToken && request.mutate({ ownerId, leadId, leadToken, dates, timeOfDay, note: note.trim() || undefined })}
           className="rounded-full px-4 py-2 text-xs font-bold tracking-wide uppercase shadow-sm disabled:opacity-60"
           style={{ backgroundColor: accentColor, color: accentTextColor }}>
           {request.isPending ? 'Sending…' : changing ? 'Update request' : 'Request a walkthrough'}
@@ -739,12 +764,9 @@ export default function LeadForm() {
   // Prefill from embed.js's data-event-type/date/guests/format, e.g. a
   // Christmas landing page opening the form already on "Christmas Party" —
   // fewer taps, better mobile conversion. Each is independently optional.
-  const prefillEventType = fuzzyMatch(sp.get("prefillEventType"), EVENT_TYPES);
-  const prefillDateRaw = sp.get("prefillDate");
-  const prefillDate = prefillDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(prefillDateRaw) ? prefillDateRaw : undefined;
-  const prefillGuestsRaw = parseInt(sp.get("prefillGuests") ?? '', 10);
-  const prefillGuests = Number.isFinite(prefillGuestsRaw) && prefillGuestsRaw > 0 ? String(prefillGuestsRaw) : undefined;
-  const prefillFormat = fuzzyMatchOption(sp.get("prefillFormat"), EVENT_FORMAT_OPTIONS);
+  // Read once: an impossible date ("2026-13-01"), a format word the form
+  // doesn't know or a guest count with no number in it is no prefill.
+  const [urlPrefill] = useState(() => prefillFromUrl(sp, EVENT_TYPES));
 
   // The form's display type (Spectral + Hanken Grotesk) loads unconditionally
   // — it's the heading/label typeface for every venue now, independent of
@@ -808,15 +830,43 @@ export default function LeadForm() {
   // Auto-resize: when embedded, post our content height to the parent page so a
   // tiny script in the embed snippet can size the <iframe> to fit — no inner
   // scrollbars, no empty space, regardless of which step is showing.
+  //
+  // A host page that never resizes the frame (it doesn't listen for
+  // vf-embed-height) can cut step 2 off above BACK and SUBMIT. Only then,
+  // once the frame has stayed shorter than the form for a moment, the button
+  // row is kept at the bottom of the frame (frameShort). A host that does
+  // resize the frame never gets it.
+  const [frameShort, setFrameShort] = useState(false);
   useEffect(() => {
     if (!isEmbed) return;
+    let lastPosted = 0;
+    let lastInner = window.innerHeight;
+    let hostResizes = false;
+    let shortTimer: ReturnType<typeof setTimeout> | undefined;
+    const tooShort = () => !hostResizes && window.innerHeight + 2 < document.body.scrollHeight;
+    const evaluate = () => {
+      clearTimeout(shortTimer);
+      if (!tooShort()) { setFrameShort(false); return; }
+      // A host that resizes the frame gets a moment to catch up first.
+      shortTimer = setTimeout(() => setFrameShort(tooShort()), 1000);
+    };
     const post = () => {
       // Measure the body, not documentElement: inside an iframe the root
       // element's scrollHeight is floored at the iframe's own height, so it can
       // only grow. body.scrollHeight tracks the real content and lets a shorter
       // step shrink the frame too.
       const h = Math.ceil(document.body.scrollHeight);
+      lastPosted = h;
       postToParent({ type: "vf-embed-height", height: h });
+      evaluate();
+    };
+    const onResize = () => {
+      if (window.innerHeight !== lastInner) {
+        lastInner = window.innerHeight;
+        // The frame became the height just posted: the host page sizes it.
+        if (lastPosted && Math.abs(window.innerHeight - lastPosted) <= 4) hostResizes = true;
+      }
+      post();
     };
     post();
     const ro = new ResizeObserver(() => post());
@@ -825,20 +875,19 @@ export default function LeadForm() {
     const t1 = setTimeout(post, 400);
     const t2 = setTimeout(post, 1500);
     window.addEventListener("load", post);
-    window.addEventListener("resize", post);
-    return () => { ro.disconnect(); clearTimeout(t1); clearTimeout(t2); window.removeEventListener("load", post); window.removeEventListener("resize", post); };
+    window.addEventListener("resize", onResize);
+    return () => { ro.disconnect(); clearTimeout(t1); clearTimeout(t2); clearTimeout(shortTimer); window.removeEventListener("load", post); window.removeEventListener("resize", onResize); };
   }, [isEmbed]);
 
-  const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
-    { slug: slug ?? "" },
-    { enabled: !!slug }
-  );
-  const { data: venueDefault, isLoading: loadingDefault } = trpc.venue.getDefault.useQuery(
-    undefined,
-    { enabled: !slug }
-  );
-  const venue = slug ? venueBySlug : venueDefault;
-  const isLoading = slug ? loadingBySlug : loadingDefault;
+  // The venue. A lookup that failed (a deploy, a mobile blip) used to fall
+  // through to a nameless form that could never send: it is retried with
+  // backoff, and while it keeps failing the frame says so, with Try again.
+  const venueBySlugQ = trpc.venue.getBySlug.useQuery({ slug: slug ?? "" }, { enabled: !!slug, ...VENUE_RETRY });
+  const venueDefaultQ = trpc.venue.getDefault.useQuery(undefined, { enabled: !slug, ...VENUE_RETRY });
+  const venueQ = slug ? venueBySlugQ : venueDefaultQ;
+  const venue = venueQ.data;
+  const isLoading = venueQ.isLoading;
+  const venueFailed = venue === undefined && venueQ.isError;
   // Lead with the venue's Brand Pack accent (brandAccentColor → venue colour →
   // navy), exactly as the proposal page does via venueBrand(). This replaces the
   // old `venue.primaryColor ?? green` default, which left the enquiry form on
@@ -852,12 +901,54 @@ export default function LeadForm() {
   // look like a too-fast bot.
   const { data: formConfig } = trpc.leads.formConfig.useQuery(
     { ownerId: venue?.ownerId ?? 0 },
-    { enabled: !!venue?.ownerId, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false },
+    { enabled: !!venue?.ownerId, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false, retry: 3 },
   );
   // Where the visitor had got to before a reload (step, step-1 lead, first
   // token), kept beside the draft below: see enquiryProgress.ts.
   const storageKeys = enquiryStorageKeys(slug);
-  const [storedProgress] = useState(() => {
+  // Whether this frame can use storage. Where it can't (a browser blocking
+  // all third-party storage), the answers and the step are kept in the
+  // frame's window.name instead (lib/framedDraft.ts), so the venue's page
+  // reloading the frame doesn't wipe them. Never the lead's token.
+  const [storageOk] = useState(() => {
+    try { const k = "vf-storage-check"; localStorage.setItem(k, "1"); localStorage.removeItem(k); return true; } catch { return false; }
+  });
+  const [nameDraft] = useState(() => {
+    try {
+      if (!storageOk) return readNameDraft(window.name, storageKeys.slug, Date.now());
+      const cleared = clearNameDraft(window.name);
+      if (cleared !== window.name) window.name = cleared;
+    } catch { /* no window.name either */ }
+    return null;
+  });
+  // This frame's own name (window.name survives the venue's page reloading
+  // the frame, not a whole-page reload or another page), and the page it is
+  // on: "Enquiry Received!" comes back only where it was sent.
+  const [thisFrame] = useState<string | null>(() => {
+    if (!isEmbed || !storageOk) return null;
+    try {
+      const f = frameTag(window.name, () => Math.random().toString(36).slice(2));
+      if (f.name !== window.name) window.name = f.name;
+      return f.tag;
+    } catch { return null; }
+  });
+  const [thisPage] = useState(() => formPageKey({ search: window.location.search, isEmbed, referrer: document.referrer, href: window.location.href }));
+  // The sent enquiry's token, for the walkthrough offer after a reload: this
+  // tab only (sessionStorage), never kept where another tab could use it.
+  const sentTokenKey = `vf-lead-sent-${storageKeys.slug}`;
+  const readSentToken = (): { leadId: number; token: string } | null => {
+    try {
+      const d = JSON.parse(sessionStorage.getItem(sentTokenKey) ?? "null");
+      return d && Number.isInteger(d.leadId) && d.leadId > 0 && typeof d.token === "string" && d.token.length <= 64 ? { leadId: d.leadId, token: d.token } : null;
+    } catch { return null; }
+  };
+  const [storedProgress] = useState<EnquiryProgress | null>(() => {
+    if (!storageOk) {
+      return nameDraft?.ownerId ? {
+        slug: storageKeys.slug, ownerId: nameDraft.ownerId, step: nameDraft.step,
+        leadId: null, leadToken: null, leadEmail: null, leadAt: null, formToken: null, formTokenAt: null, prefill: nameDraft.prefill,
+      } : null;
+    }
     try { return parseProgress(localStorage.getItem(storageKeys.progress), storageKeys.slug); } catch { return null; }
   });
   // The first token this draft had survives a reload (the venue's page
@@ -869,7 +960,14 @@ export default function LeadForm() {
   // enough to pass (formTokenToSend).
   const freshTokenRef = useRef<{ token: string; at: number } | null>(null);
   if (!freshTokenRef.current && formConfig?.formToken) freshTokenRef.current = { token: formConfig.formToken, at: Date.now() };
-  const sendFormToken = () => formTokenToSend(formTokenRef.current, freshTokenRef.current, Date.now());
+  const sendFormToken = () => pickTokenToSend(formTokenRef.current, freshTokenRef.current, Date.now())?.token;
+  // The server drops a token under 3 s old as a bot, while the visitor sees
+  // "Enquiry Received!" (an autofilled step 1, NEXT and a quick SUBMIT can be
+  // that fast): wait out the rest before sending. Never sends early.
+  const waitForFormToken = async () => {
+    const ms = tokenWaitMs(pickTokenToSend(formTokenRef.current, freshTokenRef.current, Date.now()), Date.now(), CLIENT_MIN_TOKEN_AGE_MS);
+    if (ms > 0) await sleep(ms);
+  };
   // Honeypot: a field people never see. Anything typed here is a bot.
   const [honeypot, setHoneypot] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -887,33 +985,42 @@ export default function LeadForm() {
   // Half-filled forms survive a reload — someone who taps away to check their
   // calendar and comes back shouldn't have to retype everything. Scoped per
   // venue slug so different venues' drafts on the same device never collide.
-  // URL prefill (an ad/email link) always wins over a stale draft field.
   const draftKey = storageKeys.draft;
   const readDraft = (): Record<string, string> => {
+    if (!storageOk) return nameDraft?.fields ?? {};
     try {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return {};
       const d = JSON.parse(raw);
-      return d && typeof d === "object" ? d : {};
+      if (!d || typeof d !== "object") return {};
+      return Object.fromEntries(Object.entries(d).filter((e): e is [string, string] => typeof e[1] === "string"));
     } catch { return {}; }
   };
-  const [draftRestored] = useState(() => Object.values(readDraft()).some(v => !!v));
+  // Only what the visitor put there: the page's own prefill, kept in the
+  // draft (after "Enquiry Received!", say), is nothing they started.
+  const [draftRestored] = useState(() => draftHasOwnAnswers(readDraft(), storedProgress?.prefill));
   const [form, setForm] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = { ...readDraft() };
-    if (prefillEventType) initial.eventType = prefillEventType;
-    if (prefillDate) initial.eventDate = prefillDate;
-    if (prefillGuests) initial.guestCount = prefillGuests;
-    if (prefillFormat) initial.eventFormat = prefillFormat;
-    // Arbitrary preselection: any prefill_<fieldId> param sets that field, so a
-    // venue can open the form on a chosen package, company, etc. from a link.
-    sp.forEach((value, key) => {
-      if (key.startsWith("prefill_") && value) {
-        const fieldId = key.slice("prefill_".length);
-        if (fieldId && initial[fieldId] === undefined) initial[fieldId] = value.slice(0, 500);
-      }
-    });
-    return initial;
+    const draft = { ...readDraft() };
+    // A date or time that can't be real (an old draft, a hand-made link) is dropped, not sent.
+    if (draft.eventDate && !isRealDateKey(draft.eventDate)) delete draft.eventDate;
+    if (draft.eventTime && !isWallTime(draft.eventTime)) delete draft.eventTime;
+    // URL prefill (an ad or email link, embed.js, the venue's page): on a
+    // first visit it wins over an old draft as it always did; on a reload it
+    // only changes a field the page sent something new for, so the page's
+    // "40, seated" no longer overwrites what the visitor typed in the form.
+    return applyPrefill(draft, urlPrefill, storedProgress ? (storedProgress.prefill ?? null) : null).form;
   });
+  const formRef = useRef(form);
+  formRef.current = form;
+  // The prefill values seen last (kept in the progress record), for that
+  // rule: this load's on top of the ones remembered, so a load whose URL has
+  // none (the venue's page loads the frame bare first, then with its
+  // finder's "40, seated") doesn't make the next load's look new.
+  const [lastPrefill, setLastPrefill] = useState<Record<string, string>>(() => rememberPrefill(storedProgress?.prefill, urlPrefill));
+  // This page's own prefill (its URL, then any vf-prefill), for a fresh form.
+  const thisLoadPrefillRef = useRef<Record<string, string>>(urlPrefill);
+  const lastPrefillRef = useRef(lastPrefill);
+  lastPrefillRef.current = lastPrefill;
   const [showDraftNote, setShowDraftNote] = useState(draftRestored);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   // After a reload, pick up where the visitor was: the step and the step-1
@@ -931,37 +1038,60 @@ export default function LeadForm() {
   const [embedStep, setEmbedStep] = useState<number>(initialResume.step);
   // "We don't have a date yet" — an explicit answer, not a skipped field.
   // Clients without a date were guessing one or abandoning; this makes
-  // no-date a first-class choice, stored on the lead as dateFlexible.
-  const [noDateYet, setNoDateYet] = useState(false);
-  // Set once startCapture succeeds after step 1 — passed to submit() so it
-  // UPDATEs this row instead of inserting a second one. Staying null just
-  // means submit() falls back to a normal insert; the visitor's flow never
-  // waits on or breaks over this write.
-  const [capturedLeadId, setCapturedLeadId] = useState<number | null>(initialResume.leadId);
-  // startCapture's proof that this visitor created capturedLeadId — the
-  // server only completes that row when it's sent back (see leadToken.ts).
-  const [capturedLeadToken, setCapturedLeadToken] = useState<string | null>(initialResume.leadToken);
-  // The email it was saved with: the lead is only reused for that email.
-  const [capturedEmail, setCapturedEmail] = useState<string | null>(initialResume.leadEmail);
-  // When it was saved (this device's clock): a reload only picks it up again for a while.
-  const [capturedAt, setCapturedAt] = useState<number | null>(initialResume.leadAt);
-  const capturedLead = { leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail, leadAt: capturedAt };
+  // no-date a first-class choice, stored on the lead as dateFlexible. Kept
+  // with the answers, so a reload (or a prefilled date) doesn't undo it.
+  const noDateYet = form[NO_DATE_KEY] === "1";
+  const setNoDateYet = (on: boolean) => setForm(p => {
+    const n = { ...p };
+    if (on) n[NO_DATE_KEY] = "1"; else delete n[NO_DATE_KEY];
+    return n;
+  });
+  // The step-1 lead startCapture saved, passed to submit() so it completes
+  // this row instead of inserting a second one, with its token (the server
+  // only completes that row when it's sent back, see leadToken.ts), the email
+  // it was saved with, when (this device's clock), and whether this page
+  // load saved it (enquiryProgress.ts: only then may a corrected email go
+  // with it). Kept in a ref too, for the waits in NEXT and SUBMIT.
+  const [held, setHeldState] = useState<HeldLead>(() => ({ leadId: initialResume.leadId, leadToken: initialResume.leadToken, leadEmail: initialResume.leadEmail, leadAt: initialResume.leadAt, fromThisPage: false }));
+  const heldRef = useRef(held);
+  const setHeld = (h: HeldLead) => { heldRef.current = h; setHeldState(h); };
+  const capturedLead = held;
   // Field ids that failed validation on the last submit attempt — drives the
   // inline error text/aria-invalid under each field. Cleared on submit, and
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
   // (no per-keystroke bookkeeping needed).
   const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
+  // A field the server refused, with the value it refused: marked at the
+  // field until that value changes.
+  const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, { message: string; value: string }>>({});
   // Why the last submit failed, shown (and announced) just above SUBMIT. A
   // toast sat right on top of that button: in the embed (the iframe is only as
   // tall as the form), and on a phone, where SUBMIT is at the bottom of the
   // screen when it's tapped.
   const [submitError, setSubmitError] = useState("");
+  // A very large guest count waiting for "Did you mean …?" before sending.
+  const [guestConfirm, setGuestConfirm] = useState<number | null>(null);
+  // SUBMIT is busy: waiting for step 1's save or the timing token, or sending.
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   // The id of the lead row this submission created/updated — captured from
   // submit()'s response so the post-submit walkthrough step has something to
-  // attach the chosen slot to. Distinct from capturedLeadId (set earlier, by
-  // startCapture): that one only ever fires in the step-wizard's step 1.
+  // attach the chosen slot to.
   const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
   const [submittedLeadToken, setSubmittedLeadToken] = useState<string | null>(null);
+  // A walkthrough already asked for on the enquiry a reload shows again.
+  const [restoredWalkthrough, setRestoredWalkthrough] = useState<string | null>(null);
+  // An enquiry this device sent from another page (or one that can't be
+  // told apart) in the last hour: the form says so above step 1.
+  const [sentElsewhereAt, setSentElsewhereAt] = useState<number | null>(null);
+  const submittedRef = useRef(false);
+  // Enquiries already announced to the host page, so a repeated SUBMIT (the
+  // server answers "already received") is never counted twice.
+  const postedSubmittedRef = useRef<Set<number>>(new Set());
+  // Step 1's save while it's on its way, and a count that START FRESH bumps so
+  // an answer for the person before is never taken for the next one.
+  const captureRef = useRef<Promise<void> | null>(null);
+  const genRef = useRef(0);
 
   // Availability of the date already chosen (same cache as the picker's), for
   // the gentle "this date is popular" note. Per space when one is picked.
@@ -975,10 +1105,9 @@ export default function LeadForm() {
     availabilityOpts,
     !noDateYet && /^\d{4}-\d{2}-\d{2}$/.test(form.eventDate ?? '') ? form.eventDate!.slice(0, 7) : null,
   )(form.eventDate ?? '');
-  // Whether the server actually sent the "we've got your enquiry" email (off
-  // in Settings, or email not set up, means it didn't) — the success screen
-  // only tells people to check their inbox when there's something in it.
-  const [autoReplySent, setAutoReplySent] = useState(false);
+  // Whether the visitor's copy of the enquiry has gone (or is going): the
+  // success screen only mentions their inbox when it's true.
+  const [autoReply, setAutoReply] = useState<AutoReplyState>("none");
 
   // Tell the host page which wizard step is showing, so it can track funnel
   // drop-off. Fires on mount and whenever the step changes; compact/one-scroll
@@ -987,6 +1116,19 @@ export default function LeadForm() {
     if (!isEmbed) return;
     postToParent({ type: "vf-step-changed", step: embedStep });
   }, [isEmbed, embedStep]);
+  // A message about the last SUBMIT belongs to the step it was shown on.
+  useEffect(() => { setSubmitError(""); setGuestConfirm(null); }, [embedStep]);
+  // A quick second tap on NEXT landed on whatever step 2 has in that place
+  // ("No date yet" got ticked): taps are ignored for a moment after the step
+  // changes. Keyboard focus still moves at once.
+  const [stepGuard, setStepGuard] = useState(false);
+  const stepGuardFirstRun = useRef(true);
+  useEffect(() => {
+    if (stepGuardFirstRun.current) { stepGuardFirstRun.current = false; return; }
+    setStepGuard(true);
+    const t = setTimeout(() => setStepGuard(false), 400);
+    return () => clearTimeout(t);
+  }, [embedStep]);
 
   // Focus follows the form. The button just pressed (SUBMIT, NEXT, BACK) is
   // gone afterwards, which dropped focus to the top of the page: go to
@@ -1012,40 +1154,206 @@ export default function LeadForm() {
   const formToken = formTokenRef.current;
   useEffect(() => {
     if (submitted) return;
+    const hasAny = Object.values(form).some(v => !!v);
+    const step = embedStep === 2 ? 2 : 1;
+    if (!storageOk) {
+      try {
+        window.name = hasAny
+          ? writeNameDraft(window.name, { slug: storageKeys.slug, ownerId: ownerId ?? nameDraft?.ownerId ?? null, step, fields: form, prefill: lastPrefill, at: Date.now() })
+          : clearNameDraft(window.name);
+      } catch { /* nowhere to keep it */ }
+      return;
+    }
+    // Not before the saved record has been read: the form here is the
+    // draft plus this load's prefill, and a load that turns out to show
+    // "Enquiry Received!" again mustn't save the page's prefill as a draft.
+    if (!resumeChecked) return;
     try {
-      const hasAny = Object.values(form).some(v => !!v) || noDateYet;
       if (hasAny) localStorage.setItem(draftKey, JSON.stringify(form));
       else localStorage.removeItem(draftKey);
-      if (!hasAny) localStorage.removeItem(storageKeys.progress);
-      else if (ownerId && resumeChecked) {
+      // "Enquiry Received!" kept for a reload stays until the visitor starts
+      // another enquiry (types their details): the venue's page loads the
+      // frame empty, then with its own "40, seated", neither of which is
+      // anything the visitor did.
+      const saved = parseProgress(localStorage.getItem(storageKeys.progress), storageKeys.slug);
+      const keepSent = holdsSentConfirmation(saved, Date.now(), SENT_CONFIRMATION_KEEP_MS)
+        && !STEP_ONE_FIELDS.some(f => (form[f] ?? '').trim());
+      const sentFields = keepSent && saved ? {
+        sentLeadId: saved.sentLeadId, sentLeadToken: null, sentAt: saved.sentAt,
+        sentPage: saved.sentPage, sentFrame: saved.sentFrame, walkthroughSummary: saved.walkthroughSummary,
+      } : {};
+      // Nothing is written or removed before the saved record has been read against the venue.
+      if (!hasAny) {
+        if (!keepSent) localStorage.removeItem(storageKeys.progress);
+      } else if (ownerId) {
         localStorage.setItem(storageKeys.progress, serializeProgress({
-          slug: storageKeys.slug, ownerId, step: embedStep === 2 ? 2 : 1,
-          leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail, leadAt: capturedAt,
+          slug: storageKeys.slug, ownerId, step,
+          leadId: held.leadId, leadToken: held.leadToken, leadEmail: held.leadEmail, leadAt: held.leadAt,
           formToken: formToken?.token ?? null, formTokenAt: formToken?.at ?? null,
+          prefill: lastPrefill,
+          ...sentFields,
         }));
       }
     } catch { /* storage disabled/full — draft persistence is a nicety, not required */ }
-  }, [form, noDateYet, submitted, draftKey, storageKeys.progress, storageKeys.slug, ownerId, resumeChecked, embedStep, capturedLeadId, capturedLeadToken, capturedEmail, capturedAt, formToken]);
+  }, [form, submitted, draftKey, storageKeys.progress, storageKeys.slug, ownerId, resumeChecked, embedStep, held, formToken, lastPrefill, storageOk, nameDraft]);
   const clearDraft = () => {
     try { localStorage.removeItem(draftKey); localStorage.removeItem(storageKeys.progress); } catch {}
+    try { const n = clearNameDraft(window.name); if (n !== window.name) window.name = n; } catch {}
     setShowDraftNote(false);
   };
+  // "Enquiry Received!" survives a reload for a while (the venue's page
+  // reloads the frame when its calendar is used, and an empty step 1 invited
+  // a second, "unfinished" enquiry). localStorage only, and nothing about the
+  // visitor: the enquiry's id, when, and the page and frame it was sent
+  // from. Its token (for the walkthrough offer) stays in this tab only.
+  const rememberSent = (leadId: number | null, leadToken: string | null) => {
+    if (!storageOk || !ownerId) return;
+    try {
+      localStorage.setItem(storageKeys.progress, serializeProgress({
+        slug: storageKeys.slug, ownerId, step: 1,
+        leadId: null, leadToken: null, leadEmail: null, leadAt: null, formToken: null, formTokenAt: null,
+        prefill: lastPrefillRef.current, sentLeadId: leadId, sentLeadToken: null, sentAt: Date.now(),
+        sentPage: thisPage, sentFrame: thisFrame, walkthroughSummary: null,
+      }));
+    } catch { /* no storage: a reload shows the form */ }
+    try {
+      if (leadId && leadToken) sessionStorage.setItem(sentTokenKey, JSON.stringify({ leadId, token: leadToken }));
+      else sessionStorage.removeItem(sentTokenKey);
+    } catch { /* the walkthrough just isn't offered again after a reload */ }
+  };
+  // The walkthrough asked for, kept with the sent record, so a reload shows
+  // it as asked for instead of offering it (and alerting the venue) again.
+  const rememberWalkthrough = (summary: string) => {
+    if (!storageOk) return;
+    try {
+      const saved = parseProgress(localStorage.getItem(storageKeys.progress), storageKeys.slug);
+      if (saved?.sentAt != null) localStorage.setItem(storageKeys.progress, serializeProgress({ ...saved, walkthroughSummary: summary.slice(0, 300) }));
+    } catch { /* a reload offers it again */ }
+  };
+
+  // The step-2 "still here" ping (lib/partialPing.ts): the venue's
+  // "Unfinished enquiry" alert then counts from when the visitor was last
+  // seen on step 2, not from step 1. Only with the lead this page holds for
+  // the email on step 1, never while step 1's save is still on its way.
+  const touchPartial = trpc.leads.touchPartial.useMutation();
+  const touchRef = useRef(touchPartial.mutateAsync);
+  touchRef.current = touchPartial.mutateAsync;
+  const pingerRef = useRef<ReturnType<typeof createPartialPinger> | null>(null);
+  if (!pingerRef.current) pingerRef.current = createPartialPinger({ everyMs: PARTIAL_PING_EVERY_MS, send: t => touchRef.current(t) });
+  const pinger = pingerRef.current;
+  const stepRef = useRef(embedStep);
+  stepRef.current = embedStep;
+  const pingTarget = (): PingTarget | null => {
+    const h = heldRef.current;
+    if (!isEmbed || isCompact || !ownerId || submittedRef.current || stepRef.current !== 2 || captureRef.current) return null;
+    if (!canReuseLead(h, formRef.current.email)) return null;
+    return { ownerId, leadId: h.leadId!, leadToken: h.leadToken! };
+  };
+  const pingTargetRef = useRef(pingTarget);
+  pingTargetRef.current = pingTarget;
+  const pageVisible = () => document.visibilityState === "visible";
+  const noteStep2Activity = () => pinger.activity(pingTargetRef.current(), pageVisible());
+  useEffect(() => {
+    const tick = () => pinger.tick(pingTargetRef.current(), pageVisible());
+    const t = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, [pinger]);
+  useEffect(() => {
+    if (resumeChecked && resumedStep2) pinger.resumed(pingTargetRef.current());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeChecked]);
+
+  // vf-prefill: the host page can change the event answers without
+  // reloading the frame ({ type: "vf-prefill", eventType, date, guests,
+  // format, fields }), only from window.parent, in embed mode, by the same
+  // rule as a reload's prefill. Never the contact fields, never the step,
+  // never a submit. Answered with vf-prefill-applied; vf-ready says the
+  // form is there to take one (see EmbedDocs.tsx).
+  useEffect(() => {
+    if (!isEmbed) return;
+    const onMessage = (ev: MessageEvent) => {
+      const input = vfPrefillFrom(
+        { source: ev.source, origin: ev.origin, data: ev.data },
+        { isEmbed, parent: window.parent !== window ? window.parent : null, parentOrigin, frameId },
+      );
+      if (!input) return;
+      // Choices only: never the visitor's own words or contact details.
+      const { values, ignored } = normalisePrefill(input, EVENT_TYPES, { allowContact: false, onlyChoices: true });
+      const r = applyPrefill(formRef.current, values, lastPrefillRef.current);
+      formRef.current = r.form;
+      setForm(r.form);
+      const seen = rememberPrefill(lastPrefillRef.current, values);
+      lastPrefillRef.current = seen;
+      setLastPrefill(seen);
+      thisLoadPrefillRef.current = rememberPrefill(thisLoadPrefillRef.current, values);
+      postToParent({ type: "vf-prefill-applied", applied: r.applied, kept: r.kept, ignored });
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEmbed]);
+  const readyPostedRef = useRef(false);
+  useEffect(() => {
+    if (!isEmbed || !venue?.ownerId || readyPostedRef.current) return;
+    readyPostedRef.current = true;
+    postToParent({ type: "vf-ready", prefill: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEmbed, venue?.ownerId]);
+
+  // The sticky BACK/SUBMIT row (frameShort, above): stepped embed, step 2,
+  // inline frames only. Fields scrolled into view (focus, an invalid SUBMIT)
+  // stop above it.
+  const stickyActions = isEmbed && !isCompact && !isFloatingPlacement && frameShort && embedStep === 2 && !submitted;
+  const stickyBarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = stickyBarRef.current;
+    if (!stickyActions || !el) { root.style.scrollPaddingBottom = ""; return; }
+    const set = () => { root.style.scrollPaddingBottom = `${Math.ceil(el.getBoundingClientRect().height) + 8}px`; };
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.scrollPaddingBottom = ""; };
+  }, [stickyActions]);
+
   const resetForm = () => {
+    genRef.current++;
+    captureRef.current = null;
+    pinger.stop();
+    submittedRef.current = false;
     clearDraft();
-    setForm({});
+    try { sessionStorage.removeItem(sentTokenKey); } catch { /* nothing kept */ }
+    // A fresh form as this page opens it: the date, guests and format the
+    // venue's page put in the frame's address are kept.
+    setForm(applyPrefill({}, thisLoadPrefillRef.current, null).form);
+    setRestoredWalkthrough(null);
+    setSentElsewhereAt(null);
     setCustomFieldValues({});
-    setNoDateYet(false);
     setEmbedStep(1);
     setResumedStep2(false);
-    setCapturedLeadId(null);
-    setCapturedLeadToken(null);
-    setCapturedEmail(null);
-    setCapturedAt(null);
+    setHeld(NO_HELD);
     setSubmittedLeadId(null);
     setSubmittedLeadToken(null);
-    setAutoReplySent(false);
+    setAutoReply("none");
     setTouchedInvalid(new Set());
+    setServerFieldErrors({});
+    setSubmitError("");
+    setGuestConfirm(null);
     setSubmitted(false);
+  };
+
+  // A field the server refused: marked at the field with the server's words,
+  // and for a step-1 field in the stepped embed, back to step 1 to fix it.
+  const markServerError = (field: string, message: string, value: string, toStepOne: boolean) => {
+    setServerFieldErrors(p => ({ ...p, [field]: { message, value } }));
+    if (toStepOne && isEmbed && !isCompact) { setResumedStep2(false); setEmbedStep(1); }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById(`${formId}-${field}`);
+      if (!el) return;
+      el.focus({ preventScroll: isEmbed });
+      if (isEmbed) el.scrollIntoView({ block: "center", behavior: scrollBehavior() });
+    }));
   };
 
   // Autosaves a real, contactable lead the moment step 1 (Your Details) is
@@ -1054,90 +1362,154 @@ export default function LeadForm() {
   // bails on the event questions, simply vanishes: no record, no follow-up.
   // Enquiries already announced as partial, so each is sent once at most.
   const partialPostedRef = useRef<Set<number>>(new Set());
-  const startCapture = trpc.leads.startCapture.useMutation({
-    onSuccess: (data, vars) => {
-      // leadId 0 means the server's bot check kept nothing: no lead to reuse.
-      const saved = data.leadId > 0 && !!data.leadToken;
-      setCapturedLeadId(saved ? data.leadId : null);
-      setCapturedLeadToken(saved ? data.leadToken : null);
-      setCapturedEmail(saved ? normaliseEmail(vars.email) : null);
-      setCapturedAt(saved ? Date.now() : null);
-      if (saved && !partialPostedRef.current.has(data.leadId)) {
-        partialPostedRef.current.add(data.leadId);
-        postEnquiryToParent({ type: 'vf-partial-captured', enquiryId: data.leadId, budgetRange: form.budgetRange || null });
-      }
-    },
-    // No error toast — this is a background nicety. If it fails, submit()
-    // just falls back to a normal insert; the visitor never sees a hiccup.
-  });
-
-  const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: (data: any) => {
-      setSubmitted(true);
-      setSubmittedLeadId(data?.id ?? null);
-      setSubmittedLeadToken(data?.leadToken ?? null);
-      setAutoReplySent(data?.autoReplySent === true);
-      clearDraft();
-      // ── Conversion signal ───────────────────────────────────────────────
-      // Embedding pages (and tag managers on them) need to know a submission
-      // happened — Google Ads conversion tracking can't see inside the
-      // iframe. Fired on BOTH modes; deliberately carries NO personal data,
-      // only the qualifiers useful for value-based bidding.
-      //
-      // Only ever to the parent's exact origin, never "*". The enquiry id lets
-      // the page count each enquiry once (Google Ads transaction_id). Email
-      // and phone, for Google's enhanced conversions, go only to the venue's
-      // own website (its domain over https); any other page gets the message
-      // without them.
-      // An id of 0 is the server's pretend success for a submission its bot
-      // check dropped: nothing was saved, so it is not a conversion (the
-      // venue's page would record an ad conversion "vf-0").
-      if (parentOrigin && typeof data?.id === "number" && data.id > 0) {
-        const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
-        postEnquiryToParent({
-          type: "vf-enquiry-submitted",
-          enquiryId: data?.id ?? null,
-          eventType: form.eventType || null,
-          guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-          budgetRange: form.budgetRange || null,
-          eventFormat: form.eventFormat || null,
-          source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
-          ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
-        });
-      }
-      // ── Optional thank-you redirect (?redirect=…) ───────────────────────
-      // Full-page mode only (navigating inside the iframe helps nobody). To
-      // keep this from being an open-redirect lure, the target must be https
-      // and on the venue's own website domain (or a subdomain of it).
-      if (!isEmbed) {
-        const target = sp.get("redirect");
-        const site = ((venue as any)?.website ?? "").toString();
-        if (target && site) {
-          try {
-            const t = new URL(target);
-            const v = new URL(site.startsWith("http") ? site : `https://${site}`);
-            const okHost = t.hostname === v.hostname || t.hostname.endsWith(`.${v.hostname.replace(/^www\./, "")}`) || t.hostname === v.hostname.replace(/^www\./, "");
-            if (t.protocol === "https:" && okHost) {
-              setTimeout(() => { window.location.href = t.href; }, 1200);
-            }
-          } catch { /* malformed redirect — ignore, show the normal thank-you */ }
+  const startCapture = trpc.leads.startCapture.useMutation();
+  const startCaptureRef = useRef(startCapture.mutateAsync);
+  startCaptureRef.current = startCapture.mutateAsync;
+  // NEXT's save, in the background: NEXT never waits on it. Once per person,
+  // so BACK then NEXT again (or a reload in between) doesn't save a second
+  // lead. An email changed after an earlier NEXT on this page load updates
+  // that same lead (leadToSupersede); anyone else (a lead restored after a
+  // reload, or after START FRESH) gets their own. A save still on its way is
+  // waited for first, so the email change can't miss the lead it answers with.
+  const saveStep1 = (owner: number) => {
+    const values = {
+      firstName: (form.firstName ?? '').trim(),
+      lastName: form.lastName?.trim() || undefined,
+      email: (form.email ?? '').trim(),
+      phone: form.phone?.trim() || undefined,
+      company: form.company?.trim() || undefined,
+    };
+    if (!captureRef.current && canReuseLead(heldRef.current, values.email)) return;
+    const typed = form;
+    const hp = honeypot || undefined;
+    const gen = genRef.current;
+    const before = captureRef.current;
+    const run = (async () => {
+      if (before) await before.catch(() => {});
+      if (gen !== genRef.current) return;
+      const current = heldRef.current;
+      if (canReuseLead(current, values.email)) return;
+      const supersede = leadToSupersede(current, values);
+      if (!supersede) setHeld(NO_HELD);
+      await waitForFormToken();
+      if (gen !== genRef.current) return;
+      try {
+        const data = await startCaptureRef.current({ ownerId: owner, ...values, hp, formToken: sendFormToken(), ...clickAttribution, ...(supersede ?? {}) });
+        if (gen !== genRef.current) return;
+        // leadId 0 means the server's bot check kept nothing: no lead to reuse.
+        if (data.leadId > 0 && data.leadToken) {
+          const same = supersede?.leadId === data.leadId;
+          setHeld({
+            leadId: data.leadId, leadToken: data.leadToken, leadEmail: normaliseEmail(values.email),
+            leadAt: same ? (current.leadAt ?? Date.now()) : Date.now(), fromThisPage: true,
+            leadName: { firstName: values.firstName, lastName: values.lastName ?? "", phone: values.phone ?? "" },
+          });
+          // Never after the enquiry itself was announced.
+          if (!partialPostedRef.current.has(data.leadId) && !submittedRef.current) {
+            partialPostedRef.current.add(data.leadId);
+            postEnquiryToParent({ type: 'vf-partial-captured', enquiryId: data.leadId, budgetRange: formRef.current.budgetRange || null });
+          }
         }
+        // Dropped while a lead is held: keep it, so SUBMIT can still complete
+        // it with the corrected email rather than leave it "Unfinished".
+      } catch (e) {
+        if (gen !== genRef.current || submittedRef.current) return;
+        // A background save: a network failure stays quiet (SUBMIT falls back
+        // to a normal insert). A refused step-1 answer is shown on step 1.
+        const v = describeEnquiryError(e, isEnquiryTimeout(e));
+        if (!v.network && v.stepOne && v.field) markServerError(v.field, v.field === 'email' ? EMAIL_INVALID : v.text, typed[v.field] ?? '', true);
       }
-    },
-    onError: (e) => {
-      // The real reason, not a shrug: "too many submissions" and a validation
-      // problem need different reactions from the person filling the form.
-      // Either way, give them a route that cannot fail — the venue's email.
-      // A Turnstile token is single-use — fetch a fresh one for the retry.
-      setTurnstileReset(n => n + 1);
-      const reason = e?.message?.trim() || "Something went wrong submitting the form.";
-      const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
-      setSubmitError(`${reason}${fallback}`);
-    },
-  });
+    })();
+    const p: Promise<void> = run.finally(() => { if (captureRef.current === p) captureRef.current = null; });
+    captureRef.current = p;
+  };
 
-  const doSubmit = () => {
-    if (!venue?.ownerId) return toast.error("Venue not found");
+  const submitLead = trpc.leads.submit.useMutation();
+  const onSubmitted = (data: any, sent: Record<string, string>) => {
+    const id = typeof data?.id === "number" ? data.id : 0;
+    const token = typeof data?.leadToken === "string" && data.leadToken ? data.leadToken : null;
+    submittedRef.current = true;
+    pinger.stop();
+    setSubmitted(true);
+    setSubmittedLeadId(id > 0 ? id : null);
+    setSubmittedLeadToken(id > 0 ? token : null);
+    setAutoReply(autoReplyState(data));
+    setRestoredWalkthrough(null);
+    setSentElsewhereAt(null);
+    clearDraft();
+    rememberSent(id > 0 ? id : null, id > 0 ? token : null);
+    // ── Conversion signal ───────────────────────────────────────────────
+    // Embedding pages (and tag managers on them) need to know a submission
+    // happened — Google Ads conversion tracking can't see inside the
+    // iframe. Fired on BOTH modes; deliberately carries NO personal data,
+    // only the qualifiers useful for value-based bidding.
+    //
+    // Only ever to the parent's exact origin, never "*". The enquiry id lets
+    // the page count each enquiry once (Google Ads transaction_id). Email
+    // and phone, for Google's enhanced conversions, go only to the venue's
+    // own website (its domain over https); any other page gets the message
+    // without them.
+    // An id of 0 is the server's pretend success for a submission its bot
+    // check dropped: nothing was saved, so it is not a conversion (the
+    // venue's page would record an ad conversion "vf-0"). An enquiry this
+    // page already announced (a repeated SUBMIT) isn't announced again.
+    if (parentOrigin && id > 0 && !postedSubmittedRef.current.has(id)) {
+      postedSubmittedRef.current.add(id);
+      const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
+      postEnquiryToParent({
+        type: "vf-enquiry-submitted",
+        enquiryId: id,
+        eventType: sent.eventType || null,
+        guestCount: guestCountValue(sent.guestCount),
+        budgetRange: sent.budgetRange || null,
+        eventFormat: sent.eventFormat || null,
+        source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
+        ...(toVenueSite ? { email: (sent.email ?? "").trim() || null, phone: (sent.phone ?? "").trim() || null } : {}),
+      });
+    }
+    // ── Optional thank-you redirect (?redirect=…) ───────────────────────
+    // Full-page mode only (navigating inside the iframe helps nobody). To
+    // keep this from being an open-redirect lure, the target must be https
+    // and on the venue's own website domain (or a subdomain of it).
+    if (!isEmbed) {
+      const target = sp.get("redirect");
+      const site = ((venue as any)?.website ?? "").toString();
+      if (target && site) {
+        try {
+          const t = new URL(target);
+          const v = new URL(site.startsWith("http") ? site : `https://${site}`);
+          const okHost = t.hostname === v.hostname || t.hostname.endsWith(`.${v.hostname.replace(/^www\./, "")}`) || t.hostname === v.hostname.replace(/^www\./, "");
+          if (t.protocol === "https:" && okHost) {
+            setTimeout(() => { window.location.href = t.href; }, 1200);
+          }
+        } catch { /* malformed redirect — ignore, show the normal thank-you */ }
+      }
+    }
+  };
+  const onSubmitError = (e: unknown, sent: Record<string, string>) => {
+    // A Turnstile token is single-use — fetch a fresh one for the retry.
+    setTurnstileReset(n => n + 1);
+    // The real reason, in words a visitor can act on: no answer at all, a
+    // field to fix (at that field, on its own step), "too many submissions".
+    const v = describeEnquiryError(e, isEnquiryTimeout(e));
+    if (v.field && visibleFields.some(f => f.id === v.field)) {
+      markServerError(v.field, v.field === 'email' ? EMAIL_INVALID : v.text, sent[v.field] ?? '', v.stepOne);
+      if (!(v.stepOne && isEmbed && !isCompact)) setSubmitError(v.text);
+      return;
+    }
+    // Either way, give them a route that cannot fail — the venue's email.
+    const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
+    setSubmitError(`${v.text}${fallback}`);
+  };
+
+  const doSubmit = async (opts: { guestsConfirmed?: number } = {}) => {
+    if (sendingRef.current) return;
+    if (!venue?.ownerId) {
+      // The venue's details didn't load: try again, and keep everything typed.
+      void venueQ.refetch();
+      setSubmitError("We couldn't load the venue's details just now. Please wait a moment and tap SUBMIT again.");
+      return;
+    }
     // Every required field must actually be filled — checked explicitly here,
     // not just via each input's `required` attribute, because source,
     // eventFormat and budgetRange are button groups with no real <input>
@@ -1145,7 +1517,7 @@ export default function LeadForm() {
     // submits via onClick, where native form validation never runs at all
     // (even for eventType's <select>). Guest count gets its own check below
     // since "filled" isn't the same as "a valid number".
-    const invalid = requiredInOrder().filter(([f, isCustom]) => !isFieldFilled(f, isCustom)).map(([f]) => f);
+    const invalid = requiredInOrder().filter(([f, isCustom]) => !isFieldFilled(f, isCustom) || serverErrorOn(f, isCustom)).map(([f]) => f);
     if (invalid.length > 0) {
       setTouchedInvalid(new Set(invalid.map(f => f.id)));
       setSubmitError("");
@@ -1154,56 +1526,83 @@ export default function LeadForm() {
       // left up with a message that goes stale as the fields are fixed. None in
       // the embed, where it would cover the SUBMIT button.
       if (!isEmbed) toast.error(fieldErrorMessage(invalid[0]), { id: "lead-form-invalid", duration: 4000 });
+      // A step-1 answer missing while step 2 is showing: back to step 1.
+      const toStepOne = isEmbed && !isCompact && embedStep === 2 && detailFields.some(f => f.id === invalid[0].id);
+      if (toStepOne) { setResumedStep2(false); setEmbedStep(1); }
       // Land keyboard/screen-reader focus right on the first problem field —
       // the toast alone is easy to miss, especially for a screen reader user
       // who isn't looking at the corner of the screen it appears in. In the
       // embed it can be far above SUBMIT, so bring it (and its label) into
       // view as well.
-      requestAnimationFrame(() => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
         const el = document.getElementById(fieldElId(invalid[0]));
         if (!el) return;
         el.focus({ preventScroll: isEmbed });
         if (isEmbed) el.scrollIntoView({ block: "center", behavior: scrollBehavior() });
-      });
+      }));
       return;
     }
     setTouchedInvalid(new Set());
     setSubmitError("");
     toast.dismiss("lead-form-invalid");
-    const customParts = Object.entries(customFieldValues)
-      .filter(([, v]) => v.trim())
-      .map(([k, v]) => `${k}: ${v}`);
-    const fullMessage = [form.message, ...customParts].filter(Boolean).join('\n\n');
-    submitLead.mutate({
-      ownerId: venue.ownerId,
-      // If step 1's autosave landed (for this email), complete that same row
-      // instead of inserting a second one. If it never fired (or is still in
-      // flight), this is undefined and the server falls back to a normal insert.
-      ...(canReuseLead(capturedLead, form.email) ? { leadId: capturedLeadId!, leadToken: capturedLeadToken! } : {}),
-      firstName: (form.firstName ?? '').trim(),
-      lastName: form.lastName?.trim() || undefined,
-      email: (form.email ?? '').trim(),
-      phone: form.phone?.trim() || undefined,
-      company: form.company?.trim() || undefined,
-      eventType: form.eventType || undefined,
-      eventDate: noDateYet ? undefined : combineLocalDateTime(form.eventDate, form.eventTime),
-      dateFlexible: noDateYet,
-      guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
-      eventFormat: (form.eventFormat || undefined) as any,
-      budgetRange: (form.budgetRange || undefined) as any,
-      budget: form.budget ? parseFloat(form.budget) : undefined,
-      eventDetail: form.eventDetail?.trim() || undefined,
-      invoicingNote: form.invoicingNote?.trim() || undefined,
-      message: fullMessage || undefined,
-      source: form.source || "lead_form",
-      spaceId: showSpacePicker && pickedSpace ? pickedSpace.id : (formSpaces.length === 1 ? formSpaces[0].id : undefined),
-      hp: honeypot || undefined,
-      formToken: sendFormToken(),
-      turnstileToken: turnstileToken ?? undefined,
-      ...clickAttribution,
-    });
+    // "30-40" typed on Safari's number pad used to arrive as 3040: a very
+    // large number is checked with the visitor first.
+    const big = guestCountToConfirm(form.guestCount);
+    if (big != null && opts.guestsConfirmed !== big) { setGuestConfirm(big); return; }
+    setGuestConfirm(null);
+    const sent = form;
+    const owner = venue.ownerId;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      // Step 1's save may still be on its way (SUBMIT straight after NEXT):
+      // wait a little for it, so this completes that lead instead of leaving
+      // it behind as a stray "Partial" (and a false "Unfinished" alert).
+      const pending = captureRef.current;
+      if (pending) await Promise.race([pending.catch(() => {}), sleep(SUBMIT_WAITS_FOR_CAPTURE_MS)]);
+      // The lead to complete: the visitor's own step 1 (no wait: the server
+      // already timed it), or for a corrected email the lead this page saved.
+      const target = leadForSubmit(heldRef.current, sent);
+      if (!target?.own) await waitForFormToken();
+      const when = eventDateForWire({ eventDate: sent.eventDate, eventTime: sent.eventTime, noDateYet: sent[NO_DATE_KEY] === "1" });
+      const extra = eventExtraFor(sent.eventType, eventFields.some(f => f.id === 'eventFormat'));
+      const data = await submitLead.mutateAsync({
+        ownerId: owner,
+        ...(target ? { leadId: target.leadId, leadToken: target.leadToken } : {}),
+        firstName: (sent.firstName ?? '').trim(),
+        lastName: sent.lastName?.trim() || undefined,
+        email: (sent.email ?? '').trim(),
+        phone: sent.phone?.trim() || undefined,
+        company: sent.company?.trim() || undefined,
+        eventType: sent.eventType || undefined,
+        // The venue's wall clock: "2026-12-12" and "19:00" (the server puts
+        // them in the venue's time zone, whatever this device is set to).
+        eventDate: when.eventDate,
+        eventTime: when.eventTime,
+        dateFlexible: sent[NO_DATE_KEY] === "1",
+        guestCount: guestCountValue(sent.guestCount) ?? undefined,
+        eventFormat: (sent.eventFormat || undefined) as any,
+        budgetRange: (sent.budgetRange || undefined) as any,
+        budget: sent.budget ? parseFloat(sent.budget) : undefined,
+        eventDetail: extra ? sent.eventDetail?.trim() || undefined : undefined,
+        invoicingNote: sent.invoicingNote?.trim() || undefined,
+        message: buildEnquiryMessage({ message: sent.message, custom: Object.entries(customFieldValues), guestCount: sent.guestCount, timeLine: when.timeLine }),
+        source: sent.source || "lead_form",
+        spaceId: showSpacePicker && pickedSpace ? pickedSpace.id : (formSpaces.length === 1 ? formSpaces[0].id : undefined),
+        hp: honeypot || undefined,
+        formToken: sendFormToken(),
+        turnstileToken: turnstileToken ?? undefined,
+        ...clickAttribution,
+      });
+      onSubmitted(data, sent);
+    } catch (e) {
+      onSubmitError(e, sent);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
   };
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSubmit(); };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); void doSubmit(); };
   // Every field SUBMIT checks, in the order they're checked (the first one
   // missing gets focus), each with whether it's a custom field.
   const requiredInOrder = (): Array<[FormFieldDef, boolean]> => [
@@ -1229,13 +1628,22 @@ export default function LeadForm() {
    *     this check) to see.
    */
   const isFieldFilled = (field: FormFieldDef, isCustomField = false): boolean => {
+    // A guest count is read the way people type one ("30-40", "50+",
+    // "approx 40"); one with no number in it, 0, or too many is never sent,
+    // required or not.
+    if (!isCustomField && field.id === 'guestCount') return !guestCountError(form.guestCount, !!field.required);
+    // Exactly the server's email rule (shared/enquiryRules.ts), so an address
+    // NEXT lets through is never refused at SUBMIT on step 2.
+    if (!isCustomField && field.id === 'email' && (form.email ?? '').trim()) return isValidEnquiryEmail(form.email);
     if (!field.required) return true;
     if (isCustomField) return !!(customFieldValues[field.label] ?? '').trim();
     if (field.id === 'eventDate') return noDateYet || !!(form.eventDate ?? '').trim();
-    if (field.id === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
-    // "Filled" isn't the same as "a valid number" — reject "abc", "0", "-5".
-    if (field.id === 'guestCount') return parseInt(form.guestCount ?? '', 10) >= 1;
     return !!(form[field.id] ?? '').trim();
+  };
+  // The server refused this field's current value (it hasn't been changed since).
+  const serverErrorOn = (f: FormFieldDef, isCustom = false) => {
+    const e = isCustom ? undefined : serverFieldErrors[f.id];
+    return !!e && e.value === (form[f.id] ?? '');
   };
 
   // Error id/message plumbing for inline field errors — the single place
@@ -1243,13 +1651,14 @@ export default function LeadForm() {
   // field's error disappears the moment it's actually fixed (isFieldFilled
   // says so again) without any separate per-keystroke clearing logic.
   const fieldErrorId = (f: FormFieldDef) => `${fieldElId(f)}-error`;
-  const fieldHasError = (f: FormFieldDef, isCustom = false) => touchedInvalid.has(f.id) && !isFieldFilled(f, isCustom);
+  const fieldHasError = (f: FormFieldDef, isCustom = false) => (touchedInvalid.has(f.id) && !isFieldFilled(f, isCustom)) || serverErrorOn(f, isCustom);
   // Something typed but not valid gets its own wording: "Please fill in
   // Email" for an address that is filled in (just malformed) misled people.
   const fieldErrorMessage = (f: FormFieldDef) => {
-    if (f.id === 'email' && (form.email ?? '').trim()) return "Enter a valid email address, like name@example.com.";
-    if (f.id === 'guestCount' && (form.guestCount ?? '').trim()) return "Enter 1 or more guests.";
-    return f.id === 'guestCount' ? "Please tell us how many guests you're expecting." : `Please fill in "${f.label}".`;
+    if (f.id === 'email' && (form.email ?? '').trim()) return EMAIL_INVALID;
+    if (f.id === 'guestCount') return guestCountError(form.guestCount, true) ?? "Please tell us how many guests you're expecting.";
+    if (serverErrorOn(f)) return serverFieldErrors[f.id].message;
+    return `Please fill in "${f.label}".`;
   };
   function FieldError({ field, isCustom }: { field: FormFieldDef; isCustom?: boolean }) {
     if (!fieldHasError(field, isCustom)) return null;
@@ -1267,6 +1676,21 @@ export default function LeadForm() {
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
       <div className="text-xl italic animate-pulse text-gray-600">Loading…</div>
     </div>
+  );
+  // The venue lookup kept failing (retried with backoff first, and again
+  // every 20 s from here): say so and offer Try again, rather than a form
+  // without a venue that could never send. Anything typed is kept.
+  if (venueFailed) return (
+    <main className={isEmbed ? "py-12 px-4 text-center" : "min-h-screen flex items-center justify-center bg-[#f8f5f0] px-4 text-center"}>
+      <div className="max-w-md mx-auto" role="alert">
+        <h1 className="text-xl font-semibold text-gray-800 mb-2">We couldn&rsquo;t load the form</h1>
+        <p className="text-sm text-gray-600 mb-4">Something interrupted the connection. Please check you&rsquo;re online and try again.</p>
+        <button type="button" disabled={venueQ.isFetching} onClick={() => { void venueQ.refetch(); }}
+          className="h-10 px-5 rounded-md border border-gray-300 bg-white text-sm font-bold tracking-wide uppercase text-gray-700 hover:border-gray-400 disabled:opacity-60">
+          {venueQ.isFetching ? "Trying again…" : "Try again"}
+        </button>
+      </div>
+    </main>
   );
   // A wrong or retired link used to show a normal-looking form that only
   // failed at submit, with a passing "Venue not found" toast.
@@ -1309,10 +1733,9 @@ export default function LeadForm() {
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
   const successMsg   = (venue as any)?.formSuccessMessage || DEFAULT_FORM_SUCCESS_MESSAGE;
-  // Only point people at their inbox when the confirmation email really went.
-  const inboxNote = autoReplySent
-    ? "We've emailed you a copy — check your inbox (and junk folder)."
-    : null;
+  // Only point people at their inbox when the confirmation email really went
+  // (or is on its way: the server sends it just after answering).
+  const inboxNote = autoReplyNote(autoReply);
   // Warm cream/linen defaults — a venue's own formPageBg/formCardBg still wins.
   const formPageBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formPageBg || "#f4efe6");
   const formPageBgImage = bgTransparent ? null : ((venue as any)?.formPageBgImage || null);
@@ -1360,15 +1783,34 @@ export default function LeadForm() {
   // first render, so nothing is shown or saved before it's checked.
   if (!resumeChecked && venue?.ownerId) {
     setResumeChecked(true);
-    const r = resumeFrom(storedProgress, { ownerId: venue.ownerId, detailsValid: detailFields.every(f => isFieldFilled(f)), email: form.email, nowMs: Date.now() });
-    setResumedStep2(r.step === 2);
-    if (r.step !== embedStep || r.leadId !== capturedLeadId) {
-      setEmbedStep(r.step);
-      setCapturedLeadId(r.leadId);
-      setCapturedLeadToken(r.leadToken);
-      setCapturedEmail(r.leadEmail);
-      setCapturedAt(r.leadAt);
-      lastFocusKey.current = `form-${r.step}`; // not a step change the visitor made: focus stays put
+    // Sent from this device a little while ago: on the page it was sent
+    // from, show "Enquiry Received!" again, not an empty step 1; any other
+    // page shows the form, with a line saying an enquiry was sent
+    // (sentConfirmation). The enquiry sent is never used for another
+    // SUBMIT: "Send another enquiry" starts clean.
+    const sent = sentConfirmation(storedProgress, {
+      ownerId: venue.ownerId, nowMs: Date.now(), keepMs: SENT_CONFIRMATION_KEEP_MS,
+      page: thisPage, frame: thisFrame, tabToken: storageOk ? readSentToken() : null,
+    });
+    if (sent?.samePage) {
+      submittedRef.current = true;
+      setSubmitted(true);
+      setSubmittedLeadId(sent.leadId);
+      setSubmittedLeadToken(sent.leadToken);
+      setRestoredWalkthrough(sent.walkthroughSummary);
+      setEmbedStep(1);
+      setHeld(NO_HELD);
+      lastFocusKey.current = "done-1"; // not something the visitor did: focus stays put
+    } else {
+      if (sent) setSentElsewhereAt(sent.sentAt);
+      const r = resumeFrom(storedProgress, { ownerId: venue.ownerId, detailsValid: detailFields.every(f => isFieldFilled(f)), email: form.email, nowMs: Date.now() });
+      setResumedStep2(r.step === 2);
+      if (r.step !== embedStep || r.leadId !== held.leadId) {
+        setEmbedStep(r.step);
+        // Restored, not saved by this page load: never given another email.
+        setHeld({ leadId: r.leadId, leadToken: r.leadToken, leadEmail: r.leadEmail, leadAt: r.leadAt, fromThisPage: false });
+        lastFocusKey.current = `form-${r.step}`; // not a step change the visitor made: focus stays put
+      }
     }
   }
 
@@ -1381,7 +1823,7 @@ export default function LeadForm() {
 
   // Price guidance once a space or a guest count is chosen (a one-space
   // venue's space counts as chosen).
-  const guestsN = parseInt(form.guestCount ?? '', 10) >= 1 ? parseInt(form.guestCount!, 10) : null;
+  const guestsN = guestCountValue(form.guestCount);
   const guidance = priceGuidance(
     formSpaces,
     pickedSpace ?? (formSpaces.length === 1 && guestsN ? formSpaces[0] : undefined),
@@ -1400,12 +1842,17 @@ export default function LeadForm() {
   }
   // Hidden from people (off-screen, not focusable, ignored by screen
   // readers); form-filling bots fill it in, and the server then drops the
-  // submission while showing them a normal success.
+  // submission while showing them a normal success. Its name says nothing a
+  // browser's autofill or a password manager would take for a URL, email,
+  // name, phone or code, and it is marked for those tools to skip. (On the
+  // wire it is still `hp`.)
   function renderHoneypot() {
     return (
       <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
-        <label>Leave this empty
-          <input type="text" name="vf-confirm-url" tabIndex={-1} autoComplete="off" value={honeypot} onChange={e => setHoneypot(e.target.value)} />
+        <label>Leave blank
+          <input type="text" name="vf-hp-extra" tabIndex={-1} autoComplete="off"
+            data-1p-ignore="" data-lpignore="true" data-bwignore="" data-form-type="other"
+            value={honeypot} onChange={e => setHoneypot(e.target.value)} />
         </label>
       </div>
     );
@@ -1433,12 +1880,21 @@ export default function LeadForm() {
       const placeholder = field.id === 'message'
         ? (MESSAGE_PLACEHOLDER[form.eventType ?? ''] || "Occasion, seating, dietaries…")
         : "Any additional details…";
+      // The server's limits, so a long answer stops at the box instead of
+      // failing at SUBMIT. Near the end of the message box, a count.
+      const max = !isCustom && field.id === 'message' ? ENQUIRY_LIMITS.message : ENQUIRY_LIMITS.customField;
+      const countId = `${controlId}-count`;
+      const showCount = value.length >= max * 0.9;
       return (
         <>
           <Textarea id={controlId} value={value} onChange={onChange} required={field.required}
-            aria-invalid={hasError} aria-describedby={describedBy}
+            maxLength={max}
+            aria-invalid={hasError} aria-describedby={[describedBy, showCount ? countId : undefined].filter(Boolean).join(' ') || undefined}
             placeholder={placeholder}
             rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'py-1.5 px-2' : ''}`} />
+          {showCount && (
+            <p id={countId} className="text-[11px] text-gray-600 mt-0.5 text-right">{value.length.toLocaleString('en-NZ')} of {max.toLocaleString('en-NZ')} characters</p>
+          )}
           <FieldError field={field} isCustom={isCustom} />
         </>
       );
@@ -1452,7 +1908,8 @@ export default function LeadForm() {
             id={controlId}
             value={value}
             onChange={(v) => { setNoDateYet(false); setForm(p => ({ ...p, eventDate: v })); }}
-            min={toLocalDateInput(new Date())}
+            // Today at the venue, not on this device's calendar.
+            min={wallDateKeyInTz(new Date(), formConfig?.timeZone ?? "Pacific/Auckland")}
             availability={availabilityOpts}
             disabled={noDateYet}
             ariaInvalid={hasError}
@@ -1485,6 +1942,9 @@ export default function LeadForm() {
       );
     }
     if (field.id === 'eventTime') {
+      // A time with no date can't be placed on a day: it goes into the
+      // message instead ("Preferred time: 7:30 pm"), and this says so.
+      const timeOnly = !!value && (noDateYet || !(form.eventDate ?? '').trim());
       return (
         <>
           <TimePickerField
@@ -1492,11 +1952,12 @@ export default function LeadForm() {
             value={value}
             onChange={(v) => setForm(p => ({ ...p, eventTime: v }))}
             ariaInvalid={hasError}
-            ariaDescribedby={describedBy}
+            ariaDescribedby={[describedBy, timeOnly ? `${controlId}-note` : undefined].filter(Boolean).join(' ') || undefined}
             inputClass={inputClass}
             accentColor={formButtonColor}
             accentTextColor={textOnButton}
           />
+          {timeOnly && <p id={`${controlId}-note`} className="text-[11px] text-gray-600 mt-1 leading-snug">No date yet, so we&rsquo;ll pass this time on in your message.</p>}
           <FieldError field={field} isCustom={isCustom} />
         </>
       );
@@ -1504,13 +1965,17 @@ export default function LeadForm() {
     // Email: a one-tap "did you mean gmail.com?" fix for a common domain
     // typo — never a hard block, just a suggestion under the field.
     if (field.id === 'email') {
-      const fix = suggestEmailFix(value);
+      // An address the server would refuse only for a stray character (a
+      // trailing full stop or comma, a space, an invisible character from a
+      // paste) gets the same one-tap fix as a domain typo.
+      const tidy = tidyEnquiryEmail(value);
+      const fix = suggestEmailFix(tidy ?? value) ?? tidy;
       const showFix = !!fix && fix !== value.trim().toLowerCase();
       return (
         <>
           <Input id={controlId} type="email" value={value} onChange={onChange} required={field.required}
             autoComplete={!isCustom ? AUTOCOMPLETE.email : undefined}
-            maxLength={MAX_LENGTH.email}
+            maxLength={!isCustom ? MAX_LENGTH.email : ENQUIRY_LIMITS.customField}
             aria-invalid={hasError} aria-describedby={describedBy}
             placeholder="" className={inputClass} />
           {showFix && (
@@ -1519,6 +1984,27 @@ export default function LeadForm() {
               Did you mean <strong style={{ color: formButtonColor }}>{fix}</strong>?
             </button>
           )}
+          <FieldError field={field} isCustom={isCustom} />
+        </>
+      );
+    }
+    // Guest count: a text box with the number pad, read leniently ("30-40",
+    // "50+", "approx 40"). A number input threw a range away (Chrome) or
+    // merged it into 3040 (Safari).
+    if (!isCustom && field.id === 'guestCount') {
+      const note = guestCountNote(value);
+      const noteId = `${controlId}-note`;
+      return (
+        <>
+          <Input id={controlId} type="text" inputMode="numeric" enterKeyHint="done" autoComplete="off"
+            value={value} onChange={e => { setGuestConfirm(null); onChange(e); }}
+            required={field.required} maxLength={60}
+            aria-invalid={hasError}
+            aria-describedby={[describedBy, note ? noteId : undefined].filter(Boolean).join(' ') || undefined}
+            className={inputClass} />
+          <div aria-live="polite">
+            {note && <p id={noteId} className="text-[11px] text-gray-600 mt-1 leading-snug">{note}</p>}
+          </div>
           <FieldError field={field} isCustom={isCustom} />
         </>
       );
@@ -1534,10 +2020,9 @@ export default function LeadForm() {
         onBlur={field.id === 'phone' ? (e: React.FocusEvent<HTMLInputElement>) => setForm(p => ({ ...p, phone: formatNZPhone(e.target.value) })) : undefined}
         required={field.required}
         autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
-        maxLength={!isCustom ? MAX_LENGTH[field.id] : undefined}
+        maxLength={!isCustom ? MAX_LENGTH[field.id] : ENQUIRY_LIMITS.customField}
         aria-invalid={hasError}
         aria-describedby={describedBy}
-        min={field.id === 'guestCount' ? 1 : undefined}
         placeholder={field.id === 'phone' ? '+64 21 000 0000' : ''}
         className={inputClass}
       />
@@ -1559,7 +2044,7 @@ export default function LeadForm() {
     const selected = form[field.id] ?? '';
     // Budget bracket ÷ guest count, live — helps people self-qualify instead
     // of guessing whether their headcount fits the bracket they picked.
-    const perGuest = field.id === 'budgetRange' ? perGuestBudget(selected, form.guestCount ?? '') : null;
+    const perGuest = field.id === 'budgetRange' ? perGuestBudget(selected, guestsN) : null;
     const budgetGuide = field.id === 'budgetRange' ? guidance.budget : null;
     return (
       <>
@@ -1596,7 +2081,7 @@ export default function LeadForm() {
   function renderEventTypeSelect() {
     const field = eventFields.find(f => f.id === 'eventType');
     const hasError = field ? fieldHasError(field) : false;
-    const extra = EVENT_EXTRA[form.eventType ?? ''];
+    const extra = eventExtraFor(form.eventType, eventFields.some(f => f.id === 'eventFormat'));
     const isCorporate = form.eventType === 'Corporate Dinner';
     return (
       <>
@@ -1622,6 +2107,7 @@ export default function LeadForm() {
             <label id={`${formId}-event-detail-label`} className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">{extra.label}</label>
             {extra.text ? (
               <Input type="text" value={form.eventDetail ?? ''} onChange={e => setForm(p => ({ ...p, eventDetail: e.target.value }))}
+                aria-labelledby={`${formId}-event-detail-label`} maxLength={ENQUIRY_LIMITS.eventDetail}
                 placeholder="Engagement, farewell, product launch…" className={inputClass} />
             ) : (
               <div role="radiogroup" aria-labelledby={`${formId}-event-detail-label`} onKeyDown={onArrowChoose} className="flex gap-2 flex-wrap">
@@ -1646,8 +2132,9 @@ export default function LeadForm() {
             its own visible/required settings, unchanged here). */}
         {isCorporate && (
           <div className="mt-2.5">
-            <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">Invoice to</label>
-            <Input type="text" value={form.invoicingNote ?? ''} onChange={e => setForm(p => ({ ...p, invoicingNote: e.target.value }))}
+            <label htmlFor={`${formId}-invoicingNote`} className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">Invoice to</label>
+            <Input id={`${formId}-invoicingNote`} type="text" value={form.invoicingNote ?? ''} onChange={e => setForm(p => ({ ...p, invoicingNote: e.target.value }))}
+              maxLength={ENQUIRY_LIMITS.invoicingNote}
               placeholder="Accounts email or PO no." className={inputClass} />
           </div>
         )}
@@ -1721,12 +2208,50 @@ export default function LeadForm() {
         full-page confirmation screens (see WalkthroughRequest). Needs the
         lead submit() just created and its proof-of-ownership token. ───── */
   function renderWalkthroughStep(size: 'sm' | 'lg') {
-    if (!venue?.ownerId || !submittedLeadId || !submittedLeadToken || formConfig?.walkthroughEnabled === false) return null;
+    if (!venue?.ownerId || !submittedLeadId || formConfig?.walkthroughEnabled === false) return null;
+    // After a reload: offered again only in the tab that sent it, soon after
+    // (the token), and one already asked for is shown as asked for.
+    if (!submittedLeadToken && !restoredWalkthrough) return null;
     return (
       <WalkthroughRequest ownerId={venue.ownerId} leadId={submittedLeadId} leadToken={submittedLeadToken}
         clientEmail={(form.email ?? '').trim()} big={size === 'lg'}
         accentColor={formButtonColor} accentTextColor={textOnButton}
-        onRequested={() => postToParent({ type: "vf-walkthrough-requested" })} />
+        requested={restoredWalkthrough}
+        onRequested={(summary) => { rememberWalkthrough(summary); postToParent({ type: "vf-walkthrough-requested" }); }} />
+    );
+  }
+
+  /* ── An enquiry this device sent a little while ago, from another page (or
+        one we can't tell apart): said above the form, not shown again. ── */
+  function renderSentNote(size: 'sm' | 'lg') {
+    if (sentElsewhereAt == null || submitted) return null;
+    const time = new Intl.DateTimeFormat("en-NZ", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(sentElsewhereAt));
+    return (
+      <div role="status" className={`rounded border border-gray-200 bg-gray-50 ${size === 'lg' ? 'px-4 py-2.5 text-sm mb-5' : 'px-3 py-2 text-xs mb-3'} text-gray-600`}>
+        Your enquiry was sent at {time}, thank you. To send another one, fill in the form below.
+      </div>
+    );
+  }
+
+  /* ── "Did you mean 3,040 guests?" — asked before sending a very large
+        guest count, with Yes (send it) and Change (back to the box). ──── */
+  function renderGuestConfirm() {
+    if (guestConfirm == null) return null;
+    const guestField = eventFields.find(f => f.id === 'guestCount');
+    return (
+      <div role="alert" className="rounded border border-[#d8cdb8] bg-[#fbf7ef] px-3 py-2 text-xs text-gray-800">
+        <p>Did you mean {guestConfirm.toLocaleString('en-NZ')} guests?</p>
+        <div className="mt-1.5 flex gap-2">
+          <button type="button" onClick={() => { const n = guestConfirm; setGuestConfirm(null); void doSubmit({ guestsConfirmed: n }); }}
+            className="rounded px-3 py-1.5 font-bold tracking-wide uppercase text-[11px]" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+            Yes
+          </button>
+          <button type="button" onClick={() => { setGuestConfirm(null); if (guestField) document.getElementById(fieldElId(guestField))?.focus(); }}
+            className="rounded px-3 py-1.5 font-bold tracking-wide uppercase text-[11px] border border-gray-300 bg-white text-gray-700">
+            Change
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -1763,7 +2288,9 @@ export default function LeadForm() {
     // into oversized buttons and a wide, squat calendar instead of the
     // compact card it's designed as.
     return (
-      <div style={{ fontFamily, backgroundColor: formCardBg }} className={cn("vf-embed-root vf-card w-full max-w-md mx-auto overflow-hidden rounded-lg", bgOverride && !bgTransparent ? "border border-[#e6dccb] shadow-sm" : "")}>
+      // overflow-clip (not hidden) while the button row is sticky: a hidden
+      // overflow would make the card its own scroll box and the row wouldn't stick.
+      <div style={{ fontFamily, backgroundColor: formCardBg }} className={cn("vf-embed-root vf-card w-full max-w-md mx-auto rounded-lg", stickyActions ? "overflow-clip" : "overflow-hidden", bgOverride && !bgTransparent ? "border border-[#e6dccb] shadow-sm" : "")}>
 
         {/* Bottom-sheet drag handle — floating placement, narrow viewport only. */}
         {isSheet && (
@@ -1802,7 +2329,7 @@ export default function LeadForm() {
             {renderWalkthroughStep('sm')}
             <button type="button" onClick={resetForm}
               className="mt-5 h-9 px-4 border border-gray-200 rounded text-xs font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">
-              Send another
+              Send another enquiry
             </button>
           </div>
         ) : isCompact ? (
@@ -1812,6 +2339,7 @@ export default function LeadForm() {
           // visitor already committed to by tapping an ad. Same fields, same
           // renderField()/reqMark() as the wizard steps — just laid out flat.
           <div className="px-4 pb-4 pt-3 space-y-3">
+            {renderSentNote('sm')}
             {renderDraftNote('sm')}
             {renderHoneypot()}
             {eventFields.some(f => f.id === 'eventType') && (
@@ -1890,11 +2418,12 @@ export default function LeadForm() {
             {renderTurnstile()}
             {renderMissingNote()}
             {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
-            <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
+            {renderGuestConfirm()}
+            <button type="button" disabled={sending} onClick={() => { void doSubmit(); }}
               aria-describedby={missingNote ? missingNoteId : undefined}
               className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
-              {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
+              {sending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
             </button>
             <p className="text-[9px] text-center text-gray-600">By submitting you agree to be contacted by {venueName}.</p>
           </div>
@@ -1927,7 +2456,26 @@ export default function LeadForm() {
                     taps an ad shouldn't hit a 12-option dropdown and a
                     guest-count box before they've typed their name. ────── */}
               {embedStep === 1 && (
-                <div className="space-y-2.5">
+                // A real form, so Enter or Go on a phone keyboard is NEXT (with
+                // the same checks), never a submit: SUBMIT is on step 2.
+                <form noValidate className="space-y-2.5" style={stepGuard ? { pointerEvents: 'none' } : undefined}
+                  onSubmit={e => {
+                    e.preventDefault();
+                    // Not disabled while incomplete (a faded button said nothing):
+                    // mark what's missing at each field and go to the first one.
+                    // An answer the server refused is missing too until it's changed.
+                    const missing = detailFields.filter(f => !isFieldFilled(f) || serverErrorOn(f));
+                    if (missing.length > 0) {
+                      setTouchedInvalid(new Set(missing.map(f => f.id)));
+                      requestAnimationFrame(() => { document.getElementById(fieldElId(missing[0]))?.focus(); });
+                      return;
+                    }
+                    // Autosave a contactable lead the moment we have a name
+                    // + email (saveStep1, in the background).
+                    if (venue?.ownerId) saveStep1(venue.ownerId);
+                    setEmbedStep(2);
+                  }}>
+                  {renderSentNote('sm')}
                   {renderDraftNote('sm')}
                   {renderHoneypot()}
                   <div className="grid grid-cols-2 gap-2">
@@ -1938,49 +2486,17 @@ export default function LeadForm() {
                       </div>
                     ))}
                   </div>
-                  <button type="button" onClick={() => {
-                    // Not disabled while incomplete (a faded button said nothing):
-                    // mark what's missing at each field and go to the first one.
-                    if (!detailsValid) {
-                      const missing = detailFields.filter(f => !isFieldFilled(f));
-                      setTouchedInvalid(new Set(missing.map(f => f.id)));
-                      requestAnimationFrame(() => { document.getElementById(fieldElId(missing[0]))?.focus(); });
-                      return;
-                    }
-                    // Autosave a contactable lead the moment we have a name
-                    // + email — once per person, so going Back then Next
-                    // again (or a reload in between) doesn't create a second
-                    // partial row (nor while the first save is still on its
-                    // way). A changed email is someone else as far as we can
-                    // tell: they get their own lead, and the first is left
-                    // as it was rather than given another person's details.
-                    if (!canReuseLead(capturedLead, form.email) && !startCapture.isPending && venue?.ownerId) {
-                      setCapturedLeadId(null);
-                      setCapturedLeadToken(null);
-                      setCapturedEmail(null);
-                      setCapturedAt(null);
-                      startCapture.mutate({
-                        ownerId: venue.ownerId,
-                        firstName: (form.firstName ?? '').trim(),
-                        lastName: form.lastName?.trim() || undefined,
-                        email: (form.email ?? '').trim(),
-                        phone: form.phone?.trim() || undefined,
-                        company: form.company?.trim() || undefined,
-                        hp: honeypot || undefined,
-                        formToken: sendFormToken(),
-                        ...clickAttribution,
-                      });
-                    }
-                    setEmbedStep(2);
-                  }}
+                  <button type="submit"
                     className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                     style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
-                </div>
+                </form>
               )}
 
               {/* ── STEP 2: Your Event — submits directly, no Summary step. ── */}
               {embedStep === 2 && (
-                <div className="space-y-3">
+                // What the visitor does here is the step-2 "still here" ping's cue.
+                <div className="space-y-3" style={stepGuard ? { pointerEvents: 'none' } : undefined}
+                  onInputCapture={noteStep2Activity} onPointerDownCapture={noteStep2Activity} onKeyDownCapture={noteStep2Activity}>
                   {resumedStep2 && renderResumedNote()}
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
@@ -2056,17 +2572,25 @@ export default function LeadForm() {
 
                   {renderHoneypot()}
                   {renderTurnstile()}
-                  {renderMissingNote()}
-                  {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
-                  <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => { setResumedStep2(false); setEmbedStep(1); }}
-                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
-                    <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
-                      aria-describedby={missingNote ? missingNoteId : undefined}
-                      className="vf-submit flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-                      style={{ backgroundColor: formButtonColor, color: textOnButton }}>
-                      {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
-                    </button>
+                  {/* Kept at the bottom of the frame when the host page cuts the
+                      form off (stickyActions), with the notes about SUBMIT inside
+                      it, so the row never covers them. */}
+                  <div ref={stickyBarRef}
+                    className={stickyActions ? "sticky bottom-0 z-10 -mx-4 px-4 pt-2 pb-2 space-y-3 border-t border-[#e6dccb] shadow-[0_-4px_10px_rgba(0,0,0,0.06)]" : "space-y-3"}
+                    style={stickyActions ? { backgroundColor: formCardBg === 'transparent' ? '#fffdf9' : formCardBg } : undefined}>
+                    {renderMissingNote()}
+                    {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
+                    {renderGuestConfirm()}
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => { setResumedStep2(false); setEmbedStep(1); }}
+                        className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50 bg-white">← BACK</button>
+                      <button type="button" disabled={sending} onClick={() => { void doSubmit(); }}
+                        aria-describedby={missingNote ? missingNoteId : undefined}
+                        className="vf-submit flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                        style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+                        {sending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[9px] text-center text-gray-600">By submitting you agree to be contacted by {venueName}.</p>
                 </div>
@@ -2144,7 +2668,7 @@ export default function LeadForm() {
             {renderWalkthroughStep('lg')}
             <button type="button" onClick={resetForm}
               className="mt-6 h-11 px-6 border border-gray-200 rounded text-sm font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">
-              Send another
+              Send another enquiry
             </button>
             <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
               <div className="font-bold text-xs tracking-widest text-gray-600">POWERED BY VenueFlowHQ</div>
@@ -2159,6 +2683,7 @@ export default function LeadForm() {
             {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
             <div className="rounded-xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-7" style={{ backgroundColor: formCardBg }}>
 
+              {sentElsewhereAt != null && <div className="-mb-3">{renderSentNote('lg')}</div>}
               {showDraftNote && <div className="-mb-3">{renderDraftNote('lg')}</div>}
 
               {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}
@@ -2272,10 +2797,11 @@ export default function LeadForm() {
 
             {renderTurnstile()}
             {submitError && <p role="alert" className="text-red-700 text-sm">{submitError}</p>}
-            <Button type="submit" disabled={submitLead.isPending}
+            {renderGuestConfirm()}
+            <Button type="submit" disabled={sending}
               className="w-full font-bold tracking-widest rounded-lg h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
-              {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
+              {sending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
             <p className="text-xs text-center text-gray-600">

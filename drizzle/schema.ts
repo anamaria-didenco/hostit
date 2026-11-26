@@ -392,6 +392,11 @@ export const leads = pgTable("leads", {
   // Last time a win-back email went to this lead. A lead is never sent
   // another win-back within 90 days of this.
   lastWinBackAt: timestamp("lastWinBackAt"),
+  // A step-1 (partial) enquiry only: the last "still here" ping from the
+  // visitor's open form on step 2 (leads.touchPartial). The Unfinished alert
+  // counts its 20 minutes from this, capped (shared/enquiryTiming.ts). Never
+  // touches updatedAt or lastActivityAt, which "gone quiet" reads.
+  partialSeenAt: timestamp("partialSeenAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -1496,10 +1501,22 @@ export const venueNotifications = pgTable("venue_notifications", {
   dedupeKey: varchar("dedupeKey", { length: 160 }),
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  // The alert's email, retried until the venue's mail server takes it
+  // (shared/emailDelivery.ts). emailStatus is null when no email is wanted
+  // (email: false) and on alerts from before retries existed.
+  emailStatus: varchar("emailStatus", { length: 12 }),
+  emailAttempts: integer("emailAttempts").default(0).notNull(),
+  // When the next try is due; while "sending", when that run's claim ends.
+  emailNextAt: timestamp("emailNextAt"),
+  emailLastError: varchar("emailLastError", { length: 500 }),
+  emailedAt: timestamp("emailedAt"),
 }, (t) => ({
   dedupeUnique: uniqueIndex("venue_notifications_owner_dedupe_uq")
     .on(t.ownerId, t.dedupeKey)
     .where(sql`${t.dedupeKey} IS NOT NULL`),
+  emailDue: index("venue_notifications_email_due_idx")
+    .on(t.emailNextAt)
+    .where(sql`${t.emailStatus} IN ('pending', 'sending')`),
 }));
 export type VenueNotification = typeof venueNotifications.$inferSelect;
 
@@ -1522,6 +1539,38 @@ export const leadSequenceSends = pgTable("lead_sequence_sends", {
   sendUnique: uniqueIndex("lead_sequence_sends_uq").on(t.leadId, t.sequenceKey, t.step, t.refId),
 }));
 export type LeadSequenceSend = typeof leadSequenceSends.$inferSelect;
+
+// ─── A finished enquiry's two emails ─────────────────────────────────────────
+// The New Event Enquiry email to the venue (kind "venue") and the visitor's
+// "we've got your enquiry" confirmation (kind "auto_reply"). leads.submit
+// queues them once the lead is saved and answers the visitor straight away;
+// they are sent after that and retried with growing gaps
+// (shared/emailDelivery.ts). One row per lead and kind: the unique index
+// means a retried or repeated SUBMIT can never queue a second email.
+export const enquiryEmails = pgTable("enquiry_emails", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  leadId: integer("leadId").notNull(),
+  kind: varchar("kind", { length: 20 }).notNull(),
+  // pending | sending | sent | failed | skipped (EmailDeliveryStatus).
+  status: varchar("status", { length: 12 }).default("pending").notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  // When the next try is due; while "sending", when that run's claim ends.
+  nextAttemptAt: timestamp("nextAttemptAt").defaultNow().notNull(),
+  // The mail server's reply on the last failure (describeSmtpError): codes
+  // and its own words, never the email or any address.
+  lastError: varchar("lastError", { length: 500 }),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (t) => ({
+  leadKindUnique: uniqueIndex("enquiry_emails_lead_kind_uq").on(t.leadId, t.kind),
+  due: index("enquiry_emails_due_idx")
+    .on(t.nextAttemptAt)
+    .where(sql`${t.status} IN ('pending', 'sending')`),
+}));
+export type EnquiryEmail = typeof enquiryEmails.$inferSelect;
+export type InsertEnquiryEmail = typeof enquiryEmails.$inferInsert;
 // ─── Lead conversation (emails in and out) ───────────────────────────────────
 // Every client email we send about an enquiry ("out") and every reply matched
 // back to it from the venue's inbox ("in"), so the enquiry shows the whole

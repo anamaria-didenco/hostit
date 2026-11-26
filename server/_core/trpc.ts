@@ -1,6 +1,7 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
+import { ENQUIRY_FIELD_LABELS } from "@shared/enquiryRules";
 import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
@@ -8,11 +9,14 @@ const t = initTRPC.context<TrpcContext>().create({
   // A date-clash CONFLICT (server/availability.ts) carries the clash list so
   // the UI can show what's in the way and offer "Book anyway".
   errorFormatter({ shape, error }) {
+    // Which input field a validation failure is about ("email"), so a form
+    // can put the message at that field.
+    const field = invalidField(error);
     const clashes = (error.cause as { clashes?: unknown } | undefined)?.clashes;
-    if (Array.isArray(clashes)) return { ...shape, data: { ...shape.data, clashes } };
+    if (Array.isArray(clashes)) return { ...shape, data: { ...shape.data, clashes, field } };
     const message = userFacingMessage(error);
-    if (message !== shape.message) return { ...shape, message, data: { ...shape.data, stack: undefined } };
-    return shape;
+    if (message !== shape.message) return { ...shape, message, data: { ...shape.data, stack: undefined, field } };
+    return { ...shape, data: { ...shape.data, field } };
   },
 });
 
@@ -27,10 +31,22 @@ export function isDatabaseError(error: { message: string; cause?: unknown }): bo
     || (typeof cause?.code === "string" && /^[0-9A-Z]{5}$/.test(cause.code));
 }
 
+// The enquiry form's own names for its fields (eventDetail is "What's the
+// occasion?" on screen, invoicingNote "Invoice to"), so a message names a
+// box the visitor can see.
 const FIELD_LABELS: Record<string, string> = {
   firstName: "First name", lastName: "Last name", email: "Email", phone: "Phone",
   company: "Company", message: "Message", guestCount: "Guest count", eventDate: "Event date",
+  ...ENQUIRY_FIELD_LABELS,
 };
+
+/** The top-level input field the first validation issue is about, if any. */
+export function invalidField(error: TRPCError): string | undefined {
+  if (error.code !== "BAD_REQUEST") return undefined;
+  const issues = (error.cause as { issues?: { path?: PropertyKey[] }[] } | undefined)?.issues;
+  const key = Array.isArray(issues) ? issues[0]?.path?.[0] : undefined;
+  return typeof key === "string" && key ? key : undefined;
+}
 
 /** One readable sentence for validation and database failures; every other
  *  error keeps the message its procedure chose. */

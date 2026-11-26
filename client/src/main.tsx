@@ -8,6 +8,8 @@ import { SignedOutBanner, SignedOutNotice, watchForSignOut } from "./lib/session
 import "./index.css";
 import "./lib/installPrompt"; // starts listening for the browser's "install" offer straight away
 import { isPublicClientPath } from "@shared/pwaScope";
+import { ENQUIRY_REQUEST_TIMEOUT_MS } from "@shared/enquiryTiming";
+import { withEnquiryTimeout } from "./lib/requestTimeout";
 
 // Installable app. The manifest is linked on staff screens only: a client opening a proposal or the
 // enquiry form must not be offered "install" (the app opens the staff dashboard).
@@ -43,13 +45,18 @@ const queryClient = new QueryClient({
 // sign-in and losing it (see lib/sessionExpiry.ts).
 watchForSignOut(queryClient);
 
+// The enquiry form's own requests give up after ENQUIRY_REQUEST_TIMEOUT_MS, so a
+// stalled SUBMIT comes back with "Your connection dropped" instead of spinning
+// for as long as the browser keeps the connection open. Nothing else is limited.
+const timedFetch = withEnquiryTimeout((input, init) => globalThis.fetch(input, init), ENQUIRY_REQUEST_TIMEOUT_MS);
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
-        return globalThis.fetch(input, {
+        return timedFetch(input, {
           ...(init ?? {}),
           credentials: "include",
         });
