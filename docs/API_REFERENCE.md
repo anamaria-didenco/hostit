@@ -208,7 +208,6 @@ Calling convention:
 ## expressBook
 
 - **checkAvailability** `query` _(public)_ — input: `z.object({ date: z.string(), ownerId: z.number() })`
-- **getVenueInfo** `query` _(public)_ — input: `z.object({ ownerId: z.number() })`
 - **submit** `mutation` _(public)_ — input: `z.object({ ownerId: z.number(), firstName: z.string().min(1), lastName: z.string().optional(), email: z.string().email(), phone: z.string().optional(), eventType: z.string().min(1), eventDate: z.string(), guestCount: z.number().int().positive(), spaceName: z.string().optional(), selectedPackageIds: z.array(z.number()).`
 
 ## dashboard

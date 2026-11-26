@@ -23,6 +23,7 @@ import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
 import { normaliseTaskPriority } from "@shared/taskFields";
 import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
+import { publicVenue } from "./publicVenue";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -37,16 +38,13 @@ const VENUE_SECRET_FIELDS = [
   "alertEmailsEnabled", "alertEmailKinds", "replyOverdueEnabled", "replyOverdueHours", "followUpSequences",
   "defaultHoldDays", "holdClientReminderEnabled",
 ] as const;
-function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
-  const safe: any = { ...row };
-  for (const k of VENUE_SECRET_FIELDS) delete safe[k];
-  return safe as T;
-}
+// Anything a visitor without this venue's login gets is the allow-list in
+// server/publicVenue.ts, never "the row minus these".
 import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, updateLeadStatus, updateLead, markLeadLost,
+  getLeads, getLeadById, createLead, completePartialLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -96,7 +94,14 @@ const validDateString = z
 // Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
 // ownerId), shared by leads.submit AND leads.startCapture — a bot hammering
 // startCapture without ever calling submit still burns the same budget,
-// rather than getting a second, unlimited quota. Skipped under
+// rather than getting a second, unlimited quota. One write is not counted:
+// the one submit that completes the caller's own still-partial lead (its
+// leadToken verifies, same email, and it wins the atomic claim in
+// leads.submit). That is the second half of one enquiry whose first half,
+// startCapture, already counted — and it inserts nothing — so three people
+// on one office connection no longer have the third refused at SUBMIT, while
+// rows created per bucket stay capped at 5, and each counted startCapture
+// buys at most one uncounted completion. Skipped under
 // `NODE_ENV=test` because the vitest suite calls these many times from the
 // same (unknown IP, ownerId 1) bucket.
 async function enforceLeadRateLimit(ctx: any, ownerId: number) {
@@ -173,18 +178,24 @@ export const appRouter = router({
         //  - a STAFF/TEAM-LINK session, which runs under the owner's id (so it
         //    looks like "self") but must never be handed stored SMTP/NBI
         //    credentials or internal config.
-        // Use the canonical VENUE_SECRET_FIELDS list so this can't drift out of
-        // sync with the sibling public endpoints (previously it omitted
-        // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
-        // info leak).
+        // Anyone else gets only the public allow-list (server/publicVenue.ts),
+        // the same as the public enquiry form and proposal page; the venue's
+        // own team and staff logins get the row minus VENUE_SECRET_FIELDS.
         const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember && !ctx.isStaff;
-        if (!isRealOwner) {
-          const safe: any = { ...vs };
-          for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
-          safe.staffEmails = null; // PII — not needed by non-owner callers
-          return safe;
+        if (isRealOwner) return vs;
+        // Someone else's venue (no login, or another venue's login): only what
+        // the public enquiry form shows (server/publicVenue.ts). Every other key
+        // is there but null, so the response keeps its shape.
+        if (ctx.user?.id !== id) {
+          const blank: any = Object.fromEntries(Object.keys(vs).map(k => [k, null]));
+          return { ...blank, ...publicVenue(vs) };
         }
-        return vs;
+        // This venue's own team and staff logins: everything but the stored
+        // credentials, internal config and the staff email list.
+        const safe: any = { ...vs };
+        for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
+        safe.staffEmails = null; // PII — not needed by non-owner callers
+        return safe;
       }),
 
     update: protectedProcedure
@@ -402,17 +413,16 @@ export const appRouter = router({
     getBySlug: publicProcedure
       .input(z.object({ slug: z.string() }))
       .query(async ({ input }) => {
-        // Find venue by slug for public lead form. Strip server secrets
-        // (SMTP creds, NBI keys/webhook secret, notification email) before
-        // returning — anything reachable here is visible to the entire
-        // internet.
+        // Find venue by slug for the public lead form. Anything reachable here
+        // is visible to the entire internet, so only the allow-listed fields
+        // go back (server/publicVenue.ts).
         const { getDb } = await import("./db");
         const { venueSettings } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) return null;
         const result = await db.select().from(venueSettings).where(eq(venueSettings.slug, input.slug)).limit(1);
-        return result[0] ? stripVenueSecrets(result[0]) : null;
+        return result[0] ? publicVenue(result[0]) : null;
       }),
     getDefault: publicProcedure.query(async () => {
       // Returns the first venue (single-venue system) for use on /enquire without a slug
@@ -421,7 +431,7 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) return null;
       const result = await db.select().from(venueSettings).limit(1);
-      return result[0] ? stripVenueSecrets(result[0]) : null;
+      return result[0] ? publicVenue(result[0]) : null;
     }),
 
     testEmail: protectedProcedure
@@ -801,10 +811,34 @@ export const appRouter = router({
         turnstileToken: z.string().max(2048).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        await enforceLeadRateLimit(ctx, input.ownerId);
+        // The visitor's OWN autosaved step-1 lead, when this completes one:
+        // the token must match, and the row must still be an untouched
+        // partial. Any enquiry staff have since worked on is left alone.
+        // The token is an HMAC the server only hands out with a lead it saved
+        // (startCapture), so the DB is read only for a real one.
+        const claimed = input.leadId && isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
+          ? await getLeadById(input.leadId, input.ownerId)
+          : undefined;
+        const partial = claimed && claimed.internalNotes === PARTIAL_LEAD_NOTE && claimed.status === "new" ? claimed : undefined;
+        // Finishing it with the email it was saved with is the second half of
+        // one enquiry whose first half, startCapture, already counted against
+        // the rate limit. So it isn't counted again, and the timing token is
+        // skipped: the venue's own page may have reloaded the form (a new
+        // token) seconds before SUBMIT. That is only a provisional pass: the
+        // request that actually completes the row keeps it. The row is
+        // claimed atomically below (completePartialLead), so a burst of
+        // submits with one token gets one free completion and the rest are
+        // counted and checked like any other. This is no proof of a person:
+        // startCapture lets a missing timing token through (cached pages), so
+        // a script can get a partial without loading the form. It gains
+        // nothing a plain submit doesn't: one completion per counted write.
+        const sameEmail = (a: string | null | undefined, b: string | null | undefined) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+        const finishingOwn = !!partial && sameEmail(partial.email, input.email);
+        if (!finishingOwn) await enforceLeadRateLimit(ctx, input.ownerId);
         const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
-        // A bot gets a convincing success and nothing is stored or sent.
-        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+        // A bot gets a convincing success and nothing is stored or sent. The
+        // honeypot always counts.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken, { timingPassed: finishingOwn })) return { id: 0, leadToken: "" } as any;
         if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
           throw new Error("Please complete the quick security check above the button, then send again.");
         }
@@ -853,26 +887,20 @@ export const appRouter = router({
         };
 
         let lead = null;
-        if (input.leadId) {
+        if (partial) {
           // Completing a lead startCapture already created at step 1 —
           // update that row rather than insert a second one, and clear the
-          // "Partial" marker (unless a staff member already overwrote it
-          // with a real note in the meantime — that's theirs, not ours to
-          // erase).
-          // Only ever complete the visitor's OWN autosaved draft: the token
-          // must match, and the row must still be an untouched partial. Any
-          // enquiry staff have since worked on is left alone.
-          const existing = isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
-            ? await getLeadById(input.leadId, input.ownerId)
-            : undefined;
-          if (existing && existing.internalNotes === PARTIAL_LEAD_NOTE && existing.status === "new") {
-            await updateLead(input.leadId, input.ownerId, {
-              ...leadData,
-              internalNotes: null,
-              updatedAt: new Date(),
-            });
-            lead = await getLeadById(input.leadId, input.ownerId);
-          }
+          // "Partial" marker. Only while it is still the untouched partial
+          // (a staff note written meanwhile is theirs, not ours to erase),
+          // and only for one request: of several racing to finish it, one
+          // gets the row and the others get null.
+          lead = await completePartialLead(partial.id, input.ownerId, leadData);
+        }
+        if (!lead && finishingOwn) {
+          // Another request finished this partial between the read above and
+          // here. This one gets no free pass: counted, and timing-checked.
+          await enforceLeadRateLimit(ctx, input.ownerId);
+          if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
         }
         if (!lead) {
           // No leadId (or its row vanished) — startCapture never ran, or
@@ -2215,8 +2243,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           const { recordProposalViewed } = await import('./proposalResponses');
           if (await recordProposalViewed(proposal)) proposal = (await getProposalByToken(input.token)) ?? proposal;
         }
-        // Also fetch venue settings for branding — STRIP secrets first since
-        // this endpoint is reachable by anyone with a proposal token.
+        // Also fetch venue settings for branding. Anyone with a proposal token
+        // can reach this, so the page gets the public fields only.
         const venue = await getVenueSettings(proposal.ownerId);
         // Internal notes are staff-only; never hand them to the client.
         const { internalNotes: _internal, ...publicProposal } = proposal;
@@ -2230,7 +2258,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // client the finished HTML instead of the built-in layout. The raw
         // template is never shipped to the public page.
         let customHtml: string | null = null;
-        const safeVenue: any = venue ? stripVenueSecrets(venue) : null;
+        const safeVenue = venue ? publicVenue(venue) : null;
         if (venue?.proposalTemplateEnabled && venue?.proposalTemplateHtml) {
           try {
             const { getDb } = await import('./db');
@@ -2260,9 +2288,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             customHtml = null;
           }
         }
-        // The raw template isn't needed (and shouldn't be exposed) on the
-        // public page — the rendered customHtml carries everything.
-        if (safeVenue) safeVenue.proposalTemplateHtml = null;
+        // The raw template never reaches the public page: it isn't one of the
+        // public fields, and the rendered customHtml carries everything.
         return { proposal: publicProposal, venue: safeVenue, menus, photos, customHtml };
       }),
 
@@ -7236,23 +7263,6 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const sameDay = await findClashes(input.ownerId, { start: midday });
         const bookedSpaces = Array.from(new Set(sameDay.map(c => c.spaceName).filter((s): s is string => !!s)));
         return { available: sameDay.length === 0, bookedSpaces };
-      }),
-    getVenueInfo: publicProcedure
-      .input(z.object({ ownerId: z.number() }))
-      .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { venueSettings, eventSpaces, menuPackages } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return null;
-        const [venue] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId));
-        const spaces = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, input.ownerId));
-        // Retired packages stay on file for past events but aren't offered.
-        const packages = (await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId)))
-          .filter(p => p.isActive);
-        // Strip secrets from the venue row before returning — this endpoint
-        // is public and previously leaked SMTP creds + NBI webhook secret.
-        return { venue: venue ? stripVenueSecrets(venue) : null, spaces, packages };
       }),
     submit: publicProcedure
       .input(z.object({

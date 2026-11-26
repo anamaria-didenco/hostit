@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allShownSelected, keepShown, selectableIds } from "@shared/bulkSelection";
+import { clearFilters, enrichRows, listRows, type LeadLike } from "@shared/enquiryFilters";
 
 // Enquiries > More actions > Select multiple. SELECT ALL used to select the
 // page's older filtered list, not the rows on screen: with the All tab showing
@@ -62,5 +63,30 @@ describe("what a selection may hold while the list isn't shown", () => {
 
   it("keeps the same empty list while the list is hidden, so nothing re-runs", () => {
     expect(selectableIds([1], "kanban", "all")).toBe(selectableIds([2], "table", "winback"));
+  });
+});
+
+describe("a filter narrowing the list cuts the selection to the rows left", () => {
+  // Needs reply shows 24; a Space filter leaves 9. The 15 others must drop out
+  // of the selection, so a bulk change only reaches what is on screen.
+  it("keeps exactly the rows the filtered list shows", () => {
+    const NOW = Date.UTC(2026, 10, 16, 21, 0);
+    const leads: LeadLike[] = Array.from({ length: 24 }, (_, i) => ({
+      id: i + 1, firstName: "Test", lastName: `Client${i + 1}`, email: `client${i + 1}@example.test`,
+      status: "new", createdAt: new Date(NOW - (i + 1) * 3_600_000), spaceId: i < 9 ? 4 : 2,
+    }));
+    const ctx = { nowMs: NOW, tz: "Pacific/Auckland", statusOrder: ["new"] };
+    const rows = enrichRows(leads, ctx);
+    const view = (space: number[]) => listRows(rows, { view: "reply", q: "", sort: { key: "urgent", dir: "asc" }, filters: { ...clearFilters(), space } }, ctx).rows.map(r => r.lead.id);
+    const all = view([]);
+    expect(all.length).toBe(24);
+    const selected = new Set(all);
+    expect(allShownSelected(selected, all)).toBe(true);
+    const shown = view([4]);
+    expect(shown.length).toBe(9);
+    const kept = keepShown(selected, shown);
+    expect(kept.size).toBe(9);
+    expect(allShownSelected(kept, shown)).toBe(true);
+    expect(allShownSelected(kept, all)).toBe(false);
   });
 });

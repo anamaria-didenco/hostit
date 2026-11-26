@@ -12,6 +12,7 @@ import {
   leadActivity,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
@@ -214,6 +215,28 @@ export async function updateLead(id: number, ownerId: number, data: Partial<Inse
   if (!db) return;
   await db.update(leads).set({ updatedAt: new Date(), ...data })
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
+}
+
+/**
+ * Finish a lead the public form saved at step 1 (startCapture), only while it
+ * is still that untouched partial: status "new" with the Partial note. One
+ * conditional UPDATE, so when several requests race to finish the same
+ * partial exactly one gets the row back. Postgres makes a second UPDATE of
+ * the row wait for the first to commit, then re-checks the WHERE, which no
+ * longer matches once the note is cleared. The rest get null. The note is
+ * cleared here; a staff note written meanwhile also stops the match, and is
+ * left alone.
+ */
+export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.update(leads).set({ updatedAt: new Date(), ...data, internalNotes: null })
+    .where(and(
+      eq(leads.id, id), eq(leads.ownerId, ownerId),
+      eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
+    ))
+    .returning();
+  return row ?? null;
 }
 
 /**

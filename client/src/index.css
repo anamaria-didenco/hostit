@@ -1316,6 +1316,9 @@
   :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today):focus-visible { outline-color: CanvasText !important; }
   :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) :not(.vf-swatch) { color: HighlightText !important; background-color: transparent !important; }
   :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) .vf-swatch { outline-color: HighlightText; }
+  /* The enquiry lanes' dots are borders, so they stay as discs in the system
+     colour; on a selected view tab they follow its highlight text. */
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) [data-lane-dot] { border-color: HighlightText !important; }
 }
 
 /* Short screens: a laptop zoomed to 200-400%, or a phone on its side. The

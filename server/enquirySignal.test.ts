@@ -93,3 +93,28 @@ describe("enquiryAction", () => {
     expect(enquiryAction("progress")).toMatchObject({ label: "Open", reply: false });
   });
 });
+
+describe("enquirySignal kind (which rule produced the signal)", () => {
+  const kind = (lead: Parameters<typeof enquirySignal>[0], ctx: Parameters<typeof enquirySignal>[1] = {}) =>
+    enquirySignal(lead, { nowMs: NOW, ...ctx }).kind;
+  it("names every branch", () => {
+    expect(kind({ status: "new", createdAt: ago(5 * HOUR) })).toBe("waiting");
+    expect(kind({ status: "contacted", respondedAt: ago(3 * DAY) }, { clientRepliedAtMs: NOW - HOUR })).toBe("client_replied");
+    expect(kind({ status: "proposal_sent", respondedAt: ago(9 * DAY), followUpDate: ago(DAY + HOUR) })).toBe("followup_overdue");
+    expect(kind({ status: "contacted", respondedAt: ago(9 * DAY), lastActivityAt: ago(9 * DAY) })).toBe("gone_quiet");
+    expect(kind({ status: "tentative", respondedAt: ago(DAY), lastActivityAt: ago(DAY) }, { holdUntilMs: NOW + 5 * DAY })).toBe("hold");
+    expect(kind({ status: "tentative", respondedAt: ago(DAY), lastActivityAt: ago(DAY) }, { holdUntilMs: NOW - HOUR })).toBe("hold_expired");
+    expect(kind({ status: "contacted", respondedAt: ago(DAY), lastActivityAt: ago(DAY) }, { hasClash: true })).toBe("clash");
+    expect(kind({ status: "new", createdAt: ago(HOUR) }, { partial: true })).toBe("partial");
+    expect(kind({ status: "contacted", respondedAt: ago(9 * DAY), lastActivityAt: ago(DAY), eventDate: ago(3 * DAY) })).toBe("date_passed");
+    expect(kind({ status: "contacted", respondedAt: ago(DAY), lastActivityAt: ago(DAY) })).toBe("in_progress");
+    expect(kind({ status: "booked" }, { eventDateMs: NOW + 5 * DAY })).toBe("confirmed");
+    for (const status of ["lost", "finished", "cancelled"]) expect(kind({ status })).toBe("closed");
+  });
+
+  it("'Follow up today' is still an overdue follow-up", () => {
+    const s = enquirySignal({ status: "proposal_sent", respondedAt: ago(9 * DAY), followUpDate: ago(2 * HOUR) }, { nowMs: NOW });
+    expect(s.text).toBe("Follow up today");
+    expect(s.kind).toBe("followup_overdue");
+  });
+});
