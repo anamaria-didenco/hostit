@@ -10,14 +10,15 @@
 import { and, eq, gte, inArray, isNull, notInArray, or, ne, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { leads, venueSettings } from "../drizzle/schema";
-import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { NON_ENQUIRY_SOURCES, PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { addBusinessHours, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@shared/businessHours";
 import { notifyVenue } from "./notify";
 import { registerJob } from "./jobs";
 
 /** Sources that aren't inbound enquiries — staff typed or imported them, so
- *  there's nobody waiting on a reply. */
-export const NON_ENQUIRY_SOURCES = ["manual", "csv_import", "healthcheck", "express_book", "xero"];
+ *  there's nobody waiting on a reply. One list, shared with the Unfinished
+ *  alert (shared/leadConstants.ts). */
+export { NON_ENQUIRY_SOURCES };
 
 /** Never alert about a lead whose reply fell due longer ago than this — keeps
  *  the first run after a deploy from alerting on every old enquiry. */

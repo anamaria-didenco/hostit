@@ -25,4 +25,15 @@ describe("unfinished enquiry alert", () => {
   it("copes with a missing name", () => {
     expect(partialEnquiryAlert({ ...lead, firstName: null, lastName: null }).title).toBe("Unfinished enquiry: Someone");
   });
+
+  it("says when they were last on the form, if step 2 was open a while", () => {
+    const pinged = partialEnquiryAlert({ ...lead, partialSeenAt: new Date("2026-10-14T01:47:00Z") });
+    expect(pinged.body).toMatch(/Started: Wed,? 14 Oct,? 2:05\s?pm/i);
+    expect(pinged.body).toMatch(/Last on the form: Wed,? 14 Oct,? 2:47\s?pm/i);
+    // No ping, or one in the same minute: just when they started.
+    expect(partialEnquiryAlert(lead).body).not.toContain("Last on the form");
+    expect(partialEnquiryAlert({ ...lead, partialSeenAt: new Date("2026-10-14T01:05:30Z") }).body).not.toContain("Last on the form");
+    // Pings stop counting 2 hours after step 1.
+    expect(partialEnquiryAlert({ ...lead, partialSeenAt: new Date("2026-10-14T09:00:00Z") }).body).toMatch(/Last on the form: Wed,? 14 Oct,? 4:05\s?pm/i);
+  });
 });
