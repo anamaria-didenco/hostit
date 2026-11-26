@@ -4291,6 +4291,8 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
                 <div className="flex flex-col gap-7 min-w-0">
+                  {/* The full month calendar comes first, then Needs you today. */}
+                  {monthCalendarCard}
                   {/* Needs you today — clashes, overdue tasks and replies,
                       deposits, missing run sheets, start times to check. */}
                   {!isStaff && (
@@ -4312,8 +4314,6 @@ export default function Dashboard() {
                       fmtTime={fmtHhmm}
                     />
                   )}
-                  {/* The full month calendar, right under Needs you today. */}
-                  {monthCalendarCard}
                   {/* New enquiries: not answered yet, newest first. */}
                   {!isStaff && (
                     <OverviewNewEnquiries
