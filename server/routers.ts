@@ -5922,6 +5922,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { subject, html, text } = buildPaymentReceiptEmail({
           firstName: booking.firstName, type: pmt.type, amount: Number(pmt.amount), paidAt: pmt.paidAt,
           total, outstanding, portalUrl, fromName: mailer.fromName,
+          cancelled: booking.status === 'cancelled',
         });
         try {
           await mailer.transporter.sendMail({

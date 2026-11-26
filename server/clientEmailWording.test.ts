@@ -357,12 +357,26 @@ describe("payment receipts", () => {
     expectTextMatchesHtml(m);
   });
 
-  it("refund with nothing owing: its own sign-off, as it may be the last email", () => {
+  it("refund on a booking that's still going ahead: same sign-off, even when nothing is owing", () => {
     for (const r of [{ total: 5750, outstanding: 0 }, { total: 0, outstanding: 0 }]) {
       const m = buildPaymentReceiptEmail({ ...base, type: "refund", amount: 200, ...r });
+      expect(m.text.endsWith("Speak soon,\nThe Larder Room")).toBe(true);
+      expect(m.html).toContain("<p>Speak soon,<br>The Larder Room</p>");
+      expectHouseStyle(m);
+    }
+  });
+
+  it("cancelled booking: no balance line, and its own sign-off", () => {
+    // A cancellation keeps the booking total, so the sum would say the whole
+    // total is still owed. Nothing more is owed on a cancelled booking.
+    for (const type of ["refund", "other"]) {
+      const m = buildPaymentReceiptEmail({ ...base, type, amount: 1437.5, outstanding: 5750, cancelled: true });
+      expect(m.text).not.toContain("balance");
+      expect(m.html).not.toContain("balance");
       expect(m.text.endsWith("All the best,\nThe Larder Room")).toBe(true);
       expect(m.html).toContain("<p>All the best,<br>The Larder Room</p>");
       expectHouseStyle(m);
+      expectTextMatchesHtml(m);
     }
   });
 

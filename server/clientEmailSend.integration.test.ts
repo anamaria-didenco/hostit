@@ -161,6 +161,8 @@ d("client emails through their send paths (DB, mail stubbed)", () => {
     await owner.proposals.send({ id: p.id });
     m = clientMail();
     expect(m).toMatchObject({ from: FROM, to: `"Ava Lindqvist" <${CLIENT}>`, subject: "Your proposal is ready — Ava's team dinner" });
+    expect(m.bcc).toBeUndefined();
+    expect(m.replyTo).toBeUndefined();
     expect(m.text).toContain(`View your proposal: ${BASE}/proposal/send-test-${OWNER}`);
     await owner.leads.sendFollowUp({ leadId: lead.id });
     m = clientMail();
@@ -194,6 +196,7 @@ d("client emails through their send paths (DB, mail stubbed)", () => {
     m = clientMail();
     expect(m).toMatchObject({ from: FROM, to: `"Ava Lindqvist" <${CLIENT}>`, subject: "We've received your deposit — Larder Events" });
     expect(m.bcc).toBeUndefined();
+    expect(m.replyTo).toBeUndefined();
     expect(m.text).toContain("Thank you for your deposit of $1,437.50, received on 20 November 2026.");
     expect(m.text).toContain("Your remaining balance is $4,312.50.");
     expect(m.text).toContain(`Full details are on your event page:\n${BASE}/portal/${portalToken}`);
@@ -204,6 +207,17 @@ d("client emails through their send paths (DB, mail stubbed)", () => {
     expect(m.text).toContain("We've refunded $200.00 to you on 22 November 2026.");
     expect(m.text).toContain("Your remaining balance is $4,512.50.");
     expect(m.text.endsWith("Speak soon,\nLarder Events")).toBe(true);
+    expect(m).toMatchObject({ from: FROM, to: `"Ava Lindqvist" <${CLIENT}>` });
+    expect(m.bcc).toBeUndefined();
+    expect(m.replyTo).toBeUndefined();
+
+    // Once the booking is cancelled, a refund receipt drops the balance line.
+    await db.update(bookings).set({ status: "cancelled" } as any).where(eq(bookings.id, bk.id));
+    await owner.payments.sendReceipt({ paymentId: ref.id });
+    m = clientMail();
+    expect(m.subject).toBe("Confirming your refund — Larder Events");
+    expect(m.text).not.toContain("balance");
+    expect(m.text.endsWith("All the best,\nLarder Events")).toBe(true);
 
     // Event page link and contract signing: to the client, replies to the venue.
     await emailPortalLink(OWNER, { to: CLIENT, clientName: "Ava Lindqvist", token: portalToken });

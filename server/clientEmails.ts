@@ -145,9 +145,12 @@ export function buildPaymentReceiptEmail(i: {
   firstName: string | null; type: string; amount: number; paidAt: Date | string;
   /** The booking total; 0 means no total is set, so no balance line. */
   total: number; outstanding: number; portalUrl: string | null; fromName: string;
+  /** The booking is cancelled: no balance line, as nothing more is owed. */
+  cancelled?: boolean;
 }): ClientEmail {
   const first = i.firstName ?? "there";
   const refund = i.type === "refund";
+  const showBalance = i.total > 0 && !i.cancelled;
   const kind = PAYMENT_KIND[i.type] ?? "payment";
   const paidOn = new Date(i.paidAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: DEFAULT_VENUE_TZ });
   const amount = fmtNzd(i.amount);
@@ -160,19 +163,19 @@ export function buildPaymentReceiptEmail(i: {
   const plain = (s: string) => s;
   const portalLead = "Full details are on your event page:";
   const closing = "Any questions, just reply to this email.";
-  // "All the best," only when a refund leaves nothing owing (it may be the
-  // last email); with a balance still to pay, the event is still ahead.
-  const signOff = refund && i.outstanding <= 0 ? "All the best," : "Speak soon,";
+  // A cancelled booking may not hear from the venue again; any other booking
+  // still has its event ahead.
+  const signOff = i.cancelled ? "All the best," : "Speak soon,";
   const html = `<p>Hi ${esc(first)},</p>`
     + `<p>${amountLine(strong)}</p>`
-    + (i.total > 0 ? `<p>${balanceLine(strong)}</p>` : "")
+    + (showBalance ? `<p>${balanceLine(strong)}</p>` : "")
     + (i.portalUrl ? `<p>${portalLead}<br><a href="${esc(i.portalUrl)}">${esc(i.portalUrl)}</a></p>` : "")
     + `<p>${closing}</p>`
     + `<p>${signOff}<br>${esc(i.fromName)}</p>`;
   const text = [
     `Hi ${first},`,
     amountLine(plain),
-    ...(i.total > 0 ? [balanceLine(plain)] : []),
+    ...(showBalance ? [balanceLine(plain)] : []),
     ...(i.portalUrl ? [`${portalLead}\n${i.portalUrl}`] : []),
     closing,
     `${signOff}\n${i.fromName}`,
