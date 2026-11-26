@@ -1,16 +1,19 @@
 import { describe, it, expect } from "vitest";
 import {
-  FORM_TOKEN_REUSE_MS, FRESH_TOKEN_SAFE_MS, RESUME_LEAD_MS, canReuseLead, enquiryStorageKeys, formTokenToSend, leadStillResumable,
-  parseProgress, pickFormToken, resumeFrom, serializeProgress,
-  type EnquiryProgress,
+  FORM_TOKEN_REUSE_MS, FRESH_TOKEN_SAFE_MS, RESUME_LEAD_MS, canReuseLead, enquiryStorageKeys, formTokenToSend, leadForSubmit, leadStillResumable,
+  leadToSupersede, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs,
+  type EnquiryProgress, type HeldLead,
 } from "../client/src/lib/enquiryProgress";
 import { MIN_FORM_FILL_MS } from "./enquiryConversion";
+import { CLIENT_MIN_TOKEN_AGE_MS, SENT_CONFIRMATION_KEEP_MS } from "@shared/enquiryTiming";
 
 /** The website form's progress kept across a reload (client/src/lib/enquiryProgress.ts). */
 const saved = (over: Partial<EnquiryProgress> = {}): EnquiryProgress => ({
   slug: "bar-franco", ownerId: 7, step: 2,
   leadId: 433, leadToken: "tok_abcdefghijklmnopqrstuvwxyz0123", leadEmail: "aroha@example.test", leadAt: 1_800_000_060_000,
   formToken: "mfz0q3k0.abcdefghijklmnopqrstuv", formTokenAt: 1_800_000_000_000,
+  prefill: { guestCount: "40", eventFormat: "seated" },
+  sentLeadId: null, sentLeadToken: null, sentAt: null,
   ...over,
 });
 
@@ -137,5 +140,84 @@ describe("which token goes with NEXT and SUBMIT", () => {
     expect(formTokenToSend(null, fresh, reloadAt + 1000)).toBe("fresh.token");
     expect(formTokenToSend(first, null, reloadAt)).toBe("first.token");
     expect(formTokenToSend(null, null, reloadAt)).toBeUndefined();
+  });
+});
+
+describe("what else the record keeps", () => {
+  it("keeps the prefill values seen last, and nothing that isn't a plain field and short text", () => {
+    const raw = JSON.stringify({ ...saved(), prefill: { guestCount: "40", "bad key": "x", eventDate: 7, message: "y".repeat(501), eventFormat: "cocktail" } });
+    expect(parseProgress(raw, "bar-franco")!.prefill).toEqual({ guestCount: "40", eventFormat: "cocktail" });
+    expect(parseProgress(JSON.stringify({ ...saved(), prefill: ["40"] }), "bar-franco")!.prefill).toBeNull();
+    expect(parseProgress(JSON.stringify({ ...saved(), prefill: undefined }), "bar-franco")!.prefill).toBeNull(); // a record from before
+  });
+  it("keeps the enquiry just sent: its id and token only together, its time on its own", () => {
+    const sent = saved({ sentLeadId: 501, sentLeadToken: "tok_sent", sentAt: 1_800_000_900_000 });
+    expect(parseProgress(serializeProgress(sent), "bar-franco")).toMatchObject({ sentLeadId: 501, sentLeadToken: "tok_sent", sentAt: 1_800_000_900_000 });
+    const noToken = parseProgress(serializeProgress(saved({ sentLeadId: 501, sentAt: 1_800_000_900_000 })), "bar-franco")!;
+    expect(noToken).toMatchObject({ sentLeadId: null, sentLeadToken: null, sentAt: 1_800_000_900_000 });
+  });
+});
+
+describe("Enquiry Received! after a reload", () => {
+  const sentAt = 1_800_000_900_000;
+  const rec = saved({ step: 1, leadId: null, leadToken: null, leadEmail: null, leadAt: null, sentLeadId: 501, sentLeadToken: "tok_sent", sentAt });
+  const at = (ms: number) => ({ ownerId: 7, nowMs: sentAt + ms, keepMs: SENT_CONFIRMATION_KEEP_MS });
+  it("shows again for an hour, with what the walkthrough offer needs", () => {
+    expect(SENT_CONFIRMATION_KEEP_MS).toBe(60 * 60_000);
+    expect(sentConfirmation(rec, at(5 * 60_000))).toEqual({ leadId: 501, leadToken: "tok_sent" });
+    expect(sentConfirmation(rec, at(SENT_CONFIRMATION_KEEP_MS))).not.toBeNull();
+  });
+  it("is gone after that (the next person on a shared device gets a clean form), and never for another venue", () => {
+    expect(sentConfirmation(rec, at(SENT_CONFIRMATION_KEEP_MS + 1))).toBeNull();
+    expect(sentConfirmation(rec, { ...at(1000), ownerId: 8 })).toBeNull();
+    expect(sentConfirmation(saved(), at(1000))).toBeNull(); // nothing sent
+  });
+  it("still shows for a dropped bot-check 'success' (nothing to offer a walkthrough for)", () => {
+    const fake = saved({ sentLeadId: null, sentLeadToken: null, sentAt });
+    expect(sentConfirmation(fake, at(1000))).toEqual({ leadId: null, leadToken: null });
+  });
+});
+
+describe("which lead SUBMIT completes and NEXT updates", () => {
+  const own: HeldLead = { leadId: 433, leadToken: "tok", leadEmail: "aroha@example.test", leadAt: 1, fromThisPage: true };
+  const restored: HeldLead = { ...own, fromThisPage: false };
+  it("the visitor's own step 1 for the same email (the free completion: no wait for the timing token)", () => {
+    expect(leadForSubmit(own, " Aroha@Example.test")).toEqual({ leadId: 433, leadToken: "tok", own: true });
+    expect(leadForSubmit(restored, "aroha@example.test")).toEqual({ leadId: 433, leadToken: "tok", own: true }); // a reload's resume, as before
+  });
+  it("for a corrected email, only the lead this page load saved (counted and checked by the server)", () => {
+    expect(leadForSubmit(own, "aroha@example.test.nz")).toEqual({ leadId: 433, leadToken: "tok", own: false });
+    expect(leadForSubmit(restored, "mere@example.test")).toBeNull(); // maybe another person on a shared device
+  });
+  it("nothing without a real lead or an email", () => {
+    expect(leadForSubmit(null, "aroha@example.test")).toBeNull();
+    expect(leadForSubmit({ ...own, leadId: 0 }, "aroha@example.test")).toBeNull();
+    expect(leadForSubmit({ ...own, leadToken: null }, "aroha@example.test")).toBeNull();
+    expect(leadForSubmit(own, "  ")).toBeNull();
+  });
+  it("NEXT after BACK and an email fix updates this page's lead; resumed or after START FRESH, it's a new lead", () => {
+    expect(leadToSupersede(own, "aroha@gmail.example.test")).toEqual({ leadId: 433, leadToken: "tok" });
+    expect(leadToSupersede(own, "AROHA@example.test")).toBeNull(); // same email: nothing to save
+    expect(leadToSupersede(restored, "mere@example.test")).toBeNull();
+    expect(leadToSupersede({ leadId: null, leadToken: null, leadEmail: null, leadAt: null, fromThisPage: false }, "mere@example.test")).toBeNull();
+  });
+});
+
+describe("waiting out the timing token", () => {
+  const first = { token: "first.token", at: 1_800_000_000_000 };
+  it("picks the same token formTokenToSend sends, with when it arrived", () => {
+    const fresh = { token: "fresh.token", at: first.at + 600_000 };
+    expect(pickTokenToSend(first, fresh, fresh.at + 1000)).toEqual(first);
+    expect(pickTokenToSend(first, fresh, fresh.at + FRESH_TOKEN_SAFE_MS)).toEqual(fresh);
+    expect(pickTokenToSend(null, null, 0)).toBeNull();
+  });
+  it("holds a send until the token is old enough for the server, and not otherwise", () => {
+    expect(CLIENT_MIN_TOKEN_AGE_MS).toBeGreaterThan(MIN_FORM_FILL_MS);
+    expect(tokenWaitMs(first, first.at + 300, CLIENT_MIN_TOKEN_AGE_MS)).toBe(CLIENT_MIN_TOKEN_AGE_MS - 300);
+    expect(tokenWaitMs(first, first.at + 1641, CLIENT_MIN_TOKEN_AGE_MS)).toBe(CLIENT_MIN_TOKEN_AGE_MS - 1641);
+    expect(tokenWaitMs(first, first.at + CLIENT_MIN_TOKEN_AGE_MS, CLIENT_MIN_TOKEN_AGE_MS)).toBe(0);
+    expect(tokenWaitMs(first, first.at + 600_000, CLIENT_MIN_TOKEN_AGE_MS)).toBe(0);
+    expect(tokenWaitMs(null, first.at, CLIENT_MIN_TOKEN_AGE_MS)).toBe(0); // no token: the server lets it through
+    expect(tokenWaitMs(first, first.at - 10_000, CLIENT_MIN_TOKEN_AGE_MS)).toBe(CLIENT_MIN_TOKEN_AGE_MS); // the clock went back
   });
 });

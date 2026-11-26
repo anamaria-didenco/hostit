@@ -144,7 +144,11 @@ export function toLocalDateInput(date: Date | string | null | undefined): string
 export function combineLocalDateTime(date: string | undefined | null, time: string | undefined | null): string | undefined {
   if (!date) return undefined;
   if (!time) return date;
-  const iso = new Date(`${date}T${time}:00`).toISOString();
+  // An impossible date or time ("2026-13-01") is undefined, not a RangeError
+  // from toISOString() thrown out of a click handler.
+  const at = new Date(`${date}T${time}:00`);
+  if (isNaN(at.getTime())) return undefined;
+  const iso = at.toISOString();
   if (iso.endsWith("T00:00:00.000Z")) {
     return new Date(`${date}T${time}:00.001`).toISOString();
   }
