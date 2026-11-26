@@ -173,6 +173,8 @@ d("needs-attention query (DB)", () => {
     for (const n of ["Fresh", "Typed", "Answered", "ChaseLater", "LostChase"]) expect(byName(n), n).toBeUndefined();
     expect(r.enquiries.awaitingTotal).toBe(1);
     expect(r.enquiries.followUpTotal).toBe(1);
+    // All of them, for the Overview's reply rows (not capped like items).
+    expect(r.enquiries.replyOverdueIds).toEqual([ids["A:Waiting"]]);
   });
 
   it("(c) respects a venue that turned reply-overdue alerts off", async () => {
@@ -181,6 +183,7 @@ d("needs-attention query (DB)", () => {
     try {
       const r = await caller.dashboard.needsAttention();
       expect(r.enquiries.awaitingTotal).toBe(0);
+      expect(r.enquiries.replyOverdueIds).toEqual([]);
       expect(r.enquiries.followUpTotal).toBe(1);
     } finally {
       await db.update(venueSettings).set({ replyOverdueEnabled: 1 }).where(eq(venueSettings.ownerId, OWNER));

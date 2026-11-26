@@ -133,8 +133,8 @@ export interface OverviewNeedsTodayProps {
   onGoDeposits: () => void;
   /**
    * Enquiries waiting on you: the Enquiries list's own Needs reply and
-   * Follow-up due rows (the sidebar badge and the "Needs follow-up" tile count
-   * these), not the server's older rule. Undefined until the enquiries load.
+   * Follow-up due rows (shared/needsToday.ts needsTodayEnquiries; a brand-new
+   * enquiry only once its reply is overdue). Undefined until they load.
    */
   enquiries?: EnquiryNeeds;
   /** Double-bookings kept over the clash warning (bookings.clashes). */
@@ -241,19 +241,23 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
   }
 
   // Enquiries waiting on you, as the Enquiries list shows them: Needs reply
-  // (a first reply, or the client wrote back), then Follow-up due. Each keeps
-  // its lane colour and the words on its row.
+  // (a first reply once it is overdue, or the client wrote back), then
+  // Follow-up due. Each keeps its lane colour and the words on its row.
   const shownReply = (p.enquiries?.reply ?? []).slice(0, NEEDS_GROUP_CAP);
   const shownFollowup = (p.enquiries?.followup ?? []).slice(0, NEEDS_GROUP_CAP);
   for (const [group, list] of [["reply", shownReply], ["followup", shownFollowup]] as const) {
     for (const l of list) {
-      const tone = LANE_TONE[l.lane];
+      // A first reply past the venue's reply hours is red "Reply overdue", as
+      // it always was here, with the list's wait under it; the list itself
+      // shows it blue ("new"). A red lane (a date clash) keeps its own words.
+      const overdue = !!l.replyOverdue && l.lane !== "red";
+      const tone = overdue ? "red" : LANE_TONE[l.lane];
       const reply = group === "reply";
       rows.push({
-        key: `lead-${l.leadId}`, tone, signal: l.text, signalSub: l.sub,
-        // Someone waiting on a reply comes straight after the red rows, whatever
-        // their colour: a first reply is blue ("new") on the list however long
-        // it has waited, but it is still the venue's to answer today.
+        key: `lead-${l.leadId}`, tone,
+        signal: overdue ? "Reply overdue" : l.text, signalSub: overdue ? l.text : l.sub,
+        // Someone waiting on a reply comes straight after the red rows, before
+        // the other amber ones: it is the venue's to answer today.
         rank: reply && tone !== "red" ? 0.5 : undefined,
         initials: initialsOf(l.name),
         name: nameBtn(l.name, () => p.onOpenLead(l.leadId)),

@@ -3655,10 +3655,13 @@ export default function Dashboard() {
   );
   // "Needs you today" (Overview and the Calendar panel): the list's own Needs
   // reply and Follow-up due rows, in the list's order, with each row's lane
-  // and words, so they are the same people the badge and the tabs count.
+  // and words, so they are the people the tabs list. A brand-new enquiry only
+  // once its reply is overdue (the server's rule, as before): inside the
+  // venue's reply hours it isn't waiting on anything yet.
+  const { data: needsAttention } = trpc.dashboard.needsAttention.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 15_000, refetchOnWindowFocus: true });
   const needsEnquiries = React.useMemo(
-    () => (allLeads ? needsTodayEnquiries(enquiryRows, listCtx) : undefined),
-    [allLeads, enquiryRows, listCtx],
+    () => (allLeads && needsAttention ? needsTodayEnquiries(enquiryRows, listCtx, new Set(needsAttention.enquiries.replyOverdueIds)) : undefined),
+    [allLeads, needsAttention, enquiryRows, listCtx],
   );
   // Each enquiry's lane on the list, for the calendar: an enquiry the list
   // marks red (late or wrong) is red on the calendar too, in the same words.

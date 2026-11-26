@@ -114,7 +114,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     todayKey: zonedYmd(now, tz),
     tonight: { total: 0, items: [] as TonightItem[] },
     tasks: { total: 0, items: [] as TaskItem[] },
-    enquiries: { total: 0, awaitingTotal: 0, followUpTotal: 0, items: [] as EnquiryItem[] },
+    enquiries: { total: 0, awaitingTotal: 0, followUpTotal: 0, items: [] as EnquiryItem[], replyOverdueIds: [] as number[] },
     deposits: { total: 0, items: [] as DepositItem[] },
     runsheets: { total: 0, items: [] as RunsheetItem[] },
     alerts: { total: 0, items: [] as AlertItem[] },
@@ -257,7 +257,13 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     todayKey,
     tonight: { total: tonightAll.length, items: tonightAll.slice(0, cap) },
     tasks: { total: overdueRows.length, items: taskItems },
-    enquiries: { total: awaiting.length + followUps.length, awaitingTotal: awaiting.length, followUpTotal: followUps.length, items: enquiryItems },
+    enquiries: {
+      total: awaiting.length + followUps.length, awaitingTotal: awaiting.length, followUpTotal: followUps.length, items: enquiryItems,
+      // Every enquiry whose first reply is overdue, not just the shown ones: the
+      // Overview lists the Enquiries list's Needs reply rows, and leaves out a
+      // brand-new enquiry that isn't in here (shared/needsToday.ts).
+      replyOverdueIds: awaiting.map(a => a.leadId),
+    },
     deposits: { total: depositAll.length, items: depositAll.slice(0, cap) },
     runsheets: { total: noSheetAll.length, items: noSheetAll.slice(0, cap) },
     alerts: { total: alertAll.length, items: alertAll.slice(0, cap) },

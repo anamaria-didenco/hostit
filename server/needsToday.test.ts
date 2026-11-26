@@ -62,26 +62,42 @@ function rowsOf(specs: { lead: Partial<LeadLike>; inbound?: Date }[]): ListRow[]
 describe("needsTodayEnquiries", () => {
   const rows = rowsOf([
     { lead: { firstName: "Kiri", lastName: "Testwell" }, inbound: ago(2 * DAY) },                       // 1 client wrote back
-    { lead: { firstName: "Aroha", lastName: "Testa", status: "new", respondedAt: null, createdAt: ago(20 * 60_000) } }, // 2 new, inside any reply window
+    { lead: { firstName: "Aroha", lastName: "Testa", status: "new", respondedAt: null, createdAt: ago(20 * 60_000) } }, // 2 new, inside the reply hours
     { lead: { firstName: "Jamal", lastName: "Testor", status: "proposal_sent", followUpDate: ago(2 * DAY + HOUR) } },    // 3 follow-up 2 days late
     { lead: { firstName: "Hannah", lastName: "Testby", status: "proposal_sent", followUpDate: new Date(NOW + 3 * HOUR) } }, // 4 follow-up later today
     { lead: { firstName: "Sione", lastName: "Testfa", lastActivityAt: ago(12 * DAY) } },                // 5 gone quiet
     { lead: { firstName: "Liam", lastName: "Testan", status: "booked" } },                              // 6 booked: neither
+    { lead: { firstName: "Ana", lastName: "Testora", status: "new", respondedAt: null, createdAt: ago(3 * DAY + 4 * HOUR) } }, // 7 new, reply overdue
+    { lead: { firstName: "Mere", lastName: "Testkai", status: "new", respondedAt: null, createdAt: ago(HOUR) }, inbound: ago(HOUR) }, // 8 new, wrote in, inside the hours
   ]);
-  const needs = needsTodayEnquiries(rows, ctx);
+  // The server's reply-overdue rule (dashboard.needsAttention) names Ana only.
+  const overdue = new Set([7]);
+  const needs = needsTodayEnquiries(rows, ctx, overdue);
   const counts = viewCounts(rows, EMPTY_FILTERS, "", ctx);
+  const listOrder = (view: "reply" | "followup") =>
+    listRows(rows, { view, filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort(view) }, ctx).rows.map(r => r.lead.id);
 
-  it("lists exactly the people the Needs reply and Follow-up due tabs count, in the list's order", () => {
-    expect(needs.reply.length).toBe(counts.reply);
+  it("lists the Follow-up due tab's people, and the Needs reply tab's less brand-new ones inside the reply hours, in the list's order", () => {
     expect(needs.followup.length).toBe(counts.followup);
-    const listOrder = (view: "reply" | "followup") =>
-      listRows(rows, { view, filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort(view) }, ctx).rows.map(r => r.lead.id);
-    expect(needs.reply.map(n => n.leadId)).toEqual(listOrder("reply"));
     expect(needs.followup.map(n => n.leadId)).toEqual(listOrder("followup"));
+    // The tab (and the badge) still count Aroha and Mere.
+    expect(counts.reply).toBe(4);
+    expect(needs.reply.map(n => n.leadId)).toEqual(listOrder("reply").filter(id => id !== 2 && id !== 8));
   });
 
-  it("includes a client who wrote back and a new enquiry still inside its reply window", () => {
-    expect(needs.reply.map(n => n.name).sort()).toEqual(["Aroha Testa", "Kiri Testwell"]);
+  it("includes a client who wrote back and a new enquiry past its reply hours, not one still inside them", () => {
+    expect(needs.reply.map(n => n.name).sort()).toEqual(["Ana Testora", "Kiri Testwell"]);
+  });
+
+  it("lists no brand-new enquiry until the server's overdue list is known", () => {
+    expect(needsTodayEnquiries(rows, ctx).reply.map(n => n.name)).toEqual(["Kiri Testwell"]);
+  });
+
+  it("marks the overdue first reply, and only that one", () => {
+    expect(needs.reply.find(n => n.name === "Ana Testora")).toMatchObject({ replyOverdue: true, lane: "blue", text: "Waiting 3d 4h" });
+    expect(needs.reply.find(n => n.name === "Kiri Testwell")?.replyOverdue).toBeUndefined();
+    // A client who wrote back is never "reply overdue", whatever the server says.
+    expect(needsTodayEnquiries(rows, ctx, new Set([1, 7])).reply.find(n => n.leadId === 1)?.replyOverdue).toBeUndefined();
   });
 
   it("leaves out a follow-up due later today, as the Follow-up due tab does, and keeps gone-quiet ones", () => {
@@ -98,6 +114,5 @@ describe("needsTodayEnquiries", () => {
     }
     expect(byName.get("Jamal Testor")).toMatchObject({ lane: "red", text: "Follow-up overdue · 2d" });
     expect(byName.get("Kiri Testwell")).toMatchObject({ lane: "amber", text: "Replied 2d ago" });
-    expect(byName.get("Aroha Testa")).toMatchObject({ lane: "blue" });
   });
 });

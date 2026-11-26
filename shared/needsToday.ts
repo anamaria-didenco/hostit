@@ -7,8 +7,9 @@
  * (The list's views are built in shared/enquiryFilters.ts on enquirySignal.)
  *  NEEDS REPLY nobody has answered a new enquiry yet, or the client wrote last
  *              and is waiting on you. NEEDS REPLY = sidebar badge = Needs reply
- *              tab = the reply rows in "Needs you today" = Today's "waiting on
- *              a reply".
+ *              tab = Today's "waiting on a reply". The reply rows in "Needs
+ *              you today" are these, less brand-new enquiries still inside the
+ *              venue's reply hours (needsTodayEnquiries).
  *  OPEN        every enquiry still in play: not confirmed / finished / lost /
  *              cancelled. NEEDS REPLY is part of OPEN. This is the "Open
  *              enquiries" tile, and the Open view it opens shows exactly these.
@@ -24,6 +25,7 @@
 import { CLOSED_LEAD_STATUSES } from "./followUp";
 import { EMPTY_FILTERS, listRows, viewDefaultSort, type ListCtx, type ListRow } from "./enquiryFilters";
 import { rowLane, type Lane } from "./enquiryLane";
+import { leadNeedsReply } from "./needsReply";
 
 /** Events this many days ahead (from today, in the venue's zone) are "upcoming" on the Overview. */
 export const UPCOMING_DAYS = 14;
@@ -77,6 +79,12 @@ export interface EnquiryNeed {
   text: string;
   /** A second line when the lane's reason isn't the Needs line ("Waiting 9d 22h" under "Date clash"). */
   sub?: string;
+  /**
+   * A brand-new enquiry past the venue's reply hours: the list shows it blue
+   * ("new") however long it has waited, but "Needs you today" shows it red as
+   * "Reply overdue", as it always has.
+   */
+  replyOverdue?: true;
 }
 
 export interface EnquiryNeeds {
@@ -88,17 +96,30 @@ export interface EnquiryNeeds {
  * The enquiries "Needs you today" lists (Overview and the Calendar panel): the
  * Enquiries list's own Needs reply and Follow-up due views, with no filter or
  * search, in the list's default order, each with its row's lane and words
- * (shared/enquiryLane.ts). So the reply rows are exactly the sidebar badge and
- * the Needs reply tab, the follow-ups exactly the "Needs follow-up" tile and
- * the Follow-up due tab, and a "+N more" link opens a tab holding those N.
+ * (shared/enquiryLane.ts).
+ *
+ * The follow-ups are exactly the "Needs follow-up" tile and the Follow-up due
+ * tab. The reply rows are the Needs reply tab less the brand-new enquiries (no
+ * reply from the venue yet) still inside the venue's reply hours: those were
+ * never in "Needs you today" (the badge and the tab still count them).
+ * `replyOverdueIds` are the brand-new enquiries past those hours, by the
+ * server's own rule (dashboard.needsAttention, enquiries.replyOverdueIds);
+ * until it loads, no brand-new enquiry is listed. Every row is in the tab its
+ * group's "+N more" link opens.
  */
-export function needsTodayEnquiries(rows: readonly ListRow[], ctx: ListCtx): EnquiryNeeds {
+export function needsTodayEnquiries(rows: readonly ListRow[], ctx: ListCtx, replyOverdueIds: ReadonlySet<number> = new Set()): EnquiryNeeds {
   const pick = (view: "reply" | "followup"): EnquiryNeed[] =>
-    listRows(rows, { view, filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort(view) }, ctx).rows.map(row => {
-      const lane = rowLane(row, ctx);
+    listRows(rows, { view, filters: EMPTY_FILTERS, q: "", sort: viewDefaultSort(view) }, ctx).rows.flatMap(row => {
       const l = row.lead;
+      const brandNew = view === "reply" && leadNeedsReply(l);
+      const replyOverdue = brandNew && replyOverdueIds.has(Number(l.id));
+      if (brandNew && !replyOverdue) return [];
+      const lane = rowLane(row, ctx);
       const name = [l.firstName, l.lastName].filter(Boolean).join(" ").trim() || String(l.company ?? "").trim() || "Enquiry";
-      return { leadId: l.id, name, eventType: l.eventType ?? null, lane: lane.lane, text: lane.text, ...(lane.sub ? { sub: lane.sub } : {}) };
+      return [{
+        leadId: l.id, name, eventType: l.eventType ?? null, lane: lane.lane, text: lane.text,
+        ...(lane.sub ? { sub: lane.sub } : {}), ...(replyOverdue ? { replyOverdue: true as const } : {}),
+      }];
     });
   return { reply: pick("reply"), followup: pick("followup") };
 }
