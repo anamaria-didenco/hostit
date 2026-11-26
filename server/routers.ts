@@ -987,8 +987,10 @@ export const appRouter = router({
             lead = await completePartialLead(completing.id, input.ownerId, leadData, { internalNotes: honeypotForgiven ? POSSIBLE_SPAM_NOTE : null }, tx);
             finishedPartial = !!lead;
           }
-          // Another request finished our own partial first: decided below, outside this.
-          if (!lead && finishingOwn) return { lost: true };
+          // Another request finished this partial first (the same SUBMIT
+          // sent twice, with the same or the corrected email): decided below,
+          // outside this.
+          if (!lead && completing) return { lost: true };
           // No leadId (or its row vanished) — startCapture never ran, or
           // failed. Either way a submission is never silently lost: insert
           // fresh, exactly as before this feature existed.
@@ -1001,13 +1003,17 @@ export const appRouter = router({
         let saved: Saved;
         if ("lost" in outcome) {
           // Another request finished this partial between the read above and
-          // here. Received just now, so this is usually the same SUBMIT sent
-          // twice: it gets that enquiry back. Otherwise it gets no free pass:
-          // counted, and checked like any submit (the honeypot included).
+          // here. Received just now with this email, so this is usually the
+          // same SUBMIT sent twice: it gets that enquiry back. Otherwise it
+          // gets no free pass: counted, and checked like any submit (the
+          // honeypot included). A corrected email was counted and checked
+          // above already.
           const again = await getLeadById(partial!.id, input.ownerId);
           if (isRepeat(again)) return repeatAnswer(again!);
-          await enforceLeadRateLimit(ctx, input.ownerId);
-          if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+          if (finishingOwn) {
+            await enforceLeadRateLimit(ctx, input.ownerId);
+            if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+          }
           saved = await db.transaction(async (tx) => {
             const lead = await createLead(leadData, tx);
             if (!lead) throw new Error("Could not save — please try again.");

@@ -77,6 +77,32 @@ describe("enquiry refusals in the server log", () => {
     }
   });
 
+  it("logs a visitor turned away by the enquiry rate limit, without their address", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const limited = () => new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many submissions from your connection just now" });
+      const req = { headers: { "cf-connecting-ip": "203.0.113.9" } };
+      for (const path of ["leads.startCapture", "leads.submit", "leads.requestWalkthrough"]) {
+        logTrpcError({ error: limited(), path, type: "mutation", req: { ...req } });
+      }
+      // Staff screens' limits stay out of it.
+      logTrpcError({ error: limited(), path: "leads.update", type: "mutation", req: { ...req } });
+      expect(refusalLines(warn).map(l => JSON.parse(l))).toEqual(["leads.startCapture", "leads.submit", "leads.requestWalkthrough"].map(path => (
+        { level: "warn", source: "enquiry-refused", path, field: null, code: "too_many_requests" }
+      )));
+      expect(refusalLines(warn).join("\n")).not.toContain("203.0.113");
+      expect(error).not.toHaveBeenCalled();
+      // One request refused many times over still gets only a few lines.
+      const one = { ...req };
+      for (let i = 0; i < 10; i++) logTrpcError({ error: limited(), path: "leads.submit", type: "mutation", req: one });
+      expect(refusalLines(warn)).toHaveLength(3 + REFUSAL_LINES_PER_REQUEST);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it("names the field the way the form shows it", async () => {
     const res = await post("leads.submit", { ownerId: 1, firstName: "Mere", email: "mere@example.test", eventDetail: "x".repeat(256) });
     expect((await res.json()).error.json.message).toBe("What's the occasion? is too long (255 characters at most).");

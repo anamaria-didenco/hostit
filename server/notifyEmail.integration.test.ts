@@ -236,7 +236,10 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     const owner = await venue();
     const db = (await getDb())!;
     const t = tag();
-    const base = { ownerId: owner, firstName: "Mere", lastName: "Testwell", status: "new", source: "lead_form", internalNotes: PARTIAL_LEAD_NOTE } as const;
+    // Started "later" than any other test file's alert run looks, so their
+    // runs (for every venue at once) never alert these first.
+    const startedAt = later(6 * 60 * MIN);
+    const base = { ownerId: owner, firstName: "Mere", lastName: "Testwell", status: "new", source: "lead_form", internalNotes: PARTIAL_LEAD_NOTE, createdAt: startedAt } as const;
     const ins = async (v: any) => (await db.insert(leads).values(v).returning())[0];
     const finished = await ins({ ...base, email: `fin.${t}@example.test` });
     const cameBack = await ins({ ...base, email: `back.${t}@example.test` });
@@ -248,7 +251,7 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     errors.mockRestore();
     mode = "ok";
     await db.update(leads).set({ internalNotes: null }).where(eq(leads.id, finished.id));
-    await ins({ ...base, email: `BACK.${t}@example.test`, createdAt: later(MIN) }); // started the form again
+    await ins({ ...base, email: `BACK.${t}@example.test`, createdAt: new Date(startedAt.getTime() + MIN) }); // started the form again
     await db.update(leads).set({ status: "contacted" }).where(eq(leads.id, touched.id));
     await retryAlertEmails(later(2 * MIN), { ownerIds: [owner] });
     const byLead = new Map((await rowsFor(owner)).map(r => [r.leadId, r.emailStatus]));
@@ -260,7 +263,7 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     expect(delivered.filter(m => titles.includes(m.subject)).map(m => m.subject)).toEqual([titles[3]]);
   });
 
-  it("a held-back proposal, hold or double-booking alert isn't sent once it no longer stands", async () => {
+  it("a held-back proposal, hold or double-booking alert isn't sent once it no longer stands; a NowBookIt refusal still is", async () => {
     const owner = await venue();
     const db = (await getDb())!;
     const t = tag();
@@ -278,6 +281,9 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     const held = await lead("tentative", { holdUntil: until });
     const [clash] = await db.insert(bookings).values({ ownerId: owner, firstName: "Wiremu", email: `b.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000), clashFlaggedAt: new Date() } as any).returning();
     const [clashOn] = await db.insert(bookings).values({ ownerId: owner, firstName: "Ana", email: `c.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000), clashFlaggedAt: new Date() } as any).returning();
+    // NowBookIt refusing a push (nbi_409:) never sets the clash flag.
+    const [nbiTaken] = await db.insert(bookings).values({ ownerId: owner, firstName: "Mere", email: `n.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000) } as any).returning();
+    const [nbiCancelled] = await db.insert(bookings).values({ ownerId: owner, firstName: "Tama", email: `m.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000) } as any).returning();
     const sent: Record<string, string> = {};
     const alert = async (name: string, a: Parameters<typeof notifyVenue>[1]) => { sent[name] = `${a.title} (${name}) ${t}`; await notifyVenue(owner, { ...a, title: sent[name] }); };
     mode = "busy";
@@ -289,6 +295,8 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     }
     await alert("resolved", { kind: "double_booking", title: "Double booking", bookingId: clash.id, dedupeKey: `double_booking:${clash.id}` });
     await alert("clashing", { kind: "double_booking", title: "Double booking", bookingId: clashOn.id, dedupeKey: `double_booking:${clashOn.id}` });
+    await alert("nbiTaken", { kind: "double_booking", title: "NowBookIt slot already taken", bookingId: nbiTaken.id, dedupeKey: `nbi_409:${nbiTaken.id}` });
+    await alert("nbiCancelled", { kind: "double_booking", title: "NowBookIt slot already taken", bookingId: nbiCancelled.id, dedupeKey: `nbi_409:${nbiCancelled.id}` });
     errors.mockRestore();
     // Twenty minutes later, before the retry: the client accepted online, a hold was
     // confirmed and another extended, and one double booking was sorted out.
@@ -297,12 +305,13 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     await db.update(leads).set({ status: "booked", holdUntil: null }).where(eq(leads.id, confirmed.id));
     await db.update(leads).set({ holdUntil: new Date(until.getTime() + 7 * 86_400_000) }).where(eq(leads.id, extended.id));
     await db.update(bookings).set({ clashFlaggedAt: null }).where(eq(bookings.id, clash.id));
+    await db.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, nbiCancelled.id));
     mode = "ok";
     await retryAlertEmails(later(2 * MIN), { ownerIds: [owner] });
     const got = Object.fromEntries(Object.entries(sent).map(([k, title]) => [k, mailsTitled(title)]));
-    expect(got).toEqual({ booked: 0, stillOpen: 1, confirmed: 0, extended: 0, held: 1, resolved: 0, clashing: 1 });
+    expect(got).toEqual({ booked: 0, stillOpen: 1, confirmed: 0, extended: 0, held: 1, resolved: 0, clashing: 1, nbiTaken: 1, nbiCancelled: 0 });
     const statuses = (await rowsFor(owner)).map(r => r.emailStatus);
-    expect(statuses.filter(s => s === "skipped")).toHaveLength(4);
+    expect(statuses.filter(s => s === "skipped")).toHaveLength(5);
   });
 
   it("a 'waiting for a reply' alert held back isn't sent once staff have replied", async () => {

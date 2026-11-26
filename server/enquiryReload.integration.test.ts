@@ -243,14 +243,14 @@ d("enquiry form after a reload (DB)", () => {
     const N = 30;
     const mailPerson = (email: string, i = 0) => ({ ownerId: MAIL_OWNER, firstName: `Burst${i}`, lastName: "Testwell", email, phone: "021 555 0142" });
     const mailToken = (ms: number) => formStartToken(MAIL_OWNER, Date.now() - ms, ENV.cookieSecret);
-    async function burst(opts: { stepOneToken?: string; submitToken?: (i: number) => string | undefined; email: (i: number) => string; stepOneEmail: string }) {
+    async function burst(opts: { stepOneToken?: string; submitToken?: (i: number) => string | undefined; email: (i: number) => string; stepOneEmail: string; sameName?: boolean }) {
       return withRateLimit(async () => {
         const pub = publicCaller(randIp());
         const cap = await pub.leads.startCapture({ ...mailPerson(opts.stepOneEmail), formToken: opts.stepOneToken });
         expect(cap.leadId).toBeGreaterThan(0);
         sent.length = 0;
         const res = await Promise.allSettled(Array.from({ length: N }, (_, i) => pub.leads.submit({
-          ...mailPerson(opts.email(i), i), ...step2, leadId: cap.leadId, leadToken: cap.leadToken, formToken: opts.submitToken?.(i),
+          ...mailPerson(opts.email(i), opts.sameName ? 0 : i), ...step2, leadId: cap.leadId, leadToken: cap.leadToken, formToken: opts.submitToken?.(i),
         })));
         const ok = res.filter(r => r.status === "fulfilled").map(r => (r as PromiseFulfilledResult<any>).value);
         const refused = res.filter(r => r.status === "rejected" && /Too many submissions/.test(String((r as PromiseRejectedResult).reason?.message)));
@@ -300,6 +300,29 @@ d("enquiry form after a reload (DB)", () => {
       expect(r.autoReplies).toHaveLength(1);
       expect(r.activity).toBe(1);
       expect(await leadsFor(email, MAIL_OWNER)).toHaveLength(1);
+    });
+
+    it("a corrected email under the same name, sent many times at once: one finishes the partial with it, the rest get that enquiry back", async () => {
+      const t = tag();
+      const typo = `aroha.${t}@exmaple.test`;
+      const fixed = `aroha.${t}@example.test`;
+      const r = await burst({ stepOneToken: mailToken(10_000), stepOneEmail: typo, email: () => fixed, submitToken: () => mailToken(10_000), sameName: true });
+      // A corrected email is counted, so 4 of them pass the limit. Before,
+      // every one of the 4 that read the row while it was partial saved its
+      // own enquiry and sent its own two emails.
+      // (One that reads the row after it is finished is a repeat before it
+      // is counted, so it can let one more through the limit as a repeat.)
+      expect(r.completed.map(v => v.id)).toEqual([r.cap.leadId]);
+      expect(new Set(r.accepted.map(v => v.id))).toEqual(new Set([r.cap.leadId]));
+      expect(r.repeats.length).toBeGreaterThanOrEqual(3);
+      expect(r.repeats.length + r.refused).toBe(N - 1);
+      expect(r.fake).toBe(0);
+      expect(r.venueMails).toBe(1);
+      expect(r.autoReplies.map(m => m.to)).toEqual([fixed]);
+      expect(r.row.internalNotes).toBeNull();
+      expect(r.row.email).toBe(fixed);
+      expect(await leadsFor(fixed, MAIL_OWNER)).toHaveLength(1);
+      expect(await leadsFor(typo, MAIL_OWNER)).toHaveLength(0);
     });
 
     it("a different email on every submit: nothing is free, so at most 4 get through", async () => {

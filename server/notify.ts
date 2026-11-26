@@ -163,7 +163,9 @@ async function alertStillWanted(db: Db, row: VenueNotification): Promise<boolean
     const { bookings } = await import("../drizzle/schema");
     const [b] = await db.select({ status: bookings.status, clashFlaggedAt: bookings.clashFlaggedAt }).from(bookings)
       .where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, row.ownerId))).limit(1);
-    return !!b && !!b.clashFlaggedAt && b.status !== "cancelled";
+    if (!b || b.status === "cancelled") return false;
+    // Only a clash VenueFlow found sets the flag; a NowBookIt refusal (nbi_409:) never does.
+    return (row.dedupeKey ?? "").startsWith("double_booking:") ? !!b.clashFlaggedAt : true;
   }
   if (!row.leadId) return true;
   if (row.kind === "proposal_stalled") {
