@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { TRPCError } from "@trpc/server";
 import { appRouter } from "./routers";
-import { logTrpcError } from "./_core/trpcErrorLog";
+import { REFUSAL_LINES_PER_REQUEST, logTrpcError } from "./_core/trpcErrorLog";
 
 /**
  * A refusal on the public enquiry form leaves one log line saying which call,
@@ -53,6 +53,25 @@ describe("enquiry refusals in the server log", () => {
       const all = refusalLines(warn).join("\n");
       expect(all).not.toContain("mere");
       expect(all).not.toContain("Ruby");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("writes only a few lines for one batched request, however many calls it carries", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const n = 40;
+      const paths = Array.from({ length: n }, () => "leads.submit").join(",");
+      const body: Record<string, unknown> = {};
+      for (let i = 0; i < n; i++) body[i] = { json: { ownerId: 1, firstName: "Mere", email: "not-an-email" } };
+      const res = await fetch(`${base}/${paths}?batch=1`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const answers = await res.json();
+      expect(answers).toHaveLength(n);
+      expect(refusalLines(warn)).toHaveLength(REFUSAL_LINES_PER_REQUEST);
+      // A separate request starts its own count.
+      await post("leads.submit", { ownerId: 1, firstName: "Mere", email: "not-an-email" });
+      expect(refusalLines(warn)).toHaveLength(REFUSAL_LINES_PER_REQUEST + 1);
     } finally {
       warn.mockRestore();
     }

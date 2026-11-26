@@ -15,7 +15,7 @@
  * retry an hour later sends the same thing.
  */
 import { and, desc, eq, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
-import { getDb, addLeadActivity, getLeadById } from "./db";
+import { getDb, addLeadActivity, getLeadById, type DbOrTx } from "./db";
 import { bookings, enquiryEmails, leads, venueNotifications, venueSettings, type EnquiryEmail, type Lead, type VenueSettings } from "../drizzle/schema";
 import { buildVenueMailer } from "./paymentsEmail";
 import { registerJob } from "./jobs";
@@ -25,6 +25,7 @@ import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { formatEventDate } from "@shared/eventDate";
 import { venueDayWindow, wallDateKeyInTz } from "@shared/enquiryWallTime";
 import { POSSIBLE_SPAM_NOTE, partialAlertDedupeKey } from "@shared/leadConstants";
+import { finishedMatchesAlert } from "./partialEnquiries";
 import {
   AUTO_REPLY_RETRY, EMAIL_SENDING_LEASE_MS, VENUE_EMAIL_RETRY, describeSmtpError, nextEmailAttemptAt,
   type EmailDeliveryStatus,
@@ -48,13 +49,16 @@ const smtpReady = (vs: QueueSettings | null | undefined) => !!(vs?.smtpHost && v
  * "skipped" when the venue has no notification address or no SMTP, or the
  * auto-reply is switched off. A lead that already has its rows keeps them
  * (a repeated SUBMIT never queues a second email). Returns each row's status.
+ * leads.submit runs it in the transaction that saves the lead (`tx`), so a
+ * saved enquiry always has its emails queued.
  */
 export async function queueEnquiryEmails(
   lead: Pick<Lead, "id" | "ownerId" | "email">,
   vs: QueueSettings | null | undefined,
   now: Date = new Date(),
+  tx?: DbOrTx,
 ): Promise<Record<EnquiryEmailKind, EmailDeliveryStatus>> {
-  const db = await getDb();
+  const db = tx ?? await getDb();
   if (!db) return { venue: "skipped", auto_reply: "skipped" };
   const venueOk = !!vs?.notificationEmail?.trim() && smtpReady(vs);
   if (!venueOk) {
@@ -111,14 +115,23 @@ export async function autoReplyNoteFor(leadId: number): Promise<AutoReplyNote> {
 /**
  * Finishing a partial the venue was already told was unfinished: that bell
  * row is marked read, so it doesn't sit there saying they gave up. Only that
- * row (by its dedupe key), never the new enquiry's own. Its time goes into
- * the venue's email (see buildVenueEnquiryEmail).
+ * row (by its dedupe key), never the new enquiry's own, and only when the
+ * finished enquiry is the person the alert named (finishedMatchesAlert).
+ * Its time goes into the venue's email (see buildVenueEnquiryEmail).
  */
-export async function markPartialAlertRead(ownerId: number, leadId: number, now: Date = new Date()): Promise<Date | null> {
+export async function markPartialAlertRead(
+  ownerId: number,
+  lead: Pick<Lead, "id" | "firstName" | "lastName" | "email">,
+  now: Date = new Date(),
+): Promise<Date | null> {
   const db = await getDb();
   if (!db) return null;
+  const [alert] = await db.select({ id: venueNotifications.id, body: venueNotifications.body }).from(venueNotifications)
+    .where(and(eq(venueNotifications.ownerId, ownerId), eq(venueNotifications.dedupeKey, partialAlertDedupeKey(lead.id)), isNull(venueNotifications.readAt)))
+    .limit(1);
+  if (!alert || !finishedMatchesAlert(alert.body, lead)) return null;
   const [row] = await db.update(venueNotifications).set({ readAt: now })
-    .where(and(eq(venueNotifications.ownerId, ownerId), eq(venueNotifications.dedupeKey, partialAlertDedupeKey(leadId)), isNull(venueNotifications.readAt)))
+    .where(and(eq(venueNotifications.id, alert.id), isNull(venueNotifications.readAt)))
     .returning({ createdAt: venueNotifications.createdAt });
   return row?.createdAt ?? null;
 }
@@ -136,7 +149,7 @@ function alertTimeText(at: Date, tz: string, now: Date): string {
 }
 
 /** The New Event Enquiry email to the venue (moved here from leads.submit). */
-export async function buildVenueEnquiryEmail(lead: Lead, vs: VenueSettings, opts: { fromEmail: string; now?: Date }): Promise<Built> {
+export async function buildVenueEnquiryEmail(lead: Lead, vs: VenueSettings, opts: { fromEmail: string; now?: Date; lateSince?: Date }): Promise<Built> {
   const db = (await getDb())!;
   const now = opts.now ?? new Date();
   const tz = venueTimeZone(vs);
@@ -220,9 +233,13 @@ export async function buildVenueEnquiryEmail(lead: Lead, vs: VenueSettings, opts
   // Lines above the details: this finishes an enquiry the venue was told
   // was unfinished, and/or the form's hidden anti-spam field was filled in.
   const notes: string[] = [];
-  const [alerted] = await db.select({ createdAt: venueNotifications.createdAt }).from(venueNotifications)
+  if (opts.lateSince) {
+    const when = alertTimeText(opts.lateSince, tz, now);
+    notes.push(`This enquiry came in ${/^\d/.test(when) ? "at" : "on"} ${when}. This email was held up on our side, so it is late.`);
+  }
+  const [alerted] = await db.select({ createdAt: venueNotifications.createdAt, body: venueNotifications.body }).from(venueNotifications)
     .where(and(eq(venueNotifications.ownerId, lead.ownerId), eq(venueNotifications.dedupeKey, partialAlertDedupeKey(lead.id)))).limit(1);
-  if (alerted) notes.push(`They finished the enquiry we told you was unfinished at ${alertTimeText(alerted.createdAt, tz, now)}.`);
+  if (alerted && finishedMatchesAlert(alerted.body, lead)) notes.push(`They finished the enquiry we told you was unfinished at ${alertTimeText(alerted.createdAt, tz, now)}.`);
   if (lead.internalNotes === POSSIBLE_SPAM_NOTE) notes.push("The form's hidden anti-spam field was filled in, so this may not be real. Check it looks genuine before you reply.");
   const notesHtml = notes.map(n => `<div style="margin:0 0 12px;background:#f3f4f6;border-radius:6px;padding:10px 12px;font-size:14px;color:#374151">${esc(n)}</div>`).join('');
 
@@ -391,9 +408,21 @@ export async function sendEnquiryEmail(id: number, now: Date = new Date()): Prom
     await settle(row.id, { status: "skipped", updatedAt: now });
     return "skipped";
   }
+  // A first try that never happened (the jobs were stopped, an instance was
+  // down): the retries have a time limit, and so does this. A "we've got
+  // your enquiry" days later helps nobody, so it isn't sent; the venue's
+  // email still goes, saying it is late, as the enquiry still needs a reply.
+  const policy = kind === "venue" ? VENUE_EMAIL_RETRY : AUTO_REPLY_RETRY;
+  const late = now.getTime() - new Date(row.createdAt).getTime() > policy.retryForMs + EMAIL_SENDING_LEASE_MS;
+  if (late && kind === "auto_reply") {
+    console.log(`[EnquiryEmail] auto_reply for lead ${lead.id} not sent: queued ${Math.round((now.getTime() - new Date(row.createdAt).getTime()) / 60_000)} min ago, too late`);
+    await settle(row.id, { status: "skipped", lastError: "Not sent: too long after the enquiry arrived", updatedAt: now });
+    return "skipped";
+  }
+  let mail: Built;
   try {
-    const mail = kind === "venue"
-      ? await buildVenueEnquiryEmail(lead, vs, { fromEmail: mailer.fromEmail, now })
+    mail = kind === "venue"
+      ? await buildVenueEnquiryEmail(lead, vs, { fromEmail: mailer.fromEmail, now, lateSince: late ? new Date(row.createdAt) : undefined })
       : await buildEnquiryAutoReply(lead, vs, mailer);
     await mailer.transporter.sendMail({
       from: `"${mail.fromName}" <${mailer.fromEmail}>`,
@@ -404,19 +433,6 @@ export async function sendEnquiryEmail(id: number, now: Date = new Date()): Prom
       text: mail.text,
       ...(mail.attachments ? { attachments: mail.attachments } : {}),
     });
-    await settle(row.id, { status: "sent", sentAt: now, updatedAt: now });
-    console.log(`[EnquiryEmail] ${kind} for lead ${lead.id} sent (try ${row.attempts})`);
-    if (kind === "auto_reply") {
-      // On the lead's timeline, but it isn't a reply from the team —
-      // the lead still shows "needs reply".
-      await addLeadActivity({
-        leadId: lead.id,
-        ownerId: lead.ownerId,
-        type: 'email',
-        content: `Automatic reply sent to ${lead.email}\n\nSubject: ${mail.subject}\n\n${mail.text}`,
-      }, { countsAsReply: false });
-    }
-    return "sent";
   } catch (err) {
     const line = describeSmtpError(err);
     console.error(`[EnquiryEmail] ${kind} for lead ${row.leadId} failed (try ${row.attempts}): ${line}`);
@@ -440,6 +456,30 @@ export async function sendEnquiryEmail(id: number, now: Date = new Date()): Prom
     }
     return "failed";
   }
+  // The mail server has it. Nothing after this may put it back in the queue
+  // (the visitor would get it twice): a failure here is only logged.
+  for (let i = 0; ; i++) {
+    try { await settle(row.id, { status: "sent", sentAt: now, updatedAt: now }); break; } catch (err: any) {
+      console.error(`[EnquiryEmail] ${kind} for lead ${lead.id} sent, but recording it failed (try ${i + 1}):`, err?.message ?? err);
+      if (i >= 2) break;
+    }
+  }
+  console.log(`[EnquiryEmail] ${kind} for lead ${lead.id} sent (try ${row.attempts})`);
+  if (kind === "auto_reply") {
+    try {
+      // On the lead's timeline, but it isn't a reply from the team —
+      // the lead still shows "needs reply".
+      await addLeadActivity({
+        leadId: lead.id,
+        ownerId: lead.ownerId,
+        type: 'email',
+        content: `Automatic reply sent to ${lead.email}\n\nSubject: ${mail.subject}\n\n${mail.text}`,
+      }, { countsAsReply: false });
+    } catch (err: any) {
+      console.error(`[EnquiryEmail] auto_reply for lead ${lead.id} sent, but its timeline note failed:`, err?.message ?? err);
+    }
+  }
+  return "sent";
 }
 
 /** Send both of one enquiry's emails, each on its own: the auto-reply never waits on the venue's. */
@@ -473,14 +513,17 @@ export async function waitForEnquiryEmails(): Promise<void> {
 /**
  * The enquiry-emails job: every email that is due (a retry whose gap has
  * passed, or a "sending" claim that lapsed because a run died mid-send).
- * Returns how many were sent.
+ * Returns how many were sent. `ownerIds` keeps a test to its own venues.
  */
-export async function runEnquiryEmailRetries(now: Date = new Date()): Promise<number> {
+export async function runEnquiryEmailRetries(now: Date = new Date(), opts: { ownerIds?: number[] } = {}): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
   // Same predicate as the partial index (enquiry_emails_due_idx).
   const due = await db.select({ id: enquiryEmails.id }).from(enquiryEmails)
-    .where(and(inArray(enquiryEmails.status, ["pending", "sending"]), lte(enquiryEmails.nextAttemptAt, now)))
+    .where(and(
+      inArray(enquiryEmails.status, ["pending", "sending"]), lte(enquiryEmails.nextAttemptAt, now),
+      opts.ownerIds ? inArray(enquiryEmails.ownerId, opts.ownerIds) : undefined,
+    ))
     .orderBy(enquiryEmails.nextAttemptAt)
     .limit(50);
   let sent = 0;

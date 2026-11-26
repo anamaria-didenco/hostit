@@ -13,10 +13,14 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { sameEnquiryName } from "@shared/enquiryRules";
 import { PARTIAL_PING_CAP_MS, PARTIAL_PING_MIN_GAP_MS } from "@shared/enquiryTiming";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
+
+/** The database, or a transaction on it: helpers that take one run inside the caller's transaction. */
+export type DbOrTx = ReturnType<typeof drizzle> | Parameters<Parameters<ReturnType<typeof drizzle>["transaction"]>[0]>[0];
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -186,8 +190,8 @@ export async function getLeadById(id: number, ownerId: number) {
   return result[0] ?? null;
 }
 
-export async function createLead(data: InsertLead) {
-  const db = await getDb();
+export async function createLead(data: InsertLead, tx?: DbOrTx) {
+  const db = tx ?? await getDb();
   if (!db) return null;
   // RETURNING, not a re-select by email: a returning client (or a manual
   // lead with a blank email) shares that email with other rows, and the
@@ -229,8 +233,8 @@ export async function updateLead(id: number, ownerId: number, data: Partial<Inse
  * note); a staff note written meanwhile also stops the match, and is left
  * alone.
  */
-export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>, opts: { internalNotes?: string | null } = {}) {
-  const db = await getDb();
+export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>, opts: { internalNotes?: string | null } = {}, tx?: DbOrTx) {
+  const db = tx ?? await getDb();
   if (!db) return null;
   const [row] = await db.update(leads).set({ updatedAt: new Date(), ...data, internalNotes: opts.internalNotes ?? null })
     .where(and(
@@ -245,9 +249,12 @@ export async function completePartialLead(id: number, ownerId: number, data: Par
  * The visitor went BACK on the form and changed their step-1 details
  * (usually a mistyped email): put the new ones on the lead this page saved,
  * instead of leaving it behind as an Unfinished enquiry next to a second one.
- * Only while it is still the untouched partial, in one conditional UPDATE;
- * null otherwise (finished, or staff have worked on it). createdAt,
- * partialSeenAt and the ad attribution stay as they were.
+ * Only while it is still the untouched partial, and with the same email or
+ * the same name; null otherwise (finished, staff have worked on it, or a new
+ * name with a new email: someone else on a shared device, who gets their own
+ * lead). createdAt, partialSeenAt and the ad attribution stay
+ * as they were. The details replaced go on the lead's timeline, so nothing
+ * typed is lost.
  */
 export async function updatePartialLeadContact(
   id: number,
@@ -256,21 +263,41 @@ export async function updatePartialLeadContact(
 ) {
   const db = await getDb();
   if (!db) return null;
-  const [row] = await db.update(leads).set({
-    firstName: data.firstName,
-    lastName: data.lastName ?? null,
-    email: data.email,
-    phone: data.phone ?? null,
-    company: data.company ?? null,
-    contactId: data.contactId ?? null,
-    updatedAt: new Date(),
-  })
-    .where(and(
-      eq(leads.id, id), eq(leads.ownerId, ownerId),
-      eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
-    ))
-    .returning();
-  return row ?? null;
+  return db.transaction(async (tx) => {
+    const [before] = await tx.select({
+      firstName: leads.firstName, lastName: leads.lastName, email: leads.email, phone: leads.phone, company: leads.company,
+    }).from(leads)
+      .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId), eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE)))
+      .limit(1).for("update");
+    const sameEmail = (before?.email ?? "").trim().toLowerCase() === (data.email ?? "").trim().toLowerCase();
+    if (!before || !(sameEmail || sameEnquiryName(before, data))) return null;
+    const [row] = await tx.update(leads).set({
+      firstName: data.firstName,
+      lastName: data.lastName ?? null,
+      email: data.email,
+      phone: data.phone ?? null,
+      company: data.company ?? null,
+      contactId: data.contactId ?? null,
+      updatedAt: new Date(),
+    })
+      .where(and(
+        eq(leads.id, id), eq(leads.ownerId, ownerId),
+        eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
+      ))
+      .returning();
+    if (!row) return null;
+    const was = [
+      (before.email ?? "") !== (row.email ?? "") && `email ${before.email || "(none)"}`,
+      (before.phone ?? "") !== (row.phone ?? "") && `phone ${before.phone || "(none)"}`,
+      (before.company ?? "") !== (row.company ?? "") && `company ${before.company || "(none)"}`,
+      ((before.firstName ?? "") !== (row.firstName ?? "") || (before.lastName ?? "") !== (row.lastName ?? "")) && `name ${[before.firstName, before.lastName].filter(Boolean).join(" ")}`,
+    ].filter(Boolean);
+    // Straight onto the timeline: not a staff touch, so the lead stays an untouched partial.
+    if (was.length) {
+      await tx.insert(leadActivity).values({ leadId: id, ownerId, type: "note", content: `Step 1 of the website form was changed before it was sent. Before the change: ${was.join(", ")}.` });
+    }
+    return row;
+  });
 }
 
 /**

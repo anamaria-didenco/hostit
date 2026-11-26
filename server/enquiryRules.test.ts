@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
   ENQUIRY_EMAIL_RE, ENQUIRY_FIELD_LABELS, ENQUIRY_LIMITS, GUEST_COUNT_MAX, STEP_ONE_FIELDS,
-  eventFormatFromText, guestCountAsTypedLine, isStepOneField, isValidEnquiryEmail, parseGuestCount, tidyEnquiryEmail,
+  eventFormatFromText, sameEnquiryName, guestCountAsTypedLine, isStepOneField, isValidEnquiryEmail, parseGuestCount, tidyEnquiryEmail,
 } from "@shared/enquiryRules";
 import { EVENT_FORMAT_OPTIONS } from "@shared/formFields";
 
@@ -266,5 +266,18 @@ describe("event format words", () => {
     expect(eventFormatFromText("banquet")).toBeUndefined();
     expect(eventFormatFromText("")).toBeUndefined();
     expect(eventFormatFromText(null)).toBeUndefined();
+  });
+});
+
+describe("same name on step 1", () => {
+  it("ignores case and extra spaces", () => {
+    expect(sameEnquiryName({ firstName: " Aroha ", lastName: "Te  Wiata" }, { firstName: "aroha", lastName: "te wiata" })).toBe(true);
+    expect(sameEnquiryName({ firstName: "Aroha", lastName: null }, { firstName: "Aroha", lastName: "" })).toBe(true);
+  });
+
+  it("tells a different first or last name apart", () => {
+    expect(sameEnquiryName({ firstName: "Aroha", lastName: "Testwell" }, { firstName: "Ben", lastName: "Testwell" })).toBe(false);
+    expect(sameEnquiryName({ firstName: "Aroha", lastName: "Testwell" }, { firstName: "Aroha", lastName: "Other" })).toBe(false);
+    expect(sameEnquiryName({ firstName: "Aroha" }, { firstName: "Aroha", lastName: "Testwell" })).toBe(false);
   });
 });

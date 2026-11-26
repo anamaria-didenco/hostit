@@ -26,7 +26,7 @@ import { normaliseTaskPriority } from "@shared/taskFields";
 import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 import { publicVenue } from "./publicVenue";
 import { enquiryEventInstant, isValidEnquiryDateInput, isWallTime } from "@shared/enquiryWallTime";
-import { ENQUIRY_LIMITS } from "@shared/enquiryRules";
+import { ENQUIRY_LIMITS, sameEnquiryName } from "@shared/enquiryRules";
 import { IDEMPOTENT_SUBMIT_MS } from "@shared/enquiryTiming";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -48,7 +48,7 @@ import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, completePartialLead, updatePartialLeadContact, touchPartialLead, updateLeadStatus, updateLead, markLeadLost,
+  getDb, getLeads, getLeadById, createLead, completePartialLead, updatePartialLeadContact, touchPartialLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -135,7 +135,8 @@ async function enforceLeadRateLimit(ctx: any, ownerId: number) {
   } else {
     entry.count += 1;
     if (entry.count > MAX) {
-      throw new Error("Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
+      // An expected answer, not a failure: no stack in the log for it.
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there." });
     }
   }
 }
@@ -868,14 +869,18 @@ export const appRouter = router({
         const isRepeat = (row: { internalNotes: string | null; status: string | null; email: string | null; updatedAt: Date } | null | undefined): boolean =>
           !!row && row.internalNotes == null && row.status === "new" && sameEmail(row.email, input.email)
           && new Date(row.updatedAt).getTime() >= Date.now() - IDEMPOTENT_SUBMIT_MS;
-        const repeatAnswer = async (row: NonNullable<typeof claimed>) => {
+        // Only what the form needs back: the enquiry's id and token (for the
+        // walkthrough offer) and what to say about their copy. Never the
+        // rest of the row, which staff may have worked on since.
+        type Answer = { id: number; leadToken: string; autoReply: "sent" | "sending" | "none"; autoReplySent: boolean; repeat: boolean };
+        const answer = (id: number, autoReply: Answer["autoReply"], repeat: boolean, autoReplySent = autoReply === "sent"): Answer =>
+          ({ id, leadToken: leadAccessToken(input.ownerId, id), autoReply, autoReplySent, repeat });
+        const repeatAnswer = async (row: NonNullable<typeof claimed>): Promise<Answer> => {
           if (!rateLimit('enquiry-submit-repeat', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 30, 10 * 60_000)) {
             throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there." });
           }
           const { autoReplyNoteFor } = await import('./enquiryEmails');
-          const autoReply = await autoReplyNoteFor(row.id);
-          const { internalNotes: _notes, ...shown } = row;
-          return { ...shown, leadToken: leadAccessToken(input.ownerId, row.id), autoReplySent: autoReply === "sent", autoReply, repeat: true };
+          return answer(row.id, await autoReplyNoteFor(row.id), true);
         };
         if (claimed && !partial && isRepeat(claimed)) return repeatAnswer(claimed);
         // Finishing it with the email it was saved with is the second half of
@@ -892,6 +897,11 @@ export const appRouter = router({
         // can get a partial without loading the form. It gains nothing a
         // plain submit doesn't: one completion per counted write.
         const finishingOwn = !!partial && sameEmail(partial.email, input.email);
+        // A different email completes the held partial only under the same
+        // name (a corrected email). A new name and a new email is someone
+        // else on a shared device: they get their own lead, and the first
+        // person's partial stays as it was, still alerted.
+        const completing = partial && (finishingOwn || sameEnquiryName(partial, input)) ? partial : undefined;
         if (!finishingOwn) await enforceLeadRateLimit(ctx, input.ownerId);
         const { isBotSubmission, verifyTurnstile, venueTimeZone } = await import('./enquiryForm');
         // A bot gets a convincing success and nothing is stored or sent. The
@@ -953,20 +963,43 @@ export const appRouter = router({
           ...(space ? { spaceId: space.id, spaceName: space.name } : {}),
         };
 
-        let lead = null;
-        let finishedPartial = false;
-        if (partial) {
-          // Completing a lead startCapture already created at step 1 —
-          // update that row rather than insert a second one, and clear the
-          // "Partial" marker. Only while it is still the untouched partial
-          // (a staff note written meanwhile is theirs, not ours to erase),
-          // and only for one request: of several racing to finish it, one
-          // gets the row and the others get null.
-          lead = await completePartialLead(partial.id, input.ownerId, leadData, { internalNotes: honeypotForgiven ? POSSIBLE_SPAM_NOTE : null });
-          finishedPartial = !!lead;
-          if (honeypotForgiven && lead) console.log(`[EnquirySpam] kept lead ${lead.id} for owner ${input.ownerId}, marked possible spam (honeypot on its own step-1 lead)`);
-        }
-        if (!lead && finishingOwn) {
+        // Saving the enquiry and queueing its two emails (the New Event
+        // Enquiry to the venue and the visitor's auto-reply, sent once this
+        // has answered: server/enquiryEmails.ts) happen together or not at
+        // all. A failure part way used to leave a saved enquiry with no
+        // emails, and the visitor's retry then found it "already received",
+        // so the venue was never told.
+        const { queueEnquiryEmails, promisedAutoReply, markPartialAlertRead, sendEnquiryEmailsSoon } = await import('./enquiryEmails');
+        const db = await getDb();
+        if (!db) throw new Error("Could not save — please try again.");
+        type Saved = { lead: NonNullable<Awaited<ReturnType<typeof createLead>>>; finishedPartial: boolean; queued: Awaited<ReturnType<typeof queueEnquiryEmails>> };
+        type Outcome = { saved: Saved } | { lost: true };
+        const outcome: Outcome = await db.transaction(async (tx): Promise<Outcome> => {
+          let lead = null;
+          let finishedPartial = false;
+          if (completing) {
+            // Completing a lead startCapture already created at step 1 —
+            // update that row rather than insert a second one, and clear the
+            // "Partial" marker. Only while it is still the untouched partial
+            // (a staff note written meanwhile is theirs, not ours to erase),
+            // and only for one request: of several racing to finish it, one
+            // gets the row and the others get null.
+            lead = await completePartialLead(completing.id, input.ownerId, leadData, { internalNotes: honeypotForgiven ? POSSIBLE_SPAM_NOTE : null }, tx);
+            finishedPartial = !!lead;
+          }
+          // Another request finished our own partial first: decided below, outside this.
+          if (!lead && finishingOwn) return { lost: true };
+          // No leadId (or its row vanished) — startCapture never ran, or
+          // failed. Either way a submission is never silently lost: insert
+          // fresh, exactly as before this feature existed.
+          if (!lead) lead = await createLead(leadData, tx);
+          // Never a success screen for an enquiry that wasn't saved.
+          if (!lead) throw new Error("Could not save — please try again.");
+          const queued = await queueEnquiryEmails(lead, vs, new Date(), tx);
+          return { saved: { lead, finishedPartial, queued } };
+        });
+        let saved: Saved;
+        if ("lost" in outcome) {
           // Another request finished this partial between the read above and
           // here. Received just now, so this is usually the same SUBMIT sent
           // twice: it gets that enquiry back. Otherwise it gets no free pass:
@@ -975,25 +1008,26 @@ export const appRouter = router({
           if (isRepeat(again)) return repeatAnswer(again!);
           await enforceLeadRateLimit(ctx, input.ownerId);
           if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+          saved = await db.transaction(async (tx) => {
+            const lead = await createLead(leadData, tx);
+            if (!lead) throw new Error("Could not save — please try again.");
+            return { lead, finishedPartial: false, queued: await queueEnquiryEmails(lead, vs, new Date(), tx) };
+          });
+        } else {
+          saved = outcome.saved;
         }
-        if (!lead) {
-          // No leadId (or its row vanished) — startCapture never ran, or
-          // failed. Either way a submission is never silently lost: insert
-          // fresh, exactly as before this feature existed.
-          lead = await createLead(leadData);
-        }
-        // Never a success screen for an enquiry that wasn't saved.
-        if (!lead) throw new Error("Could not save — please try again.");
+        const { lead, finishedPartial, queued } = saved;
+        if (honeypotForgiven && finishedPartial) console.log(`[EnquirySpam] kept lead ${lead.id} for owner ${input.ownerId}, marked possible spam (honeypot on its own step-1 lead)`);
 
-        // The New Event Enquiry email and the visitor's auto-reply are queued
-        // now and sent once this has answered (server/enquiryEmails.ts): a
-        // slow or broken mail server no longer keeps the visitor waiting,
-        // and a failed send is tried again.
-        const { queueEnquiryEmails, promisedAutoReply, markPartialAlertRead, sendEnquiryEmailsSoon } = await import('./enquiryEmails');
-        const queued = await queueEnquiryEmails(lead, vs);
+        // The enquiry is saved and its emails queued: nothing after this
+        // turns it into an error for the visitor (a retry would only be
+        // taken as "already received").
+        const afterSave = async (what: string, run: () => Promise<unknown>) => {
+          try { await run(); } catch (err: any) { console.error(`[LeadSubmit] ${what} for lead ${lead.id} failed (non-fatal):`, err?.message ?? err); }
+        };
         // They finished an enquiry the venue was already told was
         // unfinished: that alert is marked read, and the venue's email says so.
-        if (finishedPartial) await markPartialAlertRead(input.ownerId, lead.id);
+        if (finishedPartial) await afterSave("marking the Unfinished alert read", () => markPartialAlertRead(input.ownerId, lead));
 
         // Into the bell too. email:false — the detailed enquiry email above
         // already goes to the venue.
@@ -1010,18 +1044,19 @@ export const appRouter = router({
 
         // Synthetic health-check pings never become real work.
         if (lead.source !== 'healthcheck') {
-          const { fireTaskRules } = await import('./automatedTasks');
-          await fireTaskRules(input.ownerId, { trigger: 'on_enquiry_received', leadId: lead.id });
+          await afterSave("task rules", async () => {
+            const { fireTaskRules } = await import('./automatedTasks');
+            await fireTaskRules(input.ownerId, { trigger: 'on_enquiry_received', leadId: lead.id });
+          });
         }
 
         // What the success screen may say about their copy: nothing has gone
         // yet. Forms loaded before this read autoReplySent, which is false
         // until the email is actually sent, so they promise nothing.
-        const autoReply = await promisedAutoReply(input.ownerId, lead.id, queued.auto_reply);
+        let autoReply: Answer["autoReply"] = "none";
+        await afterSave("the auto-reply note", async () => { autoReply = await promisedAutoReply(input.ownerId, lead.id, queued.auto_reply); });
         sendEnquiryEmailsSoon(lead.id);
-        // internalNotes is staff-only (it can hold the possible-spam note).
-        const { internalNotes: _notes, ...shown } = lead;
-        return { ...shown, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent: false, autoReply, repeat: false };
+        return answer(lead.id, autoReply, false, false);
       }),
 
     // Public: "still here" from the form while a visitor fills in step 2,

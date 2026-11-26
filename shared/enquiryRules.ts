@@ -162,6 +162,21 @@ export function isStepOneField(field: string | null | undefined): boolean {
   return (STEP_ONE_FIELDS as readonly string[]).includes(field ?? "");
 }
 
+const nameKey = (v: string | null | undefined) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * Whether two sets of step-1 details carry the same name: first and last
+ * name, ignoring case and extra spaces. Someone fixing a mistyped email keeps
+ * their name; a new name and a new email is another person (a shared tablet
+ * or computer), who gets their own lead rather than someone else's.
+ */
+export function sameEnquiryName(
+  a: { firstName?: string | null; lastName?: string | null },
+  b: { firstName?: string | null; lastName?: string | null },
+): boolean {
+  return nameKey(a.firstName) === nameKey(b.firstName) && nameKey(a.lastName) === nameKey(b.lastName);
+}
+
 // ─── Event format ────────────────────────────────────────────────────────────
 
 export type EventFormatValue = "seated" | "cocktail" | "both";

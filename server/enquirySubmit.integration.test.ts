@@ -184,6 +184,48 @@ d("leads.* on the public enquiry form (DB)", () => {
       expect(alerts).toHaveLength(0);
     });
 
+    it("keeps what was replaced on the lead's timeline, without making it look touched", async () => {
+      const t = tag();
+      const pub = publicCaller();
+      const a = await pub.leads.startCapture({ ...person(OWNER, `kiri.${t}@gmial.example.test`), formToken: opened(OWNER, 30_000) });
+      const was = await leadRow(a.leadId);
+      await pub.leads.startCapture({ ...person(OWNER, `kiri.${t}@gmail.example.test`), phone: "021 555 0199", leadId: a.leadId, leadToken: a.leadToken, formToken: opened(OWNER, 60_000) });
+      const db = (await getDb())!;
+      const notes = await db.select().from(leadActivity).where(eq(leadActivity.leadId, a.leadId));
+      expect(notes.map(n => n.content)).toEqual([`Step 1 of the website form was changed before it was sent. Before the change: email kiri.${t}@gmial.example.test, phone 021 555 0142.`]);
+      const row = await leadRow(a.leadId);
+      expect([row.internalNotes, row.status, row.lastActivityAt?.getTime()]).toEqual([PARTIAL_LEAD_NOTE, "new", was.lastActivityAt?.getTime()]);
+    });
+
+    it("never puts another person's name and email on someone's step-1 lead (a shared device)", async () => {
+      const t = tag();
+      const first = `aria.${t}@example.test`;
+      const next = `bodhi.${t}@example.test`;
+      const pub = publicCaller();
+      const a = await pub.leads.startCapture({ ...person(MAIL_OWNER, first), formToken: opened(MAIL_OWNER, 30_000) });
+      // Aria's step 1 sat long enough for the venue to be told.
+      await alertUnfinishedEnquiries(new Date(Date.now() + 25 * 60_000));
+      const db = (await getDb())!;
+      const alertRow = async () => (await db.select().from(venueNotifications).where(and(eq(venueNotifications.ownerId, MAIL_OWNER), eq(venueNotifications.dedupeKey, partialAlertDedupeKey(a.leadId)))))[0];
+      expect(await alertRow()).toBeTruthy();
+      // The next person on the same tab: BACK, their own name, email and phone, NEXT.
+      const bodhi = { ownerId: MAIL_OWNER, firstName: "Bodhi", lastName: "Second", email: next, phone: "027 555 0111" };
+      const b = await pub.leads.startCapture({ ...bodhi, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(MAIL_OWNER, 60_000) });
+      expect(b.leadId).not.toBe(a.leadId);
+      // Or SUBMIT straight away with the first person's lead still held.
+      const before = mailSink.messages.length;
+      const done: any = await pub.leads.submit({ ...bodhi, email: `bodhi2.${t}@example.test`, ...step2, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(MAIL_OWNER, 60_000) });
+      expect(done.id).not.toBe(a.leadId);
+      // Aria's lead is as she left it, still unfinished, and her alert is still unread.
+      const aria = await leadRow(a.leadId);
+      expect([aria.firstName, aria.email, aria.internalNotes]).toEqual(["Aroha", first, PARTIAL_LEAD_NOTE]);
+      expect((await alertRow()).readAt).toBeNull();
+      await waitForEnquiryEmails();
+      const mail = mailSink.messages.slice(before).filter(isVenueMail).map(m => qp(m.data)).find(m => m.includes(`bodhi2.${t}`))!;
+      expect(mail).toBeTruthy();
+      expect(mail).not.toContain("told you was unfinished");
+    });
+
     it("clears a phone or company the visitor removed", async () => {
       const email = `clear.${tag()}@example.test`;
       const pub = publicCaller();
@@ -333,7 +375,8 @@ d("leads.* on the public enquiry form (DB)", () => {
       const a = await pub.leads.startCapture({ ...person(MAIL_OWNER, email), formToken: opened(MAIL_OWNER, 30_000) });
       const first: any = await pub.leads.submit({ ...person(MAIL_OWNER, email), ...step2, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(MAIL_OWNER, 30_000) });
       expect(first).toMatchObject({ id: a.leadId, repeat: false, autoReply: "sending", autoReplySent: false });
-      expect(first.internalNotes).toBeUndefined();
+      // Only what the form needs: never the rest of the row (staff notes, who it's assigned to...).
+      expect(Object.keys(first).sort()).toEqual(["autoReply", "autoReplySent", "id", "leadToken", "repeat"]);
       await waitForEnquiryEmails();
       const db = (await getDb())!;
       const count = async () => ({
@@ -348,11 +391,12 @@ d("leads.* on the public enquiry form (DB)", () => {
       // The reply was lost; the phone sends it again, a second later and a minute later.
       for (const ago of [500, 60_000]) {
         const again: any = await pub.leads.submit({ ...person(MAIL_OWNER, `  ${email.toUpperCase()} `), ...step2, guestCount: 41, leadId: a.leadId, leadToken: a.leadToken, formToken: opened(MAIL_OWNER, ago) });
-        expect(again).toMatchObject({ id: a.leadId, leadToken: first.leadToken, repeat: true, autoReply: "sent", autoReplySent: true, guestCount: 40 });
-        expect(again.internalNotes).toBeUndefined();
+        expect(again).toEqual({ id: a.leadId, leadToken: first.leadToken, repeat: true, autoReply: "sent", autoReplySent: true });
       }
       await waitForEnquiryEmails();
       expect(await count()).toEqual(before);
+      // The second SUBMIT's answers aren't merged in.
+      expect((await leadRow(a.leadId)).guestCount).toBe(40);
     });
 
     it("isn't counted against the 5-write limit, but has a limit of its own", async () => {
@@ -416,7 +460,9 @@ d("leads.* on the public enquiry form (DB)", () => {
       expect(res.id).toBe(a.leadId);
       expect(took).toBeLessThan(2000);
       expect((await leadRow(a.leadId)).internalNotes).toBeNull();
-      expect((await emailRows(a.leadId)).map(r => [r.kind, r.status])).toEqual([["auto_reply", "pending"], ["venue", "pending"]]);
+      // Queued, not sent: the background send may already have picked them up.
+      for (const r of await emailRows(a.leadId)) expect(["pending", "sending"], r.kind).toContain(r.status);
+      expect((await emailRows(a.leadId)).map(r => r.kind)).toEqual(["auto_reply", "venue"]);
       // The connection drops: both fail, each on its own, and are queued again.
       await new Promise(r => setTimeout(r, 200));
       silent.dropAll();
@@ -451,10 +497,10 @@ d("leads.* on the public enquiry form (DB)", () => {
         expect(logged.join("\n")).not.toContain(email);
 
         // Not due yet: nothing happens.
-        expect(await runEnquiryEmailRetries(new Date())).toBe(0);
+        expect(await runEnquiryEmailRetries(new Date(), { ownerIds: OWNERS })).toBe(0);
         refuseVenue = null;
         const due = new Date(venue.nextAttemptAt.getTime() + 1000);
-        expect(await runEnquiryEmailRetries(due)).toBeGreaterThanOrEqual(1);
+        expect(await runEnquiryEmailRetries(due, { ownerIds: OWNERS })).toBeGreaterThanOrEqual(1);
         const sentRow = await emailRow(a.leadId, "venue");
         expect([sentRow.status, sentRow.attempts]).toEqual(["sent", 2]);
         const mails = refuseSink.messages.filter(isVenueMail).map(m => qp(m.data)).filter(m => m.includes(email));
@@ -462,7 +508,7 @@ d("leads.* on the public enquiry form (DB)", () => {
         expect(mails[0]).toContain("New Event Enquiry: Aroha Testwell");
         expect(mails[0]).toContain("Something for 40 in March");
         // Sent: never again.
-        expect(await runEnquiryEmailRetries(new Date(due.getTime() + 3_600_000))).toBe(0);
+        expect(await runEnquiryEmailRetries(new Date(due.getTime() + 3_600_000), { ownerIds: OWNERS })).toBe(0);
         expect(refuseSink.messages.filter(isVenueMail).filter(m => qp(m.data).includes(email))).toHaveLength(1);
       } finally {
         errors.mockRestore();
@@ -479,7 +525,7 @@ d("leads.* on the public enquiry form (DB)", () => {
         await waitForEnquiryEmails();
         let row = await emailRow(res.id, "venue");
         for (let i = 0; i < 20 && row.status === "pending"; i++) {
-          await runEnquiryEmailRetries(new Date(row.nextAttemptAt.getTime() + 1000));
+          await runEnquiryEmailRetries(new Date(row.nextAttemptAt.getTime() + 1000), { ownerIds: OWNERS });
           row = await emailRow(res.id, "venue");
         }
         expect([row.status, row.attempts]).toEqual(["failed", 8]);
@@ -491,7 +537,7 @@ d("leads.* on the public enquiry form (DB)", () => {
         expect(bell[0].dedupeKey).toBe(`venue-email-failed:${res.id}`);
         expect(bell[0].body).not.toContain("@");
         // Given up: no more tries.
-        expect(await runEnquiryEmailRetries(new Date(Date.now() + 5 * 3_600_000))).toBe(0);
+        expect(await runEnquiryEmailRetries(new Date(Date.now() + 5 * 3_600_000), { ownerIds: OWNERS })).toBe(0);
         expect((await emailRow(res.id, "venue")).attempts).toBe(8);
       } finally {
         refuseVenue = null;
@@ -509,7 +555,7 @@ d("leads.* on the public enquiry form (DB)", () => {
         expect((await emailRow(res.id, "venue")).status).toBe("sent");
         let row = await emailRow(res.id, "auto_reply");
         for (let i = 0; i < 10 && row.status === "pending"; i++) {
-          await runEnquiryEmailRetries(new Date(row.nextAttemptAt.getTime() + 1000));
+          await runEnquiryEmailRetries(new Date(row.nextAttemptAt.getTime() + 1000), { ownerIds: OWNERS });
           row = await emailRow(res.id, "auto_reply");
         }
         expect([row.status, row.attempts]).toEqual(["failed", 3]);
