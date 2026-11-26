@@ -1108,18 +1108,14 @@ export const appRouter = router({
               const mailer = await buildVenueMailer(input.ownerId);
               if (mailer) {
                 const { escapeHtml: esc } = await import('./sanitizeHtml');
-                const { DEFAULT_AUTO_REPLY_INTRO } = await import('../shared/enquiryCopy');
+                const { buildEnquiryAutoReplyEmail } = await import('./clientEmails');
                 const { venueBrand } = await import('@shared/brand');
                 const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
                 // Brand Pack: accent colour, ink-on-accent and the font pairing,
                 // so the auto-reply wears the venue's branding like the proposal
                 // and BEO — not a generic green serif.
                 const brand = venueBrand(vs);
-                const accent = brand.accent;
                 const onAccent = brand.onAccent;
-                const firstName = esc(input.firstName);
-                const introRaw = vs.enquiryAutoReplyMessage?.trim();
-                const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
                 const fmtDate = input.eventDate
                   ? formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ)
                   : null;
@@ -1137,28 +1133,18 @@ export const appRouter = router({
                 } else if (/^https?:\/\//.test(logoRaw)) {
                   logoHtml = `<img src="${esc(logoRaw)}" alt="${esc(venueName)}" style="${logoStyle}"/>`;
                 }
-                const details = [
-                  input.eventType && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px;width:120px">Event</td><td style="padding:3px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
-                  fmtDate && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Date</td><td style="padding:3px 0;font-size:14px;font-weight:600">${esc(fmtDate)}${input.dateFlexible ? ' (flexible)' : ''}</td></tr>`,
-                  input.guestCount && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Guests</td><td style="padding:3px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
-                ].filter(Boolean).join('');
-                const contactBits = [vs.phone && esc(vs.phone), esc(mailer.fromEmail)].filter(Boolean).join(' · ');
-                const html = `<div style="font-family:${brand.sans};max-width:520px;margin:0 auto;color:#1f2430">
-  <div style="background:${accent};color:${onAccent};padding:22px 26px;border-radius:10px 10px 0 0">
-    ${logoHtml}
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:${brand.sans}">${esc(venueName)}</div>
-    <div style="font-size:23px;font-weight:bold;margin-top:4px;font-family:${brand.serif}">We've got your enquiry</div>
-  </div>
-  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
-    <p style="font-size:16px;margin:0 0 12px;font-family:${brand.serif}">Hi ${firstName},</p>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 ${details ? '16px' : '18px'}">${intro}</p>
-    ${details ? `<table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px;padding:6px 12px"><tbody>${details}</tbody></table>` : ''}
-    <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">If anything's changed in the meantime, just reply to this email${contactBits ? ` or reach us on ${contactBits}` : ''}.</p>
-    <p style="font-size:15px;margin:16px 0 0;font-family:${brand.serif}">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
-  </div>
-</div>`;
-                const text = `Hi ${input.firstName},\n\n${introRaw || DEFAULT_AUTO_REPLY_INTRO}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
-                const subject = `We've received your enquiry — ${venueName}`;
+                // The wording (and its escaping) lives in clientEmails.ts.
+                const { subject, html, text } = buildEnquiryAutoReplyEmail({
+                  venueName, brand, logoHtml,
+                  firstName: input.firstName,
+                  introOverride: vs.enquiryAutoReplyMessage,
+                  eventType: input.eventType,
+                  dateLabel: fmtDate,
+                  dateFlexible: input.dateFlexible,
+                  guestCount: input.guestCount,
+                  phone: vs.phone,
+                  fromEmail: mailer.fromEmail,
+                });
                 await mailer.transporter.sendMail({
                   from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
                   to: input.email,
@@ -1815,37 +1801,16 @@ export const appRouter = router({
         const { buildVenueMailer } = await import('./paymentsEmail');
         const mailer = await buildVenueMailer(ctx.user.id);
         if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
-        const { escapeHtml: esc } = await import('./sanitizeHtml');
         const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor, notificationEmail: venueSettings.notificationEmail })
           .from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
         const venueName = String(vs?.name ?? mailer.fromName);
         const accent = (vs?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
-        const first = esc(lead.firstName ?? 'there');
         const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'there';
-        const quoted = lead.status === 'proposal_sent';
-        const bodyHtml = input.message?.trim()
-          ? esc(input.message.trim()).replace(/\n/g, '<br>')
-          : quoted
-            ? `I just wanted to follow up on the proposal we sent through${lead.eventType ? ` for your ${esc(lead.eventType)}` : ''} — have you had a chance to take a look? I'm happy to tweak anything or answer any questions.`
-            : `I just wanted to check in on your enquiry${lead.eventType ? ` about a ${esc(lead.eventType)}` : ''} with us. We'd love to help make it happen — is there anything I can help with or any details you'd like to talk through?`;
-        const bodyText = input.message?.trim()
-          ? input.message.trim()
-          : quoted
-            ? `I just wanted to follow up on the proposal we sent through${lead.eventType ? ` for your ${lead.eventType}` : ''} — have you had a chance to take a look? I'm happy to tweak anything or answer any questions.`
-            : `I just wanted to check in on your enquiry${lead.eventType ? ` about a ${lead.eventType}` : ''} with us. We'd love to help make it happen — is there anything I can help with?`;
-        const subject = quoted ? `Following up on your proposal — ${venueName}` : `Following up on your enquiry — ${venueName}`;
-        const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
-  <div style="background:${accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
-    <div style="font-size:22px;font-weight:bold;margin-top:4px">Just checking in</div>
-  </div>
-  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
-    <p style="font-size:16px;margin:0 0 12px">Hi ${first},</p>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 16px">${bodyHtml}</p>
-    <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
-  </div>
-</div>`;
-        const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
+        // Status-aware default wording, or the custom message (clientEmails.ts).
+        const { buildOneTapFollowUpEmail } = await import('./clientEmails');
+        const { subject, html, text } = buildOneTapFollowUpEmail({
+          firstName: lead.firstName, venueName, accent, status: lead.status, eventType: lead.eventType, message: input.message,
+        });
         const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
         const threadHeaders = leadMailHeaders(mailer.venue, { leadId: lead.id, fromEmail: mailer.fromEmail, replyTo: mailer.fromEmail });
         // BCC the venue's notification inbox, same as email.send, so the
@@ -2476,8 +2441,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     const fromName = vs!.smtpFromName ?? vs!.name ?? 'VenueFlowHQ';
                     const fromEmail = vs!.smtpFromEmail ?? vs!.smtpUser!;
                     const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-                    const subject = `Your event proposal — ${proposal.title}`;
-                    const text = `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`;
+                    // Wording and escaping in clientEmails.ts (the first name
+                    // comes from the public form, so it's escaped in the HTML).
+                    const { buildProposalSentEmail } = await import('./clientEmails');
+                    const { subject, html, text } = buildProposalSentEmail({
+                      firstName: lead.firstName, fromName, proposalUrl, proposalTitle: proposal.title,
+                    });
                     // With the inbox connected, replies also reach the polled
                     // mailbox; without it Reply-To stays unset (replies go to From).
                     const { leadMailHeaders, recordLeadMessage, inboxAddress } = await import('./inbox');
@@ -2486,7 +2455,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                       from: `"${fromName}" <${fromEmail}>`,
                       to: `"${clientName}" <${lead.email}>`,
                       subject,
-                      html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
+                      html,
                       text,
                       ...threadHeaders,
                     });
@@ -5897,26 +5866,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const [vs] = await db.select({ pi: venueSettings.paymentInstructions }).from(venueSettings)
           .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
         const portalUrl = await findPortalUrl(ctx.user.id, input.bookingId);
-        const first = booking.firstName ?? 'there';
         const clientName = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Client';
-        const instr = (vs?.pi ?? '').trim();
-        const htmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const html = `<p>Hi ${htmlEsc(first)},</p>`
-          + `<p>To secure your booking${booking.eventType ? ` (${htmlEsc(booking.eventType)})` : ''}, we ask for a deposit of <strong>${fmtNzd(depositNzd)}</strong>.</p>`
-          + (instr ? `<p><strong>How to pay</strong><br>${htmlEsc(instr).replace(/\n/g, '<br>')}</p>` : '')
-          + (portalUrl ? `<p>You can see your balance and confirm payment any time here:<br><a href="${portalUrl}">${portalUrl}</a></p>` : '')
-          + `<p>Thanks so much — please reply to this email with any questions.</p>`
-          + `<p>Warm regards,<br>${htmlEsc(mailer.fromName)}</p>`;
-        const text = `Hi ${first},\n\nTo secure your booking, we ask for a deposit of ${fmtNzd(depositNzd)}.\n`
-          + (instr ? `\nHow to pay:\n${instr}\n` : '')
-          + (portalUrl ? `\nTrack your balance: ${portalUrl}\n` : '')
-          + `\nWarm regards,\n${mailer.fromName}`;
+        const { buildDepositRequestEmail } = await import('./clientEmails');
+        const { subject, html, text } = buildDepositRequestEmail({
+          firstName: booking.firstName, eventType: booking.eventType, depositNzd,
+          paymentInstructions: vs?.pi ?? '', portalUrl, fromName: mailer.fromName,
+        });
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${booking.email}>`,
-            subject: `Deposit to secure your booking — ${mailer.fromName}`,
-            html, text,
+            subject, html, text,
           });
         } catch (err) {
           console.error('[payments.requestDeposit] send failed', err);
@@ -5947,7 +5907,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(bookings.id, pmt.bookingId), eq(bookings.ownerId, ctx.user.id)));
         if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
         if (!booking.email) return { sent: false as const, reason: 'no_client_email' as const };
-        const { buildVenueMailer, findPortalUrl, fmtNzd } = await import('./paymentsEmail');
+        const { buildVenueMailer, findPortalUrl } = await import('./paymentsEmail');
         const { netPaid, round2 } = await import('../shared/paymentMath');
         const mailer = await buildVenueMailer(ctx.user.id);
         if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
@@ -5957,30 +5917,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const total = Number(booking.totalNzd ?? 0);
         const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
         const portalUrl = await findPortalUrl(ctx.user.id, pmt.bookingId);
-        const first = booking.firstName ?? 'there';
         const clientName = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Client';
-        const htmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const TYPE_LABEL: Record<string, string> = { deposit: 'deposit', partial: 'payment', final: 'final payment', refund: 'refund', other: 'payment' };
-        const kind = TYPE_LABEL[pmt.type] ?? 'payment';
-        const paidOn = new Date(pmt.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_VENUE_TZ });
-        const amountLine = pmt.type === 'refund'
-          ? `We've refunded <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}.`
-          : `We've received your ${kind} of <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}. Thank you!`;
-        const html = `<p>Hi ${htmlEsc(first)},</p>`
-          + `<p>${amountLine}</p>`
-          + (total > 0 ? `<p>Balance remaining: <strong>${fmtNzd(outstanding)}</strong>${outstanding <= 0 ? ' — you\'re all paid up.' : ''}</p>` : '')
-          + (portalUrl ? `<p>Full details are on your event page:<br><a href="${portalUrl}">${portalUrl}</a></p>` : '')
-          + `<p>Warm regards,<br>${htmlEsc(mailer.fromName)}</p>`;
-        const text = `Hi ${first},\n\n${amountLine.replace(/<[^>]+>/g, '')}\n`
-          + (total > 0 ? `\nBalance remaining: ${fmtNzd(outstanding)}\n` : '')
-          + (portalUrl ? `\nYour event page: ${portalUrl}\n` : '')
-          + `\nWarm regards,\n${mailer.fromName}`;
+        const { buildPaymentReceiptEmail } = await import('./clientEmails');
+        const { subject, html, text } = buildPaymentReceiptEmail({
+          firstName: booking.firstName, type: pmt.type, amount: Number(pmt.amount), paidAt: pmt.paidAt,
+          total, outstanding, portalUrl, fromName: mailer.fromName,
+        });
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${booking.email}>`,
-            subject: pmt.type === 'refund' ? `Refund confirmation — ${mailer.fromName}` : `Payment received — ${mailer.fromName}`,
-            html, text,
+            subject, html, text,
           });
         } catch (err) {
           console.error('[payments.sendReceipt] send failed', err);
