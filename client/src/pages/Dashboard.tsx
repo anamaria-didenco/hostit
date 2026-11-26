@@ -120,7 +120,7 @@ import { holdTyping } from "@/lib/sessionExpiry";
 import { AlertTriangle } from "lucide-react";
 import { hhmmLabel } from "@/lib/overviewDates";
 import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
-import { OverviewSummaryStrip, OverviewNeedsToday, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
+import { OverviewSummaryStrip, OverviewNeedsToday, OverviewNewEnquiries, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1248,8 +1248,8 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Calendar view: month (default), week, day or list.
-  // Overview calendar: start at this week (default) or show the whole month.
-  const [overviewShowPast, setOverviewShowPast] = useState(false);
+  // Overview calendar: the whole month (default) or start at this week.
+  const [overviewShowPast, setOverviewShowPast] = useState(true);
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   // "Needs you today" used to sit at the top of the Overview; it now lives
   // under the calendar as an opt-in panel, off by default and remembered per
@@ -3576,6 +3576,22 @@ export default function Dashboard() {
     () => enrichRows(allEnquiries as LeadLike[], { ...listCtx, replyStatus: replyStatus as any, clashMap: clashMap as any, isPartial: isPartialLead }),
     [allEnquiries, listCtx, replyStatus, clashMap],
   );
+  // New enquiries for the top of the Overview: not answered yet, newest first.
+  const newEnquiryRows = React.useMemo(() => enquiryRows
+    .filter(r => r.lead.status === 'new')
+    .sort((a, b) => new Date(b.lead.createdAt ?? 0).getTime() - new Date(a.lead.createdAt ?? 0).getTime())
+    .map(r => {
+      const l: any = r.lead;
+      const space = l.spaceId != null ? listCtx.spaceNames?.get(Number(l.spaceId)) : '';
+      return {
+        id: Number(l.id),
+        name: [l.firstName, l.lastName].filter(Boolean).join(' ') || l.email || 'Enquiry',
+        what: [l.eventType || 'Event', space].filter(Boolean).join(' · '),
+        eventDate: l.eventDate ?? null,
+        guests: l.guestCount ?? null,
+        createdAt: l.createdAt ?? null,
+      };
+    }), [enquiryRows, listCtx]);
   const baseCounts = React.useMemo(() => viewCounts(enquiryRows, EMPTY_FILTERS, "", listCtx), [enquiryRows, listCtx]);
   const baseCountsRef = useRef(baseCounts);
   baseCountsRef.current = baseCounts;
@@ -4214,7 +4230,6 @@ export default function Dashboard() {
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             const actionStats = visibleStats.filter(s => !(s as any).perf);
             const perfStats = visibleStats.filter(s => (s as any).perf);
-            const firstName = (user?.name ?? '').trim().split(/\s+/)[0];
             const setupSteps = [
               { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
               { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
@@ -4225,17 +4240,9 @@ export default function Dashboard() {
             const setupTodo = setupStatus ? setupSteps.filter(st => !(setupStatus as any)[st.key]) : [];
             return (
             <div className="px-4 md:px-8 pt-5 md:pt-7 pb-10 flex flex-col gap-5">
-              {/* Greeting header */}
-              <header className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                  <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-                    {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </span>
-                  <h1 className="m-0 font-sans text-[26px] md:text-[30px] font-semibold tracking-[-0.015em] text-foreground leading-tight">
-                    Kia ora{firstName ? `, ${firstName}` : ''}<span className="sr-only"> — Overview</span>
-                  </h1>
-                </div>
-                <div className="flex items-center gap-2">
+              {/* The page heading is for screen readers; the summary strip leads. */}
+              <h1 className="sr-only">Overview</h1>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                   <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
                     <PopoverTrigger asChild>
                       <button className={calBtn}>
@@ -4259,13 +4266,13 @@ export default function Dashboard() {
                       ))}
                     </PopoverContent>
                   </Popover>
-                  <button
+                <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
                     className={calBtnPrimary}>
                     <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
                   </button>
-                </div>
-              </header>
+              </div>
+
 
               {/* Summary strip — action counts first; each opens exactly the
                   records it counted. The vanity numbers wait in a collapsed row. */}
@@ -4284,6 +4291,8 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
                 <div className="flex flex-col gap-7 min-w-0">
+                  {/* The full month calendar comes first, then Needs you today. */}
+                  {monthCalendarCard}
                   {/* Needs you today — clashes, overdue tasks and replies,
                       deposits, missing run sheets, start times to check. */}
                   {!isStaff && (
@@ -4305,9 +4314,18 @@ export default function Dashboard() {
                       fmtTime={fmtHhmm}
                     />
                   )}
-                  {/* The month calendar, as the Overview always had it: starts at
-                      this week, with earlier weeks a click away. */}
-                  {monthCalendarCard}
+                  {/* New enquiries: not answered yet, newest first. */}
+                  {!isStaff && (
+                    <OverviewNewEnquiries
+                      rows={newEnquiryRows.slice(0, 6)}
+                      total={newEnquiryRows.length}
+                      loading={!allLeads}
+                      tz={venueTz}
+                      nowMs={listNowMs}
+                      onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                      onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
+                    />
+                  )}
                 </div>
 
                 <aside aria-label="At a glance" className="flex flex-col gap-5 min-w-0">

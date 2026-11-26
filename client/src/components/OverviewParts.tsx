@@ -519,3 +519,80 @@ export function OverviewSetup({ total, todo }: { total: number; todo: { key: str
     </section>
   );
 }
+
+// ── New enquiries ────────────────────────────────────────────────────────────
+
+export interface NewEnquiryRow {
+  id: number;
+  name: string;
+  what: string;
+  eventDate?: Date | string | null;
+  guests?: number | null;
+  createdAt?: Date | string | null;
+}
+
+function cameInLabel(createdAt: Date | string | null | undefined, nowMs: number): string {
+  if (!createdAt) return "New";
+  const mins = Math.max(0, Math.round((nowMs - new Date(createdAt).getTime()) / 60000));
+  if (mins < 60) return `New · ${Math.max(1, mins)}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `New · ${hrs}h`;
+  return `New · ${Math.round(hrs / 24)}d`;
+}
+
+/**
+ * The top of the Overview: enquiries nobody has answered yet, newest first,
+ * each one click from its reply box.
+ */
+export function OverviewNewEnquiries(p: {
+  rows: NewEnquiryRow[];
+  total: number;
+  loading: boolean;
+  tz: string;
+  nowMs: number;
+  onOpen: (id: number) => void;
+  onViewAll: () => void;
+}) {
+  const fmtDate = (d: Date | string) => new Date(d).toLocaleDateString("en-NZ", { timeZone: p.tz, weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const fmtTime = (d: Date | string) => new Date(d).toLocaleTimeString("en-NZ", { timeZone: p.tz, hour: "numeric", minute: "2-digit" });
+  return (
+    <section aria-label="New enquiries" className="flex flex-col gap-2.5">
+      <OvHead
+        title="New enquiries"
+        meta={p.loading ? "Loading…" : p.total === 0 ? "All answered" : `${p.total} waiting`}
+        action={p.total > 0 ? <button type="button" onClick={p.onViewAll} className={linkBtn}>View all<ArrowRight className="w-3.5 h-3.5" aria-hidden /></button> : undefined}
+      />
+      {!p.loading && p.rows.length === 0 && (
+        <div className="rounded-[8px] border-[1.5px] border-border bg-card px-4 py-3.5 font-sans text-[13px] text-muted-foreground">
+          No new enquiries. New ones show up here as soon as they come in.
+        </div>
+      )}
+      {p.rows.length > 0 && (
+        <ul className="m-0 p-0 list-none flex flex-col gap-2">
+          {p.rows.map((r) => (
+            <li key={r.id} className="grid items-center gap-x-3.5 gap-y-1 px-4 py-2.5 rounded-[8px] border-[1.5px] border-border bg-card grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[104px_minmax(0,1.6fr)_minmax(0,1fr)_56px_auto]">
+              <span className="hidden md:inline-flex"><Sig tone="blue">{cameInLabel(r.createdAt, p.nowMs)}</Sig></span>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span aria-hidden className="w-8 h-8 rounded-full bg-accent text-primary font-sans text-[12px] font-bold flex items-center justify-center flex-shrink-0">{initialsOf(r.name)}</span>
+                <div className="min-w-0">
+                  <button type="button" onClick={() => p.onOpen(r.id)} className="block max-w-full truncate text-left font-sans text-[15px] font-bold text-foreground hover:underline">{r.name}</button>
+                  <div className="font-sans text-[12px] text-muted-foreground truncate">
+                    <span className="md:hidden font-bold text-primary">{cameInLabel(r.createdAt, p.nowMs)} · </span>
+                    {r.what}
+                    <span className="md:hidden">{r.eventDate ? ` · ${fmtDate(r.eventDate)}` : ""}{r.guests ? ` · ${r.guests} guests` : ""}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="hidden md:block min-w-0">
+                <div className="font-sans text-[14px] font-semibold text-foreground truncate tabular-nums">{r.eventDate ? fmtDate(r.eventDate) : "No date yet"}</div>
+                {r.eventDate && <div className="font-sans text-[12px] text-muted-foreground tabular-nums">{fmtTime(r.eventDate)}</div>}
+              </div>
+              <span className="hidden md:block font-sans text-[17px] font-semibold text-foreground tabular-nums" aria-label={r.guests ? `${r.guests} guests` : "Guests not given"}>{r.guests || "—"}</span>
+              <button type="button" onClick={() => p.onOpen(r.id)} aria-label={`Reply to ${r.name}`} className={btnPrimary}>Reply</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
