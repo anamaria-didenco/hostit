@@ -21,6 +21,7 @@ import {
   readSequenceSettings, SEQUENCE_BY_KEY, SEQUENCES,
   type SequenceConfig, type SequenceKey,
 } from "@shared/followUpSequences";
+import { copyEventType } from "@shared/enquiryCopy";
 import { dueStep, planLeadSteps, type PlanLead, type PlanProposal, type PlanSend, type PlannedStep } from "./followUpSchedule";
 
 const ACTIVE_STATUSES = ["new", "contacted", "proposal_sent", "negotiating"];
@@ -53,9 +54,9 @@ export function renderFollowUpEmail(opts: {
   const { lead, venue } = opts;
   const extra: Record<string, string> = {
     // Server runs in UTC — format the event date in NZ time, and read
-    // "your {{eventType}}" naturally when no type was given.
+    // "your {{eventType}}" naturally when no type (or just "Other") was given.
     eventDate: lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "",
-    eventType: lead.eventType?.trim() || "event",
+    eventType: copyEventType(lead.eventType) ?? "event",
     firstName: lead.firstName?.trim() || "there",
     proposalLink: opts.proposalLink ?? "",
     enquiryFormLink: opts.enquiryFormLink ?? "",
