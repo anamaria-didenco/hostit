@@ -34,7 +34,7 @@ const H = 60 * MIN;
 
 d("finish-your-enquiry email for unfinished enquiries (DB)", async () => {
   const { getDb } = await import("./db");
-  const { leads, venueSettings, leadSequenceSends, venueNotifications, leadActivity } = await import("../drizzle/schema");
+  const { leads, venueSettings, leadSequenceSends, venueNotifications, leadActivity, enquiryEmails } = await import("../drizzle/schema");
   const { runFollowUpSequences, leadFollowUpOutlook } = await import("./followUpSequences");
   const { applySequenceUpdate, readSequenceSettings } = await import("@shared/followUpSequences");
   const { PARTIAL_LEAD_NOTE } = await import("@shared/leadConstants");
@@ -51,6 +51,7 @@ d("finish-your-enquiry email for unfinished enquiries (DB)", async () => {
     if (owned.length) await db.delete(leadActivity).where(inArray(leadActivity.leadId, owned));
     await db.delete(leadSequenceSends).where(inArray(leadSequenceSends.ownerId, [ids.OWNER]));
     await db.delete(venueNotifications).where(inArray(venueNotifications.ownerId, [ids.OWNER]));
+    await db.delete(enquiryEmails).where(inArray(enquiryEmails.ownerId, [ids.OWNER]));
     await db.delete(leads).where(inArray(leads.ownerId, [ids.OWNER]));
     await db.delete(venueSettings).where(inArray(venueSettings.ownerId, [ids.OWNER]));
   }
@@ -69,8 +70,14 @@ d("finish-your-enquiry email for unfinished enquiries (DB)", async () => {
     };
     const partial = (key: string, who: string, min: number, extra: Record<string, unknown> = {}) =>
       ins(key, { email: email(who), internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(min), ...extra });
-    const finished = (key: string, who: string, min: number, extra: Record<string, unknown> = {}) =>
-      ins(key, { email: email(who), internalNotes: null, createdAt: at(min), ...extra });
+    // Sent through the form: submit queued its emails.
+    const finished = async (key: string, who: string, min: number, extra: Record<string, unknown> = {}) => {
+      await ins(key, { email: email(who), internalNotes: null, createdAt: at(min), ...extra });
+      await db.insert(enquiryEmails).values({ ownerId: ids.OWNER, leadId: L[key], kind: "venue", status: "sent" });
+    };
+    // Typed in by staff (Dashboard > Add enquiry keeps the source picked): no emails queued.
+    const staffLogged = (key: string, who: string, min: number, source: string) =>
+      ins(key, { email: email(who), internalNotes: null, createdAt: at(min), source });
 
     // Finished as a newer enquiry (step 1's reply was lost; SUBMIT inserted a new one).
     await partial("leftBehind", "ana", 0);
@@ -87,6 +94,9 @@ d("finish-your-enquiry email for unfinished enquiries (DB)", async () => {
     // A newer one staff typed in doesn't count.
     await finished("staffTyped", "typed", 1, { source: "manual" });
     await partial("notSilencedByStaff", "typed", 0);
+    // Nor does a phone call staff logged that morning, whatever source they picked.
+    await staffLogged("staffPhone", "phoned", -3 * 60, "Phone");
+    await partial("notSilencedByPhone", "phoned", 0);
     // A newer enquiry that has since been closed still means they finished.
     await finished("closedLater", "closed", 3, { status: "lost" });
     await partial("silencedByClosed", "closed", 0);
@@ -100,8 +110,8 @@ d("finish-your-enquiry email for unfinished enquiries (DB)", async () => {
     ids.mail.length = 0;
     const run = await runFollowUpSequences(at(2 * 60), { ownerIds: [ids.OWNER] });
     const nudged = run.sent.filter(s => s.key === "partial_form").map(s => s.leadId).sort();
-    expect(nudged).toEqual([L.newAbandon, L.secondTry, L.notSilencedByStaff].sort());
-    expect(ids.mail.map(m => m.to?.[0]?.address).sort()).toEqual([email("returning"), email("twice"), email("typed")].sort());
+    expect(nudged).toEqual([L.newAbandon, L.secondTry, L.notSilencedByStaff, L.notSilencedByPhone].sort());
+    expect(ids.mail.map(m => m.to?.[0]?.address).sort()).toEqual([email("returning"), email("twice"), email("typed"), email("phoned")].sort());
     // Nothing merged or deleted.
     const db = (await getDb())!;
     const rows = await db.select({ id: leads.id, internalNotes: leads.internalNotes }).from(leads).where(inArray(leads.id, [L.leftBehind, L.afterSending, L.firstTry, L.silencedByClosed]));

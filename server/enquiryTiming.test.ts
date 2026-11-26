@@ -77,7 +77,7 @@ describe("shared lead constants", () => {
 describe("left behind or abandoned", () => {
   const P = { id: 50, email: "Aroha@Example.test ", createdAt: at(0) };
   const lead = (over: Partial<SupersedeCandidate>): SupersedeCandidate => ({
-    id: 60, email: "aroha@example.test", source: "lead_form", internalNotes: null, createdAt: at(10), ...over,
+    id: 60, email: "aroha@example.test", source: "lead_form", internalNotes: null, createdAt: at(10), reachedVenue: true, ...over,
   });
 
   it("is abandoned with nothing else from that email", () => {
@@ -114,6 +114,17 @@ describe("left behind or abandoned", () => {
     expect(isPartialSuperseded(P, [lead({ source: null })])).toBe(false);
     // "How did you hear about us" is stored as the source of a finished enquiry.
     expect(isPartialSuperseded(P, [lead({ source: "Instagram" })])).toBe(true);
+  });
+
+  it("never counts a lead staff typed or imported, whatever source it was given", () => {
+    // Dashboard > Add enquiry keeps the source picked (Phone, Walk-In, Website...), and a
+    // CSV import keeps its Source column: neither went through the form.
+    for (const source of ["Phone", "Website", "Walk-In", "Email", "Instagram", "lead_form"]) {
+      expect(isPartialSuperseded(P, [lead({ source, reachedVenue: false, id: 40, createdAt: at(-180) })]), source).toBe(false);
+      expect(isPartialSuperseded(P, [lead({ source, reachedVenue: undefined })]), source).toBe(false);
+    }
+    // Step 1 saved again on the form is the form's own (only startCapture writes the note).
+    expect(isPartialSuperseded(P, [lead({ internalNotes: PARTIAL_LEAD_NOTE, reachedVenue: false })])).toBe(true);
   });
 
   it("never matches itself or an empty email", () => {

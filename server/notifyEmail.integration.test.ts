@@ -4,7 +4,7 @@ import net from "node:net";
 import { getDb } from "./db";
 import { markNotificationsRead, notifyVenue, retryAlertEmails } from "./notify";
 import { partialEnquiryAlert } from "./partialEnquiries";
-import { leads, venueNotifications, venueSettings } from "../drizzle/schema";
+import { bookings, leads, proposals, venueNotifications, venueSettings } from "../drizzle/schema";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { EMAIL_RETRY_BACKOFF_MS, EMAIL_SENDING_LEASE_MS, VENUE_EMAIL_RETRY } from "@shared/emailDelivery";
 
@@ -93,6 +93,8 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
   afterAll(async () => {
     const db = (await getDb())!;
     await db.delete(venueNotifications).where(inArray(venueNotifications.ownerId, owners));
+    await db.delete(proposals).where(inArray(proposals.ownerId, owners));
+    await db.delete(bookings).where(inArray(bookings.ownerId, owners));
     await db.delete(leads).where(inArray(leads.ownerId, owners));
     await db.delete(venueSettings).where(inArray(venueSettings.ownerId, owners));
     await new Promise(resolve => sink ? sink.close(resolve) : resolve(undefined));
@@ -246,7 +248,7 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     errors.mockRestore();
     mode = "ok";
     await db.update(leads).set({ internalNotes: null }).where(eq(leads.id, finished.id));
-    await ins({ ...base, email: `BACK.${t}@example.test`, internalNotes: null, createdAt: later(MIN) });
+    await ins({ ...base, email: `BACK.${t}@example.test`, createdAt: later(MIN) }); // started the form again
     await db.update(leads).set({ status: "contacted" }).where(eq(leads.id, touched.id));
     await retryAlertEmails(later(2 * MIN), { ownerIds: [owner] });
     const byLead = new Map((await rowsFor(owner)).map(r => [r.leadId, r.emailStatus]));
@@ -256,6 +258,51 @@ d("bell alert emails are retried until the mail server takes them (DB)", () => {
     expect(byLead.get(gone.id)).toBe("sent");
     const titles = [finished, cameBack, touched, gone].map(l => `Unfinished enquiry: Mere Testwell ${l.id}`);
     expect(delivered.filter(m => titles.includes(m.subject)).map(m => m.subject)).toEqual([titles[3]]);
+  });
+
+  it("a held-back proposal, hold or double-booking alert isn't sent once it no longer stands", async () => {
+    const owner = await venue();
+    const db = (await getDb())!;
+    const t = tag();
+    const lead = async (status: string, extra: Record<string, unknown> = {}) =>
+      (await db.insert(leads).values({ ownerId: owner, firstName: "Wiremu", lastName: "Testwell", email: `w.${tag()}@example.test`, status, source: "lead_form", ...extra } as any).returning())[0];
+    const proposal = async (leadId: number) =>
+      (await db.insert(proposals).values({ ownerId: owner, leadId, title: "Dinner", publicToken: `pt-${tag()}-${tag()}`, status: "viewed" } as any).returning())[0];
+    const until = new Date(Date.now() + 20 * 3_600_000);
+    const booked = await lead("proposal_sent");
+    const bookedP = await proposal(booked.id);
+    const stillOpen = await lead("proposal_sent");
+    const stillOpenP = await proposal(stillOpen.id);
+    const confirmed = await lead("tentative", { holdUntil: until });
+    const extended = await lead("tentative", { holdUntil: until });
+    const held = await lead("tentative", { holdUntil: until });
+    const [clash] = await db.insert(bookings).values({ ownerId: owner, firstName: "Wiremu", email: `b.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000), clashFlaggedAt: new Date() } as any).returning();
+    const [clashOn] = await db.insert(bookings).values({ ownerId: owner, firstName: "Ana", email: `c.${t}@example.test`, eventDate: new Date(Date.now() + 30 * 86_400_000), clashFlaggedAt: new Date() } as any).returning();
+    const sent: Record<string, string> = {};
+    const alert = async (name: string, a: Parameters<typeof notifyVenue>[1]) => { sent[name] = `${a.title} (${name}) ${t}`; await notifyVenue(owner, { ...a, title: sent[name] }); };
+    mode = "busy";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await alert("booked", { kind: "proposal_stalled", title: "Opened, not accepted", leadId: booked.id, dedupeKey: `proposal_stalled:${bookedP.id}` });
+    await alert("stillOpen", { kind: "proposal_stalled", title: "Opened, not accepted", leadId: stillOpen.id, dedupeKey: `proposal_stalled:${stillOpenP.id}` });
+    for (const [name, l] of [["confirmed", confirmed], ["extended", extended], ["held", held]] as const) {
+      await alert(name, { kind: "hold_expiring", title: "Hold ends today", leadId: l.id, dedupeKey: `hold_expiring:${l.id}:${until.getTime()}` });
+    }
+    await alert("resolved", { kind: "double_booking", title: "Double booking", bookingId: clash.id, dedupeKey: `double_booking:${clash.id}` });
+    await alert("clashing", { kind: "double_booking", title: "Double booking", bookingId: clashOn.id, dedupeKey: `double_booking:${clashOn.id}` });
+    errors.mockRestore();
+    // Twenty minutes later, before the retry: the client accepted online, a hold was
+    // confirmed and another extended, and one double booking was sorted out.
+    await db.update(leads).set({ status: "booked" }).where(eq(leads.id, booked.id));
+    await db.update(proposals).set({ status: "accepted" }).where(eq(proposals.id, bookedP.id));
+    await db.update(leads).set({ status: "booked", holdUntil: null }).where(eq(leads.id, confirmed.id));
+    await db.update(leads).set({ holdUntil: new Date(until.getTime() + 7 * 86_400_000) }).where(eq(leads.id, extended.id));
+    await db.update(bookings).set({ clashFlaggedAt: null }).where(eq(bookings.id, clash.id));
+    mode = "ok";
+    await retryAlertEmails(later(2 * MIN), { ownerIds: [owner] });
+    const got = Object.fromEntries(Object.entries(sent).map(([k, title]) => [k, mailsTitled(title)]));
+    expect(got).toEqual({ booked: 0, stillOpen: 1, confirmed: 0, extended: 0, held: 1, resolved: 0, clashing: 1 });
+    const statuses = (await rowsFor(owner)).map(r => r.emailStatus);
+    expect(statuses.filter(s => s === "skipped")).toHaveLength(4);
   });
 
   it("a 'waiting for a reply' alert held back isn't sent once staff have replied", async () => {

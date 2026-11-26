@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { getDb } from "./db";
+import net from "node:net";
+import { completePartialLead, getDb } from "./db";
+import { markPartialAlertRead } from "./enquiryEmails";
 import { alertUnfinishedEnquiries, isPartialStillUnfinished } from "./partialEnquiries";
-import { leads, venueNotifications, venueSettings } from "../drizzle/schema";
+import { enquiryEmails, leads, venueNotifications, venueSettings } from "../drizzle/schema";
 import { NON_ENQUIRY_SOURCES, PARTIAL_LEAD_NOTE, POSSIBLE_SPAM_NOTE } from "@shared/leadConstants";
 import { isPartialSuperseded, partialAlertDueAt } from "@shared/enquiryTiming";
 
@@ -36,12 +38,15 @@ const clock = () => {
   const t0 = Date.UTC(2034, 0, 1) + slot++ * 10 * 24 * H;
   return (min: number) => new Date(t0 + min * MIN);
 };
-type Row = { ownerId: number; email: string; source?: string | null; internalNotes?: string | null; status?: string; createdAt: Date; partialSeenAt?: Date | null };
-async function ins(r: Row) {
+type Row = { ownerId: number; email: string; source?: string | null; internalNotes?: string | null; status?: string; createdAt: Date; partialSeenAt?: Date | null; sent?: "emails" | "bell" | false };
+/** A lead; `sent` marks one the form sent (submit queued its emails, or wrote its "New enquiry" bell row). */
+async function ins({ sent = false, ...r }: Row) {
   const db = (await getDb())!;
   const [row] = await db.insert(leads).values({
     firstName: "Mere", lastName: "Testwell", status: "new", source: "lead_form", ...r, updatedAt: r.createdAt,
   } as any).returning();
+  if (sent === "emails") await db.insert(enquiryEmails).values({ ownerId: r.ownerId, leadId: row.id, kind: "venue", status: "sent" });
+  if (sent === "bell") await db.insert(venueNotifications).values({ ownerId: r.ownerId, kind: "new_enquiry", title: "New enquiry", leadId: row.id, dedupeKey: `new_enquiry:${row.id}` });
   return row;
 }
 async function alertedFor(ownerId: number) {
@@ -55,6 +60,7 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
   afterAll(async () => {
     const db = (await getDb())!;
     await db.delete(venueNotifications).where(inArray(venueNotifications.ownerId, owners));
+    await db.delete(enquiryEmails).where(inArray(enquiryEmails.ownerId, owners));
     await db.delete(leads).where(inArray(leads.ownerId, owners));
     await db.delete(venueSettings).where(inArray(venueSettings.ownerId, owners));
   });
@@ -64,7 +70,7 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     const at = clock();
     const t = tag();
     const partial = (email: string, min = 0) => ins({ ownerId: owner, email, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(min) });
-    const finished = (email: string, min: number, extra: Partial<Row> = {}) => ins({ ownerId: owner, email, internalNotes: null, createdAt: at(min), ...extra });
+    const finished = (email: string, min: number, extra: Partial<Row> = {}) => ins({ ownerId: owner, email, internalNotes: null, createdAt: at(min), sent: min % 2 ? "bell" : "emails", ...extra });
 
     // Sent first, then step 1 again (a reload after sending, or a late step-1 save).
     await finished(`sent.${t}@example.test`, -2);
@@ -110,10 +116,18 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     const ids: number[] = [];
     for (const source of [...NON_ENQUIRY_SOURCES, null]) {
       const email = `src-${source ?? "none"}.${t}@example.test`;
-      await ins({ ownerId: owner, email: email.toUpperCase(), source, internalNotes: null, createdAt: at(-5) });
+      await ins({ ownerId: owner, email: email.toUpperCase(), source, internalNotes: null, createdAt: at(-5), sent: "emails" });
       ids.push((await ins({ ownerId: owner, email, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0) })).id);
     }
-    await ins({ ownerId: other, email: `elsewhere.${t}@example.test`, internalNotes: null, createdAt: at(-5) });
+    // Staff typed it in (Dashboard > Add enquiry, or a CSV import with a Source column):
+    // the source picked is kept, but it never went through the form.
+    for (const [source, min] of [["Phone", -180], ["Website", -60], ["Walk-In", -5], ["Email", 5], ["lead_form", 8]] as const) {
+      const email = `staff-${source}.${t}@example.test`;
+      if (min < 0) await ins({ ownerId: owner, email, source, internalNotes: null, createdAt: at(min) });
+      ids.push((await ins({ ownerId: owner, email, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0) })).id);
+      if (min > 0) await ins({ ownerId: owner, email, source, internalNotes: null, status: "booked", createdAt: at(min) });
+    }
+    await ins({ ownerId: other, email: `elsewhere.${t}@example.test`, internalNotes: null, createdAt: at(-5), sent: "emails" });
     ids.push((await ins({ ownerId: owner, email: `elsewhere.${t}@example.test`, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0) })).id);
     await alertUnfinishedEnquiries(at(30));
     expect((await alertedFor(owner)).sort()).toEqual([...ids].sort());
@@ -128,10 +142,16 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     // Minutes from the partial: before it (in and out of the day), same time either order, after.
     const offsets = [-25 * 60, -24 * 60 - 1, -24 * 60, -23 * 60, -1, 0, 1];
     let n = 0;
+    const sentIds = new Set<number>();
     for (const note of notes) for (const source of sources) for (const off of offsets) {
       const email = `mix${n++}.${t}@example.test`;
       const otherFirst = off < 0 || (off === 0 && n % 2 === 0);
-      const other = () => ins({ ownerId: owner, email: n % 3 === 0 ? ` ${email.toUpperCase()}` : email, source, internalNotes: note, createdAt: at(off) });
+      // Most went through the form; some were typed in by staff.
+      const sent = n % 5 === 0 ? false : n % 2 ? "emails" : "bell";
+      const other = async () => {
+        const row = await ins({ ownerId: owner, email: n % 3 === 0 ? ` ${email.toUpperCase()}` : email, source, internalNotes: note, createdAt: at(off), sent });
+        if (sent) sentIds.add(row.id);
+      };
       if (otherFirst) await other();
       await ins({ ownerId: owner, email, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0) });
       if (!otherFirst) await other();
@@ -140,7 +160,8 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     const db = (await getDb())!;
     const rows = await db.select().from(leads).where(eq(leads.ownerId, owner));
     const partials = rows.filter(r => r.internalNotes === PARTIAL_LEAD_NOTE);
-    const expected = partials.filter(p => !isPartialSuperseded(p, rows)).map(p => p.id).sort();
+    const candidates = rows.map(r => ({ ...r, reachedVenue: sentIds.has(r.id) }));
+    const expected = partials.filter(p => !isPartialSuperseded(p, candidates)).map(p => p.id).sort();
     const alerted = (await alertedFor(owner)).sort();
     expect(alerted).toEqual(expected);
     // Both outcomes are covered.
@@ -185,6 +206,45 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     expect(partialAlertDueAt(forgotten.createdAt, forgotten.partialSeenAt)).toEqual(at(140));
   });
 
+  it("gives the times in the venue's own time zone", async () => {
+    const owner = await venue();
+    const db = (await getDb())!;
+    await db.update(venueSettings).set({ timezone: "Australia/Sydney" }).where(eq(venueSettings.ownerId, owner));
+    const at = clock();
+    const p = await ins({ ownerId: owner, email: `syd.${tag()}@example.test`, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0), partialSeenAt: at(10) });
+    await alertUnfinishedEnquiries(at(31));
+    const [row] = await db.select().from(venueNotifications).where(and(eq(venueNotifications.ownerId, owner), eq(venueNotifications.leadId, p.id)));
+    const fmt = (d: Date) => new Intl.DateTimeFormat("en-NZ", { timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+    expect(row.body).toContain(`Started: ${fmt(at(0))}`);
+    expect(row.body).toContain(`Last on the form: ${fmt(at(10))}`);
+  });
+
+  it("doesn't alert someone who finished while an earlier alert's email was still going", async () => {
+    // Venue A's mail server takes its time to answer; venue B's visitor finishes meanwhile.
+    const slow = net.createServer(sock => { sock.on("error", () => {}); setTimeout(() => sock.destroy(), 1500); });
+    await new Promise<void>(r => slow.listen(0, "127.0.0.1", () => r()));
+    try {
+      const a = await venue();
+      const b = await venue();
+      const db = (await getDb())!;
+      await db.update(venueSettings).set({ notificationEmail: "events@slow.example.test", smtpHost: "127.0.0.1", smtpPort: (slow.address() as net.AddressInfo).port, smtpUser: "events@slow.example.test", smtpPass: "not-a-real-password" } as any).where(eq(venueSettings.ownerId, a));
+      const at = clock();
+      const t = tag();
+      await ins({ ownerId: a, email: `slowvenue.${t}@example.test`, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(0) });
+      const kiri = await ins({ ownerId: b, email: `kiri.${t}@example.test`, internalNotes: PARTIAL_LEAD_NOTE, createdAt: at(1) });
+      const job = alertUnfinishedEnquiries(at(30));
+      await new Promise(r => setTimeout(r, 500));
+      // As SUBMIT does: complete the partial, then mark its alert read (there is none yet).
+      expect(await completePartialLead(kiri.id, b, { guestCount: 20 })).toBeTruthy();
+      expect(await markPartialAlertRead(b, kiri)).toBeNull();
+      await job;
+      expect(await alertedFor(b)).toEqual([]);
+      expect(await alertedFor(a)).toHaveLength(1);
+    } finally {
+      await new Promise<void>(r => slow.close(() => r()));
+    }
+  });
+
   it("keeps the 48-hour window and the once-per-enquiry dedupe", async () => {
     const owner = await venue();
     const at = clock();
@@ -207,11 +267,15 @@ d("Unfinished enquiry alert: came back, and still on step 2 (DB)", () => {
     const done = await p(`done.${t}@example.test`, { internalNotes: null });
     const touched = await p(`touched.${t}@example.test`, { status: "contacted" });
     const cameBack = await p(`back.${t}@example.test`);
-    await ins({ ownerId: owner, email: `back.${t}@example.test`, internalNotes: null, createdAt: at(10) });
+    await ins({ ownerId: owner, email: `back.${t}@example.test`, internalNotes: null, createdAt: at(10), sent: "emails" });
+    // A later call staff logged doesn't make it "carried on".
+    const phoned = await p(`phoned.${t}@example.test`);
+    await ins({ ownerId: owner, email: `phoned.${t}@example.test`, source: "Phone", internalNotes: null, createdAt: at(10) });
     expect(await isPartialStillUnfinished(owner, still.id)).toBe(true);
     expect(await isPartialStillUnfinished(owner, done.id)).toBe(false);
     expect(await isPartialStillUnfinished(owner, touched.id)).toBe(false);
     expect(await isPartialStillUnfinished(owner, cameBack.id)).toBe(false);
+    expect(await isPartialStillUnfinished(owner, phoned.id)).toBe(true);
     expect(await isPartialStillUnfinished(other, still.id)).toBe(false);
   });
 });

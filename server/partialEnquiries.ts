@@ -21,16 +21,18 @@
  * finished one from the same email sent up to a day before it (they had
  * already sent it: a reload after sending, the form open in two tabs, or a
  * step-1 save that arrived late). An older unfinished one never counts, so a
- * genuinely abandoned attempt still alerts. Only an enquiry that reaches the
- * venue itself counts: not one staff typed or imported, an Express Book
- * request (that sends the venue no email) or a health check (hidden from the
- * list), so none of those can silence this alert. Nothing is merged or
+ * genuinely abandoned attempt still alerts. Only an enquiry that came through
+ * the form counts (step 1's save, or one the form sent: its queued emails or
+ * its "New enquiry" bell row), never one staff typed or imported, whatever
+ * source they gave it ("Phone", "Website"), nor an Express Book request or a
+ * health check. So none of those can silence this alert. Nothing is merged or
  * deleted.
  */
-import { and, eq, gte, isNotNull, lte, ne, notExists, notInArray, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, eq, exists, gte, inArray, isNotNull, lte, ne, notExists, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "./db";
-import { leads } from "../drizzle/schema";
+import { enquiryEmails, leads, venueNotifications, venueSettings } from "../drizzle/schema";
+import { venueTimeZone } from "./enquiryForm";
 import { NON_ENQUIRY_SOURCES, PARTIAL_LEAD_NOTE, partialAlertDedupeKey } from "@shared/leadConstants";
 import {
   FINISHED_ENQUIRY_SILENCES_MS, PARTIAL_ALERT_AFTER_MS, PARTIAL_PING_CAP_MS, partialLastSeenAt,
@@ -84,10 +86,56 @@ export function partialEnquiryAlert(lead: PartialLead, tz = "Pacific/Auckland"):
   };
 }
 
+const looseName = (v: string | null | undefined) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+/** Who an Unfinished alert was about, read back from its body (the "Name:" and "Email:" lines above). */
+export function alertedContact(body: string | null | undefined): { name: string | null; email: string | null } {
+  const line = (label: string) => {
+    const m = new RegExp(`^${label}: (.*)$`, "m").exec(body ?? "");
+    return m ? m[1].trim() : null;
+  };
+  return { name: line("Name"), email: line("Email") };
+}
+
+/**
+ * Is this finished enquiry the one the Unfinished alert was about? The same
+ * email, or the same name (someone fixing a mistyped email keeps their
+ * name). Only then is the alert marked read and the venue told "they
+ * finished": a step-1 lead someone else's details were put on must not hide
+ * the first person's alert.
+ */
+export function finishedMatchesAlert(
+  alertBody: string | null | undefined,
+  lead: { firstName?: string | null; lastName?: string | null; email?: string | null },
+): boolean {
+  const was = alertedContact(alertBody);
+  const email = (lead.email ?? "").trim().toLowerCase();
+  if (was.email && email && was.email.toLowerCase() === email) return true;
+  const name = looseName([lead.firstName, lead.lastName].filter(Boolean).join(" "));
+  return !!was.name && !!name && looseName(was.name) === name;
+}
+
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 // Durations from the shared constants as SQL interval literals (numbers only).
 const interval = (ms: number) => sql.raw(`interval '${Math.round(ms / 1000)} seconds'`);
+
+/**
+ * True (in SQL) when the lead `l` is a finished enquiry the website form
+ * sent: leads.submit queued its emails, or (forms from before those were
+ * queued) wrote its "New enquiry" bell row. Nothing else writes either, so a
+ * lead staff typed or imported never passes, whatever source it was given.
+ * SupersedeCandidate.reachedVenue.
+ */
+export function sentThroughFormSql(db: Db, l: { id: PgColumn; ownerId: PgColumn }): SQL {
+  return or(
+    exists(db.select({ one: sql`1` }).from(enquiryEmails).where(eq(enquiryEmails.leadId, l.id))),
+    exists(db.select({ one: sql`1` }).from(venueNotifications).where(and(
+      eq(venueNotifications.ownerId, l.ownerId),
+      sql`${venueNotifications.dedupeKey} = 'new_enquiry:' || ${l.id}`,
+    ))),
+  )!;
+}
 
 /**
  * The enquiries that show the unfinished enquiry `partial` (the leads table
@@ -96,6 +144,7 @@ const interval = (ms: number) => sql.raw(`interval '${Math.round(ms / 1000)} sec
  */
 function supersedingLeads(db: Db, partial: typeof leads) {
   const other = alias(leads, "superseding");
+  const startedOnForm = sql`${other.internalNotes} = ${PARTIAL_LEAD_NOTE}`;
   return db.select({ one: sql`1` }).from(other).where(and(
     eq(other.ownerId, partial.ownerId),
     ne(other.id, partial.id),
@@ -104,11 +153,17 @@ function supersedingLeads(db: Db, partial: typeof leads) {
     sql`trim(coalesce(${partial.email}, '')) <> ''`,
     sql`lower(trim(${other.email})) = lower(trim(${partial.email}))`,
     or(
-      // Any newer one, finished or not: they came back.
-      sql`${other.createdAt} > ${partial.createdAt}`,
-      sql`(${other.createdAt} = ${partial.createdAt} and ${other.id} > ${partial.id})`,
-      // A finished one from up to a day before: they had already sent it.
-      sql`(${other.internalNotes} is distinct from ${PARTIAL_LEAD_NOTE} and ${other.createdAt} >= ${partial.createdAt} - ${interval(FINISHED_ENQUIRY_SILENCES_MS)})`,
+      // Any newer one from the form, finished or not: they came back.
+      and(
+        or(sql`${other.createdAt} > ${partial.createdAt}`, sql`(${other.createdAt} = ${partial.createdAt} and ${other.id} > ${partial.id})`),
+        or(startedOnForm, sentThroughFormSql(db, other)),
+      ),
+      // One the form sent up to a day before: they had already sent it.
+      and(
+        sql`${other.internalNotes} is distinct from ${PARTIAL_LEAD_NOTE}`,
+        sql`${other.createdAt} >= ${partial.createdAt} - ${interval(FINISHED_ENQUIRY_SILENCES_MS)}`,
+        sentThroughFormSql(db, other),
+      ),
     ),
   ));
 }
@@ -134,11 +189,31 @@ export async function alertUnfinishedEnquiries(now = new Date()): Promise<number
     // partialAlertDueAt(createdAt, partialSeenAt) <= now
     sql`${lastSeenSql} <= ${dueBy.toISOString()}::timestamp`,
     notExists(supersedingLeads(db, leads)),
-  ));
+  )).orderBy(leads.createdAt, leads.id);
+  // Times in the alert are the venue's own (Settings), not always NZ.
+  const owners = Array.from(new Set(rows.map(r => r.ownerId)));
+  const zones = new Map<number, string>();
+  if (owners.length) {
+    const vs = await db.select({ ownerId: venueSettings.ownerId, timezone: venueSettings.timezone }).from(venueSettings).where(inArray(venueSettings.ownerId, owners));
+    for (const v of vs) zones.set(v.ownerId, venueTimeZone(v));
+  }
   let sent = 0;
   for (const r of rows) {
-    const res = await notifyVenue(r.ownerId, partialEnquiryAlert(r));
-    if (res.created) sent++;
+    // Each alert's first email is sent as it is made, which can take a
+    // while: someone may have finished meanwhile. Checked again just before.
+    if (!(await isPartialStillUnfinished(r.ownerId, r.id))) continue;
+    const res = await notifyVenue(r.ownerId, partialEnquiryAlert(r, zones.get(r.ownerId) ?? venueTimeZone(null)));
+    if (!res.created) continue;
+    sent++;
+    // Finished while this alert was being made: SUBMIT looked for the alert
+    // to mark read before it existed, so it is marked read here instead.
+    if (!(await isPartialStillUnfinished(r.ownerId, r.id))) {
+      const [lead] = await db.select().from(leads).where(and(eq(leads.id, r.id), eq(leads.ownerId, r.ownerId))).limit(1);
+      if (lead) {
+        const { markPartialAlertRead } = await import("./enquiryEmails");
+        await markPartialAlertRead(r.ownerId, lead);
+      }
+    }
   }
   return sent;
 }

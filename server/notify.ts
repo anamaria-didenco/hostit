@@ -153,11 +153,38 @@ async function sendAlertEmail(db: Db, row: VenueNotification, now: Date): Promis
  * Is a held-back alert still worth emailing? Staff haven't seen it in the
  * app, and what it is about still stands: an Unfinished enquiry still
  * unfinished (not completed, touched or carried on from), an enquiry still
- * waiting for its first reply.
+ * waiting for its first reply, a proposal still opened and not answered, a
+ * hold still on with the same end, a double booking not yet sorted. A retry
+ * can come up to two hours later, and the client may have booked by then.
  */
 async function alertStillWanted(db: Db, row: VenueNotification): Promise<boolean> {
   if (row.readAt) return false;
+  if (row.kind === "double_booking" && row.bookingId) {
+    const { bookings } = await import("../drizzle/schema");
+    const [b] = await db.select({ status: bookings.status, clashFlaggedAt: bookings.clashFlaggedAt }).from(bookings)
+      .where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, row.ownerId))).limit(1);
+    return !!b && !!b.clashFlaggedAt && b.status !== "cancelled";
+  }
   if (!row.leadId) return true;
+  if (row.kind === "proposal_stalled") {
+    const proposalId = Number(/^proposal_stalled:(\d+)$/.exec(row.dedupeKey ?? "")?.[1]);
+    const { leads, proposals } = await import("../drizzle/schema");
+    const [lead] = await db.select({ status: leads.status }).from(leads).where(and(eq(leads.id, row.leadId), eq(leads.ownerId, row.ownerId))).limit(1);
+    if (lead?.status !== "proposal_sent") return false;
+    if (!proposalId) return true;
+    const [p] = await db.select({ status: proposals.status }).from(proposals).where(and(eq(proposals.id, proposalId), eq(proposals.ownerId, row.ownerId))).limit(1);
+    return p?.status === "viewed";
+  }
+  if (row.kind === "hold_expiring" || row.kind === "hold_lapsed") {
+    // The key ends with the hold's end time: an extended or released hold isn't this one.
+    const until = Number(/:(\d+)$/.exec(row.dedupeKey ?? "")?.[1]);
+    const { leads } = await import("../drizzle/schema");
+    const { HOLD_STATUS } = await import("./holds");
+    const [lead] = await db.select({ status: leads.status, holdUntil: leads.holdUntil }).from(leads)
+      .where(and(eq(leads.id, row.leadId), eq(leads.ownerId, row.ownerId))).limit(1);
+    if (!lead || lead.status !== HOLD_STATUS || !lead.holdUntil) return false;
+    return !until || new Date(lead.holdUntil).getTime() === until;
+  }
   if (row.kind === "partial_enquiry") {
     const { isPartialStillUnfinished } = await import("./partialEnquiries");
     return isPartialStillUnfinished(row.ownerId, row.leadId);

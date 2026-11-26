@@ -356,22 +356,31 @@ d("unfinished-enquiry alerts when the person came back (DB)", () => {
     const db = (await getDb())!;
     const t = tag();
     const ins = async (v: any) => (await db.insert(leads).values(v).returning({ id: leads.id }))[0].id;
+    // Sent through the form: its "New enquiry" bell row, as every submit writes (forms before queued emails too).
+    const sent = async (v: any) => {
+      const id = await ins(v);
+      await db.insert(venueNotifications).values({ ownerId: v.ownerId, kind: "new_enquiry", title: "New enquiry", leadId: id, dedupeKey: `new_enquiry:${id}` });
+      return id;
+    };
     const finishedLater = await ins(partial(`Kim.${t}@Example.test`, 0));
-    await ins(complete(`  kim.${t}@example.test`, 5));                 // came back and finished (other case, spaces)
+    await sent(complete(`  kim.${t}@example.test`, 5));                // came back and finished (other case, spaces)
     const restartedFirst = await ins(partial(`ora.${t}@example.test`, 0));
     const restartedSecond = await ins(partial(`ORA.${t}@example.test`, 3)); // started again
     const neverBack = await ins(partial(`lee.${t}@example.test`, 0));
     const olderOnly = await ins(partial(`max.${t}@example.test`, 2));
-    await ins(complete(`max.${t}@example.test`, -25 * 60));             // an enquiry from more than a day before doesn't count
+    await sent(complete(`max.${t}@example.test`, -25 * 60));            // an enquiry from more than a day before doesn't count
     const otherVenue = await ins(partial(`ngaio.${t}@example.test`, 0));
-    await ins(complete(`ngaio.${t}@example.test`, 6, OTHER_OWNER));     // same email, another venue
+    await sent(complete(`ngaio.${t}@example.test`, 6, OTHER_OWNER));    // same email, another venue
+    // Staff logged a call from this person after they left the form: not the form, so it doesn't count.
+    const staffAfter = await ins(partial(`rua.${t}@example.test`, 0));
+    await ins({ ...complete(`rua.${t}@example.test`, 8), source: "Phone" });
     const before = (await db.select({ n: sql<number>`count(*)::int` }).from(leads).where(or(eq(leads.ownerId, OWNER), eq(leads.ownerId, OTHER_OWNER))))[0].n;
 
     await alertUnfinishedEnquiries(at(30));
 
     const alerted = (await db.select({ leadId: venueNotifications.leadId }).from(venueNotifications)
       .where(and(eq(venueNotifications.ownerId, OWNER), eq(venueNotifications.kind, "partial_enquiry")))).map(r => r.leadId);
-    expect(alerted).toEqual(expect.arrayContaining([restartedSecond, neverBack, olderOnly, otherVenue]));
+    expect(alerted).toEqual(expect.arrayContaining([restartedSecond, neverBack, olderOnly, otherVenue, staffAfter]));
     expect(alerted).not.toContain(finishedLater);
     expect(alerted).not.toContain(restartedFirst);
     // Nothing merged or deleted; the left-behind partials stay as they were.

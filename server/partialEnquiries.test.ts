@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { partialEnquiryAlert } from "./partialEnquiries";
+import { alertedContact, finishedMatchesAlert, partialEnquiryAlert } from "./partialEnquiries";
 
 describe("unfinished enquiry alert", () => {
   const lead = {
@@ -35,5 +35,16 @@ describe("unfinished enquiry alert", () => {
     expect(partialEnquiryAlert({ ...lead, partialSeenAt: new Date("2026-10-14T01:05:30Z") }).body).not.toContain("Last on the form");
     // Pings stop counting 2 hours after step 1.
     expect(partialEnquiryAlert({ ...lead, partialSeenAt: new Date("2026-10-14T09:00:00Z") }).body).toMatch(/Last on the form: Wed,? 14 Oct,? 4:05\s?pm/i);
+  });
+
+  it("reads back who it was about, so finishing marks it read only for that person", () => {
+    const body = partialEnquiryAlert(lead).body;
+    expect(alertedContact(body)).toEqual({ name: "Sam Hart", email: "sam@example.com" });
+    // The same person finishing, also with a corrected email (the name stays).
+    expect(finishedMatchesAlert(body, { firstName: "Sam", lastName: "Hart", email: " SAM@example.com" })).toBe(true);
+    expect(finishedMatchesAlert(body, { firstName: "sam", lastName: "hart ", email: "sam@gmail.example.test" })).toBe(true);
+    // Someone else on a shared device: another name and another email.
+    expect(finishedMatchesAlert(body, { firstName: "Ben", lastName: "Other", email: "ben@example.test" })).toBe(false);
+    expect(finishedMatchesAlert(null, { firstName: "Sam", lastName: "Hart", email: "sam@example.com" })).toBe(false);
   });
 });

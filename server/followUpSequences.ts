@@ -114,8 +114,11 @@ async function supersededPartials(ownerId: number, rows: Array<{ id: number; sta
   const db = await getDb();
   if (!db || partials.length === 0) return out;
   const emails = Array.from(new Set(partials.map(p => p.email!.trim().toLowerCase())));
+  const { sentThroughFormSql } = await import("./partialEnquiries");
   const others = await db.select({
     id: leads.id, email: leads.email, source: leads.source, internalNotes: leads.internalNotes, createdAt: leads.createdAt,
+    // Only a lead the form sent counts, never one staff typed or imported.
+    reachedVenue: sql<boolean>`(${sentThroughFormSql(db, leads)})`.mapWith(Boolean),
   }).from(leads).where(and(eq(leads.ownerId, ownerId), inArray(sql`lower(trim(${leads.email}))`, emails)));
   for (const p of partials) if (isPartialSuperseded(p, others)) out.add(p.id);
   return out;

@@ -95,6 +95,12 @@ export type SupersedeCandidate = {
   source: string | null;
   internalNotes: string | null;
   createdAt: Date;
+  /**
+   * The enquiry was sent through the website form: leads.submit queued its
+   * emails (enquiry_emails) or its "New enquiry" bell row. A lead staff typed
+   * or imported never has either, whatever source was picked for it.
+   */
+  reachedVenue?: boolean;
 };
 
 const normEmail = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
@@ -109,10 +115,13 @@ const normEmail = (e: string | null | undefined) => (e ?? "").trim().toLowerCase
  *    (they had already sent it: a reload after sending, two tabs, or a step-1
  *    save that arrived late). An older unfinished one never counts, so two
  *    abandoned attempts still give one alert, for the newest.
- * Only enquiries that reached the venue count: rows staff typed or imported,
- * Express Book requests and health checks (NON_ENQUIRY_SOURCES, or no
- * source) never silence an alert. alertUnfinishedEnquiries and the
- * "finish your enquiry" follow-up use this same rule.
+ * Only enquiries that came through the website form count: step 1's own
+ * save (the partial note, which only the form writes), or a finished one the
+ * form sent (`reachedVenue`). A lead staff typed or imported counts for
+ * nothing whatever source was picked for it ("Phone", "Website", ...), and
+ * nor do Express Book requests and health checks (NON_ENQUIRY_SOURCES, or no
+ * source). alertUnfinishedEnquiries and the "finish your enquiry" follow-up
+ * use this same rule.
  */
 export function isPartialSuperseded(
   partial: { id: number; email: string | null; createdAt: Date },
@@ -124,9 +133,10 @@ export function isPartialSuperseded(
   return others.some(o => {
     if (o.id === partial.id || normEmail(o.email) !== email) return false;
     if (!o.source || NON_ENQUIRY_SOURCES.includes(o.source)) return false;
+    const startedOnForm = o.internalNotes === PARTIAL_LEAD_NOTE;
+    if (!startedOnForm && !o.reachedVenue) return false;
     const t = new Date(o.createdAt).getTime();
     if (t > at || (t === at && o.id > partial.id)) return true;
-    const finished = o.internalNotes !== PARTIAL_LEAD_NOTE;
-    return finished && at - t <= FINISHED_ENQUIRY_SILENCES_MS;
+    return !startedOnForm && at - t <= FINISHED_ENQUIRY_SILENCES_MS;
   });
 }
