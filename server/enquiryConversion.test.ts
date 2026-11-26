@@ -172,6 +172,16 @@ describe("spam checks", () => {
     expect(looksLikeBot({ honeypot: "http://spam", ownerId: 1, now: Date.now(), secret: SECRET }).bot).toBe(true);
     expect(looksLikeBot({ honeypot: "", formToken: undefined, ownerId: 1, now: Date.now(), secret: SECRET }).bot).toBe(false);
   });
+
+  it("skips the timing token for a visitor finishing a step 1 the server already accepted, but not the honeypot", () => {
+    const issued = 1_800_000_000_000;
+    const fresh = formStartToken(1, issued, SECRET); // the form was reloaded a second ago
+    const base = { ownerId: 1, now: issued + 1000, secret: SECRET };
+    expect(looksLikeBot({ ...base, formToken: fresh })).toEqual({ bot: true, reason: "too_fast" });
+    expect(looksLikeBot({ ...base, formToken: fresh, timingPassed: true }).bot).toBe(false);
+    expect(looksLikeBot({ ...base, formToken: "abc.def", timingPassed: true }).bot).toBe(false);
+    expect(looksLikeBot({ ...base, formToken: fresh, honeypot: "http://spam", timingPassed: true })).toEqual({ bot: true, reason: "honeypot" });
+  });
 });
 
 describe("walkthrough requests", () => {

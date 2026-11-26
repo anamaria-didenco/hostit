@@ -9,8 +9,8 @@ import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
-import { bookings, checklistInstances, checklistTemplates, leads, runsheets } from "../drizzle/schema";
-import { mergeChecklistItems } from "./eventChecklist";
+import { bookings, checklistInstances, checklistTemplates, leads, runsheets, staffPortalLinks } from "../drizzle/schema";
+import { correctedChecklistName, mergeChecklistItems, PLACEHOLDER_CHECKLIST_NAME } from "./eventChecklist";
 
 const HAS_DB = !!process.env.DATABASE_URL;
 
@@ -46,6 +46,16 @@ describe("mergeChecklistItems", () => {
   });
 });
 
+describe("correctedChecklistName", () => {
+  it("renames only the placeholder name, after a real sheet title", () => {
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "Grace Holloway — Birthday")).toBe("Grace Holloway — Birthday — Staff Checklist");
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "Event Runsheet")).toBeNull();
+    expect(correctedChecklistName(PLACEHOLDER_CHECKLIST_NAME, "  ")).toBeNull();
+    expect(correctedChecklistName("Bar crew list", "Grace Holloway — Birthday")).toBeNull();
+    expect(correctedChecklistName(null, "Grace Holloway — Birthday")).toBeNull();
+  });
+});
+
 describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
   const a = appRouter.createCaller(ctxFor(OWNER_A));
   const b = appRouter.createCaller(ctxFor(OWNER_B));
@@ -54,6 +64,7 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
   afterAll(async () => {
     const db = (await getDb())!;
     const owners = [OWNER_A, OWNER_B];
+    await db.delete(staffPortalLinks).where(inArray(staffPortalLinks.ownerId, owners));
     await db.delete(checklistInstances).where(inArray(checklistInstances.ownerId, owners));
     await db.delete(checklistTemplates).where(inArray(checklistTemplates.ownerId, owners));
     await db.delete(runsheets).where(inArray(runsheets.ownerId, owners));
@@ -143,6 +154,199 @@ describe.skipIf(!HAS_DB)("one checklist per event (DB)", () => {
     const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, bookingId: bk.id });
     expect(inst.bookingId).toBe(bk.id);
     expect((await a.checklists.getForBooking({ bookingId: bk.id })).instance?.id).toBe(inst.id);
+  });
+
+  it("names a new checklist after its sheet, and fixes one left with the placeholder name", async () => {
+    const db = (await getDb())!;
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Ivy Example — Engagement", bookingId: bk.id } as any);
+    // A list made before the title loaded (the old bug)…
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: PLACEHOLDER_CHECKLIST_NAME });
+    expect(inst.name).toBe("Ivy Example — Engagement — Staff Checklist");
+    await db.update(checklistInstances).set({ name: PLACEHOLDER_CHECKLIST_NAME }).where(eq(checklistInstances.id, inst.id));
+    await a.checklists.saveItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-1", text: "Ice in wells", checked: false }] });
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-1", checked: true });
+    // …is renamed when the sheet next opens, and the staff tick stays.
+    const again = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Ivy Example — Engagement — Staff Checklist" });
+    expect(again.id).toBe(inst.id);
+    expect(again.name).toBe("Ivy Example — Engagement — Staff Checklist");
+    expect((again.items as any[]).map(i => i.checked)).toEqual([true]);
+  });
+
+  it("edits, reorders and renames on the server without wiping a staff tick made meanwhile", async () => {
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Noah Example — Dinner", bookingId: bk.id } as any);
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Noah Example — Dinner — Staff Checklist" });
+    await a.checklists.saveItemsForRunsheet({ runsheetId: rs.id, items: [
+      { id: "c-1", text: "Set tables", category: "other", checked: false },
+      { id: "c-2", text: "Ice in wells", category: "bar", checked: false },
+      { id: "c-3", text: "Light candles", category: "other", checked: false },
+    ] });
+    // The run sheet has that copy open; a staff member ticks "Ice" from the link.
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-2", checked: true });
+
+    let res = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: "Set the long table", category: "setup" });
+    expect((res.items as any[]).map(i => [i.id, i.text, i.category, i.checked])).toEqual([
+      ["c-1", "Set the long table", "setup", false],
+      ["c-2", "Ice in wells", "bar", true],
+      ["c-3", "Light candles", "other", false],
+    ]);
+
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-3", checked: true });
+    res = await a.checklists.reorderItemsForRunsheet({ runsheetId: rs.id, ids: ["c-3", "c-1", "c-2"] });
+    expect((res.items as any[]).map(i => [i.id, i.checked])).toEqual([["c-3", true], ["c-1", false], ["c-2", true]]);
+
+    res = await a.checklists.renameForRunsheet({ runsheetId: rs.id, name: "  Bar crew — Noah's dinner  " });
+    expect(res.name).toBe("Bar crew — Noah's dinner");
+    const view = await a.checklists.getForBooking({ bookingId: bk.id });
+    expect(view.instance?.name).toBe("Bar crew — Noah's dinner");
+    expect((view.instance!.items as any[]).map(i => i.text)).toEqual(["Light candles", "Set the long table", "Ice in wells"]);
+    // The staff link sees the same.
+    const staff = await pub.checklists.getByShareToken({ token: inst.shareToken! });
+    expect(staff?.name).toBe("Bar crew — Noah's dinner");
+
+    // An item deleted meanwhile, a blank name or an unknown category is refused.
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "gone", text: "X" })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(a.checklists.renameForRunsheet({ runsheetId: rs.id, name: "   " })).rejects.toThrow();
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", category: "nonsense" as any })).rejects.toThrow();
+    // Another venue can't change it.
+    await expect(b.checklists.renameForRunsheet({ runsheetId: rs.id, name: "Mine now" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(b.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: "Mine" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await a.checklists.getForBooking({ bookingId: bk.id })).instance?.name).toBe("Bar crew — Noah's dinner");
+  });
+
+  it("adds, removes and sets a photo on the server without wiping a staff tick made meanwhile", async () => {
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Mia Example — Drinks", bookingId: bk.id } as any);
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Mia Example — Drinks — Staff Checklist" });
+    let res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [
+      { id: "c-1", text: "Chill the bubbles by 5pm", category: "bar" },
+      { id: "c-2", text: "Light candles" },
+    ] });
+    expect((res.items as any[]).map(i => [i.id, i.category, i.checked])).toEqual([["c-1", "bar", false], ["c-2", "other", false]]);
+    expect(res.added).toBe(2);
+
+    // The run sheet has that copy open; a staff member ticks the bubbles.
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-1", checked: true });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-3", text: "Set up the photo booth" }] });
+    expect((res.items as any[]).map(i => [i.text, i.checked])).toEqual([
+      ["Chill the bubbles by 5pm", true], ["Light candles", false], ["Set up the photo booth", false],
+    ]);
+
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-2", checked: true });
+    const removed = await a.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-3" });
+    expect((removed.items as any[]).map(i => [i.text, i.checked])).toEqual([["Chill the bubbles by 5pm", true], ["Light candles", true]]);
+    // Removing it again (a second tab) changes nothing.
+    expect((await a.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-3" })).items).toEqual(removed.items);
+
+    await pub.checklists.toggleItemByToken({ token: inst.shareToken!, itemId: "c-2", checked: false });
+    const photo = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "/uploads/bubbles.jpg" });
+    expect((photo.items as any[]).map(i => [i.id, i.checked, i.imageUrl ?? null])).toEqual([["c-1", true, "/uploads/bubbles.jpg"], ["c-2", false, null]]);
+    const off = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "" });
+    expect((off.items as any[])[0]).not.toHaveProperty("imageUrl");
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", imageUrl: "javascript:alert(1)" })).rejects.toThrow();
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-3", imageUrl: "/uploads/x.jpg" })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // PULL BAR DRINKS twice: drinks already on the list (as stored now) are skipped.
+    const drinks = [{ id: "d-1", text: "Stock bar: Prosecco", category: "bar" as const }, { id: "d-2", text: "Stock bar: Pinot Gris", category: "bar" as const }];
+    expect((await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: drinks, skipSameText: true })).added).toBe(2);
+    const again = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: drinks.map(d => ({ ...d, id: d.id + "b" })), skipSameText: true });
+    expect(again.added).toBe(0);
+    expect((again.items as any[]).map(i => i.text)).toEqual(["Chill the bubbles by 5pm", "Light candles", "Stock bar: Prosecco", "Stock bar: Pinot Gris"]);
+
+    // Blank words are refused; another venue can't add or remove.
+    await expect(a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: "   " }] })).rejects.toThrow();
+    await expect(b.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: "Mine" }] })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(b.checklists.removeItemForRunsheet({ runsheetId: rs.id, itemId: "c-1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const staff = await pub.checklists.getByShareToken({ token: inst.shareToken! });
+    expect((staff!.items as any[]).map(i => i.id)).toEqual(["c-1", "c-2", "d-1", "d-2"]);
+  });
+
+  it("opening the list from several places at once makes one list", async () => {
+    const db = (await getDb())!;
+    for (let round = 0; round < 3; round++) {
+      const bk = await newBooking();
+      const rs = await a.runsheets.create({ title: `Zoe Example — Party ${round}`, bookingId: bk.id } as any);
+      const link = await a.staffPortal.createLink({ runsheetId: rs.id });
+      // Staff open the link on several phones while the run sheet and
+      // /checklist open it, all at the same moment.
+      const opened = await Promise.all([
+        ...[1, 2, 3, 4].map(() => pub.staffPortal.getByToken({ token: link.token }).then(p => p!.checklist!.id)),
+        a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, name: "Zoe Example — Party — Staff Checklist" }).then(i => i.id),
+        a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id, bookingId: bk.id }).then(i => i.id),
+      ]);
+      const rows = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, rs.id));
+      expect(rows).toHaveLength(1);
+      expect(opened.every(id => id === rows[0].id)).toBe(true);
+      expect(rows[0].shareToken).toBeTruthy();
+    }
+  });
+
+  it("a template applied while a staff tick is being saved keeps the tick", async () => {
+    const db = (await getDb())!;
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Leo Example — Launch", bookingId: bk.id } as any);
+    const inst = await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id });
+    await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [
+      { id: "c-1", text: "Set tables" }, { id: "c-2", text: "Ice in wells", category: "bar" },
+    ] });
+    const tpl = await newTemplate([{ id: "1", text: "Music on" }, { id: "2", text: "Set tables" }]);
+
+    // A staff tick that has locked the row and changed it, but not yet
+    // committed (what toggleItemByToken does)...
+    let release!: () => void;
+    const held = new Promise<void>(r => { release = r; });
+    let locked!: () => void;
+    const isLocked = new Promise<void>(r => { locked = r; });
+    const tick = db.transaction(async (tx) => {
+      const [row] = await tx.select().from(checklistInstances).where(eq(checklistInstances.id, inst.id)).for("update");
+      const items = (row.items as any[]).map(i => i.id === "c-2" ? { ...i, checked: true, checkedAt: "2027-03-06T05:00:00Z" } : i);
+      await tx.update(checklistInstances).set({ items }).where(eq(checklistInstances.id, inst.id));
+      locked();
+      await held;
+    });
+    await isLocked;
+    // ...while "Assign template" runs on /checklist. It must wait for the tick
+    // and add to the ticked list, not write back the list it read before.
+    const assign = a.checklists.assignToBooking({ templateId: tpl.id, bookingId: bk.id });
+    await new Promise(r => setTimeout(r, 400));
+    release();
+    await Promise.all([tick, assign]);
+
+    const view = await a.checklists.getForBooking({ bookingId: bk.id });
+    expect((view.instance!.items as any[]).map(i => [i.text, i.checked])).toEqual([
+      ["Set tables", false], ["Ice in wells", true], ["Music on", false],
+    ]);
+  });
+
+  it("saves long items on every path: add, AI PASTE's 'task — note', edit, template and drinks", async () => {
+    const bk = await newBooking();
+    const rs = await a.runsheets.create({ title: "Ada Example — Gala", bookingId: bk.id } as any);
+    await a.checklists.getOrCreateForRunsheet({ runsheetId: rs.id });
+    const words = (n: number, w: string) => (w + " ").repeat(Math.ceil(n / (w.length + 1))).slice(0, n).trim();
+    const t520 = words(520, "Fold");
+    const t3000 = words(3000, "Polish");
+    const pasted = `${words(400, "Brief")} — ${words(2600, "detail")}`;
+    let res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-1", text: t520 }, { id: "c-2", text: t3000 }] });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-3", text: pasted, category: "staff" }] });
+    expect((res.items as any[]).map(i => i.text.length)).toEqual([t520.length, t3000.length, pasted.length]);
+    expect(t520.length).toBeGreaterThan(500);
+
+    const t5000 = words(5000, "Steam");
+    res = await a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: t5000, notes: words(3000, "note") });
+    expect((res.items as any[])[0].text).toBe(t5000);
+
+    const tpl = await a.checklists.createTemplate({ name: "Long", items: [{ id: "1", text: t3000 + " extra" }] });
+    await a.checklists.assignToBooking({ templateId: tpl.id, bookingId: bk.id });
+    res = await a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "d-1", text: `Stock bar: ${words(250, "Prosecco")}`, category: "bar" }], skipSameText: true });
+    expect(res.added).toBe(1);
+    expect((res.items as any[]).map(i => i.text.length)).toEqual([t5000.length, t3000.length, pasted.length, t3000.length + 6, expect.any(Number)]);
+
+    // Past the limit it's refused, on every path, rather than cut short.
+    const tooLong = "x".repeat(10_001);
+    await expect(a.checklists.addItemsForRunsheet({ runsheetId: rs.id, items: [{ id: "c-9", text: tooLong }] })).rejects.toThrow();
+    await expect(a.checklists.editItemForRunsheet({ runsheetId: rs.id, itemId: "c-1", text: tooLong })).rejects.toThrow();
+    await expect(a.checklists.createTemplate({ name: "Too long", items: [{ id: "1", text: tooLong }] })).rejects.toThrow();
   });
 
   it("another venue can't read, create or fill an event's checklist", async () => {

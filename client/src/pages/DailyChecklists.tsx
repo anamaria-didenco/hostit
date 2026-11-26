@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useId } from "react";
 import { trpc } from "../lib/trpc";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { moveAnnouncement, moveInList } from "@shared/listOrder";
 import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, Edit2, Check, CopyPlus, Save, Pencil, Settings, ArrowUp, ArrowDown, Image, Sparkles } from "lucide-react";
 
 // Copy to clipboard with feedback that reflects the real outcome — the old
@@ -28,6 +29,9 @@ const CATEGORIES = [
   { value: "closing", label: "Closing", color: "bg-purple-100 text-purple-700" },
   { value: "cleaning", label: "Cleaning", color: "bg-cyan-100 text-cyan-700" },
 ];
+
+// Small icon buttons: at least 26px with a mouse, 44px on a touch screen.
+const ICON_BTN = "inline-flex items-center justify-center p-1.5 min-w-[26px] min-h-[26px] pointer-coarse:min-w-[44px] pointer-coarse:min-h-[44px] rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#2f5488]";
 
 function catInfo(cat: string) {
   return CATEGORIES.find(c => c.value === cat) ?? CATEGORIES[0];
@@ -99,7 +103,69 @@ export default function DailyChecklists() {
     onSuccess: () => { refetch(); if (expandedId !== null) setExpandedId(null); toast.success("Checklist deleted"); },
   });
   const addItemMut = trpc.dailyChecklists.addItem.useMutation({ onSuccess: () => refetchExpanded() });
-  const updateItemMut = trpc.dailyChecklists.updateItem.useMutation({ onSuccess: () => { refetchExpanded(); setEditingItem(null); } });
+  const updateItemMut = trpc.dailyChecklists.updateItem.useMutation({
+    onSuccess: (_r, vars) => {
+      refetchExpanded();
+      // Saving the text/note edit closes it: back to that item's Edit button.
+      if (vars.text !== undefined) closeItemEdit(vars.id);
+    },
+    onError: () => toast.error("Couldn't save the item — please try again."),
+  });
+
+  // Keyboard focus after an inline edit closes, or an item moves: back to the
+  // button that started it (React may move or re-create the row, and focus
+  // would drop to the top of the page).
+  const focusTargets = useRef(new Map<string, HTMLElement>());
+  const keepRef = (key: string) => (el: HTMLElement | null) => { if (el) focusTargets.current.set(key, el); else focusTargets.current.delete(key); };
+  const [refocusKey, setRefocusKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!refocusKey) return;
+    const el = focusTargets.current.get(refocusKey);
+    if (!el) return;
+    el.focus();
+    setRefocusKey(null);
+  });
+  function closeItemEdit(itemId: number) { setEditingItem(null); setRefocusKey(`item-edit-${itemId}`); }
+
+  // ─── Edit a list's name, category, date and description ──────────────────
+  const [editingList, setEditingList] = useState<number | null>(null);
+  const updateListMut = trpc.dailyChecklists.update.useMutation({
+    onSuccess: async (_r, vars) => {
+      await Promise.all([refetch(), expandedId === vars.id ? refetchExpanded() : null]);
+      setEditingList(null);
+      setRefocusKey(`list-edit-${vars.id}`);
+      toast.success("Checklist saved");
+    },
+    onError: (err: any) => toast.error(err?.message?.includes("name") ? "Give the checklist a name." : "Couldn't save the checklist — please try again."),
+  });
+  function closeListEdit(id: number) { setEditingList(null); setRefocusKey(`list-edit-${id}`); }
+
+  // ─── Move items up / down ─────────────────────────────────────────────────
+  const utils = trpc.useUtils();
+  const [moveNote, setMoveNote] = useState("");
+  // Reload the list once the last of several quick moves is saved, not after
+  // each one (an earlier one's reload would show the item jump back).
+  const movesInFlight = useRef(0);
+  const reorderMut = trpc.dailyChecklists.reorderItems.useMutation({
+    onMutate: () => { movesInFlight.current += 1; },
+    onSettled: () => { movesInFlight.current -= 1; if (movesInFlight.current === 0) refetchExpanded(); },
+    onError: () => toast.error("Couldn't move the item — please try again."),
+  });
+  function moveItem(checklistId: number, itemId: number, delta: -1 | 1) {
+    const items = expandedChecklist?.items ?? [];
+    const ids = items.map(i => i.id);
+    const next = moveInList(ids, itemId, delta);
+    if (next.every((id, i) => id === ids[i])) return;
+    // Show the new order straight away; the save follows.
+    utils.dailyChecklists.get.setData({ id: checklistId }, old => old ? { ...old, items: next.map(id => old.items.find(i => i.id === id)!) } : old);
+    reorderMut.mutate({ checklistId, ids: next });
+    const item = items.find(i => i.id === itemId);
+    setMoveNote(moveAnnouncement(item?.text ?? "", next.indexOf(itemId) + 1, next.length));
+    // Stay on the same button; at the top / bottom it can't go further, so the other one.
+    const pos = next.indexOf(itemId);
+    const atEnd = delta === -1 ? pos === 0 : pos === next.length - 1;
+    setRefocusKey(`item-${atEnd ? (delta === -1 ? "down" : "up") : (delta === -1 ? "up" : "down")}-${itemId}`);
+  }
   const deleteItemMut = trpc.dailyChecklists.deleteItem.useMutation({ onSuccess: () => refetchExpanded() });
   const duplicateMut = trpc.dailyChecklists.duplicate.useMutation({
     onSuccess: () => { refetch(); toast.success("Checklist duplicated!"); },
@@ -363,28 +429,37 @@ export default function DailyChecklists() {
                 const pct = cl.itemCount > 0 ? Math.round((cl.checkedCount / cl.itemCount) * 100) : 0;
                 return (
                   <div key={cl.id} className="bg-white border border-[#c9a84c]/30 rounded overflow-hidden shadow-sm">
-                    {/* A click anywhere on the header opens it. For the keyboard the
-                        name is the disclosure button, with Copy/Open/Duplicate/
-                        Delete beside it rather than nested inside it. */}
+                    {editingList === cl.id ? (
+                      <ChecklistDetailsForm
+                        checklist={cl}
+                        saving={updateListMut.isPending}
+                        onSave={values => updateListMut.mutate({ id: cl.id, ...values })}
+                        onCancel={() => closeListEdit(cl.id)}
+                      />
+                    ) : (
+                    /* A click anywhere on the header opens it. For the keyboard the
+                        name is the disclosure button, with Edit/Copy/Open/Duplicate/
+                        Delete beside it rather than nested inside it. On a phone
+                        the buttons wrap under the name instead of squeezing it. */
                     <div
                       className="p-4 cursor-pointer hover:bg-[#f9f5ef]/50 transition-colors"
                       onClick={() => setExpandedId(isExpanded ? null : cl.id)}
                     >
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                         <button
                           type="button"
                           aria-expanded={isExpanded}
                           aria-label={`${cl.name} — ${isExpanded ? "collapse" : "expand"} checklist`}
-                          className="flex items-center gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
+                          className="flex items-center gap-3 min-w-[12rem] flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2f5488]"
                         >
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 rounded flex-shrink-0 ${cat.color}`}>{cat.label}</span>
                           <div className="min-w-0">
-                            <div className="font-bebas text-lg tracking-wider text-[#1a1209] truncate">{cl.name}</div>
+                            <div className="font-bebas text-lg tracking-wider text-[#1a1209] break-words sm:truncate">{cl.name}</div>
                             {cl.assignedDate && <div className="font-dm text-xs text-[#2f5488] font-medium truncate">{new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>}
                             {cl.description && <div className="font-dm text-xs text-[#83745b] truncate">{cl.description}</div>}
                           </div>
                         </button>
-                        <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-auto">
                           {cl.itemCount > 0 && (
                             <div className="text-right">
                               <div className="font-dm text-xs text-[#83745b]">{cl.checkedCount}/{cl.itemCount}</div>
@@ -393,14 +468,16 @@ export default function DailyChecklists() {
                               </div>
                             </div>
                           )}
-                          <button aria-label={`Copy live link for ${cl.name}`} onClick={e => { e.stopPropagation(); copyLink(cl.token); }} className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Copy live link"><Copy className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                          <a aria-label={`Open live view for ${cl.name} in a new tab`} href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Open live view"><ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /></a>
-                          <button aria-label={`Duplicate ${cl.name}`} onClick={e => { e.stopPropagation(); duplicateMut.mutate({ id: cl.id }); }} disabled={duplicateMut.isPending} className="p-1.5 text-[#83745b] hover:bg-[#83745b]/10 rounded disabled:opacity-50" title="Duplicate"><CopyPlus className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                          <button aria-label={`Delete ${cl.name}`} onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cl.name}"?`)) deleteMut.mutate({ id: cl.id }); }} className="p-1.5 text-red-400 hover:bg-red-50 rounded" title="Delete"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                          <button ref={keepRef(`list-edit-${cl.id}`)} aria-label={`Edit checklist: ${cl.name}`} onClick={e => { e.stopPropagation(); setEditingList(cl.id); }} className={`${ICON_BTN} text-[#2f5488] hover:bg-[#2f5488]/10`} title="Edit name, category, date and description"><Pencil className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                          <button aria-label={`Copy live link for ${cl.name}`} onClick={e => { e.stopPropagation(); copyLink(cl.token); }} className={`${ICON_BTN} text-[#2f5488] hover:bg-[#2f5488]/10`} title="Copy live link"><Copy className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                          <a aria-label={`Open live view for ${cl.name} in a new tab`} href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className={`${ICON_BTN} text-[#2f5488] hover:bg-[#2f5488]/10`} title="Open live view"><ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /></a>
+                          <button aria-label={`Duplicate ${cl.name}`} onClick={e => { e.stopPropagation(); duplicateMut.mutate({ id: cl.id }); }} disabled={duplicateMut.isPending} className={`${ICON_BTN} text-[#83745b] hover:bg-[#83745b]/10 disabled:opacity-50`} title="Duplicate"><CopyPlus className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                          <button aria-label={`Delete ${cl.name}`} onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cl.name}"?`)) deleteMut.mutate({ id: cl.id }); }} className={`${ICON_BTN} text-red-700 hover:bg-red-50`} title="Delete"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-[#83745b]" aria-hidden="true" /> : <ChevronRight className="w-4 h-4 text-[#83745b]" aria-hidden="true" />}
                         </div>
                       </div>
                     </div>
+                    )}
                     {isExpanded && (
                       <div className="border-t border-[#c9a84c]/20">
                         <div className="bg-[#2f5488]/8 border-b border-[#2f5488]/20 px-4 py-2 flex items-center justify-between flex-wrap gap-y-2 gap-2">
@@ -412,35 +489,46 @@ export default function DailyChecklists() {
                           </div>
                         </div>
                         {(expandedChecklist?.items ?? []).length === 0 && <div className="px-5 py-4 text-center font-dm text-sm text-[#83745b]">No items yet — add your first task below.</div>}
-                        {(expandedChecklist?.items ?? []).map(item => (
+                        {(expandedChecklist?.items ?? []).map((item, itemIndex, all) => { const itemCount = all.length; return (
                           <div key={item.id} className="border-b border-[#c9a84c]/10 last:border-0">
                             {editingItem === item.id ? (
-                              <div className="px-5 py-3 bg-[#f9f5ef]/60 space-y-2">
-                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} aria-label="Task text" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
-                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" aria-label="Task note (optional)" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-xs text-[#83745b] focus:outline-none focus:border-[#2f5488]" />
+                              <div
+                                role="group" aria-label={`Edit item: ${item.text}`}
+                                className="px-5 py-3 bg-[#f9f5ef]/60 space-y-2"
+                                onKeyDown={e => {
+                                  if (e.key === "Escape") { e.preventDefault(); closeItemEdit(item.id); }
+                                  if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT" && editItemText.trim() && !updateItemMut.isPending) { e.preventDefault(); updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() }); }
+                                }}
+                              >
+                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} aria-label="Task text" className="w-full bg-white border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
+                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" aria-label="Task note (optional)" className="w-full bg-white border border-[#c9a84c]/30 rounded px-3 py-1.5 pointer-coarse:py-2.5 font-dm text-xs text-[#83745b] focus:outline-none focus:border-[#2f5488]" />
                                 <div className="flex gap-2">
-                                  <button onClick={() => { if (editItemText.trim()) updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() || undefined }); }} disabled={!editItemText.trim() || updateItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-1.5 bg-[#2f5488] text-white rounded disabled:opacity-50">SAVE</button>
-                                  <button onClick={() => setEditingItem(null)} className="font-bebas tracking-widest text-xs px-4 py-1.5 border border-[#c9a84c]/30 text-[#83745b] rounded">CANCEL</button>
+                                  <button onClick={() => { if (editItemText.trim()) updateItemMut.mutate({ id: item.id, text: editItemText.trim(), note: editItemNote.trim() }); }} disabled={!editItemText.trim() || updateItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-1.5 min-h-[32px] pointer-coarse:min-h-[44px] bg-[#2f5488] text-white rounded disabled:opacity-50">SAVE</button>
+                                  <button onClick={() => closeItemEdit(item.id)} className="font-bebas tracking-widest text-xs px-4 py-1.5 min-h-[32px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#75674f] rounded">CANCEL</button>
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-start gap-3 px-5 py-3 group hover:bg-[#f9f5ef]/50 transition-colors">
+                              <div className="flex flex-wrap items-start gap-x-3 gap-y-1 px-5 py-3 group hover:bg-[#f9f5ef]/50 transition-colors">
                                 <div className={`w-4 h-4 rounded border flex-shrink-0 mt-0.5 flex items-center justify-center ${item.checked ? 'bg-[#2f5488] border-[#2f5488]' : 'border-[#c9a84c]/40'}`}>{item.checked ? <Check className="w-3 h-3 text-white" /> : null}</div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-[10rem]">
                                   <div className={`font-dm text-sm ${item.checked ? 'line-through text-[#83745b]' : 'text-[#1a1209]'}`}>{item.text}</div>
                                   {item.note && <div className="font-dm text-xs text-[#83745b] mt-0.5">{item.note}</div>}
                                   {item.photoUrl && <div className="mt-2"><img src={item.photoUrl} alt={`Reference photo for: ${item.text}`} className="w-24 h-16 object-cover rounded border border-[#c9a84c]/20" /></div>}
                                 </div>
-                                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity flex-shrink-0">
-                                  <button aria-label={`${item.photoUrl ? "Replace photo" : "Add photo"}: ${item.text}`} onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  {item.photoUrl && <button aria-label={`Remove photo: ${item.text}`} onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#83745b] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
-                                  <button aria-label={`Edit item: ${item.text}`} onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#83745b] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
-                                  <button aria-label={`Delete item: ${item.text}`} onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#83745b] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                <div className="flex items-center gap-1 ml-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity flex-shrink-0">
+                                  {/* aria-disabled, not disabled: the first item's Up keeps focus if it's on it. */}
+                                  <button ref={keepRef(`item-up-${item.id}`)} aria-label={`Move up: ${item.text}`} aria-disabled={itemIndex === 0 || undefined} onClick={() => { if (itemIndex > 0) moveItem(cl.id, item.id, -1); }} className={`${ICON_BTN} text-[#83745b] hover:text-[#2f5488] aria-disabled:opacity-40 aria-disabled:cursor-default`} title="Move up"><ArrowUp className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  <button ref={keepRef(`item-down-${item.id}`)} aria-label={`Move down: ${item.text}`} aria-disabled={itemIndex === itemCount - 1 || undefined} onClick={() => { if (itemIndex < itemCount - 1) moveItem(cl.id, item.id, 1); }} className={`${ICON_BTN} text-[#83745b] hover:text-[#2f5488] aria-disabled:opacity-40 aria-disabled:cursor-default`} title="Move down"><ArrowDown className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  <button aria-label={item.photoUrl ? `Replace photo: ${item.text}` : `Add photo: ${item.text}`} onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className={`${ICON_BTN} text-[#83745b] hover:text-[#2f5488]`} title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  {item.photoUrl && <button aria-label={`Remove photo: ${item.text}`} onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className={`${ICON_BTN} text-[#83745b] hover:text-red-700`} title="Remove photo"><X className="w-3 h-3" aria-hidden="true" /></button>}
+                                  <button ref={keepRef(`item-edit-${item.id}`)} aria-label={`Edit item: ${item.text}`} onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className={`${ICON_BTN} text-[#83745b] hover:text-[#2f5488]`} title="Edit item"><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                                  <button aria-label={`Delete item: ${item.text}`} onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className={`${ICON_BTN} text-[#83745b] hover:text-red-700`} title="Delete item"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
                                 </div>
                               </div>
                             )}
                           </div>
-                        ))}
+                        ); })}
+                        <p className="sr-only" role="status" aria-live="polite">{moveNote}</p>
                         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { if (pendingPhotoItemId !== null) handlePhotoUpload(pendingPhotoItemId, e); }} />
                         <div className="px-5 py-3 bg-[#f9f5ef]/40 border-t border-[#c9a84c]/10">
                           <div className="flex gap-2 mb-2">
@@ -881,6 +969,83 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
           <button aria-label="Copy staff link" onClick={onCopyLink} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" aria-hidden="true" /></button>
           <a aria-label="Open staff view in a new tab" href={shiftLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><ExternalLink className="w-3 h-3" aria-hidden="true" /></a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Edit a checklist's name, category, date and description in place of its header. */
+function ChecklistDetailsForm({ checklist, saving, onSave, onCancel }: {
+  checklist: { id: number; name: string; category: string | null; assignedDate: string | null; description: string | null };
+  saving: boolean;
+  onSave: (values: { name: string; category: string; assignedDate: string | null; description: string }) => void;
+  onCancel: () => void;
+}) {
+  const fid = useId();
+  const [name, setName] = useState(checklist.name);
+  const [category, setCategory] = useState(checklist.category || "general");
+  const [date, setDate] = useState(checklist.assignedDate ?? "");
+  const [description, setDescription] = useState(checklist.description ?? "");
+  const [nameError, setNameError] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { nameRef.current?.focus(); }, []);
+  const save = () => {
+    if (saving) return;
+    if (!name.trim()) { setNameError("Give the checklist a name."); nameRef.current?.focus(); return; }
+    onSave({ name: name.trim(), category, assignedDate: date || null, description: description.trim() });
+  };
+  const field = "w-full border border-[#c9a84c]/30 rounded px-3 py-2 pointer-coarse:min-h-[44px] font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white";
+  // A darker muted ink than the create form's: on this tinted panel #83745b
+  // is 4.3:1, under the 4.5:1 small text needs; this is 5.2:1.
+  const label = "font-bebas text-xs tracking-widest text-[#75674f] block mb-1";
+  // Categories saved before this list existed still show as themselves.
+  const options = CATEGORIES.some(c => c.value === category) ? CATEGORIES : [...CATEGORIES, { value: category, label: category, color: "" }];
+  return (
+    <div
+      role="group"
+      aria-label={`Edit checklist: ${checklist.name}`}
+      className="p-4 bg-[#f9f5ef]/60 space-y-3"
+      onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); onCancel(); } }}
+    >
+      <h2 className="font-bebas text-sm tracking-widest text-[#1a1209]">EDIT CHECKLIST</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2">
+          <label htmlFor={`${fid}-name`} className={label}>CHECKLIST NAME *</label>
+          <input id={`${fid}-name`} ref={nameRef} value={name}
+            onChange={e => { setName(e.target.value); setNameError(""); }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+            aria-required="true" aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? `${fid}-name-error` : undefined}
+            className={field} />
+          {nameError && <p id={`${fid}-name-error`} role="alert" className="font-dm text-xs text-red-700 mt-1">{nameError}</p>}
+        </div>
+        <div>
+          <label htmlFor={`${fid}-category`} className={label}>CATEGORY</label>
+          <select id={`${fid}-category`} value={category} onChange={e => setCategory(e.target.value)} className={field}>
+            {options.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`${fid}-date`} className={label}>DATE (optional)</label>
+          <input id={`${fid}-date`} type="date" value={date} onChange={e => setDate(e.target.value)} className={field} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor={`${fid}-desc`} className={label}>DESCRIPTION (optional)</label>
+          <input id={`${fid}-desc`} value={description} onChange={e => setDescription(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+            placeholder="Brief description..." className={field} />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {/* aria-disabled, not disabled: keyboard focus stays on it while it saves. */}
+        <button type="button" onClick={save} aria-disabled={saving || undefined}
+          className="font-bebas tracking-widest text-sm px-6 py-2 min-h-[36px] pointer-coarse:min-h-[44px] bg-[#2f5488] text-white rounded hover:bg-[#25426c] aria-disabled:opacity-50">
+          {saving ? "SAVING..." : "SAVE"}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="font-bebas tracking-widest text-sm px-6 py-2 min-h-[36px] pointer-coarse:min-h-[44px] border border-[#c9a84c]/30 text-[#75674f] rounded hover:bg-white">
+          CANCEL
+        </button>
       </div>
     </div>
   );

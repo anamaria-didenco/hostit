@@ -74,6 +74,8 @@ export function TaskLinkPicker({ value, onChange }: { value: TaskLink | null; on
           value={text}
           onChange={e => { setText(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
+          // Escape closes the results first (the form around it cancels on a second Escape).
+          onKeyDown={e => { if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); } }}
           placeholder="Search enquiries and events by name or email"
           aria-label="Link to an enquiry or event"
           className={`${FIELD} pl-8`}
