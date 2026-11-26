@@ -39,6 +39,21 @@ export function mergeChecklistItems(base: ChecklistItem[], incoming: ChecklistIt
   return out;
 }
 
+/**
+ * The name the run sheet gave its checklist before its title had loaded (the
+ * builder's placeholder title). A list still called this is renamed after its
+ * run sheet the next time the sheet opens.
+ */
+export const PLACEHOLDER_CHECKLIST_NAME = "Event Runsheet — Staff Checklist";
+
+/** The name a run sheet's checklist should have, if `current` is the placeholder. */
+export function correctedChecklistName(current: string | null | undefined, sheetTitle: string | null | undefined): string | null {
+  if ((current ?? "").trim() !== PLACEHOLDER_CHECKLIST_NAME) return null;
+  const title = (sheetTitle ?? "").trim();
+  if (!title || title === "Event Runsheet") return null;
+  return `${title} — Staff Checklist`;
+}
+
 /** The event's run sheet: the first one on the booking, else the enquiry's
  *  booking-less one (sheets made from the event drawer only carry leadId). */
 export async function findEventRunsheet(ownerId: number, bookingId: number) {
@@ -96,20 +111,24 @@ export async function getOrCreateRunsheetChecklist(
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
   return db.transaction(async (tx) => {
-    // One at a time per run sheet, so two tabs opening it together can't make
-    // two checklists or fold the same old list in twice.
+    // One at a time per run sheet, so two callers making it together can't
+    // make two checklists or fold the same old list in twice. Every place
+    // that creates a run sheet's checklist comes through here.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('checklist_instances:runsheet'), ${runsheetId}::int)`);
-    const [sheet] = await tx.select({ bookingId: runsheets.bookingId }).from(runsheets)
+    const [sheet] = await tx.select({ bookingId: runsheets.bookingId, title: runsheets.title }).from(runsheets)
       .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ownerId))).limit(1);
     if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Runsheet not found" });
     const bookingId = sheet.bookingId ?? opts.bookingId ?? null;
 
+    // The rows are locked (FOR UPDATE) until the items are written back, so a
+    // tick made on the staff link at the same moment (toggleItemByToken locks
+    // the row too) waits and is applied to the new list instead of being lost.
     const [existing] = await tx.select().from(checklistInstances)
       .where(and(eq(checklistInstances.runsheetId, runsheetId), eq(checklistInstances.ownerId, ownerId)))
-      .orderBy(asc(checklistInstances.id)).limit(1);
+      .orderBy(asc(checklistInstances.id)).limit(1).for("update");
     const old = bookingId == null ? [] : await tx.select().from(checklistInstances)
       .where(and(eq(checklistInstances.bookingId, bookingId), eq(checklistInstances.ownerId, ownerId), isNull(checklistInstances.runsheetId)))
-      .orderBy(asc(checklistInstances.createdAt), asc(checklistInstances.id));
+      .orderBy(asc(checklistInstances.createdAt), asc(checklistInstances.id)).for("update");
 
     let items: ChecklistItem[] = existing
       ? ((existing.items as ChecklistItem[]) ?? [])
@@ -118,22 +137,29 @@ export async function getOrCreateRunsheetChecklist(
     if (opts.addItems?.length) items = mergeChecklistItems(items, opts.addItems);
 
     let instance: ChecklistInstance;
+    const rename = existing ? correctedChecklistName(existing.name, sheet.title) : null;
     if (!existing) {
       [instance] = await tx.insert(checklistInstances).values({
         runsheetId,
         bookingId,
         ownerId,
-        name: opts.name ?? "Staff Checklist",
+        name: correctedChecklistName(opts.name, sheet.title) ?? opts.name ?? "Staff Checklist",
         items,
         shareToken: randomBytes(24).toString("hex"),
       }).returning();
     } else if (old.length || opts.addItems?.length || (existing.bookingId == null && bookingId != null) || !existing.shareToken) {
       [instance] = await tx.update(checklistInstances).set({
         items,
+        ...(rename ? { name: rename } : {}),
         bookingId: existing.bookingId ?? bookingId,
         shareToken: existing.shareToken ?? randomBytes(24).toString("hex"),
         updatedAt: new Date(),
       }).where(and(eq(checklistInstances.id, existing.id), eq(checklistInstances.ownerId, ownerId))).returning();
+    } else if (rename) {
+      // Only the name: the items aren't written back, so a tick made on the
+      // staff link meanwhile isn't undone.
+      [instance] = await tx.update(checklistInstances).set({ name: rename, updatedAt: new Date() })
+        .where(and(eq(checklistInstances.id, existing.id), eq(checklistInstances.ownerId, ownerId))).returning();
     } else {
       instance = existing;
     }
@@ -145,5 +171,37 @@ export async function getOrCreateRunsheetChecklist(
       ));
     }
     return instance;
+  });
+}
+
+/**
+ * One change to a run sheet's checklist, applied to the list as it is now:
+ * the row is locked, read, changed by `change` and written back in one
+ * transaction, so a tick made on the staff link at the same moment isn't
+ * lost (the run sheet sends the change, not its whole copy of the list).
+ * `change` returns the new items and/or name, or null when it can't apply
+ * (the item was deleted meanwhile). Owner-scoped; NOT_FOUND when the run
+ * sheet has no checklist.
+ */
+export async function changeRunsheetChecklist(
+  ownerId: number,
+  runsheetId: number,
+  change: (instance: ChecklistInstance) => { items?: ChecklistItem[]; name?: string } | null,
+): Promise<ChecklistInstance> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+  return db.transaction(async (tx) => {
+    const [instance] = await tx.select().from(checklistInstances)
+      .where(and(eq(checklistInstances.runsheetId, runsheetId), eq(checklistInstances.ownerId, ownerId)))
+      .orderBy(asc(checklistInstances.id)).limit(1).for("update");
+    if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "This run sheet has no checklist yet." });
+    const next = change(instance);
+    if (!next) throw new TRPCError({ code: "CONFLICT", message: "That item has been removed from the checklist. The list has been refreshed." });
+    const [saved] = await tx.update(checklistInstances).set({
+      ...(next.items ? { items: next.items } : {}),
+      ...(next.name !== undefined ? { name: next.name } : {}),
+      updatedAt: new Date(),
+    }).where(eq(checklistInstances.id, instance.id)).returning();
+    return saved;
   });
 }

@@ -13,6 +13,7 @@ import { zonedYmd, zonedMidnight } from "./availability";
 import { eventDayKey, startTimeOf, DEFAULT_VENUE_TZ } from "@shared/eventDate";
 import { CLOSED_LEAD_STATUSES, leadDatePassed } from "@shared/followUp";
 import { DEFAULT_BUSINESS_HOURS } from "@shared/businessHours";
+import { taskOverdueBefore } from "@shared/taskFields";
 import { isAwaitingFirstReply, replyDueAt, DEFAULT_REPLY_OVERDUE_HOURS } from "./speedToLead";
 import { doubledProposal } from "./proposalDoubleCheck";
 import { HOLD_STATUS } from "./holds";
@@ -134,11 +135,13 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
   }));
 
   // (b) Overdue tasks, most overdue first. Same rule as the Tasks "Overdue" filter.
+  // (A task due earlier today is "Due today", not overdue: taskOverdueBefore.)
   const nowMs = now.getTime();
+  const overdueBefore = taskOverdueBefore(tz, nowMs);
   const overdue = await db.select().from(tasks).where(and(
     eq(tasks.ownerId, ownerId), eq(tasks.completed, false), isNotNull(tasks.dueDate),
   ));
-  const overdueRows = overdue.filter(t => t.dueDate != null && t.dueDate < nowMs).sort((a, b) => a.dueDate! - b.dueDate!);
+  const overdueRows = overdue.filter(t => t.dueDate != null && t.dueDate < overdueBefore).sort((a, b) => a.dueDate! - b.dueDate!);
   const shownTasks = overdueRows.slice(0, cap);
   const tLeadIds = Array.from(new Set(shownTasks.map(t => t.linkedLeadId).filter((v): v is number => v != null)));
   const tBookingIds = Array.from(new Set(shownTasks.map(t => t.linkedBookingId).filter((v): v is number => v != null)));
