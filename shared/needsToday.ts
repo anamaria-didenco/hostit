@@ -4,15 +4,18 @@
  * and the lists they open all agree.
  *
  * ── Enquiry counts: one definition each ────────────────────────────────────
- *  NEW         status "new": nobody has replied or moved it on yet. This is the
- *              sidebar badge, the NEW tab, the Overview "New Enquiries" card
- *              and its "waiting" link.
+ * (The list's views are built in shared/enquiryFilters.ts on enquirySignal.)
+ *  NEEDS REPLY nobody has answered a new enquiry yet, or the client wrote last
+ *              and is waiting on you. NEEDS REPLY = sidebar badge = Needs reply
+ *              tab = Overview "Needs reply" card = Today's "waiting on a reply".
  *  OPEN        every enquiry still in play: not confirmed / finished / lost /
- *              cancelled. NEW is part of OPEN. This is the "Open enquiries"
- *              tile, and the Enquiries list it opens shows exactly these.
+ *              cancelled. NEEDS REPLY is part of OPEN. This is the "Open
+ *              enquiries" tile, and the Open view it opens shows exactly these.
  *  FOLLOW-UP   open enquiries whose follow-up date has arrived, or that have
- *              gone quiet (shared/followUp.ts). The "Needs follow-up" tile and
- *              the FOLLOW-UP tab.
+ *              gone quiet (shared/followUp.ts), and that are not waiting on a
+ *              reply. The "Needs follow-up" tile and the Follow-up due view.
+ *  The Board's "New Enquiry" column counts the status New (isNewEnquiry): a
+ *  status, under its own name, not the Needs reply count.
  *  The alerts bell counts unread ALERTS (one enquiry can raise several, and
  *  alerts are also about proposals and holds), so it is not an enquiry count.
  */
@@ -27,7 +30,7 @@ export const RUNSHEET_WINDOW_DAYS = 7;
 /** Rows shown per group in the card; the rest become "+N more". */
 export const NEEDS_GROUP_CAP = 5;
 
-/** NEW: an enquiry nobody has answered or moved on. */
+/** Status "new": the Board's New Enquiry column and the server's stats. */
 export function isNewEnquiry(status: string | null | undefined): boolean {
   return (status ?? "") === "new";
 }
