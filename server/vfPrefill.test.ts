@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  NO_DATE_KEY, applyPrefill, matchEventType, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom,
+  NO_DATE_KEY, applyPrefill, draftHasOwnAnswers, matchEventType, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom,
 } from "../client/src/lib/enquiryPrefill";
 
 /** The website form's prefill rule (client/src/lib/enquiryPrefill.ts), for reloads and vf-prefill messages. */
@@ -107,6 +107,21 @@ describe("applying prefill over what the visitor typed", () => {
   it("counts a field that already holds the value as applied, without changing anything", () => {
     const r = applyPrefill({ guestCount: "40" }, { guestCount: "40" }, { guestCount: "40" });
     expect(r).toEqual({ form: { guestCount: "40" }, applied: ["guestCount"], kept: [] });
+  });
+});
+
+describe("whether a kept draft is something the visitor started", () => {
+  const page = { eventDate: "2026-12-13", guestCount: "40", eventFormat: "seated" };
+  it("not when it holds only what the venue's page prefilled (after Enquiry Received!, say)", () => {
+    expect(draftHasOwnAnswers({ ...page }, page)).toBe(false);
+    expect(draftHasOwnAnswers({ eventDate: "", guestCount: "40" }, page)).toBe(false);
+    expect(draftHasOwnAnswers({}, null)).toBe(false);
+  });
+  it("yes for anything they typed or changed", () => {
+    expect(draftHasOwnAnswers({ ...page, firstName: "Kiri" }, page)).toBe(true);
+    expect(draftHasOwnAnswers({ ...page, guestCount: "25" }, page)).toBe(true);
+    expect(draftHasOwnAnswers({ [NO_DATE_KEY]: "1" }, page)).toBe(true);
+    expect(draftHasOwnAnswers({ guestCount: "40" }, null)).toBe(true);
   });
 });
 

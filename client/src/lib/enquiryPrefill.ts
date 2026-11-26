@@ -171,6 +171,15 @@ export function rememberPrefill(before: Record<string, string> | null | undefine
   return { ...(before ?? {}), ...now };
 }
 
+/**
+ * Whether a saved draft holds anything the visitor put there, rather than
+ * only what the venue's page prefilled (`remembered`, the prefill values seen
+ * last). Only then does the form say "we kept what you'd started".
+ */
+export function draftHasOwnAnswers(draft: Record<string, string>, remembered: Record<string, string> | null | undefined): boolean {
+  return Object.entries(draft).some(([k, v]) => !!v && v !== remembered?.[k]);
+}
+
 // ─── vf-prefill messages from the host page ─────────────────────────────────
 
 export type VfPrefillContext = {

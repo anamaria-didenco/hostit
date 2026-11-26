@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { scrollBehavior } from "@/lib/scrollBehavior";
 import { canReuseLead, enquiryStorageKeys, holdsSentConfirmation, leadForSubmit, leadToSupersede, normaliseEmail, formPageKey, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
-import { NO_DATE_KEY, applyPrefill, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom } from "@/lib/enquiryPrefill";
+import { NO_DATE_KEY, applyPrefill, draftHasOwnAnswers, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom } from "@/lib/enquiryPrefill";
 import { autoReplyNote, autoReplyState, buildEnquiryMessage, eventDateForWire, guestCountError, guestCountNote, guestCountToConfirm, guestCountValue, type AutoReplyState } from "@/lib/enquiryFields";
 import { describeEnquiryError } from "@/lib/enquiryErrors";
 import { isEnquiryTimeout } from "@/lib/requestTimeout";
@@ -996,7 +996,9 @@ export default function LeadForm() {
       return Object.fromEntries(Object.entries(d).filter((e): e is [string, string] => typeof e[1] === "string"));
     } catch { return {}; }
   };
-  const [draftRestored] = useState(() => Object.values(readDraft()).some(v => !!v));
+  // Only what the visitor put there: the page's own prefill, kept in the
+  // draft (after "Enquiry Received!", say), is nothing they started.
+  const [draftRestored] = useState(() => draftHasOwnAnswers(readDraft(), storedProgress?.prefill));
   const [form, setForm] = useState<Record<string, string>>(() => {
     const draft = { ...readDraft() };
     // A date or time that can't be real (an old draft, a hand-made link) is dropped, not sent.
