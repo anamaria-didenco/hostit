@@ -42,7 +42,7 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
   const { applySequenceUpdate, readSequenceSettings } = await import("@shared/followUpSequences");
   const { zonedTimeToUtcMs } = await import("@shared/businessHours");
   const { PARTIAL_LEAD_NOTE } = await import("@shared/leadConstants");
-  const { leads, venueSettings, leadSequenceSends, venueNotifications, leadActivity, proposals } = schema;
+  const { leads, venueSettings, leadSequenceSends, venueNotifications, leadActivity, proposals, enquiryEmails } = schema;
   const OWNERS = [ids.OWNER, ids.OWNER_NO_SMTP];
 
   // Thu 1 Oct 2026, 2am in Auckland.
@@ -59,6 +59,7 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     await db.delete(proposals).where(inArray(proposals.ownerId, OWNERS));
     await db.delete(leadSequenceSends).where(inArray(leadSequenceSends.ownerId, OWNERS));
     await db.delete(venueNotifications).where(inArray(venueNotifications.ownerId, OWNERS));
+    await db.delete(enquiryEmails).where(inArray(enquiryEmails.ownerId, OWNERS));
     await db.delete(leads).where(inArray(leads.ownerId, OWNERS));
     await db.delete(venueSettings).where(inArray(venueSettings.ownerId, OWNERS));
   }
@@ -96,6 +97,8 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     await ins("proposal", { status: "proposal_sent", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H) });
     await ins("waiting", { status: "new", createdAt: enquiryAt });
     await ins("noSmtp", { ownerId: ids.OWNER_NO_SMTP, status: "contacted", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H) });
+    // Jane's enquiries came through the website form (their emails were queued).
+    await db.insert(enquiryEmails).values([L.nudge, L.replied, L.paused, L.proposal].map(leadId => ({ ownerId: ids.OWNER, leadId, kind: "venue", status: "sent" })));
     await db.insert(proposals).values({
       ownerId: ids.OWNER, leadId: L.proposal, publicToken: `test-c-${Date.now()}`, title: "Birthday dinner",
       status: "viewed", sentAt: later(2 * H), viewedAt: later(3 * H),
