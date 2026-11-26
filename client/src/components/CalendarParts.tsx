@@ -11,8 +11,9 @@ import { statusPalette } from "@shared/statusPalette";
  * An event's signal is its status in the venue's own status colour (Settings >
  * Statuses), worked out by shared/statusPalette.ts exactly as the Enquiries
  * pills and Board headings are, so a status looks the same on every screen.
- * Red is kept for what is wrong whatever the status: a double-booking or a
- * follow-up that is overdue (the Enquiries list's red lane too).
+ * Red is kept for what is wrong whatever the status: a double-booked event,
+ * or an enquiry the Enquiries list puts in its red "late" lane (a follow-up a
+ * day overdue, a date clash, an expired hold, a date that has passed).
  */
 
 export type CalTone = "red" | "amber" | "blue" | "green" | "gray";
@@ -27,7 +28,7 @@ export const CAL_TONE: Record<CalTone, { fg: string; bg: string; border: string 
 };
 
 export interface CalSignal {
-  /** Double-booked or follow-up overdue: red, whatever the status. */
+  /** Double-booked, or an enquiry in the list's red lane: red, whatever the status. */
   red: boolean;
   /** The dot / icon colour (3:1 or more on any surface). */
   mark: string;
@@ -44,14 +45,22 @@ export interface CalSignal {
 }
 
 /** The one signal an event shows on the calendar, and what it means in words. */
-export function calSignal(ev: any, opts: { isLead: boolean; overdue?: boolean; statusLabel: string; statusColour?: string | null }): CalSignal {
+export function calSignal(ev: any, opts: {
+  isLead: boolean;
+  /** An enquiry the Enquiries list marks red (shared/enquiryLane.ts). */
+  overdue?: boolean;
+  /** What the list's red says ("Date clash", "Follow-up overdue · 2d"). */
+  lateLabel?: string;
+  statusLabel: string;
+  statusColour?: string | null;
+}): CalSignal {
   const st = String(ev?.status ?? "");
   const held = opts.isLead && st === "tentative" && holdState(ev) === "held";
   const muted = st === "cancelled" || st === "lost";
   const pal = statusPalette(opts.statusColour);
   const base = { mark: pal.outline, ink: pal.ink, status: st, held, muted, red: false };
   if (!muted && !opts.isLead && ev?.clashFlaggedAt) return { ...base, red: true, mark: CAL_TONE.red.fg, ink: CAL_TONE.red.fg, label: "Double-booked" };
-  if (!muted && opts.isLead && opts.overdue) return { ...base, red: true, mark: CAL_TONE.red.fg, ink: CAL_TONE.red.fg, label: "Follow-up overdue" };
+  if (!muted && opts.isLead && opts.overdue) return { ...base, red: true, mark: CAL_TONE.red.fg, ink: CAL_TONE.red.fg, label: opts.lateLabel || "Follow-up overdue" };
   if (held) return { ...base, label: "On hold" };
   return { ...base, label: opts.statusLabel || (opts.isLead ? "Enquiry" : "Event") };
 }
@@ -96,7 +105,7 @@ export interface CalLegendStatus { key: string; label: string; colour: string | 
 
 /**
  * The legend: each status the calendar can show, in its colour and with its
- * shape, then red for clashes and overdue follow-ups, then the spaces whose
+ * shape, then red for clashes and late enquiries, then the spaces whose
  * colour the venue chose (the left edge of an event).
  */
 export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendStatus[]; spaces?: { name: string; colour: string }[] }) {
@@ -116,7 +125,7 @@ export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendS
         );
       })}
       <span className="inline-flex items-center gap-1.5 font-sans text-[12px] font-bold whitespace-nowrap" style={{ color: CAL_TONE.red.fg }}>
-        <AlertTriangle aria-hidden strokeWidth={2.75} className="w-[11px] h-[11px] flex-shrink-0" />Double-booked / follow-up overdue
+        <AlertTriangle aria-hidden strokeWidth={2.75} className="w-[11px] h-[11px] flex-shrink-0" />Double-booked / late
       </span>
       {spaces.length > 0 && (
         <>

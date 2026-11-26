@@ -2000,13 +2000,17 @@ export default function Dashboard() {
   // freed). "Show cancelled" brings them back, e.g. to find one to restore.
   const [showCancelledOnCal, setShowCancelledOnCal] = useState(false);
   // One calendar signal per event (CalendarParts): the venue's own status
-  // colour, as the Enquiries pills show it, or red when double-booked or a
-  // follow-up is overdue.
-  const calSignalOf = (ev: any, isLead: boolean) => calSignal(ev, {
-    isLead, overdue: isLead && isOverdueLead(ev),
-    statusLabel: statusWords(getStatusInfo(ev.status).label),
-    statusColour: getStatusInfo(ev.status)?.swatch ?? '#8a8073',
-  });
+  // colour, as the Enquiries pills show it, or red when double-booked or when
+  // the Enquiries list puts the enquiry in its red lane (leadLaneById).
+  const calSignalOf = (ev: any, isLead: boolean) => {
+    const lane = isLead ? leadLaneById.get(ev.id) : undefined;
+    return calSignal(ev, {
+      isLead, overdue: isLead && (lane ? lane.lane === 'red' : isOverdueLead(ev)),
+      lateLabel: lane?.lane === 'red' ? lane.text : undefined,
+      statusLabel: statusWords(getStatusInfo(ev.status).label),
+      statusColour: getStatusInfo(ev.status)?.swatch ?? '#8a8073',
+    });
+  };
   // The legend: the statuses the calendar can show (lost enquiries never are;
   // cancelled only while "Show cancelled" is on), and the spaces whose colour
   // the venue chose (an event's left edge).
@@ -3655,6 +3659,12 @@ export default function Dashboard() {
   const needsEnquiries = React.useMemo(
     () => (allLeads ? needsTodayEnquiries(enquiryRows, listCtx) : undefined),
     [allLeads, enquiryRows, listCtx],
+  );
+  // Each enquiry's lane on the list, for the calendar: an enquiry the list
+  // marks red (late or wrong) is red on the calendar too, in the same words.
+  const leadLaneById = React.useMemo(
+    () => new Map(enquiryRows.map(r => [Number(r.lead.id), rowLane(r, listCtx)] as const)),
+    [enquiryRows, listCtx],
   );
   // The Board: every enquiry the search and filters (not Status) let through.
   const boardRowById = React.useMemo(() => {
@@ -5413,7 +5423,7 @@ export default function Dashboard() {
                                           <CalMark sig={sig} />
                                           {time && <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground leading-none">{time}</span>}
                                           <span className="truncate font-semibold text-[11.5px] leading-none">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusText ? ` (${statusText})` : ''}${overdue && sig.label !== 'Follow-up overdue' ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}${isHold && sig.label !== 'On hold' ? ', date on hold' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
+                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusText ? ` (${statusText})` : ''}${overdue && !sig.label.startsWith('Follow-up overdue') ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}${isHold && sig.label !== 'On hold' ? ', date on hold' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
                                         </button>
                                       </div>
                                     );

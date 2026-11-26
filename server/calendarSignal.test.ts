@@ -32,6 +32,13 @@ describe("calSignal", () => {
     expect(cancelled).toMatchObject({ red: false, muted: true });
   });
 
+  it("an enquiry the Enquiries list marks red is red here too, in the list's words", () => {
+    const clash = calSignal({ status: "contacted" }, { isLead: true, overdue: true, lateLabel: "Date clash", statusLabel: "Contacted", statusColour: swatch("sky") });
+    expect(clash).toMatchObject({ red: true, label: "Date clash", mark: CAL_TONE.red.fg });
+    const late = calSignal({ status: "proposal_sent" }, { isLead: true, overdue: true, lateLabel: "Follow-up overdue · 2d", statusLabel: "Proposal sent", statusColour: swatch("amber") });
+    expect(late.label).toBe("Follow-up overdue · 2d");
+  });
+
   it("marks a held date (it gets a dashed chip) and names it", () => {
     const held = calSignal({ status: "tentative", holdUntil: new Date(Date.now() + 86_400_000) }, { isLead: true, statusLabel: "On hold", statusColour: swatch("amber") });
     expect(held).toMatchObject({ held: true, label: "On hold", red: false, status: "tentative" });
