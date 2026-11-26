@@ -125,6 +125,29 @@ export async function ensureSigningPortal(ownerId: number, contract: Contract): 
 
 export type EmailOutcome = { emailSent: boolean; to: string | null; reason?: "smtp_not_configured" | "no_client_email" | "send_failed" };
 
+/**
+ * Pure: subject/html/text for the portal-link email, or (with a contract
+ * title) the "your contract is ready to sign" email. Everything is escaped.
+ */
+export function buildPortalLinkEmail(i: {
+  clientName?: string | null; url: string; venueName: string; fromName: string; contractTitle?: string;
+}): { subject: string; html: string; text: string } {
+  const first = (i.clientName ?? "").trim().split(/\s+/)[0] || "there";
+  const e = escapeHtml;
+  const { url } = i;
+  const subject = i.contractTitle ? `Your contract is ready to sign — ${i.contractTitle}` : `Your event, all in one place — ${i.venueName}`;
+  const intro = i.contractTitle
+    ? `Here's your contract, "${i.contractTitle}". You can read and sign it online. It only takes a few minutes.`
+    : `Here's your event page. Your event details, proposal and payments are all there.`;
+  const button = i.contractTitle ? "Read and sign" : "Open your event page";
+  const closing = i.contractTitle
+    ? "If you'd like to talk anything through before you sign, just reply to this email."
+    : "Any questions, just reply to this email.";
+  const html = `<div style="font-family:sans-serif;max-width:560px;color:#1f2937;line-height:1.5"><p>Hi ${e(first)},</p><p>${e(intro)}</p><p><a href="${e(url)}" style="background:#2d3a2e;color:#fffdf9;padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">${e(button)}</a></p><p style="font-size:13px;color:#6b7280">Or copy this link: <a href="${e(url)}">${e(url)}</a></p><p>${e(closing)}</p><p>Speak soon,<br>${e(i.fromName)}</p></div>`;
+  const text = `Hi ${first},\n\n${intro}\n\n${url}\n\n${closing}\n\nSpeak soon,\n${i.fromName}`;
+  return { subject, html, text };
+}
+
 /** Email a client their portal link (optionally "please sign <contract>"). Reports honestly. */
 export async function emailPortalLink(ownerId: number, opts: {
   to: string | null | undefined; clientName?: string | null; token: string; contractTitle?: string;
@@ -133,23 +156,18 @@ export async function emailPortalLink(ownerId: number, opts: {
   if (!to) return { emailSent: false, to: null, reason: "no_client_email" };
   const mailer = await buildVenueMailer(ownerId);
   if (!mailer) return { emailSent: false, to, reason: "smtp_not_configured" };
-  const url = portalUrl(opts.token);
-  const first = (opts.clientName ?? "").trim().split(/\s+/)[0] || "there";
-  const venueName = mailer.venue?.name ?? mailer.fromName;
-  const e = escapeHtml;
-  const subject = opts.contractTitle ? `Please sign: ${opts.contractTitle}` : `Your event page — ${venueName}`;
-  const intro = opts.contractTitle
-    ? `Your contract "${opts.contractTitle}" is ready. You can read it and sign it online — it only takes a minute.`
-    : `Here's the link to your event page. It has your event details, proposal and payments in one place.`;
-  const button = opts.contractTitle ? "Read and sign" : "Open your event page";
+  const { subject, html, text } = buildPortalLinkEmail({
+    clientName: opts.clientName, url: portalUrl(opts.token),
+    venueName: mailer.venue?.name ?? mailer.fromName, fromName: mailer.fromName, contractTitle: opts.contractTitle,
+  });
   try {
     await mailer.transporter.sendMail({
       from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
       to,
       ...(mailer.venue?.email ? { replyTo: mailer.venue.email } : {}),
       subject,
-      html: `<div style="font-family:sans-serif;max-width:560px;color:#1f2937;line-height:1.5"><p>Hi ${e(first)},</p><p>${e(intro)}</p><p><a href="${e(url)}" style="background:#2d3a2e;color:#fffdf9;padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">${e(button)}</a></p><p style="font-size:13px;color:#6b7280">Or copy this link: <a href="${e(url)}">${e(url)}</a></p><p>Any questions, just reply to this email.</p><p>Warm regards,<br>${e(mailer.fromName)}</p></div>`,
-      text: `Hi ${first},\n\n${intro}\n\n${url}\n\nAny questions, just reply to this email.\n\nWarm regards,\n${mailer.fromName}`,
+      html,
+      text,
     });
     return { emailSent: true, to };
   } catch (err) {

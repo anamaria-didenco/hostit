@@ -278,7 +278,7 @@ export async function confirmWalkthrough(ownerId: number, leadId: number, at: Da
       uid: `walkthrough-${ownerId}-${leadId}@${host}`,
       start: at, end: new Date(at.getTime() + settings.slotMinutes * 60_000),
       summary: `Walkthrough at ${venueName}`,
-      description: `Your ${settings.slotMinutes}-minute walkthrough at ${venueName}.${vs?.phone ? ` Need to change it? Call ${vs.phone} or reply to the confirmation email.` : " Need to change it? Reply to the confirmation email."}`,
+      description: walkthroughIcsDescription(settings.slotMinutes, venueName, vs?.phone),
       location: location || undefined,
       organizerName: venueName,
       organizerEmail: vs?.email || undefined,
@@ -311,6 +311,62 @@ type WalkthroughEmail =
   | { kind: "requested"; summary: string }
   | { kind: "confirmed"; label: string; minutes: number; location: string; ics: string };
 
+/** The calendar invite's description: what it is, and how to change it. */
+export function walkthroughIcsDescription(minutes: number, venueName: string, phone?: string | null): string {
+  return `Your ${minutes}-minute walkthrough at ${venueName}. We look forward to showing you around.`
+    + (phone ? ` Need a different time? Call ${phone} or reply to the confirmation email.` : " Need a different time? Reply to the confirmation email.");
+}
+
+/**
+ * Pure: subject/html/text for the walkthrough emails, so the wording can be
+ * tested. "requested" is an acknowledgement (never a booking); "confirmed"
+ * carries the time and goes out with the calendar invite.
+ */
+export function buildWalkthroughEmail(
+  p: { venueName: string; accent: string; firstName: string; phone?: string | null; fromEmail: string },
+  msg: { kind: "requested"; summary: string } | { kind: "confirmed"; label: string; minutes: number; location: string },
+  esc: (s: string) => string,
+): { subject: string; html: string; text: string } {
+  const { venueName } = p;
+  const contactHtml = [p.phone && esc(p.phone), esc(p.fromEmail)].filter(Boolean).join(" · ");
+  const contactText = [p.phone, p.fromEmail].filter(Boolean).join(" · ");
+  const reach = (bits: string) => (bits ? ` or reach us on ${bits}` : "");
+  const confirmed = msg.kind === "confirmed";
+  const heading = confirmed ? "Your walkthrough is confirmed" : "Let's find a time";
+  const intro = confirmed
+    ? "We look forward to showing you around. Your walkthrough is confirmed, and a calendar invite is attached."
+    : "Thank you for asking to come and see us. We'll check when the team is on site, then confirm a time with you.";
+  const rows = msg.kind === "confirmed"
+    ? `<tr><td style="padding:8px 12px 3px;color:#6b7280;font-size:14px;width:90px">When</td><td style="padding:8px 12px 3px;font-size:14px;font-weight:600">${esc(msg.label)} (${msg.minutes} min)</td></tr>
+      ${msg.location ? `<tr><td style="padding:3px 12px 8px;color:#6b7280;font-size:14px">Where</td><td style="padding:3px 12px 8px;font-size:14px">${esc(msg.location)}</td></tr>` : ""}`
+    : `<tr><td style="padding:8px 12px;color:#6b7280;font-size:14px;width:110px">You suggested</td><td style="padding:8px 12px;font-size:14px">${esc(msg.summary)}</td></tr>`;
+  const outro = (bits: string) => confirmed
+    ? `Need a different time? Just reply to this email${reach(bits)}.`
+    : `Anything else we should know? Just reply to this email${reach(bits)}.`;
+  const signOff = confirmed ? "See you soon" : "Speak soon";
+  const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
+  <div style="background:${p.accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
+    <div style="font-size:23px;font-weight:bold;margin-top:4px">${heading}</div>
+  </div>
+  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
+    <p style="font-size:16px;margin:0 0 12px">Hi ${esc(p.firstName)},</p>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px">${intro}</p>
+    <table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px"><tbody>
+      ${rows}
+    </tbody></table>
+    <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">${outro(contactHtml)}</p>
+    <p style="font-size:15px;margin:16px 0 0">${signOff},<br/><strong>${esc(venueName)}</strong></p>
+  </div>
+</div>`;
+  const details = msg.kind === "confirmed"
+    ? `When: ${msg.label} (${msg.minutes} min)${msg.location ? `\nWhere: ${msg.location}` : ""}`
+    : `You suggested: ${msg.summary}`;
+  const text = [`Hi ${p.firstName},`, intro, details, outro(contactText), `${signOff},\n${venueName}`].join("\n\n");
+  const subject = msg.kind === "confirmed" ? `See you on ${msg.label} — ${venueName}` : `We'd be glad to show you around — ${venueName}`;
+  return { subject, html, text };
+}
+
 async function sendWalkthroughEmail(
   ownerId: number, lead: { firstName: string; email: string }, msg: WalkthroughEmail,
 ): Promise<{ emailed: boolean; emailNote: string }> {
@@ -325,45 +381,17 @@ async function sendWalkthroughEmail(
     const vs = mailer.venue;
     const venueName = String(vs.name ?? mailer.fromName ?? "our venue");
     const accent = (vs.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : "#2D4A3E";
-    const contact = [vs.phone && esc(vs.phone), esc(mailer.fromEmail)].filter(Boolean).join(" · ");
-    const confirmed = msg.kind === "confirmed";
-    const heading = confirmed ? "Your walkthrough is confirmed" : "We've got your walkthrough request";
-    const intro = confirmed
-      ? "We're looking forward to showing you around. Here are the details — a calendar invite is attached."
-      : "Thanks for asking to see the venue. We'll check when the team is on site and be in touch to confirm a time.";
-    const rows = confirmed
-      ? `<tr><td style="padding:8px 12px 3px;color:#6b7280;font-size:14px;width:90px">When</td><td style="padding:8px 12px 3px;font-size:14px;font-weight:600">${esc(msg.label)} (${msg.minutes} min)</td></tr>
-      ${msg.location ? `<tr><td style="padding:3px 12px 8px;color:#6b7280;font-size:14px">Where</td><td style="padding:3px 12px 8px;font-size:14px">${esc(msg.location)}</td></tr>` : ""}`
-      : `<tr><td style="padding:8px 12px;color:#6b7280;font-size:14px;width:110px">You suggested</td><td style="padding:8px 12px;font-size:14px">${esc(msg.summary)}</td></tr>`;
-    const outro = confirmed
-      ? `Need to change the time? Just reply to this email${contact ? ` or reach us on ${contact}` : ""}.`
-      : `Anything else we should know? Just reply to this email${contact ? ` or reach us on ${contact}` : ""}.`;
-    const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
-  <div style="background:${accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
-    <div style="font-size:23px;font-weight:bold;margin-top:4px">${heading}</div>
-  </div>
-  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
-    <p style="font-size:16px;margin:0 0 12px">Hi ${esc(lead.firstName)},</p>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 16px">${intro}</p>
-    <table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px"><tbody>
-      ${rows}
-    </tbody></table>
-    <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">${outro}</p>
-    <p style="font-size:15px;margin:16px 0 0">${confirmed ? "See you soon" : "Speak soon"},<br/><strong>${esc(venueName)}</strong></p>
-  </div>
-</div>`;
-    const text = confirmed
-      ? `Hi ${lead.firstName},\n\nYour walkthrough at ${venueName} is confirmed for ${msg.label} (${msg.minutes} min).${msg.location ? `\nWhere: ${msg.location}` : ""}\n\nNeed to change the time? Just reply to this email.\n\n${venueName}`
-      : `Hi ${lead.firstName},\n\nThanks for asking to see ${venueName}. We'll check when the team is on site and be in touch to confirm a time.\n\nYou suggested: ${msg.summary}\n\n${venueName}`;
+    const { subject, html, text } = buildWalkthroughEmail(
+      { venueName, accent, firstName: lead.firstName, phone: vs.phone, fromEmail: mailer.fromEmail }, msg, esc,
+    );
     await mailer.transporter.sendMail({
       from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
       to: lead.email,
       replyTo: mailer.fromEmail,
-      subject: confirmed ? `Your walkthrough at ${venueName} — ${msg.label}` : `Your walkthrough request — ${venueName}`,
+      subject,
       html,
       text,
-      ...(confirmed ? { attachments: [{ filename: "walkthrough.ics", content: msg.ics, contentType: "text/calendar; charset=utf-8; method=PUBLISH" }] } : {}),
+      ...(msg.kind === "confirmed" ? { attachments: [{ filename: "walkthrough.ics", content: msg.ics, contentType: "text/calendar; charset=utf-8; method=PUBLISH" }] } : {}),
     });
     return { emailed: true, emailNote: "sent" };
   } catch (err: any) {
