@@ -1164,6 +1164,10 @@ export default function LeadForm() {
       } catch { /* nowhere to keep it */ }
       return;
     }
+    // Not before the saved record has been read: the form here is the
+    // draft plus this load's prefill, and a load that turns out to show
+    // "Enquiry Received!" again mustn't save the page's prefill as a draft.
+    if (!resumeChecked) return;
     try {
       if (hasAny) localStorage.setItem(draftKey, JSON.stringify(form));
       else localStorage.removeItem(draftKey);
@@ -1180,8 +1184,8 @@ export default function LeadForm() {
       } : {};
       // Nothing is written or removed before the saved record has been read against the venue.
       if (!hasAny) {
-        if (resumeChecked && !keepSent) localStorage.removeItem(storageKeys.progress);
-      } else if (ownerId && resumeChecked) {
+        if (!keepSent) localStorage.removeItem(storageKeys.progress);
+      } else if (ownerId) {
         localStorage.setItem(storageKeys.progress, serializeProgress({
           slug: storageKeys.slug, ownerId, step,
           leadId: held.leadId, leadToken: held.leadToken, leadEmail: held.leadEmail, leadAt: held.leadAt,
