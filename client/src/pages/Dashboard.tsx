@@ -1277,6 +1277,16 @@ export default function Dashboard() {
   // with focus has its events and add buttons in the Tab order. Enter goes into
   // the day, Escape back out to it.
   const [monthFocusDay, setMonthFocusDay] = useState<string | null>(null);
+  // Week and Day open on the day selected in the month grid (the side panel's
+  // day), not on whatever date the month was reached from.
+  const switchCalendarView = (v: 'month' | 'week' | 'day' | 'list') => {
+    if (calendarView === 'month' && v !== 'month' && v !== 'list' && monthFocusDay
+      && inShownMonth(monthFocusDay, calDate.getFullYear(), calDate.getMonth())) {
+      const [y, m, d] = monthFocusDay.split('-').map(Number);
+      setCalDate(new Date(y, m - 1, d));
+    }
+    setCalendarView(v);
+  };
   const monthGridRef = useRef<HTMLDivElement>(null);
   const monthGridPendingFocus = useRef<string | null>(null);
   const focusMonthDay = (ymd: string) => {
@@ -5195,7 +5205,7 @@ export default function Dashboard() {
                   <div role="group" aria-label="Calendar view" className="hidden md:flex rounded-[6px] border-[1.5px] border-input bg-card overflow-hidden">
                     {(["month","week","day","list"] as const).map(v => (
                       <button key={v}
-                        onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
+                        onClick={() => switchCalendarView(v)} aria-pressed={calendarView === v}
                         className={`font-sans text-[13px] font-semibold px-3.5 h-[35px] capitalize transition-colors ${
                           calendarView === v ? 'bg-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-foreground hover:bg-accent'
                         }`}>{v}</button>
@@ -5236,7 +5246,7 @@ export default function Dashboard() {
                 <div role="group" aria-label="Calendar view" className="md:hidden grid grid-cols-4 mx-3 mb-3 rounded-[6px] border-[1.5px] border-input bg-card overflow-hidden">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
-                      onClick={() => setCalendarView(v)} aria-pressed={calendarView === v}
+                      onClick={() => switchCalendarView(v)} aria-pressed={calendarView === v}
                       className={`font-sans text-[13px] font-semibold h-10 capitalize transition-colors ${
                         calendarView === v ? 'bg-primary text-primary-foreground forced-colors:[forced-color-adjust:none] forced-colors:bg-[Highlight]! forced-colors:text-[HighlightText]!' : 'text-foreground hover:bg-accent'
                       }`}>{v}</button>
