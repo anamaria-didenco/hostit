@@ -135,7 +135,7 @@ export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendS
 /** Button looks used across the calendar toolbar. */
 export const calBtn = "inline-flex items-center justify-center gap-1.5 h-[38px] px-3.5 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[13px] font-semibold text-foreground whitespace-nowrap hover:border-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
 export const calBtnPrimary = "inline-flex items-center justify-center gap-1.5 h-[38px] px-3.5 rounded-[6px] border-[1.5px] border-primary bg-primary font-sans text-[13px] font-semibold text-primary-foreground whitespace-nowrap hover:brightness-110 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
-export const calBtnSmall = "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[12.5px] font-semibold text-foreground whitespace-nowrap hover:border-primary transition-colors disabled:opacity-50";
+export const calBtnSmall = "inline-flex items-center justify-center gap-1.5 h-8 pointer-coarse:h-11 px-2.5 rounded-[6px] border-[1.5px] border-input bg-card font-sans text-[12.5px] font-semibold text-foreground whitespace-nowrap hover:border-primary transition-colors disabled:opacity-50";
 /** A toggle pill: blue-tinted when on. */
 export const calPill = (on: boolean) =>
   `inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[6px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${on ? "border-primary bg-accent text-primary" : "border-input bg-card text-foreground hover:border-primary"}`;
@@ -217,7 +217,7 @@ export function CalendarDayPanel(p: {
             const sub = [e.time, e.ev.spaceName, e.ev.eventType].filter(Boolean).join(" · ");
             return (
               <li key={`${e.isLead ? "l" : "b"}-${e.ev.id}`} className="border-b-[1.5px] border-[#ececed] last:border-b-0">
-                <button type="button" onClick={() => p.onOpen(e)} aria-label={`Open ${name}`}
+                <button type="button" onClick={() => p.onOpen(e)}
                   className="w-full text-left flex flex-col gap-[3px] py-2.5 hover:bg-accent/50 -mx-1 px-1 rounded-[4px]">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="font-sans text-[14px] font-semibold text-foreground truncate">{name}</span>

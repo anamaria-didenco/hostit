@@ -97,10 +97,11 @@ const CHIP = {
   late:     { color: SIG.red, label: "late" },         // the event has passed and this is still open
 } as const;
 
-// Buttons and pills — one family, sentence case. 38px default, 32px small.
+// Buttons and pills — one family, sentence case. 38px default, 32px small
+// (44px on a touch screen).
 const BTN = "inline-flex items-center justify-center gap-1.5 rounded-[6px] border-[1.5px] font-sans font-semibold whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const BTN_MD = `${BTN} h-[38px] px-3.5 text-[13px]`;
-const BTN_SM = `${BTN} h-8 px-2.5 text-[12.5px]`;
+const BTN_SM = `${BTN} h-8 pointer-coarse:h-11 px-2.5 text-[12.5px]`;
 const BTN_P = "bg-primary border-primary text-primary-foreground hover:brightness-110";
 const BTN_O = "bg-card border-input text-foreground hover:border-primary";
 const PILL = "inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[6px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -504,7 +505,6 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
             note={strip.pastOwedN > 0 ? `${strip.pastOwedN} event${strip.pastOwedN === 1 ? "" : "s"}` : "nothing owed"}
             noteColor={strip.pastOwedN > 0 ? SIG.red : undefined}
             selected={view === "events" && !bucket && filter === "action"}
-            ariaLabel={`Still owed on past events: ${fmtNZD(strip.pastOwed)} across ${strip.pastOwedN} event${strip.pastOwedN === 1 ? "" : "s"}. Show bookings that need action.`}
             onClick={() => { setView("events"); setFilter("action"); setBucket(null); setEventFilter(0); }} />
           {(["to_invoice", "awaiting", "on_night", "settled"] as const).map(b => {
             const n = summary[b];
@@ -516,7 +516,6 @@ export default function PaymentsBoard({ initialFilter }: { initialFilter?: "depo
                 noteColor={b === "to_invoice" && n > 0 ? SIG.amber : undefined}
                 inverted={b === "settled"} selected={view === "events" && bucket === b}
                 className={b === "settled" ? "col-span-2 sm:col-span-1" : ""}
-                ariaLabel={`${BUCKET_LABEL[b]}: ${n} booking${n === 1 ? "" : "s"}. ${bucket === b ? "Showing these — press to show all." : "Show these."}`}
                 onClick={() => showBucket(b)} />
             );
           })}
@@ -1041,17 +1040,19 @@ function initialsOf(name: string): string {
 }
 
 /** One cell of the summary strip. A button: each one filters the Bookings list. */
-function StripTile({ label, value, note, noteColor, inverted, selected, onClick, ariaLabel, className = "" }: {
+function StripTile({ label, value, note, noteColor, inverted, selected, onClick, className = "" }: {
   label: string; value: string; note: string; noteColor?: string; inverted?: boolean; selected: boolean;
-  onClick: () => void; ariaLabel: string; className?: string;
+  onClick: () => void; className?: string;
 }) {
+  // Named by its own words (label, number, note) so a voice user can say what
+  // they see; aria-pressed says whether it's the filter in use.
   return (
-    <button type="button" onClick={onClick} aria-pressed={selected} aria-label={ariaLabel}
+    <button type="button" onClick={onClick} aria-pressed={selected}
       className={`text-left px-4 py-3 sm:px-[18px] sm:py-3.5 flex flex-col gap-1 min-w-0 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-primary ${className} ${
         inverted ? "bg-primary text-primary-foreground hover:brightness-110" : selected ? "bg-accent" : "bg-card hover:bg-accent/60"}`}
       style={selected ? { boxShadow: `inset 0 -3px 0 ${inverted ? "#fff" : "var(--primary)"}` } : undefined}>
-      <span className={`text-[10px] font-extrabold uppercase tracking-[0.16em] leading-snug ${inverted ? "text-primary-foreground/80" : selected ? "text-primary" : "text-muted-foreground"}`}>{label}</span>
-      <span className="text-[26px] leading-tight font-semibold tabular-nums">{value}</span>
+      <span className={`text-[10px] font-extrabold uppercase tracking-[0.16em] leading-snug ${inverted ? "text-primary-foreground/80" : selected ? "text-primary" : "text-muted-foreground"}`}>{label}<span className="sr-only">:</span></span>
+      <span className="text-[26px] leading-tight font-semibold tabular-nums">{value}<span className="sr-only">,</span></span>
       <span className={`text-[12px] font-semibold ${inverted ? "text-primary-foreground/80" : "text-muted-foreground"}`}
         style={!inverted && noteColor ? { color: noteColor } : undefined}>{note}</span>
     </button>
@@ -1178,7 +1179,8 @@ function EventRow({ row, group, onFood, onDrinks, onDeposit, onOpen, onRecord, o
   const invoiced = row.foodStatus === "invoiced" || row.drinksStatus === "invoiced";
   const onNight = row.foodStatus === "on_night" || row.drinksStatus === "on_night";
   const sentCount = row.invoices.filter(i => i.status !== "VOIDED").length;
-  const xeroAria = `Xero invoices for ${row.name}${row.invoices.length > 0 ? ` (${sentCount} sent)` : ""}`;
+  // The More menu's item: its visible words first ("Xero invoices · 2"), then whose.
+  const xeroAria = `Xero invoices${row.invoices.length > 0 ? ` · ${sentCount} sent,` : ""} for ${row.name}`;
 
   // The one signal for the row: why it sits in its section.
   const daysLate = row.eventDate ? Math.max(0, Math.round((startOfToday() - new Date(row.eventDate).setHours(0, 0, 0, 0)) / DAY_MS)) : 0;
@@ -1194,8 +1196,8 @@ function EventRow({ row, group, onFood, onDrinks, onDeposit, onOpen, onRecord, o
 
   // One action per row — the next thing to do. The rest sit under "More".
   const action: { label: string; aria: string; icon: React.ReactNode; onClick: () => void } =
-    isOverdue ? { label: "Record payment", aria: `Record a payment for ${row.name}`, icon: <DollarSign className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onRecord }
-    : (depositDue || toInvoice) ? { label: "Send invoice", aria: xeroAria, icon: <FileText className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onXero }
+    isOverdue ? { label: "Record payment", aria: `Record payment for ${row.name}`, icon: <DollarSign className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onRecord }
+    : (depositDue || toInvoice) ? { label: "Send invoice", aria: `Send invoice for ${row.name} (Xero draft${sentCount > 0 ? `, ${sentCount} sent` : ""})`, icon: <FileText className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onXero }
     : (invoiced || owed > 0) ? { label: "Record", aria: `Record a payment for ${row.name}`, icon: <DollarSign className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onRecord }
     : { label: "Open", aria: `Open ${row.name}`, icon: <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />, onClick: onOpen };
   const actionPrimary = group === "overdue";
@@ -1306,7 +1308,7 @@ function EventRow({ row, group, onFood, onDrinks, onDeposit, onOpen, onRecord, o
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" aria-label={`More for ${row.name}`} title="More"
-                className={`${BTN} h-8 w-8 ${BTN_O}`}>
+                className={`${BTN} h-8 w-8 pointer-coarse:h-11 pointer-coarse:w-11 ${BTN_O}`}>
                 <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
@@ -1317,7 +1319,7 @@ function EventRow({ row, group, onFood, onDrinks, onDeposit, onOpen, onRecord, o
               <DropdownMenuItem onSelect={onRecord} aria-label={`Record a payment for ${row.name}`}>
                 <DollarSign className="w-3.5 h-3.5" aria-hidden="true" /> Record a payment
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onOpen} aria-label={`Open ${row.name}`}>
+              <DropdownMenuItem onSelect={onOpen} aria-label={`Open booking for ${row.name}`}>
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Open booking
               </DropdownMenuItem>
             </DropdownMenuContent>

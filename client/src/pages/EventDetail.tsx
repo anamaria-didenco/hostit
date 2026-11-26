@@ -32,6 +32,7 @@ import LinkedTasks from "@/components/LinkedTasks";
 import RecordPaymentButton from "@/components/RecordPaymentDialog";
 import ClientSubmissionPanel from "@/components/ClientSubmissionPanel";
 import { savedToastLabel } from "@/lib/editToast";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import {
   Card, SectionHead, Signal, Callout, FactsBand, PrepList, PaidBar, SIG,
   BTN_OUTLINE, BTN_PRIMARY, BTN_SM, FIELD_LABEL, initialsOf, relDays,
@@ -265,7 +266,7 @@ export default function EventDetail() {
   };
   const openPortalTab = () => {
     setModuleTab('portal');
-    requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }));
   };
 
   // ── Derived, all from data already on the page ──────────────────────────

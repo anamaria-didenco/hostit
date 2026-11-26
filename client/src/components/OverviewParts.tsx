@@ -40,15 +40,16 @@ function eventColour(e: UpcomingEventRow, statusColour?: (status: string) => str
   return { mark: pal.outline, ink: pal.ink, clash: false };
 }
 
-const btn = "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-[6px] border-[1.5px] font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+// 32px buttons for a mouse, 44px on a touch screen.
+const btn = "inline-flex items-center justify-center gap-1.5 h-8 pointer-coarse:h-11 px-2.5 rounded-[6px] border-[1.5px] font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const btnOutline = `${btn} border-input bg-card text-foreground hover:border-primary`;
 const btnPrimary = `${btn} border-primary bg-primary text-primary-foreground hover:brightness-110`;
-const linkBtn = "inline-flex items-center gap-1 font-sans text-[13px] font-semibold text-primary hover:underline min-h-[32px]";
+const linkBtn = "inline-flex items-center gap-1 font-sans text-[13px] font-semibold text-primary hover:underline min-h-[32px] pointer-coarse:min-h-[44px]";
 
 /** Section head: tracked caps title, a 1.5px hairline that fills the row, meta at right. */
 export function OvHead({ title, meta, action, as: H = "h2" }: { title: string; meta?: React.ReactNode; action?: React.ReactNode; as?: "h2" | "h3" }) {
   return (
-    <div className="flex items-center gap-2.5 min-w-0">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
       <H className="m-0 font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary whitespace-nowrap">{title}</H>
       <span aria-hidden className="h-[1.5px] flex-1 bg-input min-w-4" />
       {meta != null && <span className="font-sans text-[12px] text-muted-foreground whitespace-nowrap tabular-nums">{meta}</span>}
@@ -99,11 +100,11 @@ export function OverviewSummaryStrip({ tiles, onTile, label = "Summary" }: { til
         const inv = i === n - 1;
         const span = inv ? `${SPAN2[(n - 1) % 2]} ${SPAN3[(n - 1) % 3]} xl:col-span-1` : "";
         return (
+          // Named by what it shows (label, number, note), so the name is the visible words.
           <button key={t.id} type="button" onClick={() => onTile(t.id)}
-            aria-label={`${t.label}: ${typeof t.value === "string" || typeof t.value === "number" ? t.value : ""}. ${t.note}. Show these.`}
             className={`text-left px-4 md:px-[18px] py-3.5 flex flex-col gap-1 min-w-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-primary ${span} ${inv ? "bg-primary text-primary-foreground hover:brightness-110 focus-visible:outline-white" : "bg-card text-foreground hover:bg-accent/60"}`}>
-            <span className={`font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] ${inv ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{t.label}</span>
-            <span className="font-sans text-[26px] leading-tight font-semibold tabular-nums">{t.value}</span>
+            <span className={`font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] ${inv ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{t.label}<span className="sr-only">:</span></span>
+            <span className="font-sans text-[26px] leading-tight font-semibold tabular-nums">{t.value}<span className="sr-only">,</span></span>
             <span className={`font-sans text-[12px] font-semibold ${inv ? "text-primary-foreground/80" : ""}`}
               style={inv ? undefined : { color: t.noteTone ? FG[t.noteTone] : "var(--muted-foreground)" }}>{t.note}</span>
           </button>
@@ -192,14 +193,14 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
 
   const rows: Row[] = [];
   const nameBtn = (label: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} className="max-w-full truncate text-left font-sans text-[14.5px] font-semibold text-foreground hover:underline focus-visible:underline">{label}</button>
+    <button type="button" onClick={onClick} className="max-w-full truncate text-left font-sans text-[14.5px] font-semibold text-foreground hover:underline focus-visible:underline min-h-6">{label}</button>
   );
 
   // Double-bookings — red.
   for (const pair of p.clashes ?? []) {
     const busy = p.resolvingClashId != null && p.resolvingClashId === pair.a.bookingId;
     const side = (x: NonNullable<Clash["b"]>) => x.bookingId
-      ? <button type="button" onClick={() => setLocation(`/event/${x.bookingId}`)} className="font-sans text-[14.5px] font-semibold text-foreground hover:underline text-left">{x.name}</button>
+      ? <button type="button" onClick={() => setLocation(`/event/${x.bookingId}`)} className="font-sans text-[14.5px] font-semibold text-foreground hover:underline text-left min-h-6">{x.name}</button>
       : <span className="font-sans text-[14.5px] font-semibold text-foreground">{x.name} <span className="font-normal text-muted-foreground">({x.kind === "hold" ? "date on hold" : "enquiry"})</span></span>;
     rows.push({
       key: `clash-${pair.key}`, tone: "red", signal: pair.b ? "Double-booked" : "Clash flagged",
