@@ -120,7 +120,7 @@ import { holdTyping } from "@/lib/sessionExpiry";
 import { AlertTriangle } from "lucide-react";
 import { hhmmLabel } from "@/lib/overviewDates";
 import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
-import { OverviewSummaryStrip, OverviewNeedsToday, OverviewWeekStrip, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
+import { OverviewSummaryStrip, OverviewNeedsToday, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1248,6 +1248,8 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Calendar view: month (default), week, day or list.
+  // Overview calendar: start at this week (default) or show the whole month.
+  const [overviewShowPast, setOverviewShowPast] = useState(false);
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   // "Needs you today" used to sit at the top of the Overview; it now lives
   // under the calendar as an opt-in panel, off by default and remembered per
@@ -3700,6 +3702,211 @@ export default function Dashboard() {
   );
 
 
+  // The Overview calendar looks ahead on the current month (see below).
+  const isCurrentCalMonth = year === new Date().getFullYear() && month === new Date().getMonth();
+  const overviewRolling = isCurrentCalMonth && !overviewShowPast;
+  const monthCalendarCard = (
+                  <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
+                    <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
+                    <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
+                    <div className="flex-1 min-w-[6rem] relative">
+                      <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            title="Click to jump to a different month"
+                            className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                            <span className="truncate">{MONTHS[month]} {year}</span>
+                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1 mb-3">
+                            {MONTHS.map((m, i) => {
+                              const isCurrent = i === month;
+                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                              return (
+                                <button key={m}
+                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-2 pt-2 border-t border-gold/15">
+                            <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
+                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                            <input type="date" aria-label="Jump to date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {isCurrentCalMonth && (
+                      <button onClick={() => setOverviewShowPast(v => !v)} aria-pressed={overviewShowPast}
+                        title={overviewShowPast ? "Start at this week" : "Show the weeks already gone this month"}
+                        className="hidden sm:inline-flex flex-shrink-0 whitespace-nowrap font-sans text-xs font-semibold px-2 sm:px-3 py-1.5 text-sage hover:text-ink transition-colors">
+                        {overviewShowPast ? "From this week" : "Earlier weeks"}
+                      </button>
+                    )}
+                    <button onClick={() => setCalDate(new Date())} className="vf-btn vf-btn-secondary">TODAY</button>
+                    <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print week: every run sheet for a week"
+                      className="vf-btn vf-btn-secondary"><Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">PRINT WEEK</span></button>
+                    <button onClick={() => setTab('calendar' as any)} className="vf-btn vf-btn-secondary"><span className="hidden sm:inline">FULL </span>VIEW</button>
+                  </div>
+                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
+                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
+                      <div key={d} className={`text-center font-bebas tracking-widest text-xs py-2 border-r border-border last:border-r-0 ${
+                        d === 'SAT' || d === 'SUN' ? 'text-forest bg-linen/40' : 'text-sage'
+                      }`}>{d}</div>
+                    ))}
+                  </div>
+                  <div className="overflow-auto" style={{ minHeight: 340 }}>
+                    {(() => {
+                      const firstDayOfMonth = new Date(year, month, 1).getDay();
+                      const mondayOffset = (firstDayOfMonth + 6) % 7;
+                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                      const nxtYear = adjNextMonthDate.getFullYear();
+                      const nxtMonth = adjNextMonthDate.getMonth();
+                      const adjBLIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
+                      // Only this month and next are loaded, so the window stops at
+                      // the end of next month (never a made-up "32 Dec").
+                      const daysInNextMonth = new Date(nxtYear, nxtMonth + 1, 0).getDate();
+                      const cellAt = (i: number) => {
+                        const dayNum = i - mondayOffset + 1;
+                        if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
+                        if (dayNum > daysInMonth && dayNum - daysInMonth <= daysInNextMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                        return null;
+                      };
+                      // On the current month the Overview looks ahead: it starts at
+                      // this week and runs five weeks on (into next month), instead
+                      // of opening on weeks that are already over.
+                      const startCell = overviewRolling ? Math.floor((mondayOffset + new Date().getDate() - 1) / 7) * 7 : 0;
+                      const cellCount = overviewRolling ? 35 : totalCells;
+                      const cells = Array.from({ length: cellCount }, (_, k) => cellAt(startCell + k));
+                      const weeks = [];
+                      for (let i = 0; i < cells.length; i += 7) {
+                        const wk = cells.slice(i, i + 7);
+                        if (wk.some(Boolean)) weeks.push(wk); // drop weeks past the loaded range
+                      }
+                      const numWeeks = weeks.length;
+                      return weeks.map((week, wi) => (
+                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
+                          {week.map((cell, di) => {
+                            if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
+                            const { day, isOverflow } = cell;
+                            // In the look-ahead view next month's days are real,
+                            // usable days, not greyed-out spill-over.
+                            const muted = isOverflow && !overviewRolling;
+                            const cellYear = isOverflow ? nxtYear : year;
+                            const cellMonth = isOverflow ? nxtMonth : month;
+                            const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
+                            const isPastDay = new Date(cellYear, cellMonth, day, 23, 59, 59).getTime() < Date.now();
+                            const isWeekend = di >= 5;
+                            const dayBookings = isOverflow
+                              ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                              : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                            const dayLeads = isOverflow
+                              ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                            const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                            return (
+                              <div key={di}
+                                aria-current={isToday ? "date" : undefined}
+                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
+                                  muted || isPastDay ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!muted ? 'hover:bg-linen/30 transition-colors' : ''}`}
+                                onDragOver={!muted ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
+                                onDragLeave={!muted ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
+                                onDrop={!muted ? (e) => {
+                                  e.preventDefault(); setDragOverDate(null);
+                                  try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
+                                } : undefined}
+                              >
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span aria-hidden={muted ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                                    isToday ? 'vf-today w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : muted || isPastDay ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                  }`}>{day}{day === 1 && isOverflow && overviewRolling ? <span className="hidden sm:inline"> {adjNextMonthDate.toLocaleDateString('en-NZ', { month: 'short' })}</span> : null}</span>
+                                  {!muted && (
+                                    <span className="flex items-center">
+                                    {editDayTitle && !dayTitles.get(dateStr) && (
+                                      <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
+                                    )}
+                                    <button
+                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:[@media(hover:none)]:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                                      aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
+                                      title="Add event">
+                                      <Plus className="w-3 h-3 text-forest" />
+                                    </button>
+                                    </span>
+                                  )}
+                                </div>
+                                <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
+                                {dayBookings.slice(0, 2).map((b: any) => (
+                                  <button key={b.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
+                                    onClick={() => { setSelectedBooking(b); }}
+                                    style={spaceCardStyle(b.spaceName)}
+                                    className={`w-full text-left rounded font-dm ${b.status === 'finished' ? PAST_CHIP : calCardClasses(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
+                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{b.firstName} {b.lastName}</div>
+                                    <div className="hidden sm:block">
+                                      <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                      {(b.guestCount || b.spaceName) && (
+                                        <div className="opacity-95 truncate text-[12px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                      )}
+                                      {/* The status wraps only at spaces: on a narrow chip its text shrinks (11px down to 7px) and the side padding drops to 2px, just enough for the longest word to fit (shared/statusBandFit.ts). A word that still can't fit (wider letter spacing set by the user, a very long custom status) breaks rather than being hidden under the next day. */}
+                                      <div style={statusBandStyle(b.status, false, b.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(b.status, false, b.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(b.status, false, b.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(b.status).label, '2 * var(--bp)') }}>{getStatusInfo(b.status).label.toUpperCase()}</span></div>
+                                    </div>
+                                    {statusBandStyle(b.status, false, b.spaceName) && <div aria-hidden="true" style={statusBandStyle(b.status, false, b.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
+                                  </button>
+                                ))}
+                                {dayLeads.slice(0, 1).map((l: any) => (
+                                  <button key={l.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
+                                    onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
+                                    style={spaceCardStyle(l.spaceName)}
+                                    className={`w-full text-left rounded font-dm ${calCardClasses(l.status, isOverdueLead(l))} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[12px] sm:leading-snug`}
+                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[12px] leading-snug">{l.firstName} {l.lastName}</div>
+                                    <div className="hidden sm:block">
+                                      <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                      {l.guestCount && (
+                                        <div className="opacity-95 truncate text-[12px]">{l.guestCount} pax</div>
+                                      )}
+                                      <div style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className={`@container font-bebas !tracking-normal text-[10px] leading-[14px] mt-0.5 ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '-mx-1.5 -mb-0.5 py-0.5 rounded-b border-t-2 border-white' : 'opacity-95'}`}><span className={`block px-[var(--bp)] [overflow-wrap:break-word] ${statusBandStyle(l.status, isOverdueLead(l), l.spaceName) ? '[--bp:4px] @max-[76px]:[--bp:2px]' : '[--bp:0px]'}`} style={{ fontSize: statusBandFontSize(getStatusInfo(l.status).label, '2 * var(--bp)') }}>{getStatusInfo(l.status).label.toUpperCase()}</span></div>
+                                    </div>
+                                    {statusBandStyle(l.status, isOverdueLead(l), l.spaceName) && <div aria-hidden="true" style={statusBandStyle(l.status, isOverdueLead(l), l.spaceName)} className="sm:hidden h-2 -mx-1 -mb-0.5 mt-0.5 rounded-b border-t-2 border-white" />}
+                                  </button>
+                                ))}
+                                {(dayBookings.length + dayLeads.length) > 3 && (
+                                  <span className="font-dm text-[12px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+    );
+
   // Side-panel Cancel / Delete. Cancel is non-destructive (booking → Cancelled,
   // enquiry → Lost; the record is kept and the date freed); Delete is for good.
   const cancelSelectedEvent = () => {
@@ -4098,8 +4305,9 @@ export default function Dashboard() {
                       fmtTime={fmtHhmm}
                     />
                   )}
-                  {/* The next seven days from today, whatever month the calendar shows. */}
-                  <OverviewWeekStrip onOpenEvent={openOverviewEvent} onSeeAll={showCalendarList} />
+                  {/* The month calendar, as the Overview always had it: starts at
+                      this week, with earlier weeks a click away. */}
+                  {monthCalendarCard}
                 </div>
 
                 <aside aria-label="At a glance" className="flex flex-col gap-5 min-w-0">
