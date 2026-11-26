@@ -13,6 +13,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { PARTIAL_PING_CAP_MS, PARTIAL_PING_MIN_GAP_MS } from "@shared/enquiryTiming";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
@@ -224,19 +225,76 @@ export async function updateLead(id: number, ownerId: number, data: Partial<Inse
  * partial exactly one gets the row back. Postgres makes a second UPDATE of
  * the row wait for the first to commit, then re-checks the WHERE, which no
  * longer matches once the note is cleared. The rest get null. The note is
- * cleared here; a staff note written meanwhile also stops the match, and is
- * left alone.
+ * cleared here (or replaced by `opts.internalNotes`, the possible-spam
+ * note); a staff note written meanwhile also stops the match, and is left
+ * alone.
  */
-export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>) {
+export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>, opts: { internalNotes?: string | null } = {}) {
   const db = await getDb();
   if (!db) return null;
-  const [row] = await db.update(leads).set({ updatedAt: new Date(), ...data, internalNotes: null })
+  const [row] = await db.update(leads).set({ updatedAt: new Date(), ...data, internalNotes: opts.internalNotes ?? null })
     .where(and(
       eq(leads.id, id), eq(leads.ownerId, ownerId),
       eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
     ))
     .returning();
   return row ?? null;
+}
+
+/**
+ * The visitor went BACK on the form and changed their step-1 details
+ * (usually a mistyped email): put the new ones on the lead this page saved,
+ * instead of leaving it behind as an Unfinished enquiry next to a second one.
+ * Only while it is still the untouched partial, in one conditional UPDATE;
+ * null otherwise (finished, or staff have worked on it). createdAt,
+ * partialSeenAt and the ad attribution stay as they were.
+ */
+export async function updatePartialLeadContact(
+  id: number,
+  ownerId: number,
+  data: Pick<InsertLead, "firstName" | "lastName" | "email" | "phone" | "company" | "contactId">,
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.update(leads).set({
+    firstName: data.firstName,
+    lastName: data.lastName ?? null,
+    email: data.email,
+    phone: data.phone ?? null,
+    company: data.company ?? null,
+    contactId: data.contactId ?? null,
+    updatedAt: new Date(),
+  })
+    .where(and(
+      eq(leads.id, id), eq(leads.ownerId, ownerId),
+      eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
+    ))
+    .returning();
+  return row ?? null;
+}
+
+/**
+ * The step-2 "still here" ping (leads.touchPartial): stamp partialSeenAt on
+ * a lead that is still the untouched partial, within PARTIAL_PING_CAP_MS of
+ * step 1 and at least PARTIAL_PING_MIN_GAP_MS after the last stamp kept
+ * (acceptsPartialPing). `alive` is whether the lead is still worth pinging:
+ * true also when this ping came too soon to keep. Never touches updatedAt,
+ * lastActivityAt or the note.
+ */
+export async function touchPartialLead(id: number, ownerId: number, now: Date = new Date()): Promise<{ alive: boolean; kept: boolean }> {
+  const db = await getDb();
+  if (!db) return { alive: false, kept: false };
+  const stillOpen = and(
+    eq(leads.id, id), eq(leads.ownerId, ownerId),
+    eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
+    gte(leads.createdAt, new Date(now.getTime() - PARTIAL_PING_CAP_MS)),
+  );
+  const kept = await db.update(leads).set({ partialSeenAt: now })
+    .where(and(stillOpen, or(isNull(leads.partialSeenAt), lte(leads.partialSeenAt, new Date(now.getTime() - PARTIAL_PING_MIN_GAP_MS)))))
+    .returning({ id: leads.id });
+  if (kept.length) return { alive: true, kept: true };
+  const [open] = await db.select({ id: leads.id }).from(leads).where(stillOpen).limit(1);
+  return { alive: !!open, kept: false };
 }
 
 /**

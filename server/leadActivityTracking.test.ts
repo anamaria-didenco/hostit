@@ -22,7 +22,8 @@ import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { sweepDaysBeforeEvent } from "./automatedTasks";
 import { buildReport } from "./enquiryReport";
-import { leads, leadActivity, tasks, venueSettings, bookings, automatedTaskRuns } from "../drizzle/schema";
+import { waitForEnquiryEmails } from "./enquiryEmails";
+import { enquiryEmails, leads, leadActivity, tasks, venueSettings, bookings, automatedTaskRuns } from "../drizzle/schema";
 import { leadNeedsReply } from "../shared/needsReply";
 import { ymdInTz } from "../shared/automatedTasks";
 import type { TrpcContext } from "./_core/context";
@@ -62,6 +63,8 @@ async function cleanup() {
   if (!db) return;
   const ids = (await db.select({ id: leads.id }).from(leads).where(eq(leads.ownerId, OWNER))).map(r => r.id);
   if (ids.length) await db.delete(leadActivity).where(inArray(leadActivity.leadId, ids));
+  await waitForEnquiryEmails();
+  await db.delete(enquiryEmails).where(eq(enquiryEmails.ownerId, OWNER));
   await db.delete(leads).where(eq(leads.ownerId, OWNER));
   await db.delete(tasks).where(eq(tasks.ownerId, OWNER));
   await db.delete(bookings).where(eq(bookings.ownerId, OWNER));
@@ -150,7 +153,11 @@ describe.skipIf(!hasDb)("enquiry reply & chase logging", () => {
   it("public form: auto-reply is reported, logged, and still leaves the lead needing a reply", async () => {
     sent.length = 0;
     const lead: any = await caller(false).leads.submit({ ownerId: OWNER, firstName: "Web", lastName: "Form", email: "web@client.test", eventType: "Birthday" });
-    expect(lead.autoReplySent).toBe(true);
+    // SUBMIT answers before the emails go, so it promises "on its way", and
+    // forms loaded before that (autoReplySent) promise nothing.
+    expect(lead.autoReply).toBe("sending");
+    expect(lead.autoReplySent).toBe(false);
+    await waitForEnquiryEmails();
     const autoReply = sent.find(m => m.to === "web@client.test");
     expect(autoReply?.text).toContain("within one business day");
     const acts = await activity(lead.id);
@@ -165,6 +172,9 @@ describe.skipIf(!hasDb)("enquiry reply & chase logging", () => {
     await db.update(venueSettings).set({ enquiryAutoReplyEnabled: 0 }).where(eq(venueSettings.ownerId, OWNER));
     const lead2: any = await caller(false).leads.submit({ ownerId: OWNER, firstName: "Quiet", email: "quiet@client.test" });
     expect(lead2.autoReplySent).toBe(false);
+    expect(lead2.autoReply).toBe("none");
+    await waitForEnquiryEmails();
+    expect(sent.some(m => m.to === "quiet@client.test")).toBe(false);
     expect((await activity(lead2.id)).some(a => a.type === "email")).toBe(false);
   });
 

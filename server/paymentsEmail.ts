@@ -6,6 +6,7 @@
  */
 import { smtpTls } from "./smtpTls";
 import { publicBaseUrl } from "./publicUrl";
+import { SMTP_TIMEOUTS } from "@shared/emailDelivery";
 
 /** The app's public base URL, for building client-facing links. */
 export function appBaseUrl(): string {
@@ -35,6 +36,9 @@ export async function buildVenueMailer(ownerId: number): Promise<
     secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
     auth: { user: vs.smtpUser, pass: vs.smtpPass },
     tls: smtpTls(),
+    // Short timeouts: a mail server that doesn't answer fails in seconds
+    // (and is retried where the caller retries), instead of minutes.
+    ...SMTP_TIMEOUTS,
   });
   // `||` not `??`: a cleared Settings field saves as "", which used to send
   // under a blank display name (inboxes then show the mailbox owner's name).

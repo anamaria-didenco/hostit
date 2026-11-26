@@ -75,6 +75,11 @@ function knownTimeZone(tz: string | null | undefined): string | null {
   try { new Intl.DateTimeFormat("en-NZ", { timeZone: name }); return name; } catch { return null; }
 }
 
+/** The venue's time zone from Settings, or NZ when it isn't set or isn't one this runtime knows. */
+export function venueTimeZone(vs: { timezone?: string | null } | null | undefined): string {
+  return knownTimeZone(vs?.timezone) ?? VENUE_TZ;
+}
+
 export async function getPublicFormConfig(ownerId: number) {
   const db = await getDb();
   const base = {
@@ -97,7 +102,7 @@ export async function getPublicFormConfig(ownerId: number) {
     .orderBy(eventSpaces.id);
   return {
     ...base,
-    timeZone: knownTimeZone(vs?.timezone) ?? VENUE_TZ,
+    timeZone: venueTimeZone(vs),
     showAvailability: (vs?.showAvailabilityOnForm ?? 1) !== 0,
     walkthroughEnabled: parseWalkthroughSettings(vs).enabled,
     spaces: rows.map(s => {

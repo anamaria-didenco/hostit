@@ -8,7 +8,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
-import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { PARTIAL_LEAD_NOTE, POSSIBLE_SPAM_NOTE } from "@shared/leadConstants";
 import { fitFnbItems } from "@shared/fnbFit";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
@@ -24,7 +24,9 @@ import { venueUpdateErrors } from "@shared/settingsValidation";
 import { normaliseTaskPriority } from "@shared/taskFields";
 import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 import { publicVenue } from "./publicVenue";
-import { isWallTime } from "@shared/enquiryWallTime";
+import { enquiryEventInstant, isValidEnquiryDateInput, isWallTime } from "@shared/enquiryWallTime";
+import { ENQUIRY_LIMITS } from "@shared/enquiryRules";
+import { IDEMPOTENT_SUBMIT_MS } from "@shared/enquiryTiming";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -45,7 +47,7 @@ import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, completePartialLead, updateLeadStatus, updateLead, markLeadLost,
+  getLeads, getLeadById, createLead, completePartialLead, updatePartialLeadContact, touchPartialLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -720,20 +722,38 @@ export const appRouter = router({
         hp: z.string().max(500).optional(),
         formToken: z.string().max(80).optional(),
         // The lead this page already saved at step 1, and its token, sent
-        // when the visitor went BACK and changed their email. Not used yet:
-        // a new lead is saved as before.
+        // when the visitor went BACK and changed their email (the form sends
+        // them only for a lead saved by this page load, never one restored
+        // after a reload or after START FRESH).
         leadId: z.number().int().positive().optional(),
         leadToken: z.string().max(64).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Counted like any step-1 save, also when it only corrects one.
         await enforceLeadRateLimit(ctx, input.ownerId);
         const { isBotSubmission } = await import('./enquiryForm');
-        // A bot gets a convincing "saved" and nothing is stored.
+        // A bot gets a convincing "saved" and nothing is stored (nor changed).
         if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { leadId: 0, leadToken: "" };
         const { findContactIdFor } = await import('./leadRetention');
+        const contactId = await findContactIdFor(input.ownerId, input.email, input.phone);
+        // The same visitor correcting step 1 (the token proves this browser
+        // saved that lead): their new details go on that lead, so a mistyped
+        // email doesn't leave an Unfinished enquiry behind. Only while it is
+        // still the untouched partial; otherwise a new lead, as before.
+        if (input.leadId && isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) {
+          const updated = await updatePartialLeadContact(input.leadId, input.ownerId, {
+            firstName: input.firstName,
+            lastName: input.lastName,
+            email: input.email,
+            phone: input.phone,
+            company: input.company,
+            contactId,
+          });
+          if (updated) return { leadId: updated.id, leadToken: leadAccessToken(input.ownerId, updated.id) };
+        }
         const lead = await createLead({
           ownerId: input.ownerId,
-          contactId: await findContactIdFor(input.ownerId, input.email, input.phone),
+          contactId,
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -778,10 +798,12 @@ export const appRouter = router({
         phone: z.string().max(40).optional(),
         company: z.string().max(200).optional(),
         eventType: z.string().max(100).optional(),
-        eventDate: validDateString.optional(),
-        // The picked time as the venue's wall clock ("19:00"), sent with a
-        // bare "YYYY-MM-DD" eventDate. Not used yet: forms still send the
-        // time inside eventDate, and that is what is stored.
+        // A bare "YYYY-MM-DD" (with eventTime when a time was picked), or,
+        // from a form loaded before that, a full timestamp. A day that
+        // doesn't exist ("2026-02-30") is refused, not moved to 2 March.
+        eventDate: z.string().max(40).refine(isValidEnquiryDateInput, { message: "Please enter a valid date" }).optional(),
+        // The picked time as the venue's wall clock ("19:00"), placed in the
+        // venue's time zone with a bare eventDate (not the visitor's zone).
         eventTime: z.string().max(5).refine(v => v === "" || isWallTime(v), { message: "Please pick a time from the list" }).optional(),
         // The enquirer explicitly chose "no date yet" — kept as its own flag
         // so the board can say "Date TBC" instead of a blank.
@@ -796,7 +818,9 @@ export const appRouter = router({
         // separate from `message` so they stay queryable per type.
         eventDetail: z.string().max(255).optional(),
         invoicingNote: z.string().max(255).optional(),
-        message: z.string().max(5000).optional(),
+        // The visitor's box takes 5000 characters; the rest is room for the
+        // venue's own questions and the lines the form adds.
+        message: z.string().max(ENQUIRY_LIMITS.messageTotal).optional(),
         source: z.string().max(100).optional(),
         // Ad-click attribution, read by the embed loader from the parent
         // page's URL at load time (the iframe can't see it — cross-origin)
@@ -830,6 +854,27 @@ export const appRouter = router({
           ? await getLeadById(input.leadId, input.ownerId)
           : undefined;
         const partial = claimed && claimed.internalNotes === PARTIAL_LEAD_NOTE && claimed.status === "new" ? claimed : undefined;
+        const sameEmail = (a: string | null | undefined, b: string | null | undefined) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+        // The same enquiry sent again by the one who sent it: the reply was
+        // lost (the phone dropped signal) or a second tab. Received in the
+        // last 30 minutes with this email, and nobody at the venue has
+        // touched it (still "new", no notes). They get back the enquiry
+        // already saved. Nothing is written or emailed, so it isn't counted
+        // against the 5-write limit or bot-checked, and gives no free pass;
+        // its own limit stops a held token being hammered. Later answers
+        // from a second tab are not merged in.
+        const isRepeat = (row: { internalNotes: string | null; status: string | null; email: string | null; updatedAt: Date } | null | undefined): boolean =>
+          !!row && row.internalNotes == null && row.status === "new" && sameEmail(row.email, input.email)
+          && new Date(row.updatedAt).getTime() >= Date.now() - IDEMPOTENT_SUBMIT_MS;
+        const repeatAnswer = async (row: NonNullable<typeof claimed>) => {
+          enforceRateLimit('enquiry-submit-repeat', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 30, 10 * 60_000,
+            "Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
+          const { autoReplyNoteFor } = await import('./enquiryEmails');
+          const autoReply = await autoReplyNoteFor(row.id);
+          const { internalNotes: _notes, ...shown } = row;
+          return { ...shown, leadToken: leadAccessToken(input.ownerId, row.id), autoReplySent: autoReply === "sent", autoReply, repeat: true };
+        };
+        if (claimed && !partial && isRepeat(claimed)) return repeatAnswer(claimed);
         // Finishing it with the email it was saved with is the second half of
         // one enquiry whose first half, startCapture, already counted against
         // the rate limit. So it isn't counted again, and the timing token is
@@ -838,17 +883,22 @@ export const appRouter = router({
         // request that actually completes the row keeps it. The row is
         // claimed atomically below (completePartialLead), so a burst of
         // submits with one token gets one free completion and the rest are
-        // counted and checked like any other. This is no proof of a person:
-        // startCapture lets a missing timing token through (cached pages), so
-        // a script can get a partial without loading the form. It gains
-        // nothing a plain submit doesn't: one completion per counted write.
-        const sameEmail = (a: string | null | undefined, b: string | null | undefined) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+        // counted and checked like any other (or, once it is received, get
+        // it back as a repeat). This is no proof of a person: startCapture
+        // lets a missing timing token through (cached pages), so a script
+        // can get a partial without loading the form. It gains nothing a
+        // plain submit doesn't: one completion per counted write.
         const finishingOwn = !!partial && sameEmail(partial.email, input.email);
         if (!finishingOwn) await enforceLeadRateLimit(ctx, input.ownerId);
-        const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
+        const { isBotSubmission, verifyTurnstile, venueTimeZone } = await import('./enquiryForm');
         // A bot gets a convincing success and nothing is stored or sent. The
-        // honeypot always counts.
-        if (isBotSubmission(input.ownerId, input.hp, input.formToken, { timingPassed: finishingOwn })) return { id: 0, leadToken: "" } as any;
+        // honeypot counts everywhere but here: finishing your own step-1
+        // lead (which passed it at step 1) with its email. Something filled
+        // the hidden field on the way (an autofill tool, say); the enquiry
+        // is kept, marked as possible spam, rather than dropped behind a
+        // fake success. Only for the request that wins the claim below.
+        const honeypotForgiven = finishingOwn && !!(input.hp ?? "").trim();
+        if (isBotSubmission(input.ownerId, honeypotForgiven ? undefined : input.hp, input.formToken, { timingPassed: finishingOwn })) return { id: 0, leadToken: "" } as any;
         if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
           throw new Error("Please complete the quick security check above the button, then send again.");
         }
@@ -859,6 +909,8 @@ export const appRouter = router({
           space = all.find(s => s.id === input.spaceId);
         }
 
+        const vs = (await getVenueSettings(input.ownerId)) ?? null;
+        const tz = venueTimeZone(vs);
         // Link an existing client contact (matched by email or phone) so a
         // returning client's history follows them.
         const { findContactIdFor } = await import('./leadRetention');
@@ -871,7 +923,9 @@ export const appRouter = router({
           phone: input.phone,
           company: input.company,
           eventType: input.eventType,
-          eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          // A picked date and time are the venue's wall clock, placed in the
+          // venue's zone; an older form's full timestamp is kept as sent.
+          eventDate: enquiryEventInstant(input.eventDate, input.eventTime, tz) ?? undefined,
           dateFlexible: input.dateFlexible ?? false,
           eventFormat: input.eventFormat,
           budgetRange: input.budgetRange,
@@ -897,6 +951,7 @@ export const appRouter = router({
         };
 
         let lead = null;
+        let finishedPartial = false;
         if (partial) {
           // Completing a lead startCapture already created at step 1 —
           // update that row rather than insert a second one, and clear the
@@ -904,11 +959,17 @@ export const appRouter = router({
           // (a staff note written meanwhile is theirs, not ours to erase),
           // and only for one request: of several racing to finish it, one
           // gets the row and the others get null.
-          lead = await completePartialLead(partial.id, input.ownerId, leadData);
+          lead = await completePartialLead(partial.id, input.ownerId, leadData, { internalNotes: honeypotForgiven ? POSSIBLE_SPAM_NOTE : null });
+          finishedPartial = !!lead;
+          if (honeypotForgiven && lead) console.log(`[EnquirySpam] kept lead ${lead.id} for owner ${input.ownerId}, marked possible spam (honeypot on its own step-1 lead)`);
         }
         if (!lead && finishingOwn) {
           // Another request finished this partial between the read above and
-          // here. This one gets no free pass: counted, and timing-checked.
+          // here. Received just now, so this is usually the same SUBMIT sent
+          // twice: it gets that enquiry back. Otherwise it gets no free pass:
+          // counted, and checked like any submit (the honeypot included).
+          const again = await getLeadById(partial!.id, input.ownerId);
+          if (isRepeat(again)) return repeatAnswer(again!);
           await enforceLeadRateLimit(ctx, input.ownerId);
           if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
         }
@@ -918,319 +979,68 @@ export const appRouter = router({
           // fresh, exactly as before this feature existed.
           lead = await createLead(leadData);
         }
+        // Never a success screen for an enquiry that wasn't saved.
+        if (!lead) throw new Error("Could not save — please try again.");
 
-        // Send notification email to venue owner if they have configured one
-        try {
-          const { getDb } = await import('./db');
-          const { venueSettings } = await import('../drizzle/schema');
-          const { eq } = await import('drizzle-orm');
-          const db = await getDb();
-          if (db) {
-            const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId)).limit(1);
-            if (vs?.notificationEmail && vs?.smtpHost && vs?.smtpUser && vs?.smtpPass) {
-              console.log(`[LeadSubmit] Sending notification to ${vs.notificationEmail} via ${vs.smtpHost}:${vs.smtpPort ?? 587}`);
-              const nodemailer = await import('nodemailer');
-              const port = vs.smtpPort ?? 587;
-              const secure = (vs.smtpSecure ?? 0) === 1 || port === 465;
-              const transporter = nodemailer.default.createTransport({
-                host: vs.smtpHost,
-                port,
-                secure,
-                auth: { user: vs.smtpUser, pass: vs.smtpPass },
-                tls: smtpTls(),
-              } as any);
-              // Internal "new enquiry" alert — brand the sender name as
-              // VenueFlowHQ so it reads as a system notification rather than a
-              // bare mailbox address (which is what shows when smtpFromName is
-              // blank). The From address stays the authenticated SMTP mailbox.
-              const fromName = 'VenueFlowHQ';
-              const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
-              const clientName = [input.firstName, input.lastName].filter(Boolean).join(' ');
-              // Format event date as "Saturday 12 April 2026"
-              const formattedEventDate = input.eventDate
-                ? (() => {
-                    // input.eventDate may be either "YYYY-MM-DD" or a full ISO timestamp.
-                    // For bare dates, anchor to local midnight to avoid UTC-shift; for ISO,
-                    // use as-is (stored time is already meaningful).
-                    // A bare "YYYY-MM-DD" parses as date-only; a timestamp is shown in NZ time.
-                    return formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ);
-                  })()
-                : null;
-
-              // Escape every attacker-controlled value before interpolating it
-              // into the notification email HTML. `input.*` comes straight from
-              // the public enquiry form, and the on-day rows can contain prior
-              // public enquiry text.
-              const { escapeHtml: esc } = await import('./sanitizeHtml');
-              // Check for existing bookings/leads on the same event date
-              let existingOnDayHtml = '';
-              if (input.eventDate) {
-                try {
-                  const { bookings: bTable, leads: lTable } = await import('../drizzle/schema');
-                  const { and, gte, lt } = await import('drizzle-orm');
-                  // Compute the calendar day window regardless of whether input.eventDate
-                  // is "YYYY-MM-DD" or a full ISO timestamp. A bare date must be
-                  // anchored to local midnight (not UTC), otherwise in NZ (UTC+12/13)
-                  // the window lands on the previous day and the clash check is wrong.
-                  const eventD = /^\d{4}-\d{2}-\d{2}$/.test(String(input.eventDate))
-                    ? new Date(String(input.eventDate) + 'T00:00:00')
-                    : new Date(input.eventDate);
-                  const dayStart = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 0, 0, 0);
-                  const dayEnd = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 23, 59, 59);
-                  const [existingBookings, existingLeads] = await Promise.all([
-                    db.select().from(bTable).where(
-                      and(eq(bTable.ownerId, input.ownerId), gte(bTable.eventDate, dayStart), lt(bTable.eventDate, dayEnd))
-                    ),
-                    db.select().from(lTable).where(
-                      and(eq(lTable.ownerId, input.ownerId), gte(lTable.eventDate as any, dayStart), lt(lTable.eventDate as any, dayEnd))
-                    ),
-                  ]);
-                  // Build a lookup from status key → custom label using venue's stored customStatuses
-                  const customStatusLabels: Record<string, string> = {};
-                  try {
-                    const rawStatuses = vs.customStatuses ? JSON.parse(vs.customStatuses as string) : [];
-                    for (const s of rawStatuses) customStatusLabels[s.key] = s.label;
-                  } catch { /* ignore */ }
-                  const statusLabel = (s: string) => customStatusLabels[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const statusColor: Record<string, string> = {
-                    confirmed: '#16a34a', booked: '#16a34a',
-                    negotiating: '#d97706', tentative: '#d97706',
-                    proposal_sent: '#f59e0b', function_pack_sent: '#facc15',
-                    new: '#6b7280', contacted: '#3b82f6',
-                    cancelled: '#dc2626', lost: '#6b7280',
-                  };
-                  const bookingRows = existingBookings
-                    .filter(b => b.status !== 'cancelled')
-                    .map(b => `<tr style="border-bottom:1px solid #f3f4f6">
-                      <td style="padding:5px 8px;font-size:13px">${esc(b.firstName)} ${esc(b.lastName ?? '')}</td>
-                      <td style="padding:5px 8px;font-size:13px">${esc(b.eventType ?? '—')}</td>
-                      <td style="padding:5px 8px;font-size:13px">${b.spaceName ? `<span style="color:#6b7280">${esc(b.spaceName)}</span>` : '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${esc(b.guestCount ?? '—')} guests</td>
-                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${esc(statusLabel(b.status))}</span></td>
-                    </tr>`);
-                  const leadRows = existingLeads
-                    .filter((l: any) => l.id !== lead?.id && !['lost','cancelled'].includes(l.status))
-                    .map((l: any) => `<tr style="border-bottom:1px solid #f3f4f6">
-                      <td style="padding:5px 8px;font-size:13px">${esc(l.firstName)} ${esc(l.lastName ?? '')}</td>
-                      <td style="padding:5px 8px;font-size:13px">${esc(l.eventType ?? '—')}</td>
-                      <td style="padding:5px 8px;font-size:13px">${(l as any).spaceName ? `<span style="color:#6b7280">${esc((l as any).spaceName)}</span>` : '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${esc(l.guestCount ?? '—')} guests</td>
-                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[l.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${esc(statusLabel(l.status))} (enquiry)</span></td>
-                    </tr>`);
-                  const allRows = [...bookingRows, ...leadRows];
-                  if (allRows.length > 0) {
-                    existingOnDayHtml = `
-                    <div style="margin-top:16px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:12px 14px">
-                      <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⚠ You Already Have ${allRows.length} Event${allRows.length > 1 ? 's' : ''} on This Day</div>
-                      <table style="width:100%;border-collapse:collapse">
-                        <thead><tr style="background:#fde68a">
-                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Name</th>
-                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Type</th>
-                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Space / Room</th>
-                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Guests</th>
-                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Status</th>
-                        </tr></thead>
-                        <tbody>${allRows.join('')}</tbody>
-                      </table>
-                    </div>`;
-                  }
-                } catch (checkErr) {
-                  console.warn('[LeadSubmit] Could not check existing bookings:', checkErr);
-                }
-              }
-
-              const rows = [
-                input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${esc(input.email)}">${esc(input.email)}</a></td></tr>`,
-                input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${esc(input.phone)}</td></tr>`,
-                input.company && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Company</td><td style="padding:4px 0;font-size:14px">${esc(input.company)}</td></tr>`,
-                input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
-                formattedEventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(formattedEventDate)}</td></tr>`,
-                input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
-                input.eventFormat && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Format</td><td style="padding:4px 0;font-size:14px">${esc(eventFormatLabel(input.eventFormat) ?? input.eventFormat)}</td></tr>`,
-                input.budgetRange && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(budgetRangeLabel(input.budgetRange) ?? input.budgetRange)}</td></tr>`,
-                input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${esc(input.budget)} NZD</td></tr>`,
-                input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${esc(input.message)}</td></tr>`,
-                // Where the enquiry came from — the UTM trail an embedding site
-                // set (or the campaign that drove the click), so the venue can
-                // see which page/ad produced it without opening the CRM.
-                (() => {
-                  const bits = [input.utmSource, input.utmMedium, input.utmCampaign].filter(Boolean).map(v => esc(String(v)));
-                  const label = bits.join(' · ') || (input.source ? esc(String(input.source)) : (input.gclid ? 'Google Ads click' : ''));
-                  return label ? `<tr><td style="padding:4px 0;color:#666;font-size:14px">Source</td><td style="padding:4px 0;font-size:14px">${label}</td></tr>` : '';
-                })(),
-              ].filter(Boolean).join('');
-              const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-  <div style="background:#6b98e7;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.8">VenueFlowHQ</div>
-    <div style="font-size:22px;font-weight:bold;margin-top:4px">New Enquiry Received</div>
-    <div style="font-size:15px;opacity:0.9;margin-top:2px">${esc(clientName)}</div>
-  </div>
-  <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
-    <table style="width:100%;border-collapse:collapse">${rows}</table>
-    ${existingOnDayHtml}
-    <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af">
-      This notification was sent by VenueFlowHQ · Log in to your dashboard to respond.
-    </div>
-  </div>
-</div>`;
-              // notificationEmail may hold several addresses separated by commas
-              // or semicolons (e.g. "owner@venue.nz, events@venue.nz") — send to all.
-              const notifyRecipients = String(vs.notificationEmail).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-              await transporter.sendMail({
-                from: `"${fromName}" <${fromEmail}>`,
-                replyTo: input.email || fromEmail,
-                to: notifyRecipients,
-                subject: `New Event Enquiry: ${clientName}`,
-                html,
-                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${formattedEventDate ? 'Event date: ' + formattedEventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
-              });
-              console.log(`[LeadSubmit] Notification email sent to ${notifyRecipients.join(', ')}`);
-            } else {
-              const missing = [];
-              if (!vs?.notificationEmail) missing.push('notificationEmail');
-              if (!vs?.smtpHost) missing.push('smtpHost');
-              if (!vs?.smtpUser) missing.push('smtpUser');
-              if (!vs?.smtpPass) missing.push('smtpPass');
-              if (missing.length) console.log(`[LeadSubmit] Notification email skipped — missing settings: ${missing.join(', ')}`);
-            }
-          }
-        } catch (notifyErr: any) {
-          console.error('[LeadSubmit] Notification email error:', notifyErr?.message ?? notifyErr);
-        }
-
-        // Auto-reply to the enquirer — a branded "we've got it" confirmation so
-        // they're not left wondering whether the form worked. This is a
-        // transactional confirmation the enquirer initiated by submitting (like
-        // a receipt), on by default and switchable in Settings; it never blocks
-        // the submit if SMTP is down. Whether it actually went out is returned
-        // so the success screen doesn't tell them to check an empty inbox.
-        let autoReplySent = false;
-        try {
-          const { getDb } = await import('./db');
-          const { venueSettings } = await import('../drizzle/schema');
-          const { eq } = await import('drizzle-orm');
-          const db = await getDb();
-          if (db && input.email) {
-            const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId)).limit(1);
-            const autoReplyOn = (vs?.enquiryAutoReplyEnabled ?? 1) !== 0;
-            if (autoReplyOn && vs?.smtpHost && vs?.smtpUser && vs?.smtpPass) {
-              const { buildVenueMailer } = await import('./paymentsEmail');
-              const mailer = await buildVenueMailer(input.ownerId);
-              if (mailer) {
-                const { escapeHtml: esc } = await import('./sanitizeHtml');
-                const { DEFAULT_AUTO_REPLY_INTRO } = await import('../shared/enquiryCopy');
-                const { venueBrand } = await import('@shared/brand');
-                const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
-                // Brand Pack: accent colour, ink-on-accent and the font pairing,
-                // so the auto-reply wears the venue's branding like the proposal
-                // and BEO — not a generic green serif.
-                const brand = venueBrand(vs);
-                const accent = brand.accent;
-                const onAccent = brand.onAccent;
-                const firstName = esc(input.firstName);
-                const introRaw = vs.enquiryAutoReplyMessage?.trim();
-                const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
-                const fmtDate = input.eventDate
-                  ? formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ)
-                  : null;
-                // The venue logo, embedded as an inline (CID) image: logos are
-                // stored as data: URLs, which Gmail/Outlook block in <img src>.
-                // A dark accent gets the same whitening the proposal/BEO use.
-                const logoAttachments: Array<{ filename: string; content: Buffer; contentType: string; cid: string }> = [];
-                let logoHtml = '';
-                const logoRaw = String(vs.logoUrl ?? '');
-                const logoStyle = `max-height:46px;max-width:190px;object-fit:contain;display:block;margin-bottom:10px${onAccent === '#fff' ? ';filter:brightness(0) invert(1)' : ''}`;
-                const dataM = /^data:([^;]+);base64,(.+)$/s.exec(logoRaw);
-                if (dataM) {
-                  logoAttachments.push({ filename: 'logo', content: Buffer.from(dataM[2], 'base64'), contentType: dataM[1], cid: 'venuelogo' });
-                  logoHtml = `<img src="cid:venuelogo" alt="${esc(venueName)}" style="${logoStyle}"/>`;
-                } else if (/^https?:\/\//.test(logoRaw)) {
-                  logoHtml = `<img src="${esc(logoRaw)}" alt="${esc(venueName)}" style="${logoStyle}"/>`;
-                }
-                const details = [
-                  input.eventType && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px;width:120px">Event</td><td style="padding:3px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
-                  fmtDate && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Date</td><td style="padding:3px 0;font-size:14px;font-weight:600">${esc(fmtDate)}${input.dateFlexible ? ' (flexible)' : ''}</td></tr>`,
-                  input.guestCount && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Guests</td><td style="padding:3px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
-                ].filter(Boolean).join('');
-                const contactBits = [vs.phone && esc(vs.phone), esc(mailer.fromEmail)].filter(Boolean).join(' · ');
-                const html = `<div style="font-family:${brand.sans};max-width:520px;margin:0 auto;color:#1f2430">
-  <div style="background:${accent};color:${onAccent};padding:22px 26px;border-radius:10px 10px 0 0">
-    ${logoHtml}
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:${brand.sans}">${esc(venueName)}</div>
-    <div style="font-size:23px;font-weight:bold;margin-top:4px;font-family:${brand.serif}">We've got your enquiry</div>
-  </div>
-  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
-    <p style="font-size:16px;margin:0 0 12px;font-family:${brand.serif}">Hi ${firstName},</p>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 ${details ? '16px' : '18px'}">${intro}</p>
-    ${details ? `<table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px;padding:6px 12px"><tbody>${details}</tbody></table>` : ''}
-    <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">If anything's changed in the meantime, just reply to this email${contactBits ? ` or reach us on ${contactBits}` : ''}.</p>
-    <p style="font-size:15px;margin:16px 0 0;font-family:${brand.serif}">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
-  </div>
-</div>`;
-                const text = `Hi ${input.firstName},\n\n${introRaw || DEFAULT_AUTO_REPLY_INTRO}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
-                const subject = `We've received your enquiry — ${venueName}`;
-                await mailer.transporter.sendMail({
-                  from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
-                  to: input.email,
-                  replyTo: mailer.fromEmail,
-                  subject,
-                  html,
-                  text,
-                  ...(logoAttachments.length ? { attachments: logoAttachments } : {}),
-                });
-                autoReplySent = true;
-                console.log(`[LeadSubmit] Auto-reply sent to ${input.email}`);
-                // On the lead's timeline, but it isn't a reply from the team —
-                // the lead still shows "needs reply".
-                if (lead) {
-                  await addLeadActivity({
-                    leadId: lead.id,
-                    ownerId: input.ownerId,
-                    type: 'email',
-                    content: `Automatic reply sent to ${input.email}\n\nSubject: ${subject}\n\n${text}`,
-                  }, { countsAsReply: false });
-                }
-              }
-            }
-          }
-        } catch (autoErr: any) {
-          console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
-        }
+        // The New Event Enquiry email and the visitor's auto-reply are queued
+        // now and sent once this has answered (server/enquiryEmails.ts): a
+        // slow or broken mail server no longer keeps the visitor waiting,
+        // and a failed send is tried again.
+        const { queueEnquiryEmails, promisedAutoReply, markPartialAlertRead, sendEnquiryEmailsSoon } = await import('./enquiryEmails');
+        const queued = await queueEnquiryEmails(lead, vs);
+        // They finished an enquiry the venue was already told was
+        // unfinished: that alert is marked read, and the venue's email says so.
+        if (finishedPartial) await markPartialAlertRead(input.ownerId, lead.id);
 
         // Into the bell too. email:false — the detailed enquiry email above
-        // already went to the venue.
-        if (lead) {
-          const { notifyVenue } = await import('./notify');
-          const name = [input.firstName, input.lastName].filter(Boolean).join(' ');
-          await notifyVenue(input.ownerId, {
-            kind: 'new_enquiry',
-            title: `New enquiry from ${name}`,
-            body: [input.eventType, input.guestCount ? `${input.guestCount} guests` : null].filter(Boolean).join(' · ') || undefined,
-            leadId: lead.id,
-            dedupeKey: `new_enquiry:${lead.id}`,
-            email: false,
-          });
-        }
+        // already goes to the venue.
+        const { notifyVenue } = await import('./notify');
+        const name = [input.firstName, input.lastName].filter(Boolean).join(' ');
+        await notifyVenue(input.ownerId, {
+          kind: 'new_enquiry',
+          title: `New enquiry from ${name}`,
+          body: [input.eventType, input.guestCount ? `${input.guestCount} guests` : null].filter(Boolean).join(' · ') || undefined,
+          leadId: lead.id,
+          dedupeKey: `new_enquiry:${lead.id}`,
+          email: false,
+        });
 
         // Synthetic health-check pings never become real work.
-        if (lead && lead.source !== 'healthcheck') {
+        if (lead.source !== 'healthcheck') {
           const { fireTaskRules } = await import('./automatedTasks');
           await fireTaskRules(input.ownerId, { trigger: 'on_enquiry_received', leadId: lead.id });
         }
 
-        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent } : lead;
+        // What the success screen may say about their copy: nothing has gone
+        // yet. Forms loaded before this read autoReplySent, which is false
+        // until the email is actually sent, so they promise nothing.
+        const autoReply = await promisedAutoReply(input.ownerId, lead.id, queued.auto_reply);
+        sendEnquiryEmailsSoon(lead.id);
+        // internalNotes is staff-only (it can hold the possible-spam note).
+        const { internalNotes: _notes, ...shown } = lead;
+        return { ...shown, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent: false, autoReply, repeat: false };
       }),
 
     // Public: "still here" from the form while a visitor fills in step 2,
-    // for their own step-1 lead (leadToken). Not used yet: nothing is kept,
-    // and the answer is always that the lead isn't being watched.
+    // for their own step-1 lead (leadToken). Stamps partialSeenAt, which the
+    // Unfinished alert counts its 20 minutes from (capped 2 h after step 1,
+    // so a tab left open can't hold it back for ever). Writes no row, sends
+    // nothing and gives no free pass, so it has its own, roomier limit
+    // rather than the 5-write one. alive: false tells the form to stop:
+    // the lead is finished, staff have it, the cap has passed, or the token
+    // is wrong (not told apart, so a scanner learns nothing).
     touchPartial: publicProcedure
       .input(z.object({
         ownerId: z.number().int().positive(),
         leadId: z.number().int().positive(),
         leadToken: z.string().max(64),
       }))
-      .mutation(async (): Promise<{ alive: boolean }> => ({ alive: false })),
+      .mutation(async ({ input, ctx }): Promise<{ alive: boolean }> => {
+        enforceRateLimit('enquiry-partial-ping', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 60, 10 * 60_000);
+        if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) return { alive: false };
+        const { alive } = await touchPartialLead(input.leadId, input.ownerId, new Date());
+        return { alive };
+      }),
 
     // Public: the enquiry form's settings that the page needs before anyone
     // types — spaces (with prices only where the venue publishes them),
