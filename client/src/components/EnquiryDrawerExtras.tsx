@@ -3,19 +3,6 @@ import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from "lucide-react"
 import { enquiryFit, fitOkCount, type FitTone, type FitSpace } from "@shared/enquiryFit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { SpaceAvailability } from "@/components/SpaceAvailability";
-import { enquirySignal, type EnquirySignal } from "@shared/enquirySignal";
-
-/** One plain line on what to do about an enquiry that needs attention. */
-function calloutBody(s: EnquirySignal): string {
-  if (s.group === "reply") return "They're waiting on a reply from you.";
-  if (s.group === "followup") return s.tone === "red"
-    ? "The follow-up date has passed. Nudge them, or set a new date."
-    : s.text.startsWith("Gone quiet") ? "No reply since the last message. A short nudge usually does it."
-    : "A follow-up is due today.";
-  if (s.text === "Date clash") return "Another booking already has this date. Check the space before quoting.";
-  if (s.text.startsWith("Hold")) return "The date is on hold. Confirm it or release it.";
-  return "";
-}
 
 /**
  * The three Option-C sections the enquiry drawer adds for a lead:
@@ -56,8 +43,8 @@ function money(n: number): string {
 function SectionHead({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="flex items-center gap-3 mb-2">
-      <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary flex-shrink-0">{title}</h3>
-      <span className="h-[1.5px] flex-1 bg-border" />
+      <h3 className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground flex-shrink-0">{title}</h3>
+      <span className="h-px flex-1" style={{ background: "var(--vf-hair, #eee6d8)" }} />
       {meta && <span className="font-sans text-[12px] text-muted-foreground flex-shrink-0">{meta}</span>}
     </div>
   );
@@ -103,31 +90,8 @@ export default function EnquiryDrawerExtras(props: EnquiryDrawerExtrasProps) {
     { label: "Budget", value: budgetRangeLabel(lead.budgetRange) ?? "Not given" },
   ];
 
-  // Why this enquiry needs you, said once at the top of the drawer (red or
-  // amber signals only — a calm enquiry gets no callout).
-  const signal = enquirySignal(lead, {
-    nowMs: Date.now(),
-    hasClash,
-    holdUntilMs: lead.holdUntil ? new Date(lead.holdUntil).getTime() : null,
-    eventDateMs: lead.eventDate ? new Date(lead.eventDate).getTime() : null,
-  });
-  const callout = (signal.tone === "red" || signal.tone === "amber") ? calloutBody(signal) : "";
-  const calloutRed = signal.tone === "red";
-
   return (
     <div className="flex flex-col gap-5">
-      {callout && (
-        <div role="note" className="flex gap-3 rounded-[8px] border-[1.5px] px-3.5 py-3"
-          style={calloutRed
-            ? { background: "#fbecea", borderColor: "#f0c7c2", color: "#c0392b" }
-            : { background: "#f7efdd", borderColor: "#e9d7b3", color: "#8a5f18" }}>
-          <AlertTriangle className="w-[18px] h-[18px] flex-shrink-0 mt-px" strokeWidth={2} aria-hidden />
-          <div className="min-w-0">
-            <div className="font-sans text-[14px] font-bold">{signal.text}</div>
-            <div className="font-sans text-[13px] text-foreground mt-0.5">{callout}</div>
-          </div>
-        </div>
-      )}
       {/* Worth quoting? */}
       <div>
         <SectionHead title="Worth quoting?" meta={`${ok} of ${fit.length} look good`} />

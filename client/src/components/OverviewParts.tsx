@@ -484,7 +484,7 @@ export function OverviewToday(p: {
         <button type="button" onClick={p.onCalendar} className={linkBtn}>Open the calendar<ArrowRight className="w-3.5 h-3.5" aria-hidden /></button>
         {p.newEnquiries > 0 && (
           <button type="button" onClick={p.onNewEnquiries} className={linkBtn}>
-            {p.newEnquiries} new enquir{p.newEnquiries === 1 ? "y" : "ies"} waiting<ArrowRight className="w-3.5 h-3.5" aria-hidden />
+            {p.newEnquiries} enquir{p.newEnquiries === 1 ? "y" : "ies"} waiting on a reply<ArrowRight className="w-3.5 h-3.5" aria-hidden />
           </button>
         )}
       </div>

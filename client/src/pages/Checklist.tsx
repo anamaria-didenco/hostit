@@ -164,7 +164,7 @@ export default function Checklist() {
                   {completedCount} of {items.length} tasks completed
                 </p>
                 <p className="font-dm text-xs text-muted-foreground mt-1 print:hidden">
-                  The same list as the run sheet and the staff checklist link.
+                  The same list as the run sheet and the staff checklist link. Add, edit, reorder or rename it on the run sheet.
                 </p>
               </div>
               {/* The styling (centred text too) stays on an inner box, as it was on the button, so

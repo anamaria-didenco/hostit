@@ -437,7 +437,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
           <div>
             <div className="flex items-center justify-between mb-1">
               <span id={`${fid}-diet`} className="text-xs font-semibold uppercase tracking-wide" style={{ color: T.stone }}>Dietary requirements</span>
-              <button type="button" onClick={addDiet} aria-label="Add dietary requirement" className="text-xs font-semibold" style={{ color: T.accent }}>+ Add</button>
+              <button type="button" onClick={addDiet} aria-label="Add dietary requirement" className="inline-flex items-center justify-center min-h-6 min-w-6 px-1 [@media(pointer:coarse)]:min-h-11 text-xs font-semibold" style={{ color: T.accent }}>+ Add</button>
             </div>
             {diet.length === 0 && <p className="text-xs" style={{ color: T.stone }}>Add any allergies or dietary needs (e.g. 2× vegetarian, 1× gluten-free).</p>}
             <div className="space-y-2" role="group" aria-labelledby={`${fid}-diet`}>
@@ -446,7 +446,7 @@ function DetailsSection({ T, token, details, eventName, onSaved }: { T: Theme; t
                   <input value={d.name} onChange={e => setD(i, { name: e.target.value })} placeholder="e.g. Vegetarian" aria-label={`Dietary requirement ${i + 1}`} className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
                   <input type="number" min={0} value={d.count} onChange={e => setD(i, { count: Number(e.target.value) })} aria-label={`How many guests: requirement ${i + 1}`} className={`${FIELD} text-center`} style={{ borderColor: T.border, width: 64 }} />
                   <input value={d.notes ?? ""} onChange={e => setD(i, { notes: e.target.value })} placeholder="Notes" aria-label={`Notes for requirement ${i + 1}`} className={FIELD} style={{ borderColor: T.border, flex: 1 }} />
-                  <button type="button" onClick={() => rmDiet(i)} aria-label={`Remove dietary requirement ${i + 1}`} className="px-2 py-2 text-lg leading-none" style={{ color: T.stone }}>×</button>
+                  <button type="button" onClick={() => rmDiet(i)} aria-label={`Remove dietary requirement ${i + 1}`} className="inline-flex items-center justify-center min-h-6 min-w-6 px-2 py-2 [@media(pointer:coarse)]:min-h-11 text-lg leading-none" style={{ color: T.stone }}>×</button>
                 </div>
               ))}
             </div>

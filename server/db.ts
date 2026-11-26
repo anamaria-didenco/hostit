@@ -12,6 +12,7 @@ import {
   leadActivity,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
@@ -214,6 +215,28 @@ export async function updateLead(id: number, ownerId: number, data: Partial<Inse
   if (!db) return;
   await db.update(leads).set({ updatedAt: new Date(), ...data })
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
+}
+
+/**
+ * Finish a lead the public form saved at step 1 (startCapture), only while it
+ * is still that untouched partial: status "new" with the Partial note. One
+ * conditional UPDATE, so when several requests race to finish the same
+ * partial exactly one gets the row back. Postgres makes a second UPDATE of
+ * the row wait for the first to commit, then re-checks the WHERE, which no
+ * longer matches once the note is cleared. The rest get null. The note is
+ * cleared here; a staff note written meanwhile also stops the match, and is
+ * left alone.
+ */
+export async function completePartialLead(id: number, ownerId: number, data: Partial<InsertLead>) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.update(leads).set({ updatedAt: new Date(), ...data, internalNotes: null })
+    .where(and(
+      eq(leads.id, id), eq(leads.ownerId, ownerId),
+      eq(leads.status, "new"), eq(leads.internalNotes, PARTIAL_LEAD_NOTE),
+    ))
+    .returning();
+  return row ?? null;
 }
 
 /**
@@ -500,7 +523,11 @@ export async function getDashboardStats(ownerId: number) {
   const upcomingEvents = upcomingBookings.length + upcomingFromLeads;
   // Overdue tasks
   const allTasks = await db.select().from(tasks).where(eq(tasks.ownerId, ownerId));
-  const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < now.getTime()).length;
+  // The Tasks tab's Overdue rule: due before today (venue's zone), not earlier today.
+  const { taskOverdueBefore } = await import('../shared/taskFields');
+  const [tzRow] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
+  const overdueBefore = taskOverdueBefore(tzRow?.tz, now.getTime());
+  const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < overdueBefore).length;
   // Conversion rate: of the last 12 months' real enquiries (NZ calendar), how
   // many are won now — the shared definition Reports and the weekly email use.
   const { conversionHeadline } = await import('./conversionReport');

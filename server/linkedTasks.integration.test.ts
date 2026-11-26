@@ -122,6 +122,19 @@ d("linked, assigned and follow-up tasks (DB)", () => {
       expect(after.assignedTo).toBeNull();
     });
 
+    it("saves a task whose stored priority is an old word, reading it as normal", async () => {
+      const db = (await getDb())!;
+      await caller.tasks.create({ title: "Old priority task" });
+      const [t] = await caller.tasks.list({ filter: "all" });
+      await db.update(tasks).set({ priority: "medium" }).where(eq(tasks.id, t.id));
+      await caller.tasks.update({ id: t.id, title: "Old priority task (edited)", priority: "medium" });
+      let [after] = await caller.tasks.list({ filter: "all" });
+      expect(after).toMatchObject({ title: "Old priority task (edited)", priority: "normal" });
+      await caller.tasks.update({ id: t.id, priority: "high" });
+      [after] = await caller.tasks.list({ filter: "all" });
+      expect(after.priority).toBe("high");
+    });
+
     it("lists only the tasks about one enquiry / event", async () => {
       await caller.tasks.create({ title: "About lead", linkedLeadId: leadId });
       await caller.tasks.create({ title: "About booking", linkedBookingId: bookingId });
@@ -145,6 +158,25 @@ d("linked, assigned and follow-up tasks (DB)", () => {
       const a = await caller.tasks.assignees();
       expect(a.names).toEqual(expect.arrayContaining(["Olive Owner", "Mia Manager"]));
       expect(a.me).toBe("Olive Owner");
+    });
+  });
+
+  describe("overdue and upcoming", () => {
+    it("a task due earlier today is Upcoming (its row says Due today), not Overdue, everywhere", async () => {
+      const { taskOverdueBefore } = await import("../shared/taskFields");
+      const { getNeedsAttention } = await import("./needsAttention");
+      const { getDashboardStats } = await import("./db");
+      // The venue is in Auckland (the default zone).
+      const startOfToday = taskOverdueBefore("Pacific/Auckland");
+      await caller.tasks.create({ title: "Due first thing today", dueDate: startOfToday + 60_000 });
+      await caller.tasks.create({ title: "Due last night", dueDate: startOfToday - 60_000 });
+      await caller.tasks.create({ title: "Due next week", dueDate: Date.now() + 7 * DAY });
+
+      expect((await caller.tasks.list({ filter: "overdue" })).map(t => t.title)).toEqual(["Due last night"]);
+      expect((await caller.tasks.list({ filter: "upcoming" })).map(t => t.title).sort()).toEqual(["Due first thing today", "Due next week"]);
+      const needs = await getNeedsAttention(OWNER);
+      expect(needs.tasks.items.map(t => t.title)).toEqual(["Due last night"]);
+      expect((await getDashboardStats(OWNER))?.overdueTasks).toBe(1);
     });
   });
 
