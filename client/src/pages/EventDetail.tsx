@@ -39,6 +39,10 @@ import {
   type CalloutData, type PrepItem, type SigTone,
 } from "@/components/EventDetailParts";
 
+// The module tabs' small filled buttons (Add entry, Save, Add item...): 32px
+// for a mouse, 44px on a touch screen like the rest of the page.
+const BTN_PRIMARY_SM = `${BTN_PRIMARY} !h-8 pointer-coarse:h-11! !text-[12.5px] !px-2.5`;
+
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
   "Christmas Party", "Gala Dinner", "Product Launch", "Conference",
@@ -721,7 +725,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Communications log</h2>
-        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add entry</button>
+        <button onClick={() => setShowForm(v => !v)} className={BTN_PRIMARY_SM}><Plus className="w-3.5 h-3.5" aria-hidden /> Add entry</button>
       </div>
       {showForm && (
         <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
@@ -758,7 +762,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
             <Textarea id="comms-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Save'}</button>
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className={BTN_PRIMARY_SM}>{create.isPending ? 'Saving…' : 'Save'}</button>
             <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
@@ -832,7 +836,7 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Contracts & e-signatures</h3>
-        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> New contract</button>
+        <button onClick={() => setShowForm(v => !v)} className={BTN_PRIMARY_SM}><Plus className="w-3.5 h-3.5" aria-hidden /> New contract</button>
       </div>
       {showForm && (
         <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
@@ -855,7 +859,7 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
             <Textarea id="contract-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Create contract'}</button>
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className={BTN_PRIMARY_SM}>{create.isPending ? 'Saving…' : 'Create contract'}</button>
             <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
@@ -958,7 +962,7 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
           <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Budget plan</h3>
           <p className="text-xs text-muted-foreground mt-0.5">Estimated vs actual lines for planning. Real supplier spend and profit are tracked under “Budget &amp; spend” on this page.</p>
         </div>
-        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
+        <button onClick={() => setShowForm(v => !v)} className={BTN_PRIMARY_SM}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 border-[1.5px] border-input rounded-[8px] bg-card overflow-hidden">
         {[{ label: 'Est. income', val: totalEstIncome }, { label: 'Act. income', val: totalActIncome }, { label: 'Est. expense', val: totalEstExpense }, { label: 'Act. expense', val: totalActExpense }].map((s, i) => (
@@ -998,7 +1002,7 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ name: form.name, category: form.category, type: form.type, estimatedAmount: Number(form.estimatedAmount) || 0, actualAmount: Number(form.actualAmount) || 0, bookingId })} disabled={!form.name || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Add'}</button>
+            <button onClick={() => create.mutate({ name: form.name, category: form.category, type: form.type, estimatedAmount: Number(form.estimatedAmount) || 0, actualAmount: Number(form.actualAmount) || 0, bookingId })} disabled={!form.name || create.isPending} className={BTN_PRIMARY_SM}>{create.isPending ? 'Saving…' : 'Add'}</button>
             <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
@@ -1072,7 +1076,7 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Equipment & inventory</h3>
-        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
+        <button onClick={() => setShowForm(v => !v)} className={BTN_PRIMARY_SM}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
       </div>
       {showForm && (
         <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
@@ -1097,7 +1101,7 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => add.mutate({ name: form.name, category: form.category, quantity: Number(form.quantity) || 1, notes: form.notes || undefined, bookingId })} disabled={!form.name || add.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{add.isPending ? 'Saving…' : 'Add'}</button>
+            <button onClick={() => add.mutate({ name: form.name, category: form.category, quantity: Number(form.quantity) || 1, notes: form.notes || undefined, bookingId })} disabled={!form.name || add.isPending} className={BTN_PRIMARY_SM}>{add.isPending ? 'Saving…' : 'Add'}</button>
             <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
@@ -1185,7 +1189,7 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
         <div className="flex gap-2">
           <button onClick={() => addTable('round')} className={BTN_SM}>+ Round table</button>
           <button onClick={() => addTable('rect')} className={BTN_SM}>+ Rect table</button>
-          <button onClick={() => save.mutate({ bookingId, canvasData: JSON.stringify(tables), guestCount: totalSeats })} disabled={save.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{save.isPending ? 'Saving…' : 'Save chart'}</button>
+          <button onClick={() => save.mutate({ bookingId, canvasData: JSON.stringify(tables), guestCount: totalSeats })} disabled={save.isPending} className={BTN_PRIMARY_SM}>{save.isPending ? 'Saving…' : 'Save chart'}</button>
         </div>
       </div>
       <div className="flex gap-4 text-xs text-muted-foreground">
@@ -1269,7 +1273,7 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Client portal links</h3>
-        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Create link</button>
+        <button onClick={() => setShowForm(v => !v)} className={BTN_PRIMARY_SM}><Plus className="w-3.5 h-3.5" aria-hidden /> Create link</button>
       </div>
       <p className="text-xs text-muted-foreground">Share a secure link with your client so they can view their event details, approve proposals, and sign contracts — no login required.</p>
       {showForm && (
@@ -1287,7 +1291,7 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
             <button
               onClick={() => create.mutate({ bookingId, clientName: `${booking?.firstName ?? ''} ${booking?.lastName ?? ''}`.trim(), clientEmail: booking?.email, permissions: perms })}
               disabled={create.isPending}
-              className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}
+              className={BTN_PRIMARY_SM}
             >{create.isPending ? 'Creating…' : 'Create portal link'}</button>
             <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>

@@ -106,7 +106,9 @@ export interface CalLegendStatus { key: string; label: string; colour: string | 
 /**
  * The legend: each status the calendar can show, in its colour and with its
  * shape, then red for clashes and late enquiries, then the spaces whose
- * colour the venue chose (the left edge of an event).
+ * colour the venue chose (the left edge of an event). On a phone it is one
+ * line that scrolls sideways (so it takes focus); from a tablet up it wraps,
+ * so every entry shows however many statuses and spaces the venue has.
  */
 export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendStatus[]; spaces?: { name: string; colour: string }[] }) {
   return (
@@ -114,7 +116,7 @@ export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendS
       role="region"
       aria-label="Calendar colour legend"
       tabIndex={0}
-      className="flex items-center gap-3.5 overflow-x-auto flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+      className="flex items-center gap-x-3.5 gap-y-1.5 overflow-x-auto md:flex-wrap min-w-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
     >
       {statuses.map(s => {
         const pal = statusPalette(s.colour);

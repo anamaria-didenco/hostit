@@ -5242,7 +5242,10 @@ export default function Dashboard() {
                     <List className="w-3.5 h-3.5" aria-hidden /> Enquiries
                   </button>
                   <SpaceAvailability />
-                  <div className="w-full lg:w-auto lg:ml-auto">
+                  {/* min-w-0: when the legend is wider than what's left of the
+                      row it takes a row of its own and is never wider than
+                      the pane (which clips), whatever the screen. */}
+                  <div className="w-full min-w-0 lg:w-auto lg:ml-auto">
                     <CalendarLegend statuses={calLegendStatuses} spaces={calLegendSpaces} />
                   </div>
                 </div>
