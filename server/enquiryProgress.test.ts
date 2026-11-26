@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   FORM_TOKEN_REUSE_MS, FRESH_TOKEN_SAFE_MS, RESUME_LEAD_MS, canReuseLead, enquiryStorageKeys, formTokenToSend, leadForSubmit, leadStillResumable,
   leadToSupersede, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs,
-  WALKTHROUGH_AFTER_RELOAD_MS, holdsSentConfirmation, pageKey, pageKeyIsSpecific,
+  WALKTHROUGH_AFTER_RELOAD_MS, formPageKey, holdsSentConfirmation, pageKey, pageKeyIsSpecific,
   type EnquiryProgress, type HeldLead,
 } from "../client/src/lib/enquiryProgress";
 import { MIN_FORM_FILL_MS } from "./enquiryConversion";
@@ -188,6 +188,19 @@ describe("Enquiry Received! after a reload", () => {
     const originOnly = saved({ ...rec, sentPage: "https://www.example.test/" });
     expect(sentConfirmation(originOnly, at(1000, { frame: null, page: "https://www.example.test/" }))?.samePage).toBe(false);
   });
+  it("an ad visitor's landing page (vf_landing, on every page's frame) never makes another page the one it was sent from", () => {
+    // The venue's tracking script adds vf_landing=<the ad's landing page> to
+    // the frame on every page for weeks. Sent from /functions/, then opened
+    // on /weddings/: another frame, and the referrer is only the origin.
+    const weddings = formPageKey({ search: `?embed=1&vf_landing=${encodeURIComponent(page)}`, isEmbed: true, referrer: "https://www.example.test/", href: "https://app.example.test/enquire/bar?embed=1" });
+    expect(weddings).toBe("https://www.example.test/");
+    expect(sentConfirmation(rec, at(1000, { frame: "vf-frame:zzz999", page: weddings }))).toMatchObject({ samePage: false, leadId: null, leadToken: null });
+    // The page embed.js says the frame is on (vf_page) is used, then the referrer.
+    expect(formPageKey({ search: `?embed=1&vf_page=${encodeURIComponent(page)}&vf_landing=x`, isEmbed: true, referrer: "https://www.example.test/", href: "" })).toBe(page);
+    expect(formPageKey({ search: "?embed=1", isEmbed: true, referrer: "", href: "https://app.example.test/enquire/bar?embed=1" })).toBeNull();
+    // Outside a frame, the form's own address.
+    expect(formPageKey({ search: `?vf_landing=${encodeURIComponent(page)}`, isEmbed: false, referrer: page, href: "https://app.example.test/enquire/bar?x=1" })).toBe("https://app.example.test/enquire/bar");
+  });
   it("offers the walkthrough again only in the tab that sent it, and only for 10 minutes", () => {
     expect(WALKTHROUGH_AFTER_RELOAD_MS).toBe(10 * 60_000);
     expect(sentConfirmation(rec, at(WALKTHROUGH_AFTER_RELOAD_MS))?.leadToken).toBe("tok_sent");
@@ -247,6 +260,15 @@ describe("which lead SUBMIT completes and NEXT updates", () => {
     expect(leadToSupersede(own, as("AROHA@example.test"))).toBeNull(); // same email: nothing to save
     expect(leadToSupersede(restored, as("mere@example.test"))).toBeNull();
     expect(leadToSupersede(own, as("ben@example.test", { firstName: "Ben", lastName: "Testwell" }))).toBeNull();
+    // Adding the last name that was left out, or fixing a slip in the first
+    // name (same last name and phone), is still the same person.
+    const noLast: HeldLead = { ...own, leadName: { firstName: "Aroha", lastName: "", phone: "021 555 0142" } };
+    expect(leadToSupersede(noLast, { firstName: "Aroha", lastName: "Testwell", phone: "021 555 0142", email: "aroha@example.test.nz" })).toEqual({ leadId: 433, leadToken: "tok" });
+    const slip: HeldLead = { ...own, leadName: { firstName: "Arhoa", lastName: "Testwell", phone: "021 555 0142" } };
+    expect(leadToSupersede(slip, { firstName: "Aroha", lastName: "Testwell", phone: "021 555 0142", email: "aroha@example.test.nz" })).toEqual({ leadId: 433, leadToken: "tok" });
+    expect(leadForSubmit(slip, { firstName: "Aroha", lastName: "Testwell", phone: "021 555 0142", email: "aroha@example.test.nz" })).toEqual({ leadId: 433, leadToken: "tok", own: false });
+    expect(leadToSupersede(slip, { firstName: "Aroha", lastName: "Testwell", phone: "027 000 1111", email: "aroha@example.test.nz" })).toBeNull();
+    expect(leadToSupersede(noLast, { firstName: "Ben", lastName: "Testwell", phone: "021 555 0142", email: "ben@example.test" })).toBeNull();
     expect(leadToSupersede({ leadId: null, leadToken: null, leadEmail: null, leadAt: null, fromThisPage: false }, as("mere@example.test"))).toBeNull();
   });
 });

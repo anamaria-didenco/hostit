@@ -278,6 +278,30 @@ describe("same name on step 1", () => {
   it("tells a different first or last name apart", () => {
     expect(sameEnquiryName({ firstName: "Aroha", lastName: "Testwell" }, { firstName: "Ben", lastName: "Testwell" })).toBe(false);
     expect(sameEnquiryName({ firstName: "Aroha", lastName: "Testwell" }, { firstName: "Aroha", lastName: "Other" })).toBe(false);
-    expect(sameEnquiryName({ firstName: "Aroha" }, { firstName: "Aroha", lastName: "Testwell" })).toBe(false);
+    expect(sameEnquiryName({ firstName: "Aroha", lastName: "Testwell" }, { firstName: "Aroha", lastName: "" })).toBe(false);
+    expect(sameEnquiryName({ firstName: "Aroha" }, { firstName: "Ben", lastName: "Testwell" })).toBe(false);
+  });
+
+  it("keeps the person when they add the last name they left out", () => {
+    expect(sameEnquiryName({ firstName: "Aroha" }, { firstName: "Aroha", lastName: "Testwell" })).toBe(true);
+    expect(sameEnquiryName({ firstName: "Aroha", lastName: " " }, { firstName: "aroha ", lastName: "Testwell" })).toBe(true);
+  });
+
+  it("keeps the person through a slip in the first name, only with the same last name and phone", () => {
+    const saved = { firstName: "Arhoa", lastName: "Testwell", phone: "021 555 0142" };
+    expect(sameEnquiryName(saved, { firstName: "Aroha", lastName: "Testwell", phone: "0215550142" })).toBe(true); // swapped
+    expect(sameEnquiryName(saved, { firstName: "Arhoa", lastName: "Testwell", phone: "021 555 0142" })).toBe(true);
+    expect(sameEnquiryName({ ...saved, firstName: "Arona" }, { firstName: "Aroha", lastName: "Testwell", phone: saved.phone })).toBe(true); // one wrong
+    expect(sameEnquiryName({ ...saved, firstName: "Aroa" }, { firstName: "Aroha", lastName: "Testwell", phone: saved.phone })).toBe(true); // one missing
+    expect(sameEnquiryName({ ...saved, firstName: "Arohaa" }, { firstName: "Aroha", lastName: "Testwell", phone: saved.phone })).toBe(true); // one extra
+    // Not without the same phone, the same last name, or for a bigger change.
+    expect(sameEnquiryName(saved, { firstName: "Aroha", lastName: "Testwell", phone: "027 999 0000" })).toBe(false);
+    expect(sameEnquiryName({ ...saved, phone: "" }, { firstName: "Aroha", lastName: "Testwell", phone: "" })).toBe(false);
+    expect(sameEnquiryName(saved, { firstName: "Aroha", lastName: "Other", phone: saved.phone })).toBe(false);
+    expect(sameEnquiryName({ ...saved, firstName: "Bne" }, { firstName: "Ben", lastName: "Testwell", phone: saved.phone })).toBe(true);
+    expect(sameEnquiryName({ ...saved, firstName: "Ben" }, { firstName: "Bob", lastName: "Testwell", phone: saved.phone })).toBe(false);
+    expect(sameEnquiryName({ ...saved, firstName: "Mere" }, { firstName: "Aroha", lastName: "Testwell", phone: saved.phone })).toBe(false);
+    expect(sameEnquiryName({ ...saved, firstName: "Jo" }, { firstName: "Bo", lastName: "Testwell", phone: saved.phone })).toBe(false);
+    expect(sameEnquiryName({ ...saved, firstName: "Aroha" }, { firstName: "Ahora", lastName: "Testwell", phone: saved.phone })).toBe(false);
   });
 });

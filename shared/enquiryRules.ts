@@ -163,18 +163,38 @@ export function isStepOneField(field: string | null | undefined): boolean {
 }
 
 const nameKey = (v: string | null | undefined) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+const phoneKey = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+
+/** One letter wrong, missing or extra, or two letters next to each other swapped. */
+function oneSlipApart(a: string, b: string): boolean {
+  if (a === b || Math.abs(a.length - b.length) > 1) return a === b;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) {
+    if (a.slice(i + 1) === b.slice(i + 1)) return true; // one wrong
+    return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2); // swapped
+  }
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+
+type StepOneDetails = { firstName?: string | null; lastName?: string | null; phone?: string | null };
 
 /**
- * Whether two sets of step-1 details carry the same name: first and last
- * name, ignoring case and extra spaces. Someone fixing a mistyped email keeps
- * their name; a new name and a new email is another person (a shared tablet
- * or computer), who gets their own lead rather than someone else's.
+ * Whether the step-1 details now (`now`) are still the person a saved lead
+ * (`saved`) was for: the same first and last name, ignoring case and extra
+ * spaces. Adding the last name that was left out keeps the person, and so
+ * does fixing a slip in the first name when the last name and phone are
+ * unchanged. Someone fixing a mistyped email keeps their name; a new name
+ * and a new email is another person (a shared tablet or computer), who gets
+ * their own lead rather than someone else's.
  */
-export function sameEnquiryName(
-  a: { firstName?: string | null; lastName?: string | null },
-  b: { firstName?: string | null; lastName?: string | null },
-): boolean {
-  return nameKey(a.firstName) === nameKey(b.firstName) && nameKey(a.lastName) === nameKey(b.lastName);
+export function sameEnquiryName(saved: StepOneDetails, now: StepOneDetails): boolean {
+  const first = nameKey(saved.firstName), firstNow = nameKey(now.firstName);
+  const last = nameKey(saved.lastName), lastNow = nameKey(now.lastName);
+  if (first === firstNow) return last === lastNow || last === "";
+  const phone = phoneKey(saved.phone);
+  return last === lastNow && phone.length >= 7 && phone === phoneKey(now.phone)
+    && Math.min(first.length, firstNow.length) >= 3 && oneSlipApart(first, firstNow);
 }
 
 // ─── Event format ────────────────────────────────────────────────────────────

@@ -150,6 +150,10 @@
       var v = parentParams.get(p);
       if (v) iframeParams.set(p, v);
     });
+    // The page the form is on, on every load (a cross-site frame's referrer
+    // is usually only the site's origin): "Enquiry Received!" comes back
+    // after a reload only on the page it was sent from.
+    iframeParams.set("vf_page", window.location.origin + window.location.pathname);
 
     var prefillEventType = script.getAttribute("data-event-type");
     var prefillDate = script.getAttribute("data-date");

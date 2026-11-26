@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { canReuseLead, enquiryStorageKeys, holdsSentConfirmation, leadForSubmit, leadToSupersede, normaliseEmail, pageKey, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
+import { canReuseLead, enquiryStorageKeys, holdsSentConfirmation, leadForSubmit, leadToSupersede, normaliseEmail, formPageKey, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
 import { NO_DATE_KEY, applyPrefill, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom } from "@/lib/enquiryPrefill";
 import { autoReplyNote, autoReplyState, buildEnquiryMessage, eventDateForWire, guestCountError, guestCountNote, guestCountToConfirm, guestCountValue, type AutoReplyState } from "@/lib/enquiryFields";
 import { describeEnquiryError } from "@/lib/enquiryErrors";
@@ -932,7 +932,7 @@ export default function LeadForm() {
       return f.tag;
     } catch { return null; }
   });
-  const [thisPage] = useState(() => pageKey(sp.get("vf_landing") || (isEmbed ? document.referrer : window.location.href)));
+  const [thisPage] = useState(() => formPageKey({ search: window.location.search, isEmbed, referrer: document.referrer, href: window.location.href }));
   // The sent enquiry's token, for the walkthrough offer after a reload: this
   // tab only (sessionStorage), never kept where another tab could use it.
   const sentTokenKey = `vf-lead-sent-${storageKeys.slug}`;
@@ -1396,7 +1396,7 @@ export default function LeadForm() {
           setHeld({
             leadId: data.leadId, leadToken: data.leadToken, leadEmail: normaliseEmail(values.email),
             leadAt: same ? (current.leadAt ?? Date.now()) : Date.now(), fromThisPage: true,
-            leadName: { firstName: values.firstName, lastName: values.lastName ?? "" },
+            leadName: { firstName: values.firstName, lastName: values.lastName ?? "", phone: values.phone ?? "" },
           });
           // Never after the enquiry itself was announced.
           if (!partialPostedRef.current.has(data.leadId) && !submittedRef.current) {

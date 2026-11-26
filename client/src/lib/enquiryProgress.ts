@@ -55,14 +55,15 @@ export type CapturedLead = { leadId: number | null; leadToken: string | null; le
 
 /**
  * The step-1 lead this page holds, whether this page load saved it
- * (fromThisPage), and the name it was saved under. Only a lead saved by this
- * page load, and only under the same name, is ever completed or updated with
- * a different email: one restored after a reload, held before START FRESH,
- * or a new name with a new email, may be someone else's on a shared device.
+ * (fromThisPage), and the name (and phone) it was saved under. Only a lead
+ * saved by this page load, and only for the same person (sameEnquiryName),
+ * is ever completed or updated with a different email: one restored after a
+ * reload, held before START FRESH, or a new name with a new email, may be
+ * someone else's on a shared device.
  */
 export type HeldLead = CapturedLead & { fromThisPage: boolean; leadName?: StepOneName | null };
 
-export type StepOneName = { firstName?: string | null; lastName?: string | null };
+export type StepOneName = { firstName?: string | null; lastName?: string | null; phone?: string | null };
 
 /** The draft's localStorage key, and this one's beside it. Per venue slug. */
 export function enquiryStorageKeys(slug: string | null | undefined) {
@@ -215,9 +216,8 @@ export function leadToSupersede(held: HeldLead | null | undefined, now: StepOneN
 
 /**
  * The page a form is on, for telling "the page it was sent from" apart from
- * another of the venue's pages: the host page's address (embed.js passes it
- * as vf_landing; otherwise the frame's referrer) or, outside a frame, the
- * form's own, without the query or #part. Null when there isn't one.
+ * another of the venue's pages, without the query or #part. Null when there
+ * isn't one.
  */
 export function pageKey(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -225,6 +225,18 @@ export function pageKey(raw: string | null | undefined): string | null {
     const u = new URL(raw);
     return `${u.origin}${u.pathname}`.slice(0, 500);
   } catch { return null; }
+}
+
+/**
+ * This load's page key. In a frame: the host page embed.js says it is on
+ * (vf_page), else the frame's referrer (often only the site's origin).
+ * Outside one: the form's own address. Never vf_landing: that is the page an
+ * ad click landed on, which a venue's tracking script can put on the frame
+ * of every page of its site for weeks after the click.
+ */
+export function formPageKey(at: { search: string; isEmbed: boolean; referrer: string; href: string }): string | null {
+  if (!at.isEmbed) return pageKey(at.href);
+  return pageKey(new URLSearchParams(at.search).get("vf_page") || at.referrer);
 }
 
 /**
