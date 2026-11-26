@@ -16,4 +16,15 @@ export const DEFAULT_FORM_SUCCESS_MESSAGE =
 
 /** Opening line of the auto-reply email. Venue can override. */
 export const DEFAULT_AUTO_REPLY_INTRO =
-  `Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch ${ENQUIRY_RESPONSE_PROMISE}.`;
+  `Thank you for thinking of us. We'll be in touch ${ENQUIRY_RESPONSE_PROMISE}.`;
+
+/**
+ * An event type as client email copy uses it ("your {type} booking"): null
+ * when it's blank or the catch-all "Other", so the sentence falls back to its
+ * wording without a type instead of reading "your Other booking". Otherwise
+ * the type is returned as stored (trimmed), capitals and all.
+ */
+export function copyEventType(eventType: string | null | undefined): string | null {
+  const t = (eventType ?? "").trim();
+  return t && t.toLowerCase() !== "other" ? t : null;
+}

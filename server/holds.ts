@@ -22,6 +22,7 @@ import { leads, venueSettings, type Lead } from "../drizzle/schema";
 import { VENUE_TZ, dayBoundsFromYmd, zonedYmd, fmtNzDay, findClashes, assertNoClashes, type Clash } from "./availability";
 import { notifyVenue } from "./notify";
 import { registerJob } from "./jobs";
+import { copyEventType } from "../shared/enquiryCopy";
 
 export const HOLD_STATUS = "tentative";
 const DAY_MS = 86_400_000;
@@ -97,16 +98,18 @@ export function buildHoldEmail(kind: "placed" | "reminder", p: HoldEmailInput, e
   const untilLabel = fmtLongNzDate(p.holdUntil);
   const space = (p.spaceName ?? "").split(",").map(s => s.trim()).filter(Boolean).join(" and ");
   const where = space ? ` in the ${space}` : "";
-  const what = p.eventType ? ` for your ${p.eventType.toLowerCase()}` : "";
+  const type = copyEventType(p.eventType);
+  const what = type ? ` for your ${type.toLowerCase()}` : "";
   const name = p.firstName?.trim() || "there";
   const lines = kind === "placed"
     ? [
         `We've put a hold on ${dateLabel}${where}${what}. We'll keep the date for you until ${untilLabel}.`,
-        `If you'd like to go ahead, just reply to this email before then and we'll lock it in.`,
+        `If you'd like to go ahead, just reply to this email by then and we'll lock it in.`,
       ]
     : [
-        `Just a reminder that we're holding ${dateLabel}${where} for you until ${p.ends === "today" ? "the end of today" : "tomorrow"}, ${untilLabel}.`,
-        `If you'd like to go ahead, reply to this email and we'll lock it in. If your plans have changed, no problem — let us know and we'll free up the date.`,
+        `We're still holding ${dateLabel}${where} for you until ${p.ends === "today" ? "the end of today" : "tomorrow"}, ${untilLabel}.`,
+        `If you'd like to go ahead, just reply to this email by then and we'll lock it in.`,
+        `If your plans have changed, that's completely fine. Just let us know and we'll free up the date.`,
       ];
   const subject = kind === "placed"
     ? `We're holding ${dateLabel} for you — ${p.venueName}`
@@ -120,10 +123,10 @@ export function buildHoldEmail(kind: "placed" | "reminder", p: HoldEmailInput, e
   <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
     <p style="font-size:16px;margin:0 0 12px">Hi ${esc(name)},</p>
     ${lines.map(l => `<p style="font-size:15px;line-height:1.6;margin:0 0 14px">${esc(l)}</p>`).join("\n    ")}
-    <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(p.venueName)}</strong></p>
+    <p style="font-size:15px;margin:16px 0 0">Speak soon,<br/><strong>${esc(p.venueName)}</strong></p>
   </div>
 </div>`;
-  const text = `Hi ${name},\n\n${lines.join("\n\n")}\n\nWarm regards,\n${p.venueName}`;
+  const text = `Hi ${name},\n\n${lines.join("\n\n")}\n\nSpeak soon,\n${p.venueName}`;
   return { subject, html, text };
 }
 

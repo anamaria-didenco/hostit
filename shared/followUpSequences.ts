@@ -63,11 +63,11 @@ export const SEQUENCES: SequenceDef[] = [
     extraVars: [],
     defaults: {
       enabled: false, enabledAt: null, delay: 3,
-      subject: "Just checking in — {{venueName}}",
-      body: "Hi {{firstName}},\n\nI just wanted to check my last email reached you. Do you have any questions about your {{eventType}} with us? I'm happy to help with whatever you need.\n\nWarm regards,\n{{venueName}}",
+      subject: "Checking in on your event — {{venueName}}",
+      body: "Hi {{firstName}},\n\nWe wanted to make sure our last email reached you.\n\nIf you have any questions about your {{eventType}}, just reply. We're happy to help.\n\nSpeak soon,\n{{venueName}}",
       secondEnabled: false, secondDelay: 7,
-      secondSubject: "Are you still planning your event? — {{venueName}}",
-      secondBody: "Hi {{firstName}},\n\nI haven't heard back, so I thought I'd check in one last time. If you're still planning your {{eventType}}, just reply and we'll pick it up from there. If your plans have changed, no worries at all.\n\nWarm regards,\n{{venueName}}",
+      secondSubject: "Still planning your event? — {{venueName}}",
+      secondBody: "Hi {{firstName}},\n\nWe haven't heard back, so this is our last check-in.\n\nIf you're still planning your {{eventType}}, just reply and we'll pick it up from there. If your plans have changed, that's completely fine. We'd be glad to host you another time.\n\nAll the best,\n{{venueName}}",
     },
   },
   {
@@ -79,8 +79,8 @@ export const SEQUENCES: SequenceDef[] = [
     extraVars: ["proposalLink"],
     defaults: {
       enabled: false, enabledAt: null, delay: 2,
-      subject: "Any questions about your proposal? — {{venueName}}",
-      body: "Hi {{firstName}},\n\nI saw you've had a look at your proposal. Is there anything you'd like to change or talk through? You can view it again here:\n{{proposalLink}}\n\nWarm regards,\n{{venueName}}",
+      subject: "Happy to talk through your proposal — {{venueName}}",
+      body: "Hi {{firstName}},\n\nWe hope the proposal has everything you need.\n\nIf anything needs changing, or you'd like to go over any of it, just reply.\n\nHere it is again:\n{{proposalLink}}\n\nSpeak soon,\n{{venueName}}",
     },
   },
   {
@@ -93,7 +93,7 @@ export const SEQUENCES: SequenceDef[] = [
     defaults: {
       enabled: false, enabledAt: null, delay: 2,
       subject: "Your proposal expires soon — {{venueName}}",
-      body: "Hi {{firstName}},\n\nJust a heads-up that your proposal for your {{eventType}} expires soon. If you'd like to go ahead, you can accept it here:\n{{proposalLink}}\n\nWarm regards,\n{{venueName}}",
+      body: "Hi {{firstName}},\n\nA quick note to say the proposal for your {{eventType}} expires soon.\n\nIf you'd like to go ahead, you can accept it here:\n{{proposalLink}}\n\nIf you have any questions first, just reply.\n\nSpeak soon,\n{{venueName}}",
     },
   },
   {
@@ -105,8 +105,8 @@ export const SEQUENCES: SequenceDef[] = [
     extraVars: ["enquiryFormLink"],
     defaults: {
       enabled: false, enabledAt: null, delay: 2,
-      subject: "Did you want to finish your enquiry? — {{venueName}}",
-      body: "Hi {{firstName}},\n\nIt looks like you started an enquiry with us but didn't get to the end. If you're still keen, you can finish it here — it only takes a minute:\n{{enquiryFormLink}}\n\nOr just reply to this email with your date and numbers.\n\nWarm regards,\n{{venueName}}",
+      subject: "Would you like to finish your enquiry? — {{venueName}}",
+      body: "Hi {{firstName}},\n\nYou started an enquiry with us, and we'd be glad to hear the rest.\n\nIt only takes a minute. You can finish it here:\n{{enquiryFormLink}}\n\nOr just reply to this email with your date and guest numbers, and we'll take it from there.\n\nSpeak soon,\n{{venueName}}",
     },
   },
   {
@@ -119,13 +119,53 @@ export const SEQUENCES: SequenceDef[] = [
     defaults: {
       enabled: false, enabledAt: null, delay: 14,
       subject: "Still thinking about your event? — {{venueName}}",
-      body: "Hi {{firstName}},\n\nIt's been a little while, so I wanted to check in on your {{eventType}}. Are you still planning it? We'd love to help — just reply and let me know where things are at.\n\nWarm regards,\n{{venueName}}",
+      body: "Hi {{firstName}},\n\nIt's been a little while, so we wanted to check in on your {{eventType}}.\n\nIf you're still planning it, just reply and let us know where things stand. We'd be glad to help.\n\nSpeak soon,\n{{venueName}}",
     },
   },
 ];
 
 export const SEQUENCE_BY_KEY: Record<SequenceKey, SequenceDef> =
   Object.fromEntries(SEQUENCES.map(s => [s.key, s])) as Record<SequenceKey, SequenceDef>;
+
+type WordingField = "subject" | "body" | "secondSubject" | "secondBody";
+
+/**
+ * Earlier built-in wording, field by field. Saving any sequence stores the
+ * whole map, defaults included, so a venue that has ever switched one on holds
+ * these word for word without having typed them. readSequenceSettings reads
+ * a saved field that matches one of these as today's default; wording a venue
+ * actually wrote is never touched. When a default changes again, add the old
+ * text here.
+ */
+export const LEGACY_SEQUENCE_DEFAULTS: Record<SequenceKey, Partial<Record<WordingField, string[]>>> = {
+  enquiry_no_reply: {
+    subject: ["Just checking in — {{venueName}}"],
+    body: ["Hi {{firstName}},\n\nI just wanted to check my last email reached you. Do you have any questions about your {{eventType}} with us? I'm happy to help with whatever you need.\n\nWarm regards,\n{{venueName}}"],
+    secondSubject: ["Are you still planning your event? — {{venueName}}"],
+    secondBody: ["Hi {{firstName}},\n\nI haven't heard back, so I thought I'd check in one last time. If you're still planning your {{eventType}}, just reply and we'll pick it up from there. If your plans have changed, no worries at all.\n\nWarm regards,\n{{venueName}}"],
+  },
+  proposal_viewed: {
+    subject: ["Any questions about your proposal? — {{venueName}}"],
+    body: ["Hi {{firstName}},\n\nI saw you've had a look at your proposal. Is there anything you'd like to change or talk through? You can view it again here:\n{{proposalLink}}\n\nWarm regards,\n{{venueName}}"],
+  },
+  proposal_expiring: {
+    body: ["Hi {{firstName}},\n\nJust a heads-up that your proposal for your {{eventType}} expires soon. If you'd like to go ahead, you can accept it here:\n{{proposalLink}}\n\nWarm regards,\n{{venueName}}"],
+  },
+  partial_form: {
+    subject: ["Did you want to finish your enquiry? — {{venueName}}"],
+    body: ["Hi {{firstName}},\n\nIt looks like you started an enquiry with us but didn't get to the end. If you're still keen, you can finish it here — it only takes a minute:\n{{enquiryFormLink}}\n\nOr just reply to this email with your date and numbers.\n\nWarm regards,\n{{venueName}}"],
+  },
+  quiet_lead: {
+    body: ["Hi {{firstName}},\n\nIt's been a little while, so I wanted to check in on your {{eventType}}. Are you still planning it? We'd love to help — just reply and let me know where things are at.\n\nWarm regards,\n{{venueName}}"],
+  },
+};
+
+const sameWording = (a: string, b: string) => a.replace(/\r\n/g, "\n").trim() === b.replace(/\r\n/g, "\n").trim();
+
+/** A saved field that is an earlier built-in default reads as today's default. */
+function currentWording(key: SequenceKey, field: WordingField, saved: string, nowDefault: string): string {
+  return (LEGACY_SEQUENCE_DEFAULTS[key][field] ?? []).some(old => sameWording(saved, old)) ? nowDefault : saved;
+}
 
 const clampInt = (v: unknown, min: number, max: number, fallback: number): number => {
   const n = Math.round(Number(v));
@@ -146,14 +186,14 @@ export function readSequenceSettings(raw: unknown): Record<SequenceKey, Sequence
       enabled,
       enabledAt: enabled && typeof s.enabledAt === "string" && !Number.isNaN(Date.parse(s.enabledAt)) ? s.enabledAt : null,
       delay: clampInt(s.delay, def.minDelay, def.maxDelay, d.delay),
-      subject: str(s.subject, d.subject, 255),
-      body: str(s.body, d.body, 5000),
+      subject: currentWording(def.key, "subject", str(s.subject, d.subject, 255), d.subject),
+      body: currentWording(def.key, "body", str(s.body, d.body, 5000), d.body),
     };
     if (def.key === "enquiry_no_reply") {
       cfg.secondEnabled = s.secondEnabled === true;
       cfg.secondDelay = clampInt(s.secondDelay, def.minDelay, def.maxDelay, d.secondDelay ?? 7);
-      cfg.secondSubject = str(s.secondSubject, d.secondSubject ?? "", 255);
-      cfg.secondBody = str(s.secondBody, d.secondBody ?? "", 5000);
+      cfg.secondSubject = currentWording(def.key, "secondSubject", str(s.secondSubject, d.secondSubject ?? "", 255), d.secondSubject ?? "");
+      cfg.secondBody = currentWording(def.key, "secondBody", str(s.secondBody, d.secondBody ?? "", 5000), d.secondBody ?? "");
     }
     out[def.key] = cfg;
   }

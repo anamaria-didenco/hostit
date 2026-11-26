@@ -128,30 +128,30 @@ export function buildAcceptConfirmationEmail(i: AcceptEmailInput): { subject: st
   ].filter(Boolean).join(" &nbsp;·&nbsp; ");
   const html = `<div style="font-family:sans-serif;max-width:560px;color:#1f2937;line-height:1.5">
 <p>Hi ${e(i.clientFirstName)},</p>
-<p>Thank you for accepting your proposal — we're delighted to be hosting your event at ${e(i.venueName)}.</p>
+<p>Thank you for accepting your proposal. We look forward to hosting you at ${e(i.venueName)}.</p>
 ${rows ? `<table style="border-collapse:collapse;margin:8px 0 16px">${rows}</table>` : ""}
 <p style="font-weight:bold;margin:16px 0 6px">What happens next</p>
 <ul style="padding-left:20px;margin:0 0 16px">${stepsHtml}</ul>
 <p>${links}</p>
-<p>If anything's changed or you have a question, just reply to this email.</p>
-<p>Warm regards,<br>${e(i.fromName)}</p>
+<p>If anything changes or you have a question, just reply to this email.</p>
+<p>See you soon,<br>${e(i.fromName)}</p>
 </div>`;
   const text = [
     `Hi ${i.clientFirstName},`,
     "",
-    `Thank you for accepting your proposal — we're delighted to be hosting your event at ${i.venueName}.`,
+    `Thank you for accepting your proposal. We look forward to hosting you at ${i.venueName}.`,
     "",
-    ...summary.map(([k, v]) => `${k}: ${v}`),
-    "",
+    // The summary block and its blank line only when there is something in it.
+    ...(summary.length ? [...summary.map(([k, v]) => `${k}: ${v}`), ""] : []),
     "What happens next",
     ...steps.map(s => `- ${s}`),
     "",
     `View your proposal: ${i.proposalUrl}`,
     ...(i.portalUrl ? [`Your event page: ${i.portalUrl}`] : []),
     "",
-    "If anything's changed or you have a question, just reply to this email.",
+    "If anything changes or you have a question, just reply to this email.",
     "",
-    "Warm regards,",
+    "See you soon,",
     i.fromName,
   ].join("\n");
   return { subject, html, text };

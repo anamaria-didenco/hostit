@@ -21,6 +21,7 @@ import {
   readSequenceSettings, SEQUENCE_BY_KEY, SEQUENCES,
   type SequenceConfig, type SequenceKey,
 } from "@shared/followUpSequences";
+import { copyEventType } from "@shared/enquiryCopy";
 import { dueStep, planLeadSteps, type PlanLead, type PlanProposal, type PlanSend, type PlannedStep } from "./followUpSchedule";
 
 const ACTIVE_STATUSES = ["new", "contacted", "proposal_sent", "negotiating"];
@@ -42,6 +43,10 @@ export function stepWording(cfg: SequenceConfig, step: number): { subject: strin
     : { subject: cfg.subject, body: cfg.body };
 }
 
+/** Every built-in subject and body (not wording a venue wrote). */
+const BUILT_IN_WORDING = new Set(SEQUENCES.flatMap(d =>
+  [d.defaults.subject, d.defaults.body, d.defaults.secondSubject, d.defaults.secondBody].filter((s): s is string => !!s)));
+
 /**
  * Fill in the template and wrap it in the venue's branded email. Every value
  * is escaped; bare links in the body become clickable.
@@ -60,7 +65,12 @@ export function renderFollowUpEmail(opts: {
     proposalLink: opts.proposalLink ?? "",
     enquiryFormLink: opts.enquiryFormLink ?? "",
   };
-  const fill = (s: string) => substituteTemplateVars(s, lead as any, venue, { timeZone: TZ, overrides: extra });
+  // The built-in wording also reads "your event" for a lead typed just
+  // "Other"; wording the venue wrote fills {{eventType}} exactly as before.
+  const builtIn = (s: string) => BUILT_IN_WORDING.has(s);
+  const fill = (s: string) => substituteTemplateVars(s, lead as any, venue, {
+    timeZone: TZ, overrides: builtIn(s) ? { ...extra, eventType: copyEventType(lead.eventType) ?? "event" } : extra,
+  });
   const subject = fill(opts.subject).replace(/[\r\n]+/g, " ").trim().slice(0, 255);
   const text = fill(opts.body).trim();
   const linkify = (escaped: string) =>
