@@ -106,7 +106,7 @@ export const SEQUENCES: SequenceDef[] = [
     defaults: {
       enabled: false, enabledAt: null, delay: 2,
       subject: "Would you like to finish your enquiry? — {{venueName}}",
-      body: "Hi {{firstName}},\n\nYou started an enquiry with us, and we'd be glad to hear the rest.\n\nYou can finish it here. It only takes a minute:\n{{enquiryFormLink}}\n\nOr just reply to this email with your date and guest numbers, and we'll take it from there.\n\nSpeak soon,\n{{venueName}}",
+      body: "Hi {{firstName}},\n\nYou started an enquiry with us, and we'd be glad to hear the rest.\n\nIt only takes a minute. You can finish it here:\n{{enquiryFormLink}}\n\nOr just reply to this email with your date and guest numbers, and we'll take it from there.\n\nSpeak soon,\n{{venueName}}",
     },
   },
   {

@@ -1809,7 +1809,7 @@ export const appRouter = router({
         // Status-aware default wording, or the custom message (clientEmails.ts).
         const { buildOneTapFollowUpEmail } = await import('./clientEmails');
         const { subject, html, text } = buildOneTapFollowUpEmail({
-          firstName: lead.firstName, venueName, accent, status: lead.status, eventType: lead.eventType, message: input.message,
+          firstName: lead.firstName, venueName, accent, status: lead.status, message: input.message,
         });
         const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
         const threadHeaders = leadMailHeaders(mailer.venue, { leadId: lead.id, fromEmail: mailer.fromEmail, replyTo: mailer.fromEmail });

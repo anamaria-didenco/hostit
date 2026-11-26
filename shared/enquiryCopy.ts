@@ -19,9 +19,9 @@ export const DEFAULT_AUTO_REPLY_INTRO =
   `Thank you for thinking of us. We'll be in touch ${ENQUIRY_RESPONSE_PROMISE}.`;
 
 /**
- * An event type as client email copy uses it ("hosting your {type}"): null
+ * An event type as client email copy uses it ("your {type} booking"): null
  * when it's blank or the catch-all "Other", so the sentence falls back to its
- * wording without a type instead of reading "hosting your Other". Otherwise
+ * wording without a type instead of reading "your Other booking". Otherwise
  * the type is returned as stored (trimmed), capitals and all.
  */
 export function copyEventType(eventType: string | null | undefined): string | null {

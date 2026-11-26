@@ -336,10 +336,13 @@ export function buildWalkthroughEmail(
   const intro = confirmed
     ? "We look forward to showing you around. Your walkthrough is confirmed, and a calendar invite is attached."
     : "Thank you for asking to come and see us. We'll check when the team is on site, then confirm a time with you.";
+  // The stored summary marks a note with " — "; the client's copy uses the
+  // line's own " · " instead. Only the first one: a dash in the note stays.
+  const suggested = msg.kind === "requested" ? msg.summary.replace(' — "', ' · "') : "";
   const rows = msg.kind === "confirmed"
     ? `<tr><td style="padding:8px 12px 3px;color:#6b7280;font-size:14px;width:90px">When</td><td style="padding:8px 12px 3px;font-size:14px;font-weight:600">${esc(msg.label)} (${msg.minutes} min)</td></tr>
       ${msg.location ? `<tr><td style="padding:3px 12px 8px;color:#6b7280;font-size:14px">Where</td><td style="padding:3px 12px 8px;font-size:14px">${esc(msg.location)}</td></tr>` : ""}`
-    : `<tr><td style="padding:8px 12px;color:#6b7280;font-size:14px;width:110px">You suggested</td><td style="padding:8px 12px;font-size:14px">${esc(msg.summary)}</td></tr>`;
+    : `<tr><td style="padding:8px 12px;color:#6b7280;font-size:14px;width:110px">You suggested</td><td style="padding:8px 12px;font-size:14px">${esc(suggested)}</td></tr>`;
   const outro = (bits: string) => confirmed
     ? `Need a different time? Just reply to this email${reach(bits)}.`
     : `Anything else we should know? Just reply to this email${reach(bits)}.`;
@@ -361,9 +364,9 @@ export function buildWalkthroughEmail(
 </div>`;
   const details = msg.kind === "confirmed"
     ? `When: ${msg.label} (${msg.minutes} min)${msg.location ? `\nWhere: ${msg.location}` : ""}`
-    : `You suggested: ${msg.summary}`;
+    : `You suggested: ${suggested}`;
   const text = [`Hi ${p.firstName},`, intro, details, outro(contactText), `${signOff},\n${venueName}`].join("\n\n");
-  const subject = msg.kind === "confirmed" ? `See you on ${msg.label} — ${venueName}` : `We'd be glad to show you around — ${venueName}`;
+  const subject = msg.kind === "confirmed" ? `Your walkthrough on ${msg.label} — ${venueName}` : `We'd be glad to show you around — ${venueName}`;
   return { subject, html, text };
 }
 

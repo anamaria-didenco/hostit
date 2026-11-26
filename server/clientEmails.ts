@@ -108,15 +108,19 @@ export function buildDepositRequestEmail(i: {
   paymentInstructions: string; portalUrl: string | null; fromName: string;
 }): ClientEmail {
   const first = i.firstName ?? "there";
+  // The type is a label on the booking ("your Corporate booking"), never the
+  // thing being hosted: the booking editor offers "Corporate", "Birthday" and
+  // the like, which don't read as "hosting your Corporate".
   const type = copyEventType(i.eventType);
-  const opener = type ? `We're looking forward to hosting your ${type}.` : "We're looking forward to hosting you.";
+  const opener = "We're looking forward to hosting you.";
   const amount = fmtNzd(i.depositNzd);
+  const moneyLine = (t: string, a: string) => `To secure your ${t ? `${t} booking` : "booking"}, we ask for a deposit of ${a}.`;
   const instr = i.paymentInstructions.trim();
   const portalLead = "You can see your balance and confirm your payment any time on your event page:";
   const closing = "Any questions, just reply to this email.";
   const html = `<p>Hi ${esc(first)},</p>`
     + `<p>${esc(opener)}</p>`
-    + `<p>To secure your booking, we ask for a deposit of <strong>${amount}</strong>.</p>`
+    + `<p>${moneyLine(type ? esc(type) : "", `<strong>${amount}</strong>`)}</p>`
     + (instr ? `<p><strong>How to pay</strong><br>${esc(instr).replace(/\n/g, "<br>")}</p>` : "")
     + (i.portalUrl ? `<p>${portalLead}<br><a href="${esc(i.portalUrl)}">${esc(i.portalUrl)}</a></p>` : "")
     + `<p>${closing}</p>`
@@ -124,7 +128,7 @@ export function buildDepositRequestEmail(i: {
   const text = [
     `Hi ${first},`,
     opener,
-    `To secure your booking, we ask for a deposit of ${amount}.`,
+    moneyLine(type ?? "", amount),
     ...(instr ? [`How to pay:\n${instr}`] : []),
     ...(i.portalUrl ? [`${portalLead}\n${i.portalUrl}`] : []),
     closing,
@@ -156,7 +160,9 @@ export function buildPaymentReceiptEmail(i: {
   const plain = (s: string) => s;
   const portalLead = "Full details are on your event page:";
   const closing = "Any questions, just reply to this email.";
-  const signOff = refund ? "All the best," : "Speak soon,";
+  // "All the best," only when a refund leaves nothing owing (it may be the
+  // last email); with a balance still to pay, the event is still ahead.
+  const signOff = refund && i.outstanding <= 0 ? "All the best," : "Speak soon,";
   const html = `<p>Hi ${esc(first)},</p>`
     + `<p>${amountLine(strong)}</p>`
     + (i.total > 0 ? `<p>${balanceLine(strong)}</p>` : "")
@@ -180,19 +186,20 @@ export function buildPaymentReceiptEmail(i: {
 export function buildOneTapFollowUpEmail(i: {
   firstName: string | null; venueName: string; accent: string;
   /** The lead's status: "proposal_sent" follows up the proposal, anything else the enquiry. */
-  status: string; eventType: string | null;
+  status: string;
   /** Staff's own message, used instead of the default wording. */
   message?: string | null;
 }): ClientEmail {
   const first = i.firstName ?? "there";
   const quoted = i.status === "proposal_sent";
-  const type = copyEventType(i.eventType);
   const custom = i.message?.trim();
+  // No event type here: a lead's type is free text ("Corporate"), which
+  // doesn't read as "your Corporate".
   const body = custom
     ? custom
     : quoted
-      ? `We wanted to check in on the proposal we sent${type ? ` for your ${type}` : ""}. If you'd like to change anything or have a question, just reply to this email and we'll talk it through.`
-      : `We wanted to see how ${type ? `plans for your ${type} are` : "your plans are"} coming along. If there's anything we can help with, or details you'd like to talk through, just reply to this email.`;
+      ? "We wanted to check in on the proposal we sent. If you'd like to change anything or have a question, just reply to this email and we'll talk it through."
+      : "We wanted to see how your plans are coming along. If there's anything we can help with, or anything you'd like to talk through, just reply to this email.";
   const subject = quoted ? `Following up on your proposal — ${i.venueName}` : `Following up on your enquiry — ${i.venueName}`;
   const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
   <div style="background:${i.accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">

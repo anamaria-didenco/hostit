@@ -135,7 +135,7 @@ export function buildPortalLinkEmail(i: {
   const first = (i.clientName ?? "").trim().split(/\s+/)[0] || "there";
   const e = escapeHtml;
   const { url } = i;
-  const subject = i.contractTitle ? `Your contract is ready to sign — ${i.contractTitle}` : `Your event, all in one place — ${i.venueName}`;
+  const subject = i.contractTitle ? `Your contract is ready to sign — ${i.contractTitle}` : `Your event page — ${i.venueName}`;
   const intro = i.contractTitle
     ? `Here's your contract, "${i.contractTitle}". You can read and sign it online. It only takes a few minutes.`
     : `Here's your event page. Your event details, proposal and payments are all there.`;

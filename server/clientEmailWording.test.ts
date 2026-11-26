@@ -127,9 +127,19 @@ describe("walkthrough emails", () => {
     expectTextMatchesHtml(m);
   });
 
+  it("request with a note: set off with the line's own dot, the note's own dash kept", () => {
+    const m = buildWalkthroughEmail(venue, { kind: "requested", summary: `Fri 27 Nov · Morning — "Keen to see the terrace"` }, escapeHtml);
+    expect(m.text).toContain(`You suggested: Fri 27 Nov · Morning · "Keen to see the terrace"`);
+    expect(m.html).toContain("Fri 27 Nov · Morning · &quot;Keen to see the terrace&quot;");
+    expectHouseStyle(m);
+    expectTextMatchesHtml(m);
+    const dashed = buildWalkthroughEmail(venue, { kind: "requested", summary: `Any day · Evening — "after 5 — or later"` }, escapeHtml);
+    expect(dashed.text).toContain(`You suggested: Any day · Evening · "after 5 — or later"`);
+  });
+
   it("confirmed: the exact slot and length, where, the invite, and how to change it", () => {
     const m = buildWalkthroughEmail(venue, { kind: "confirmed", label: "Thu 3 Dec, 1:30pm", minutes: 30, location: "14 Example Lane, Harbourside" }, escapeHtml);
-    expect(m.subject).toBe("See you on Thu 3 Dec, 1:30pm — The Larder Room");
+    expect(m.subject).toBe("Your walkthrough on Thu 3 Dec, 1:30pm — The Larder Room");
     expect(m.html).toContain("Your walkthrough is confirmed");
     expect(m.text).toContain("We look forward to showing you around. Your walkthrough is confirmed, and a calendar invite is attached.");
     expect(m.text).toContain("When: Thu 3 Dec, 1:30pm (30 min)\nWhere: 14 Example Lane, Harbourside");
@@ -231,10 +241,12 @@ describe("proposal accepted confirmation", () => {
     proposalUrl: "https://app.example.test/proposal/tok-1", portalUrl: null,
   };
 
-  it("opens warmly, keeps the facts, and signs off for the visit", () => {
+  it("thanks them, keeps the facts, and signs off for the visit", () => {
     const m = buildAcceptConfirmationEmail(base);
     expect(m.subject).toBe("You're booked in — Ava's engagement party");
-    expect(m.text).toContain("We're delighted to be hosting you at The Larder Room. You're booked in.");
+    expect(m.text).toContain("Hi Ava,\n\nThank you for accepting your proposal. We look forward to hosting you at The Larder Room.\n\nDate:");
+    // The body doesn't repeat the subject's "booked in" (with a deposit due, it would sit oddly).
+    expect(m.text).not.toMatch(/booked in|delighted/i);
     expect(m.text).toContain("Total (incl. GST): $5,750.00");
     expect(m.text).toContain("If anything changes or you have a question, just reply to this email.");
     expect(m.text.endsWith("See you soon,\nThe Larder Room Events")).toBe(true);
@@ -247,8 +259,17 @@ describe("proposal accepted confirmation", () => {
     const m = buildAcceptConfirmationEmail({ ...base, depositNzd: 1437.5, paymentInstructions: "Bank transfer to 12-3456-7890123-00", hasContract: true, portalUrl: "https://app.example.test/portal/p" });
     expect(m.text).toContain("A deposit of $1,437.50 secures your date. How to pay:\nBank transfer to 12-3456-7890123-00");
     expect(m.text).toContain("We'll send you your contract to read and sign online.");
+    expect(m.text).not.toMatch(/booked in/i);
     expectHouseStyle(m);
     expectNoInjectedMarkup(buildAcceptConfirmationEmail({ ...base, clientFirstName: HOSTILE, venueName: "<b>V</b>", paymentInstructions: HOSTILE, depositNzd: 10 }));
+  });
+
+  it("with no date, guests, space or total: no empty block in the text", () => {
+    const m = buildAcceptConfirmationEmail({ ...base, eventDate: null, guestCount: null, spaceName: null, totalNzd: 0 });
+    expect(m.text).toContain("hosting you at The Larder Room.\n\nWhat happens next\n- There's nothing you need to do right now.");
+    expect(m.text).not.toContain("\n\n\n");
+    expect(m.html).not.toContain("<table");
+    expectTextMatchesHtml(m);
   });
 });
 
@@ -263,17 +284,27 @@ describe("deposit request", () => {
     const m = buildDepositRequestEmail(base);
     expect(m.subject).toBe("Deposit details for your booking — The Larder Room");
     expect(m.text).toBe(
-      "Hi Ava,\n\nWe're looking forward to hosting your Engagement Party.\n\n"
-      + "To secure your booking, we ask for a deposit of $1,437.50.\n\n"
+      "Hi Ava,\n\nWe're looking forward to hosting you.\n\n"
+      + "To secure your Engagement Party booking, we ask for a deposit of $1,437.50.\n\n"
       + "How to pay:\nBank transfer to 12-3456-7890123-00\nReference: your surname\n\n"
       + "You can see your balance and confirm your payment any time on your event page:\nhttps://app.example.test/portal/p\n\n"
       + "Any questions, just reply to this email.\n\nSpeak soon,\nThe Larder Room");
-    expect(m.html).toContain("we ask for a deposit of <strong>$1,437.50</strong>.");
+    expect(m.html).toContain("<p>To secure your Engagement Party booking, we ask for a deposit of <strong>$1,437.50</strong>.</p>");
     expect(m.html).toContain("Bank transfer to 12-3456-7890123-00<br>Reference: your surname");
     // No due date is invented.
     expect(m.text).not.toMatch(/\bdue\b|\bby \w+day\b/i);
     expectHouseStyle(m);
     expectTextMatchesHtml(m);
+  });
+
+  it("reads naturally with the booking editor's short labels", () => {
+    for (const eventType of ["Corporate", "Birthday", "Engagement"]) {
+      const m = buildDepositRequestEmail({ ...base, eventType });
+      expect(m.text).toContain(`We're looking forward to hosting you.\n\nTo secure your ${eventType} booking, we ask for a deposit of $1,437.50.`);
+      expect(m.text).not.toContain(`hosting your ${eventType}`);
+      expect(m.html).toContain(`<p>To secure your ${eventType} booking, we ask for a deposit of <strong>$1,437.50</strong>.</p>`);
+      expectTextMatchesHtml(m);
+    }
   });
 
   it("without an event type (or Other), instructions or a portal link", () => {
@@ -285,7 +316,9 @@ describe("deposit request", () => {
   });
 
   it("escapes what was typed", () => {
-    expectNoInjectedMarkup(buildDepositRequestEmail({ ...base, firstName: HOSTILE, eventType: "<b>x</b>", paymentInstructions: "<script>x</script>", fromName: "<b>V</b>" }));
+    const m = buildDepositRequestEmail({ ...base, firstName: HOSTILE, eventType: "<b>x</b>", paymentInstructions: "<script>x</script>", fromName: "<b>V</b>" });
+    expectNoInjectedMarkup(m);
+    expect(m.html).toContain("To secure your &lt;b&gt;x&lt;/b&gt; booking");
   });
 });
 
@@ -313,14 +346,24 @@ describe("payment receipts", () => {
     expectHouseStyle(m);
   });
 
-  it("refund: worded as a refund, with its own sign-off", () => {
+  it("refund: worded as a refund; a balance still owing means the event is still ahead", () => {
     const m = buildPaymentReceiptEmail({ ...base, type: "refund", amount: 200, outstanding: 200 });
     expect(m.subject).toBe("Confirming your refund — The Larder Room");
     expect(m.text).toContain("We've refunded $200.00 to you on 20 November 2026.");
+    expect(m.text).toContain("Your remaining balance is $200.00.");
     expect(m.text).not.toMatch(/thank you for your/i);
-    expect(m.text.endsWith("All the best,\nThe Larder Room")).toBe(true);
+    expect(m.text.endsWith("Speak soon,\nThe Larder Room")).toBe(true);
     expectHouseStyle(m);
     expectTextMatchesHtml(m);
+  });
+
+  it("refund with nothing owing: its own sign-off, as it may be the last email", () => {
+    for (const r of [{ total: 5750, outstanding: 0 }, { total: 0, outstanding: 0 }]) {
+      const m = buildPaymentReceiptEmail({ ...base, type: "refund", amount: 200, ...r });
+      expect(m.text.endsWith("All the best,\nThe Larder Room")).toBe(true);
+      expect(m.html).toContain("<p>All the best,<br>The Larder Room</p>");
+      expectHouseStyle(m);
+    }
   });
 
   it("no total set: no balance line; no portal: no link", () => {
@@ -337,7 +380,7 @@ describe("portal and contract emails", () => {
 
   it("event page: what's there, the link twice, and an invitation to reply", () => {
     const m = buildPortalLinkEmail(base);
-    expect(m.subject).toBe("Your event, all in one place — The Larder Room");
+    expect(m.subject).toBe("Your event page — The Larder Room");
     expect(m.text).toBe("Hi Ava,\n\nHere's your event page. Your event details, proposal and payments are all there.\n\nhttps://app.example.test/portal/p\n\nAny questions, just reply to this email.\n\nSpeak soon,\nThe Larder Room");
     expect(m.html).toContain(">Open your event page</a>");
     expect(m.html).toContain("Or copy this link:");
@@ -362,27 +405,23 @@ describe("portal and contract emails", () => {
 });
 
 describe("one-tap follow-up", () => {
-  const base = { firstName: "Ava", venueName: "The Larder Room", accent: "#6b2d2a", status: "contacted", eventType: "Engagement Party" };
+  const base = { firstName: "Ava", venueName: "The Larder Room", accent: "#6b2d2a", status: "contacted" };
 
-  it("enquiry: one voice, the event type read naturally, HTML and text the same", () => {
+  it("enquiry: one voice, no event type (it's free text), HTML and text the same", () => {
     const m = buildOneTapFollowUpEmail(base);
     expect(m.subject).toBe("Following up on your enquiry — The Larder Room");
-    expect(m.text).toBe("Hi Ava,\n\nWe wanted to see how plans for your Engagement Party are coming along. If there's anything we can help with, or details you'd like to talk through, just reply to this email.\n\nSpeak soon,\nThe Larder Room");
+    expect(m.text).toBe("Hi Ava,\n\nWe wanted to see how your plans are coming along. If there's anything we can help with, or anything you'd like to talk through, just reply to this email.\n\nSpeak soon,\nThe Larder Room");
     expect(m.html).toContain("Here when you");
     expect(m.text).not.toMatch(/\bI\b|\bI'm\b/);
     expectHouseStyle(m);
     expectTextMatchesHtml(m);
-    for (const eventType of [null, "Other"]) {
-      expect(buildOneTapFollowUpEmail({ ...base, eventType }).text).toContain("We wanted to see how your plans are coming along.");
-    }
   });
 
   it("proposal sent: checks in on the proposal without pushing", () => {
     const m = buildOneTapFollowUpEmail({ ...base, status: "proposal_sent" });
     expect(m.subject).toBe("Following up on your proposal — The Larder Room");
-    expect(m.text).toContain("We wanted to check in on the proposal we sent for your Engagement Party. If you'd like to change anything or have a question, just reply to this email and we'll talk it through.");
+    expect(m.text).toBe("Hi Ava,\n\nWe wanted to check in on the proposal we sent. If you'd like to change anything or have a question, just reply to this email and we'll talk it through.\n\nSpeak soon,\nThe Larder Room");
     expect(m.text).not.toMatch(/had a chance/);
-    expect(buildOneTapFollowUpEmail({ ...base, status: "proposal_sent", eventType: null }).text).toContain("the proposal we sent. If");
     expectHouseStyle(m);
     expectTextMatchesHtml(m);
   });
@@ -392,7 +431,7 @@ describe("one-tap follow-up", () => {
     expect(m.text).toBe(`Hi there,\n\nLine one\n${HOSTILE}\n\nSpeak soon,\nThe Larder Room`);
     expect(m.html).toContain("Line one<br>&lt;img");
     expectNoInjectedMarkup(m);
-    expectNoInjectedMarkup(buildOneTapFollowUpEmail({ ...base, firstName: HOSTILE, eventType: "<b>x</b>", venueName: "<b>V</b>" }));
+    expectNoInjectedMarkup(buildOneTapFollowUpEmail({ ...base, firstName: HOSTILE, venueName: "<b>V</b>" }));
   });
 });
 
@@ -431,7 +470,7 @@ describe("follow-up sequence defaults", () => {
     expect(render(d("proposal_expiring").subject, d("proposal_expiring").body).text).toContain("expires soon.\n\nIf you'd like to go ahead, you can accept it here:\nhttps://app.example.test/proposal/tok-1\n");
     expect(d("partial_form").subject).toMatch(/finish your enquiry/i);
     expect(d("partial_form").subject).not.toMatch(/proposal/i);
-    expect(render(d("partial_form").subject, d("partial_form").body).text).toContain("It only takes a minute:\nhttps://app.example.test/enquire/larder\n");
+    expect(render(d("partial_form").subject, d("partial_form").body).text).toContain("It only takes a minute. You can finish it here:\nhttps://app.example.test/enquire/larder\n");
     expect(d("partial_form").body).toContain("your date and guest numbers");
     expect(d("quiet_lead").subject).toContain("Still thinking");
   });
