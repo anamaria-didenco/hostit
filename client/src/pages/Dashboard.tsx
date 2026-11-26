@@ -4240,33 +4240,9 @@ export default function Dashboard() {
             const setupTodo = setupStatus ? setupSteps.filter(st => !(setupStatus as any)[st.key]) : [];
             return (
             <div className="px-4 md:px-8 pt-5 md:pt-7 pb-10 flex flex-col gap-5">
-              {/* The calendar leads the page; the heading is for screen readers. */}
+              {/* The page heading is for screen readers; the summary strip leads. */}
               <h1 className="sr-only">Overview</h1>
-              {/* The full month calendar, across the whole width, first thing on the page. */}
-              {monthCalendarCard}
-
-
-              {/* Then new enquiries: the ones nobody has answered yet, newest first. */}
-              <div className="flex justify-end -mb-2">
-                <button
-                    onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                    className={calBtnPrimary}>
-                    <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
-                  </button>
-              </div>
-              {!isStaff && (
-                <OverviewNewEnquiries
-                  rows={newEnquiryRows.slice(0, 6)}
-                  total={newEnquiryRows.length}
-                  loading={!allLeads}
-                  tz={venueTz}
-                  nowMs={listNowMs}
-                  onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
-                  onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
-                />
-              )}
-
-              <div className="flex justify-end -mb-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                   <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
                     <PopoverTrigger asChild>
                       <button className={calBtn}>
@@ -4290,7 +4266,14 @@ export default function Dashboard() {
                       ))}
                     </PopoverContent>
                   </Popover>
+                <button
+                    onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
+                    className={calBtnPrimary}>
+                    <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
+                  </button>
               </div>
+
+
               {/* Summary strip — action counts first; each opens exactly the
                   records it counted. The vanity numbers wait in a collapsed row. */}
               <OverviewSummaryStrip tiles={actionStats.map(toTile)} onTile={tileAction} />
@@ -4327,6 +4310,20 @@ export default function Dashboard() {
                       aligningRunsheetId={alignStartTime.isPending ? (alignStartTime.variables?.runsheetId ?? null) : null}
                       fmtDay={(d) => formatEventDate(d, { weekday: 'short', day: 'numeric', month: 'short' })}
                       fmtTime={fmtHhmm}
+                    />
+                  )}
+                  {/* The full month calendar, right under Needs you today. */}
+                  {monthCalendarCard}
+                  {/* New enquiries: not answered yet, newest first. */}
+                  {!isStaff && (
+                    <OverviewNewEnquiries
+                      rows={newEnquiryRows.slice(0, 6)}
+                      total={newEnquiryRows.length}
+                      loading={!allLeads}
+                      tz={venueTz}
+                      nowMs={listNowMs}
+                      onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                      onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
                     />
                   )}
                 </div>
