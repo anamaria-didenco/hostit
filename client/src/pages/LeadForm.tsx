@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { canReuseLead, enquiryStorageKeys, normaliseEmail, parseProgress, pickFormToken, resumeFrom, serializeProgress } from "@/lib/enquiryProgress";
+import { canReuseLead, enquiryStorageKeys, formTokenToSend, normaliseEmail, parseProgress, pickFormToken, resumeFrom, serializeProgress } from "@/lib/enquiryProgress";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -865,6 +865,11 @@ export default function LeadForm() {
   // reload's brand-new token can't make the visitor look too fast.
   const formTokenRef = useRef<{ token: string; at: number } | null>(null);
   if (!formTokenRef.current && venue?.ownerId) formTokenRef.current = pickFormToken(storedProgress, venue.ownerId, formConfig?.formToken, Date.now());
+  // This page's own token, and when it arrived: sent instead once it's old
+  // enough to pass (formTokenToSend).
+  const freshTokenRef = useRef<{ token: string; at: number } | null>(null);
+  if (!freshTokenRef.current && formConfig?.formToken) freshTokenRef.current = { token: formConfig.formToken, at: Date.now() };
+  const sendFormToken = () => formTokenToSend(formTokenRef.current, freshTokenRef.current, Date.now());
   // Honeypot: a field people never see. Anything typed here is a bot.
   const [honeypot, setHoneypot] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -914,8 +919,12 @@ export default function LeadForm() {
   // After a reload, pick up where the visitor was: the step and the step-1
   // lead. Taken as saved for now; checked against the venue once it has
   // loaded, before the form shows (resumeChecked, below).
-  const [initialResume] = useState(() => resumeFrom(storedProgress, { ownerId: storedProgress?.ownerId ?? 0, detailsValid: true, email: form.email }));
+  const [initialResume] = useState(() => resumeFrom(storedProgress, { ownerId: storedProgress?.ownerId ?? 0, detailsValid: true, email: form.email, nowMs: Date.now() }));
   const [resumeChecked, setResumeChecked] = useState(false);
+  // Opened straight on step 2 by a reload: step 1's name and email aren't on
+  // screen, so step 2 says whose enquiry this is, with Start fresh (someone
+  // else on a shared device mustn't finish it unawares). Gone after BACK.
+  const [resumedStep2, setResumedStep2] = useState(false);
   // Stepped embed widget state (Your Details → Your Event — contact info
   // comes first so a stranger who bails after step 1 still leaves behind a
   // name and email, not nothing).
@@ -934,7 +943,9 @@ export default function LeadForm() {
   const [capturedLeadToken, setCapturedLeadToken] = useState<string | null>(initialResume.leadToken);
   // The email it was saved with: the lead is only reused for that email.
   const [capturedEmail, setCapturedEmail] = useState<string | null>(initialResume.leadEmail);
-  const capturedLead = { leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail };
+  // When it was saved (this device's clock): a reload only picks it up again for a while.
+  const [capturedAt, setCapturedAt] = useState<number | null>(initialResume.leadAt);
+  const capturedLead = { leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail, leadAt: capturedAt };
   // Field ids that failed validation on the last submit attempt — drives the
   // inline error text/aria-invalid under each field. Cleared on submit, and
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
@@ -1009,12 +1020,12 @@ export default function LeadForm() {
       else if (ownerId && resumeChecked) {
         localStorage.setItem(storageKeys.progress, serializeProgress({
           slug: storageKeys.slug, ownerId, step: embedStep === 2 ? 2 : 1,
-          leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail,
+          leadId: capturedLeadId, leadToken: capturedLeadToken, leadEmail: capturedEmail, leadAt: capturedAt,
           formToken: formToken?.token ?? null, formTokenAt: formToken?.at ?? null,
         }));
       }
     } catch { /* storage disabled/full — draft persistence is a nicety, not required */ }
-  }, [form, noDateYet, submitted, draftKey, storageKeys.progress, storageKeys.slug, ownerId, resumeChecked, embedStep, capturedLeadId, capturedLeadToken, capturedEmail, formToken]);
+  }, [form, noDateYet, submitted, draftKey, storageKeys.progress, storageKeys.slug, ownerId, resumeChecked, embedStep, capturedLeadId, capturedLeadToken, capturedEmail, capturedAt, formToken]);
   const clearDraft = () => {
     try { localStorage.removeItem(draftKey); localStorage.removeItem(storageKeys.progress); } catch {}
     setShowDraftNote(false);
@@ -1025,9 +1036,11 @@ export default function LeadForm() {
     setCustomFieldValues({});
     setNoDateYet(false);
     setEmbedStep(1);
+    setResumedStep2(false);
     setCapturedLeadId(null);
     setCapturedLeadToken(null);
     setCapturedEmail(null);
+    setCapturedAt(null);
     setSubmittedLeadId(null);
     setSubmittedLeadToken(null);
     setAutoReplySent(false);
@@ -1048,6 +1061,7 @@ export default function LeadForm() {
       setCapturedLeadId(saved ? data.leadId : null);
       setCapturedLeadToken(saved ? data.leadToken : null);
       setCapturedEmail(saved ? normaliseEmail(vars.email) : null);
+      setCapturedAt(saved ? Date.now() : null);
       if (saved && !partialPostedRef.current.has(data.leadId)) {
         partialPostedRef.current.add(data.leadId);
         postEnquiryToParent({ type: 'vf-partial-captured', enquiryId: data.leadId, budgetRange: form.budgetRange || null });
@@ -1184,7 +1198,7 @@ export default function LeadForm() {
       source: form.source || "lead_form",
       spaceId: showSpacePicker && pickedSpace ? pickedSpace.id : (formSpaces.length === 1 ? formSpaces[0].id : undefined),
       hp: honeypot || undefined,
-      formToken: formTokenRef.current?.token,
+      formToken: sendFormToken(),
       turnstileToken: turnstileToken ?? undefined,
       ...clickAttribution,
     });
@@ -1346,12 +1360,14 @@ export default function LeadForm() {
   // first render, so nothing is shown or saved before it's checked.
   if (!resumeChecked && venue?.ownerId) {
     setResumeChecked(true);
-    const r = resumeFrom(storedProgress, { ownerId: venue.ownerId, detailsValid: detailFields.every(f => isFieldFilled(f)), email: form.email });
+    const r = resumeFrom(storedProgress, { ownerId: venue.ownerId, detailsValid: detailFields.every(f => isFieldFilled(f)), email: form.email, nowMs: Date.now() });
+    setResumedStep2(r.step === 2);
     if (r.step !== embedStep || r.leadId !== capturedLeadId) {
       setEmbedStep(r.step);
       setCapturedLeadId(r.leadId);
       setCapturedLeadToken(r.leadToken);
       setCapturedEmail(r.leadEmail);
+      setCapturedAt(r.leadAt);
       lastFocusKey.current = `form-${r.step}`; // not a step change the visitor made: focus stays put
     }
   }
@@ -1683,6 +1699,24 @@ export default function LeadForm() {
     );
   }
 
+  /* ── Step 2 opened by a reload: whose enquiry this is (step 1's name and
+        email aren't on screen), with Start fresh for anyone else. ──────── */
+  function renderResumedNote() {
+    const name = [form.firstName, form.lastName].map(v => (v ?? '').trim()).filter(Boolean).join(' ');
+    const email = (form.email ?? '').trim();
+    return (
+      <div className="flex items-center justify-between gap-2.5 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          Welcome back — sending as <strong className="font-semibold text-gray-800">{name}</strong>{email ? <> ({email})</> : null}. Not you?
+        </span>
+        <button type="button" onClick={resetForm}
+          className="font-bold text-[10px] tracking-wide uppercase whitespace-nowrap" style={{ color: formButtonColor }}>
+          Start fresh
+        </button>
+      </div>
+    );
+  }
+
   /* ── Post-submit walkthrough request — shared by both the embed and
         full-page confirmation screens (see WalkthroughRequest). Needs the
         lead submit() just created and its proof-of-ownership token. ───── */
@@ -1924,6 +1958,7 @@ export default function LeadForm() {
                       setCapturedLeadId(null);
                       setCapturedLeadToken(null);
                       setCapturedEmail(null);
+                      setCapturedAt(null);
                       startCapture.mutate({
                         ownerId: venue.ownerId,
                         firstName: (form.firstName ?? '').trim(),
@@ -1932,7 +1967,7 @@ export default function LeadForm() {
                         phone: form.phone?.trim() || undefined,
                         company: form.company?.trim() || undefined,
                         hp: honeypot || undefined,
-                        formToken: formTokenRef.current?.token,
+                        formToken: sendFormToken(),
                         ...clickAttribution,
                       });
                     }
@@ -1946,6 +1981,7 @@ export default function LeadForm() {
               {/* ── STEP 2: Your Event — submits directly, no Summary step. ── */}
               {embedStep === 2 && (
                 <div className="space-y-3">
+                  {resumedStep2 && renderResumedNote()}
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
                       <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
@@ -2023,7 +2059,7 @@ export default function LeadForm() {
                   {renderMissingNote()}
                   {submitError && <p role="alert" className="text-red-700 text-xs">{submitError}</p>}
                   <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setEmbedStep(1)}
+                    <button type="button" onClick={() => { setResumedStep2(false); setEmbedStep(1); }}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
                     <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
                       aria-describedby={missingNote ? missingNoteId : undefined}
