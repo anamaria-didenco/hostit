@@ -48,6 +48,7 @@ const MESSAGES: Msg[] = [
 ];
 
 const CHANGELOG: { date: string; note: string }[] = [
+  { date: "2026-11-26", note: "embed.js passes the page the form is on (vf_page), so \"Enquiry Received!\" comes back after a reload of the page it was sent from, and only there. The ad landing page (vf_landing) is used for attribution only." },
   { date: "2026-11-26", note: "vf-prefill: change the form's event answers from your page without reloading the frame (vf-ready, vf-prefill-applied, VenueFlow.prefill in embed.js). Prefilled values no longer overwrite answers the visitor changed in the form, and data-format accepts \"standing\". vf-prefill takes choices only, never free text." },
   { date: "2026-09-30", note: "Width control — data-width and data-max-width (default 520px; none/full for a full-bleed form that fills its container)." },
   { date: "2026-09-30", note: "Styling API (bg/transparent, text/label/border colours, font inherit, radius, shadow, button style); data-prefill for any field; vf-step-changed; frame ids on every message; documented, origin-pinned messages." },
@@ -261,6 +262,9 @@ export default function EmbedDocs() {
             <li>With <Code>embed.js</Code>, call <Code>{`VenueFlow.prefill({ date: "2026-12-05", guests: 120 })`}</Code>; it waits for <Code>vf-ready</Code> for you. <Code>VenueFlow.onPrefillApplied</Code> receives the reply.</li>
             <li>An older form never sends <Code>vf-ready</Code>: if none arrives, keep changing <Code>src</Code> as before (use <Code>iframe.contentWindow.location.replace(url)</Code> so Back still leaves your page).</li>
           </ul>
+          <p className="text-sm text-gray-600 mt-3">
+            After "Enquiry Received!", the form shows it again for an hour if the frame is reloaded, or the visitor reloads the page it was sent from, with "Send another enquiry" below. On any other page it shows the form with a line saying when their enquiry was sent. <Code>embed.js</Code> tells the form which page it is on. A plain iframe usually tells it only your site's address, so a whole-page reload counts as another page; add <Code>referrerpolicy="no-referrer-when-downgrade"</Code> to the iframe to fix that.
+          </p>
           <p className="text-sm text-gray-600 mt-3">
             When a visitor's browser blocks the frame's storage (some Safari and Firefox settings), the form keeps what they have typed, for up to an hour, in the frame's own window name, so a reload of the frame doesn't wipe it. A page that navigates the frame elsewhere could read that name, so only point the frame at the form.
           </p>
