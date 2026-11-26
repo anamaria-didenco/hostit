@@ -67,10 +67,12 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     await cleanup();
     const db = (await getDb())!;
     // Seeded dev copies can have rows inserted with explicit ids, leaving the
-    // serial behind; catch it up so our inserts don't collide.
+    // serial behind; catch it up so our inserts don't collide. Only ever
+    // forward: moving it back would hand out ids other test files, running
+    // alongside, have just used and deleted.
     const { sql } = await import("drizzle-orm");
     for (const t of ["venue_settings", "leads", "proposals", "lead_activity", "venue_notifications", "lead_sequence_sends"]) {
-      await db.execute(sql.raw(`SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${t}"), 1))`));
+      await db.execute(sql.raw(`SELECT setval(s, GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${t}"), COALESCE(pg_sequence_last_value(s), 0), 1)) FROM (SELECT pg_get_serial_sequence('"${t}"', 'id')::regclass AS s) q`));
     }
     let seq = readSequenceSettings(null);
     for (const k of ["enquiry_no_reply", "proposal_viewed", "partial_form"] as const) seq = applySequenceUpdate(seq, k, { enabled: true }, switchedOn);
@@ -87,7 +89,10 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     await ins("historic", { status: "contacted", createdAt: later(-20 * DAY), firstResponseAt: later(-19 * DAY), lastStaffEmailAt: later(-19 * DAY) });
     await ins("replied", { status: "contacted", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H), lastInboundAt: later(DAY) });
     await ins("paused", { status: "contacted", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H), followUpsPaused: true });
-    await ins("partial", { status: "new", internalNotes: PARTIAL_LEAD_NOTE, createdAt: later(H) });
+    // An unfinished enquiry from someone else, and one from Jane, whose
+    // finished enquiries mean she carried on: only the first is nudged.
+    await ins("partial", { status: "new", internalNotes: PARTIAL_LEAD_NOTE, createdAt: later(H), email: "pat.partial@example.test" });
+    await ins("partialJane", { status: "new", internalNotes: PARTIAL_LEAD_NOTE, createdAt: later(H + 60_000) });
     await ins("proposal", { status: "proposal_sent", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H) });
     await ins("waiting", { status: "new", createdAt: enquiryAt });
     await ins("noSmtp", { ownerId: ids.OWNER_NO_SMTP, status: "contacted", createdAt: later(H), firstResponseAt: later(2 * H), lastStaffEmailAt: later(2 * H) });
@@ -108,8 +113,8 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     expect((await runReplyOverdueCheck(new Date(at11.getTime() + H), { ownerIds: OWNERS })).alerted).toEqual([]);
     const rows = await db.select().from(venueNotifications).where(eq(venueNotifications.ownerId, ids.OWNER));
     expect(rows.filter(r => r.kind === "reply_overdue").map(r => r.dedupeKey)).toEqual([`reply_overdue:${L.waiting}`]);
-    // The partial lead never gets a reply-overdue alert.
-    expect(rows.some(r => r.leadId === L.partial)).toBe(false);
+    // The partial leads never get a reply-overdue alert.
+    expect(rows.some(r => r.leadId === L.partial || r.leadId === L.partialJane)).toBe(false);
   });
 
   it("sends each due step once, logs it, skips historic/replied/paused leads, and alerts on stalled proposals", async () => {
@@ -127,7 +132,7 @@ d("speed-to-lead + follow-up jobs against the database", async () => {
     expect(rows.every(r => r.ownerId === ids.OWNER)).toBe(true);
 
     // The emails went to the client, with working links and no raw variables.
-    const toClient = ids.mail.filter(m => m.to?.[0]?.address === "jane@example.com");
+    const toClient = ids.mail.filter(m => ["jane@example.com", "pat.partial@example.test"].includes(m.to?.[0]?.address));
     expect(toClient).toHaveLength(3);
     const proposalMail = toClient.find(m => /proposal/i.test(m.subject));
     expect(proposalMail.text).toMatch(/\/proposal\/test-c-/);

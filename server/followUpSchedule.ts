@@ -12,6 +12,7 @@
  *    gets two automatic emails within 24 hours of each other.
  */
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { partialLastSeenAt } from "@shared/enquiryTiming";
 import type { SequenceConfig, SequenceKey } from "@shared/followUpSequences";
 
 export type PlanLead = {
@@ -27,6 +28,15 @@ export type PlanLead = {
   followUpsPaused: boolean | null;
   /** Latest lead_activity row (notes, emails, status changes), if any. */
   lastActivityAt: Date | null;
+  /** Unfinished enquiries: the form's last "still here" ping from step 2. */
+  partialSeenAt?: Date | null;
+  /**
+   * Unfinished enquiries: the same person carried on (a newer enquiry from
+   * the same email, or a finished one sent up to a day before), so this one
+   * was left behind (isPartialSuperseded, the Unfinished alert's rule).
+   * Worked out by the caller, which can see the venue's other enquiries.
+   */
+  superseded?: boolean;
 };
 
 export type PlanProposal = {
@@ -123,10 +133,11 @@ export function planLeadSteps(
     }
   }
 
-  // (d) Unfinished enquiry form.
+  // (d) Unfinished enquiry form: N hours after they were last on the form
+  // (step 1, or a later ping from step 2), unless they carried on.
   const d = settings.partial_form;
-  if (status === "new" && lead.internalNotes === PARTIAL_LEAD_NOTE && !lead.firstResponseAt && !lead.lastStaffEmailAt) {
-    const t = new Date(lead.createdAt);
+  if (status === "new" && lead.internalNotes === PARTIAL_LEAD_NOTE && !lead.firstResponseAt && !lead.lastStaffEmailAt && !lead.superseded) {
+    const t = partialLastSeenAt(lead.createdAt, lead.partialSeenAt);
     if (enabledFor(d, t) && !after(lead.lastInboundAt, t) && !sent("partial_form", 1)) {
       out.push({ key: "partial_form", step: 1, refId: 0, triggerAt: t, dueAt: new Date(t.getTime() + d.delay * HOUR) });
     }

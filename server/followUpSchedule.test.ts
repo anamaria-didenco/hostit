@@ -138,6 +138,22 @@ describe("(d) unfinished enquiry form", () => {
     expect(planLeadSteps(partial, [], [sent("partial_form", 1, 1.1)], s, at(2))).toEqual([]);
     expect(planLeadSteps({ ...partial, createdAt: at(-3) }, [], [], s, at(2))).toEqual([]);
   });
+
+  it("isn't planned when the same person carried on (a newer enquiry, or one sent just before)", () => {
+    expect(planLeadSteps({ ...partial, superseded: true }, [], [], s, at(2))).toEqual([]);
+    expect(planLeadSteps({ ...partial, superseded: false }, [], [], s, at(2))).toHaveLength(1);
+  });
+
+  it("counts its hours from when they were last on the form, capped 2 hours after step 1", () => {
+    const H = 3_600_000;
+    const pinged = planLeadSteps({ ...partial, partialSeenAt: new Date(at(1).getTime() + 0.5 * H) }, [], [], s, at(1));
+    expect(pinged[0]).toMatchObject({ key: "partial_form", triggerAt: new Date(at(1).getTime() + 0.5 * H), dueAt: new Date(at(1).getTime() + 2.5 * H) });
+    const forgotten = planLeadSteps({ ...partial, partialSeenAt: at(3) }, [], [], s, at(1));
+    expect(forgotten[0]).toMatchObject({ dueAt: new Date(at(1).getTime() + 4 * H) });
+    // A ping time before step 1 (clocks) counts as step 1.
+    const early = planLeadSteps({ ...partial, partialSeenAt: at(0.5) }, [], [], s, at(1));
+    expect(early[0]).toMatchObject({ dueAt: new Date(at(1).getTime() + 2 * H) });
+  });
 });
 
 describe("(e) quiet lead check-in", () => {

@@ -9,9 +9,11 @@
  * same step twice. If the send fails the claim is removed so it can retry.
  * No SMTP = nothing sent and nothing marked as sent.
  */
-import { and, desc, eq, inArray, max, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { leadActivity, leadSequenceSends, leads, proposals, venueSettings } from "../drizzle/schema";
+import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { isPartialSuperseded } from "@shared/enquiryTiming";
 import { buildVenueMailer } from "./paymentsEmail";
 import { escapeHtml } from "./sanitizeHtml";
 import { publicBaseUrl } from "./publicUrl";
@@ -100,10 +102,30 @@ async function loadPlanInputs(ownerId: number, leadIds: number[]) {
   return { props, sends, activity };
 }
 
-const toPlanLead = (l: any, lastActivityAt: Date | null): PlanLead => ({
+/**
+ * The unfinished enquiries among `rows` that the same person has since
+ * carried on from (isPartialSuperseded, the Unfinished alert's rule): they
+ * get no "finish your enquiry" email. Looks at all the venue's enquiries
+ * with the same email, whatever their status.
+ */
+async function supersededPartials(ownerId: number, rows: Array<{ id: number; status: string | null; email: string | null; internalNotes: string | null; createdAt: Date }>): Promise<Set<number>> {
+  const out = new Set<number>();
+  const partials = rows.filter(r => r.status === "new" && r.internalNotes === PARTIAL_LEAD_NOTE && r.email?.trim());
+  const db = await getDb();
+  if (!db || partials.length === 0) return out;
+  const emails = Array.from(new Set(partials.map(p => p.email!.trim().toLowerCase())));
+  const others = await db.select({
+    id: leads.id, email: leads.email, source: leads.source, internalNotes: leads.internalNotes, createdAt: leads.createdAt,
+  }).from(leads).where(and(eq(leads.ownerId, ownerId), inArray(sql`lower(trim(${leads.email}))`, emails)));
+  for (const p of partials) if (isPartialSuperseded(p, others)) out.add(p.id);
+  return out;
+}
+
+const toPlanLead = (l: any, lastActivityAt: Date | null, superseded = false): PlanLead => ({
   id: l.id, status: l.status, email: l.email, source: l.source, internalNotes: l.internalNotes,
   createdAt: l.createdAt, firstResponseAt: l.firstResponseAt, lastInboundAt: l.lastInboundAt,
   lastStaffEmailAt: l.lastStaffEmailAt, followUpsPaused: l.followUpsPaused, lastActivityAt,
+  partialSeenAt: l.partialSeenAt ?? null, superseded,
 });
 
 /** What's next for one lead — for the lead drawer. */
@@ -115,8 +137,9 @@ export async function leadFollowUpOutlook(ownerId: number, leadId: number, now: 
   const [vs] = await db.select({ seq: venueSettings.followUpSequences }).from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
   const settings = readSequenceSettings(vs?.seq);
   const { props, sends, activity } = await loadPlanInputs(ownerId, [leadId]);
+  const superseded = await supersededPartials(ownerId, [lead]);
   const leadSends = sends.get(leadId) ?? [];
-  const steps = planLeadSteps(toPlanLead(lead, activity.get(leadId) ?? null), props.get(leadId) ?? [], leadSends, settings, now);
+  const steps = planLeadSteps(toPlanLead(lead, activity.get(leadId) ?? null, superseded.has(leadId)), props.get(leadId) ?? [], leadSends, settings, now);
   const next = steps[0] ?? null;
   return {
     lead,
@@ -217,8 +240,9 @@ export async function runFollowUpSequences(now: Date = new Date(), opts: { owner
             ne(leads.email, ""),
           ));
           const { props, sends, activity } = await loadPlanInputs(v.ownerId, rows.map(r => r.id));
+          const superseded = settings.partial_form.enabled ? await supersededPartials(v.ownerId, rows) : new Set<number>();
           for (const lead of rows) {
-            const steps = planLeadSteps(toPlanLead(lead, activity.get(lead.id) ?? null), props.get(lead.id) ?? [], sends.get(lead.id) ?? [], settings, now);
+            const steps = planLeadSteps(toPlanLead(lead, activity.get(lead.id) ?? null, superseded.has(lead.id)), props.get(lead.id) ?? [], sends.get(lead.id) ?? [], settings, now);
             const step = dueStep(steps, now);
             if (!step) continue;
             const outcome = await sendStep(v.ownerId, mailer, lead, step, settings[step.key]);
