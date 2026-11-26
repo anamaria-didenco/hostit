@@ -21,6 +21,7 @@ import { isProposalLocked, proposalLockedMessage, proposalMoney } from "@shared/
 import { proposalPhotosRouter } from "./proposalPhotos";
 import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 import { venueUpdateErrors } from "@shared/settingsValidation";
+import { publicVenue } from "./publicVenue";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -35,11 +36,8 @@ const VENUE_SECRET_FIELDS = [
   "alertEmailsEnabled", "alertEmailKinds", "replyOverdueEnabled", "replyOverdueHours", "followUpSequences",
   "defaultHoldDays", "holdClientReminderEnabled",
 ] as const;
-function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
-  const safe: any = { ...row };
-  for (const k of VENUE_SECRET_FIELDS) delete safe[k];
-  return safe as T;
-}
+// Anything a visitor without this venue's login gets is the allow-list in
+// server/publicVenue.ts, never "the row minus these".
 import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
@@ -178,18 +176,24 @@ export const appRouter = router({
         //  - a STAFF/TEAM-LINK session, which runs under the owner's id (so it
         //    looks like "self") but must never be handed stored SMTP/NBI
         //    credentials or internal config.
-        // Use the canonical VENUE_SECRET_FIELDS list so this can't drift out of
-        // sync with the sibling public endpoints (previously it omitted
-        // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
-        // info leak).
+        // Anyone else gets only the public allow-list (server/publicVenue.ts),
+        // the same as the public enquiry form and proposal page; the venue's
+        // own team and staff logins get the row minus VENUE_SECRET_FIELDS.
         const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember && !ctx.isStaff;
-        if (!isRealOwner) {
-          const safe: any = { ...vs };
-          for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
-          safe.staffEmails = null; // PII — not needed by non-owner callers
-          return safe;
+        if (isRealOwner) return vs;
+        // Someone else's venue (no login, or another venue's login): only what
+        // the public enquiry form shows (server/publicVenue.ts). Every other key
+        // is there but null, so the response keeps its shape.
+        if (ctx.user?.id !== id) {
+          const blank: any = Object.fromEntries(Object.keys(vs).map(k => [k, null]));
+          return { ...blank, ...publicVenue(vs) };
         }
-        return vs;
+        // This venue's own team and staff logins: everything but the stored
+        // credentials, internal config and the staff email list.
+        const safe: any = { ...vs };
+        for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
+        safe.staffEmails = null; // PII — not needed by non-owner callers
+        return safe;
       }),
 
     update: protectedProcedure
@@ -407,17 +411,16 @@ export const appRouter = router({
     getBySlug: publicProcedure
       .input(z.object({ slug: z.string() }))
       .query(async ({ input }) => {
-        // Find venue by slug for public lead form. Strip server secrets
-        // (SMTP creds, NBI keys/webhook secret, notification email) before
-        // returning — anything reachable here is visible to the entire
-        // internet.
+        // Find venue by slug for the public lead form. Anything reachable here
+        // is visible to the entire internet, so only the allow-listed fields
+        // go back (server/publicVenue.ts).
         const { getDb } = await import("./db");
         const { venueSettings } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) return null;
         const result = await db.select().from(venueSettings).where(eq(venueSettings.slug, input.slug)).limit(1);
-        return result[0] ? stripVenueSecrets(result[0]) : null;
+        return result[0] ? publicVenue(result[0]) : null;
       }),
     getDefault: publicProcedure.query(async () => {
       // Returns the first venue (single-venue system) for use on /enquire without a slug
@@ -426,7 +429,7 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) return null;
       const result = await db.select().from(venueSettings).limit(1);
-      return result[0] ? stripVenueSecrets(result[0]) : null;
+      return result[0] ? publicVenue(result[0]) : null;
     }),
 
     testEmail: protectedProcedure
@@ -2238,8 +2241,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           const { recordProposalViewed } = await import('./proposalResponses');
           if (await recordProposalViewed(proposal)) proposal = (await getProposalByToken(input.token)) ?? proposal;
         }
-        // Also fetch venue settings for branding — STRIP secrets first since
-        // this endpoint is reachable by anyone with a proposal token.
+        // Also fetch venue settings for branding. Anyone with a proposal token
+        // can reach this, so the page gets the public fields only.
         const venue = await getVenueSettings(proposal.ownerId);
         // Internal notes are staff-only; never hand them to the client.
         const { internalNotes: _internal, ...publicProposal } = proposal;
@@ -2253,7 +2256,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // client the finished HTML instead of the built-in layout. The raw
         // template is never shipped to the public page.
         let customHtml: string | null = null;
-        const safeVenue: any = venue ? stripVenueSecrets(venue) : null;
+        const safeVenue = venue ? publicVenue(venue) : null;
         if (venue?.proposalTemplateEnabled && venue?.proposalTemplateHtml) {
           try {
             const { getDb } = await import('./db');
@@ -2283,9 +2286,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             customHtml = null;
           }
         }
-        // The raw template isn't needed (and shouldn't be exposed) on the
-        // public page — the rendered customHtml carries everything.
-        if (safeVenue) safeVenue.proposalTemplateHtml = null;
+        // The raw template never reaches the public page: it isn't one of the
+        // public fields, and the rendered customHtml carries everything.
         return { proposal: publicProposal, venue: safeVenue, menus, photos, customHtml };
       }),
 
@@ -7175,23 +7177,6 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const sameDay = await findClashes(input.ownerId, { start: midday });
         const bookedSpaces = Array.from(new Set(sameDay.map(c => c.spaceName).filter((s): s is string => !!s)));
         return { available: sameDay.length === 0, bookedSpaces };
-      }),
-    getVenueInfo: publicProcedure
-      .input(z.object({ ownerId: z.number() }))
-      .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { venueSettings, eventSpaces, menuPackages } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return null;
-        const [venue] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId));
-        const spaces = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, input.ownerId));
-        // Retired packages stay on file for past events but aren't offered.
-        const packages = (await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId)))
-          .filter(p => p.isActive);
-        // Strip secrets from the venue row before returning — this endpoint
-        // is public and previously leaked SMTP creds + NBI webhook secret.
-        return { venue: venue ? stripVenueSecrets(venue) : null, spaces, packages };
       }),
     submit: publicProcedure
       .input(z.object({
