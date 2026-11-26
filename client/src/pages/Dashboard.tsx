@@ -120,7 +120,7 @@ import { holdTyping } from "@/lib/sessionExpiry";
 import { AlertTriangle } from "lucide-react";
 import { hhmmLabel } from "@/lib/overviewDates";
 import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
-import { OverviewSummaryStrip, OverviewNeedsToday, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
+import { OverviewSummaryStrip, OverviewNeedsToday, OverviewNewEnquiries, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1248,8 +1248,8 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   // Calendar view: month (default), week, day or list.
-  // Overview calendar: start at this week (default) or show the whole month.
-  const [overviewShowPast, setOverviewShowPast] = useState(false);
+  // Overview calendar: the whole month (default) or start at this week.
+  const [overviewShowPast, setOverviewShowPast] = useState(true);
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   // "Needs you today" used to sit at the top of the Overview; it now lives
   // under the calendar as an opt-in panel, off by default and remembered per
@@ -3576,6 +3576,22 @@ export default function Dashboard() {
     () => enrichRows(allEnquiries as LeadLike[], { ...listCtx, replyStatus: replyStatus as any, clashMap: clashMap as any, isPartial: isPartialLead }),
     [allEnquiries, listCtx, replyStatus, clashMap],
   );
+  // New enquiries for the top of the Overview: not answered yet, newest first.
+  const newEnquiryRows = React.useMemo(() => enquiryRows
+    .filter(r => r.lead.status === 'new')
+    .sort((a, b) => new Date(b.lead.createdAt ?? 0).getTime() - new Date(a.lead.createdAt ?? 0).getTime())
+    .map(r => {
+      const l: any = r.lead;
+      const space = l.spaceId != null ? listCtx.spaceNames?.get(Number(l.spaceId)) : '';
+      return {
+        id: Number(l.id),
+        name: [l.firstName, l.lastName].filter(Boolean).join(' ') || l.email || 'Enquiry',
+        what: [l.eventType || 'Event', space].filter(Boolean).join(' · '),
+        eventDate: l.eventDate ?? null,
+        guests: l.guestCount ?? null,
+        createdAt: l.createdAt ?? null,
+      };
+    }), [enquiryRows, listCtx]);
   const baseCounts = React.useMemo(() => viewCounts(enquiryRows, EMPTY_FILTERS, "", listCtx), [enquiryRows, listCtx]);
   const baseCountsRef = useRef(baseCounts);
   baseCountsRef.current = baseCounts;
@@ -4267,6 +4283,22 @@ export default function Dashboard() {
                 </div>
               </header>
 
+              {/* New enquiries first: the ones nobody has answered yet, newest first. */}
+              {!isStaff && (
+                <OverviewNewEnquiries
+                  rows={newEnquiryRows.slice(0, 6)}
+                  total={newEnquiryRows.length}
+                  loading={!allLeads}
+                  tz={venueTz}
+                  nowMs={listNowMs}
+                  onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                  onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
+                />
+              )}
+
+              {/* The full month calendar, across the whole width. */}
+              {monthCalendarCard}
+
               {/* Summary strip — action counts first; each opens exactly the
                   records it counted. The vanity numbers wait in a collapsed row. */}
               <OverviewSummaryStrip tiles={actionStats.map(toTile)} onTile={tileAction} />
@@ -4305,9 +4337,6 @@ export default function Dashboard() {
                       fmtTime={fmtHhmm}
                     />
                   )}
-                  {/* The month calendar, as the Overview always had it: starts at
-                      this week, with earlier weeks a click away. */}
-                  {monthCalendarCard}
                 </div>
 
                 <aside aria-label="At a glance" className="flex flex-col gap-5 min-w-0">
