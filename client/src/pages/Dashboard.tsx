@@ -119,7 +119,7 @@ import { holdTyping } from "@/lib/sessionExpiry";
 // Overview + Calendar redesign pieces.
 import { AlertTriangle } from "lucide-react";
 import { hhmmLabel } from "@/lib/overviewDates";
-import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
+import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalMark, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
 import { OverviewSummaryStrip, OverviewNeedsToday, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
 import { needsTodayEnquiries } from "@shared/needsToday";
 
@@ -1989,6 +1989,23 @@ export default function Dashboard() {
   // Cancelled events stay in your records but come off the calendar (the date is
   // freed). "Show cancelled" brings them back, e.g. to find one to restore.
   const [showCancelledOnCal, setShowCancelledOnCal] = useState(false);
+  // One calendar signal per event (CalendarParts): the venue's own status
+  // colour, as the Enquiries pills show it, or red when double-booked or a
+  // follow-up is overdue.
+  const calSignalOf = (ev: any, isLead: boolean) => calSignal(ev, {
+    isLead, overdue: isLead && isOverdueLead(ev),
+    statusLabel: statusWords(getStatusInfo(ev.status).label),
+    statusColour: getStatusInfo(ev.status)?.swatch ?? '#8a8073',
+  });
+  // The legend: the statuses the calendar can show (lost enquiries never are;
+  // cancelled only while "Show cancelled" is on), and the spaces whose colour
+  // the venue chose (an event's left edge).
+  const calLegendStatuses = pipelineStages
+    .filter(st => st.key !== 'lost' && (showCancelledOnCal || st.key !== 'cancelled'))
+    .map(st => ({ key: st.key, label: statusWords(st.label), colour: st.swatch ?? '#8a8073' }));
+  const calLegendSpaces = (spaces ?? [])
+    .filter((sp: any) => sp?.isActive !== false && sp?.name && spaceColorRef.current.get(sp.name))
+    .map((sp: any) => ({ name: String(sp.name), colour: spaceColorRef.current.get(sp.name)! }));
   const dropCancelled = React.useCallback(
     (rows: any) => (showCancelledOnCal || !Array.isArray(rows) ? rows : rows.filter((r: any) => r?.status !== 'cancelled')),
     [showCancelledOnCal],
@@ -4340,6 +4357,7 @@ export default function Dashboard() {
                       newEnquiries={replyCount ?? 0}
                       onNewEnquiries={() => showEnquiries({ view: 'reply' })}
                       statusLabel={(st) => statusWords(getStatusInfo(st).label)}
+                      statusColour={(st) => getStatusInfo(st)?.swatch ?? '#8a8073'}
                     />
                   )}
                   {/* Setup steps for a new venue — hidden once everything is done. */}
@@ -5202,7 +5220,7 @@ export default function Dashboard() {
                   </button>
                   <SpaceAvailability />
                   <div className="w-full lg:w-auto lg:ml-auto">
-                    <CalendarLegend showCancelled={showCancelledOnCal} />
+                    <CalendarLegend statuses={calLegendStatuses} spaces={calLegendSpaces} />
                   </div>
                 </div>
                 {/* Mobile: big tap-friendly nav controls */}
@@ -5263,9 +5281,7 @@ export default function Dashboard() {
                     : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost'),
                 });
                 // One signal per event: the colour says what it means (legend).
-                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
-                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
-                });
+                const signalOf = calSignalOf;
                 const sortedEvents = (dayBookings: any[], dayLeads: any[]) => [
                   ...dayBookings.map((b: any) => ({ ...b, _kind: 'booking' as const })),
                   ...dayLeads.map((l: any) => ({ ...l, _kind: 'lead' as const })),
@@ -5277,9 +5293,8 @@ export default function Dashboard() {
                 const selSet = eventsOn(selD, selOverflow);
                 const selEvents: CalDayEvent[] = sortedEvents(selSet.dayBookings, selSet.dayLeads).map((ev: any) => {
                   const isLead = ev._kind === 'lead';
-                  const s = signalOf(ev, isLead);
                   const t = ev.startTime ?? ev.eventTime ?? null;
-                  return { ev, isLead, tone: s.tone, label: s.label, time: t ? (hhmmLabel(String(t)) || String(t)) : null };
+                  return { ev, isLead, sig: signalOf(ev, isLead), time: t ? (hhmmLabel(String(t)) || String(t)) : null };
                 });
                 // Clashes on that day, from the same double-booking check the
                 // Overview uses (staff can't load it; they get the flag alone).
@@ -5372,6 +5387,7 @@ export default function Dashboard() {
                                     const time = ev.startTime ?? ev.eventTime ?? null;
                                     const overdue = isLead && isOverdueLead(ev);
                                     const sig = signalOf(ev, isLead);
+                                    const statusText = statusWords(getStatusInfo(ev.status).label);
                                     return (
                                       <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full min-w-0">
                                         <button
@@ -5379,13 +5395,15 @@ export default function Dashboard() {
                                           draggable
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
-                                          style={calChipStyle(sig.tone)}
+                                          style={calChipStyle(sig, firstSpaceColor(ev.spaceName))}
                                           className={`w-full text-left rounded-[4px] border-[1.5px] font-sans hover:border-primary transition-colors cursor-move h-6 px-1.5 flex items-center gap-1.5 min-w-0 ${ev.status === 'cancelled' ? 'line-through' : ''}`}
                                           title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${!isLead && ev.clashFlaggedAt ? 'DOUBLE-BOOKED — ' : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
-                                          <CalDot tone={sig.tone} />
+                                          {/* The status's shape in its colour (a warning sign when red), so
+                                              it isn't colour alone; a held date's chip is also dashed. */}
+                                          <CalMark sig={sig} />
                                           {time && <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground leading-none">{time}</span>}
                                           <span className="truncate font-semibold text-[11.5px] leading-none">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusWords(getStatusInfo(ev.status).label) ? ` (${statusWords(getStatusInfo(ev.status).label)})` : ''}${overdue && sig.label !== 'Follow-up overdue' ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
+                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusText ? ` (${statusText})` : ''}${overdue && sig.label !== 'Follow-up overdue' ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}${isHold && sig.label !== 'On hold' ? ', date on hold' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
                                         </button>
                                       </div>
                                     );
@@ -5518,7 +5536,7 @@ export default function Dashboard() {
                               <button key={`${e._kind}-${e.id}`}
                                 onClick={() => e._kind === 'booking' ? setSelectedBooking(e) : openEventDrawer({ ...e, _isLead: true })}
                                 className="w-full flex flex-col gap-1 px-3.5 py-3 text-left hover:bg-accent/40 active:bg-accent/60 transition-colors"
-                                style={(() => { const s = calSignal(e, { isLead: e._kind === 'lead', overdue: e._kind === 'lead' && isOverdueLead(e), statusLabel: '' }); return s.tone === 'red' ? { background: CAL_TONE.red.bg } : undefined; })()}>
+                                style={calSignalOf(e, e._kind === 'lead').red ? { background: CAL_TONE.red.bg } : undefined}>
                                 <span className="flex items-baseline justify-between gap-2 min-w-0">
                                   <span className="font-sans font-semibold text-[15px] text-foreground truncate">{e.firstName} {e.lastName}</span>
                                   {e.guestCount ? <span className="font-sans text-[13px] font-semibold tabular-nums text-foreground flex-shrink-0">{e.guestCount}<span className="sr-only"> guests</span></span> : null}
@@ -5530,8 +5548,8 @@ export default function Dashboard() {
                                 </span>
                                 {(() => {
                                   const isLead = e._kind === 'lead';
-                                  const sig = calSignal(e, { isLead, overdue: isLead && isOverdueLead(e), statusLabel: statusWords(getStatusInfo(e.status).label) });
-                                  return <CalSig tone={sig.tone}>{isLead && holdState(e) === 'held' ? `On hold · to ${fmtHoldDay(e.holdUntil)}` : sig.label}</CalSig>;
+                                  const sig = calSignalOf(e, isLead);
+                                  return <CalSig sig={sig}>{isLead && holdState(e) === 'held' ? `On hold · to ${fmtHoldDay(e.holdUntil)}` : sig.label}</CalSig>;
                                 })()}
                               </button>
                             ))}
@@ -5781,8 +5799,8 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {(() => {
                                     const isLead = item._type === 'lead';
-                                    const sig = calSignal(item, { isLead, overdue: isLead && isOverdueLead(item), statusLabel: statusWords(si.label) });
-                                    return <CalSig tone={sig.tone}>{isLead && holdState(item) === 'held' ? `On hold · to ${fmtHoldDay(item.holdUntil)}` : sig.label}</CalSig>;
+                                    const sig = calSignalOf(item, isLead);
+                                    return <CalSig sig={sig}>{isLead && holdState(item) === 'held' ? `On hold · to ${fmtHoldDay(item.holdUntil)}` : sig.label}</CalSig>;
                                   })()}
                                   {item._type === 'booking' && item.depositRequired !== false && (
                                     <span className="font-sans text-[12px] text-muted-foreground">{item.depositPaid ? '· Deposit paid' : '· Deposit pending'}</span>
@@ -5838,9 +5856,7 @@ export default function Dashboard() {
                 });
                 const todayStr = new Date().toDateString();
                 // One signal per event, the same as the month grid and legend.
-                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
-                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
-                });
+                const signalOf = calSignalOf;
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []).filter(Boolean), ...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
                 const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
@@ -5851,14 +5867,14 @@ export default function Dashboard() {
                   return (
                     <button key={`${isLead ? 'l' : 'b'}-${ev.id}`}
                       onClick={onClick}
-                      style={calChipStyle(sig.tone)}
+                      style={calChipStyle(sig, firstSpaceColor(ev.spaceName))}
                       className="w-full text-left rounded-[4px] border-[1.5px] px-2 py-1.5 font-sans text-[12px] leading-snug hover:border-primary transition-colors flex flex-col gap-0.5 min-w-0">
                       <span className={`font-semibold truncate ${ev.status === 'cancelled' ? 'line-through' : ''}`}>{ev.firstName} {ev.lastName}</span>
                       {ev.eventType && <span className="text-muted-foreground truncate">{ev.eventType}</span>}
                       {!isLead && ev.startTime && <span className="text-muted-foreground tabular-nums">{ev.startTime}{ev.endTime ? ` – ${ev.endTime}` : ''}</span>}
                       {ev.guestCount && <span className="text-muted-foreground tabular-nums">{ev.guestCount} guests</span>}
-                      <span className="mt-0.5 inline-flex items-center gap-1.5 font-bold text-[11.5px] min-w-0" style={{ color: CAL_TONE[sig.tone].fg }}>
-                        <CalDot tone={sig.tone} />
+                      <span className="mt-0.5 inline-flex items-center gap-1.5 font-bold text-[11.5px] min-w-0" style={{ color: sig.ink }}>
+                        <CalDot sig={sig} />
                         <span className="truncate">{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</span>
                       </span>
                     </button>
@@ -5936,9 +5952,7 @@ export default function Dashboard() {
                 const todayStr = new Date().toDateString();
                 const isToday = calDate.toDateString() === todayStr;
                 // One signal per event, the same as the month grid and legend.
-                const signalOf = (ev: any, isLead: boolean) => calSignal(ev, {
-                  isLead, overdue: isLead && isOverdueLead(ev), statusLabel: statusWords(getStatusInfo(ev.status).label),
-                });
+                const signalOf = calSignalOf;
                 const allBookings: any[] = [...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
                 const allLeads: any[] = [...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)];
                 const dayBookings = allBookings.filter((b: any) => {
@@ -5962,9 +5976,9 @@ export default function Dashboard() {
                     <button key={`${isLead ? 'l' : 'b'}-${ev.id}`}
                       onClick={onClick}
                       className="w-full text-left rounded-[8px] border-[1.5px] px-4 py-3 hover:border-primary transition-colors grid gap-3 md:gap-4 items-center grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[150px_minmax(0,1fr)_auto]"
-                      style={sig.tone === 'red' ? { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border } : { background: 'var(--card)', borderColor: 'var(--border)' }}>
+                      style={sig.red ? { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border } : { background: 'var(--card)', borderColor: 'var(--border)', ...(isHeld ? { borderStyle: 'dashed', borderColor: sig.mark } : {}) }}>
                       <span className="hidden md:flex flex-col gap-[3px] min-w-0">
-                        <CalSig tone={sig.tone}>{isHeld ? 'On hold' : sig.label}</CalSig>
+                        <CalSig sig={sig}>{isHeld ? 'On hold' : sig.label}</CalSig>
                         {isHeld && <span className="font-sans text-[12px] text-muted-foreground">to {fmtHoldDay(ev.holdUntil)}</span>}
                       </span>
                       <span className="min-w-0">
@@ -5976,7 +5990,7 @@ export default function Dashboard() {
                           {ev.eventType && <span>{ev.eventType}</span>}
                           {ev.spaceName && <span>{ev.spaceName}</span>}
                         </span>
-                        <span className="md:hidden mt-1 flex"><CalSig tone={sig.tone}>{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</CalSig></span>
+                        <span className="md:hidden mt-1 flex"><CalSig sig={sig}>{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</CalSig></span>
                       </span>
                       <span className="font-sans text-[15px] font-semibold tabular-nums text-foreground">{ev.guestCount ? <>{ev.guestCount}<span className="sr-only"> guests</span></> : ''}</span>
                     </button>

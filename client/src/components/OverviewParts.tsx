@@ -5,6 +5,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { daysAwayLabel, UPCOMING_DAYS, NEEDS_GROUP_CAP, type EnquiryNeeds } from "@shared/needsToday";
 import { LANE_INK, LANE_MARK, type Lane } from "@shared/enquiryLane";
+import { statusPalette } from "@shared/statusPalette";
 import { dayLabel, hhmmLabel } from "@/lib/overviewDates";
 import { rowOf, type UpcomingEventRow } from "@/components/TodayPanel";
 
@@ -19,7 +20,8 @@ import { rowOf, type UpcomingEventRow } from "@/components/TodayPanel";
  *
  * The signal colours are the Enquiries list's lane colours
  * (shared/enquiryLane.ts): red is late or wrong, amber is waiting on you,
- * blue is new.
+ * blue is new. An event's colour is the venue's own status colour
+ * (shared/statusPalette.ts), as on the Calendar and the status pills.
  */
 
 type Tone = "red" | "amber" | "blue" | "green" | "muted";
@@ -29,6 +31,14 @@ const FG: Record<Tone, string> = { red: LANE_INK.red, amber: LANE_INK.amber, blu
 
 /** The Overview tone for an Enquiries lane. */
 const LANE_TONE: Record<Lane, Tone> = { red: "red", amber: "amber", blue: "blue", green: "green", grey: "muted", calm: "muted" };
+
+/** An event's colours: red when it is double-booked, else its status colour. */
+type EventColour = { mark: string; ink: string; clash: boolean };
+function eventColour(e: UpcomingEventRow, statusColour?: (status: string) => string | null | undefined): EventColour {
+  if (e._type === "booking" && (e.row as any).clashFlaggedAt) return { mark: MARK.red, ink: FG.red, clash: true };
+  const pal = statusPalette(statusColour?.(rowOf(e).status ?? "confirmed"));
+  return { mark: pal.outline, ink: pal.ink, clash: false };
+}
 
 const btn = "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-[6px] border-[1.5px] font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const btnOutline = `${btn} border-input bg-card text-foreground hover:border-primary`;
@@ -47,11 +57,12 @@ export function OvHead({ title, meta, action, as: H = "h2" }: { title: string; m
   );
 }
 
-/** 7px dot + bold label in the signal colour. */
-export function Sig({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+/** 7px dot + bold label in the signal colour (or the given colours). */
+export function Sig({ tone, colour, children }: { tone?: Tone; colour?: { mark: string; ink: string }; children: React.ReactNode }) {
+  const c = colour ?? { mark: MARK[tone ?? "muted"], ink: FG[tone ?? "muted"] };
   return (
-    <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap min-w-0" style={{ color: FG[tone] }}>
-      <span aria-hidden className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: MARK[tone] }} />
+    <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap min-w-0" style={{ color: c.ink }}>
+      <span aria-hidden className="vf-swatch w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: c.mark }} />
       <span className="truncate">{children}</span>
     </span>
   );
@@ -481,6 +492,8 @@ export function OverviewToday(p: {
   newEnquiries: number;
   onNewEnquiries: () => void;
   statusLabel: (status: string) => string;
+  /** The venue's colour for a status (Settings > Statuses). */
+  statusColour?: (status: string) => string | null | undefined;
 }) {
   const { data } = trpc.dashboard.upcoming.useQuery(undefined, { staleTime: 15_000, refetchOnWindowFocus: true });
   const todays = (data?.events ?? []).filter(e => e.dayKey === data?.todayKey);
@@ -495,7 +508,7 @@ export function OverviewToday(p: {
         <ul className="m-0 p-0 list-none">
           {todays.map(e => {
             const r = rowOf(e);
-            const tone = eventTone(e);
+            const colour = eventColour(e, p.statusColour);
             const ready = e._type === "booking" && (r.status === "confirmed" || r.status === "booked")
               ? [e.hasRunSheet ? "Run sheet ready" : "No run sheet", e.deposit === "paid" ? "deposit paid" : e.deposit === "due" ? "deposit due" : null].filter(Boolean).join(" · ")
               : "";
@@ -510,7 +523,7 @@ export function OverviewToday(p: {
                       {[r.guestCount ? `${r.guestCount} guests` : null, r.spaceName, r.eventType].filter(Boolean).join(" · ")}
                     </span>
                     <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
-                      <Sig tone={tone}>{tone === "red" ? "Double-booked" : p.statusLabel(r.status ?? "confirmed")}</Sig>
+                      <Sig colour={colour}>{colour.clash ? "Double-booked" : p.statusLabel(r.status ?? "confirmed")}</Sig>
                       {ready && <span className="font-sans text-[12px] text-muted-foreground">{ready}</span>}
                     </span>
                   </span>

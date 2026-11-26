@@ -1,15 +1,23 @@
 import React from "react";
 import { AlertTriangle, CalendarDays, Plus } from "lucide-react";
 import { holdState } from "@/components/DateHold";
+import { CalendarStatusIcon } from "@/components/CalendarStatusIcon";
+import { statusPalette } from "@shared/statusPalette";
 
 /**
- * Calendar pieces for the redesigned Calendar tab: one signal colour per
- * meaning (red = clash / overdue, amber = on hold, blue = enquiry in progress,
- * green = confirmed), the legend that says so, and the selected-day panel.
+ * Calendar pieces for the redesigned Calendar tab: one signal per event, the
+ * legend that says what each one means, and the selected-day panel.
+ *
+ * An event's signal is its status in the venue's own status colour (Settings >
+ * Statuses), worked out by shared/statusPalette.ts exactly as the Enquiries
+ * pills and Board headings are, so a status looks the same on every screen.
+ * Red is kept for what is wrong whatever the status: a double-booking or a
+ * follow-up that is overdue (the Enquiries list's red lane too).
  */
 
 export type CalTone = "red" | "amber" | "blue" | "green" | "gray";
 
+/** Fixed tones for callouts (the clash callout is red). */
 export const CAL_TONE: Record<CalTone, { fg: string; bg: string; border: string }> = {
   red: { fg: "#c0392b", bg: "#fbecea", border: "#f0c7c2" },
   amber: { fg: "#8a5f18", bg: "#f7efdd", border: "#e9d7b3" },
@@ -18,60 +26,108 @@ export const CAL_TONE: Record<CalTone, { fg: string; bg: string; border: string 
   gray: { fg: "#6b7078", bg: "#f4f4f5", border: "#e2e2e5" },
 };
 
+export interface CalSignal {
+  /** Double-booked or follow-up overdue: red, whatever the status. */
+  red: boolean;
+  /** The dot / icon colour (3:1 or more on any surface). */
+  mark: string;
+  /** The label's colour (6:1 or more). */
+  ink: string;
+  /** What the signal says in words. */
+  label: string;
+  /** The status key, for its icon. */
+  status: string;
+  /** A date held for an enquiry: its chip has a dashed edge. */
+  held: boolean;
+  /** Cancelled or lost: drawn quietly. */
+  muted: boolean;
+}
+
 /** The one signal an event shows on the calendar, and what it means in words. */
-export function calSignal(ev: any, opts: { isLead: boolean; overdue?: boolean; statusLabel: string }): { tone: CalTone; label: string } {
+export function calSignal(ev: any, opts: { isLead: boolean; overdue?: boolean; statusLabel: string; statusColour?: string | null }): CalSignal {
   const st = String(ev?.status ?? "");
-  if (st === "cancelled" || st === "lost") return { tone: "gray", label: opts.statusLabel || "Cancelled" };
-  if (!opts.isLead && ev?.clashFlaggedAt) return { tone: "red", label: "Double-booked" };
-  if (opts.isLead && opts.overdue) return { tone: "red", label: "Follow-up overdue" };
-  if (st === "tentative") return { tone: "amber", label: opts.isLead && holdState(ev) === "held" ? "On hold" : (opts.statusLabel || "On hold") };
-  if (st === "booked" || st === "confirmed") return { tone: "green", label: opts.statusLabel || "Confirmed" };
-  if (st === "finished") return { tone: "green", label: opts.statusLabel || "Finished" };
-  return { tone: "blue", label: opts.statusLabel || "Enquiry" };
+  const held = opts.isLead && st === "tentative" && holdState(ev) === "held";
+  const muted = st === "cancelled" || st === "lost";
+  const pal = statusPalette(opts.statusColour);
+  const base = { mark: pal.outline, ink: pal.ink, status: st, held, muted, red: false };
+  if (!muted && !opts.isLead && ev?.clashFlaggedAt) return { ...base, red: true, mark: CAL_TONE.red.fg, ink: CAL_TONE.red.fg, label: "Double-booked" };
+  if (!muted && opts.isLead && opts.overdue) return { ...base, red: true, mark: CAL_TONE.red.fg, ink: CAL_TONE.red.fg, label: "Follow-up overdue" };
+  if (held) return { ...base, label: "On hold" };
+  return { ...base, label: opts.statusLabel || (opts.isLead ? "Enquiry" : "Event") };
 }
 
 /** 7px dot + bold label in the signal colour. */
-export function CalSig({ tone, children, className = "" }: { tone: CalTone; children: React.ReactNode; className?: string }) {
+export function CalSig({ sig, children, className = "" }: { sig: Pick<CalSignal, "mark" | "ink">; children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap ${className}`} style={{ color: CAL_TONE[tone].fg }}>
-      <span aria-hidden className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: CAL_TONE[tone].fg }} />
+    <span className={`inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap ${className}`} style={{ color: sig.ink }}>
+      <span aria-hidden className="vf-swatch w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: sig.mark }} />
       {children}
     </span>
   );
 }
 
-/** Inline style for a one-line event chip: white with a hairline, red-tinted when it clashes. */
-export function calChipStyle(tone: CalTone): React.CSSProperties {
-  return tone === "red"
-    ? { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border, color: "var(--foreground)" }
-    : { background: "var(--card)", borderColor: "#e6e6e9", color: tone === "gray" ? "var(--muted-foreground)" : "var(--foreground)" };
+/** Inline style for a one-line event chip: white with a hairline, red-tinted when it clashes, dashed when the date is only held. */
+export function calChipStyle(sig: CalSignal, spaceColour?: string | null): React.CSSProperties {
+  const edge = spaceColour ? { borderLeftWidth: 3, borderLeftColor: spaceColour, borderLeftStyle: "solid" as const } : {};
+  if (sig.red) return { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border, color: "var(--foreground)", ...edge };
+  return {
+    background: "var(--card)", borderColor: sig.held ? sig.mark : "#e6e6e9", borderStyle: sig.held ? "dashed" : "solid",
+    color: sig.muted ? "var(--muted-foreground)" : "var(--foreground)", ...edge,
+  };
 }
 
-export function CalDot({ tone, size = 6 }: { tone: CalTone; size?: number }) {
-  return <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: size, height: size, background: CAL_TONE[tone].fg }} />;
+export function CalDot({ sig, size = 6 }: { sig: Pick<CalSignal, "mark">; size?: number }) {
+  return <span aria-hidden className="vf-swatch rounded-full flex-shrink-0" style={{ width: size, height: size, background: sig.mark }} />;
 }
 
-/** The legend: four meanings (plus Cancelled when cancelled events are showing). */
-export function CalendarLegend({ showCancelled }: { showCancelled: boolean }) {
-  const items: { tone: CalTone; label: string }[] = [
-    { tone: "green", label: "Confirmed" },
-    { tone: "blue", label: "Enquiry / proposal" },
-    { tone: "amber", label: "On hold" },
-    { tone: "red", label: "Clash / overdue" },
-  ];
-  if (showCancelled) items.push({ tone: "gray", label: "Cancelled" });
+/**
+ * The month chip's mark: the status's shape in the status colour (a warning
+ * sign when it's red), so a status never rests on telling two colours apart
+ * and still shows in forced colours, where a coloured dot disappears.
+ */
+export function CalMark({ sig, size = 11 }: { sig: CalSignal; size?: number }) {
+  const style = { width: size, height: size, color: sig.mark };
+  return sig.red
+    ? <AlertTriangle aria-hidden strokeWidth={2.75} className="flex-shrink-0" style={style} />
+    : <CalendarStatusIcon status={sig.status} className="flex-shrink-0" style={style} />;
+}
+
+export interface CalLegendStatus { key: string; label: string; colour: string | null | undefined }
+
+/**
+ * The legend: each status the calendar can show, in its colour and with its
+ * shape, then red for clashes and overdue follow-ups, then the spaces whose
+ * colour the venue chose (the left edge of an event).
+ */
+export function CalendarLegend({ statuses, spaces = [] }: { statuses: CalLegendStatus[]; spaces?: { name: string; colour: string }[] }) {
   return (
     <div
       role="region"
-      aria-label="Status colour legend"
+      aria-label="Calendar colour legend"
       tabIndex={0}
       className="flex items-center gap-3.5 overflow-x-auto flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
     >
-      {items.map(i => (
-        <span key={i.tone} className="inline-flex items-center gap-1.5 font-sans text-[12px] font-bold whitespace-nowrap" style={{ color: CAL_TONE[i.tone].fg }}>
-          <span aria-hidden className="w-[7px] h-[7px] rounded-full" style={{ background: CAL_TONE[i.tone].fg }} />{i.label}
-        </span>
-      ))}
+      {statuses.map(s => {
+        const pal = statusPalette(s.colour);
+        return (
+          <span key={s.key} className="inline-flex items-center gap-1.5 font-sans text-[12px] font-bold whitespace-nowrap" style={{ color: pal.ink }}>
+            <CalendarStatusIcon status={s.key} className="w-[11px] h-[11px] flex-shrink-0" style={{ color: pal.outline }} />{s.label}
+          </span>
+        );
+      })}
+      <span className="inline-flex items-center gap-1.5 font-sans text-[12px] font-bold whitespace-nowrap" style={{ color: CAL_TONE.red.fg }}>
+        <AlertTriangle aria-hidden strokeWidth={2.75} className="w-[11px] h-[11px] flex-shrink-0" />Double-booked / follow-up overdue
+      </span>
+      {spaces.length > 0 && (
+        <>
+          <span aria-hidden className="w-[1.5px] h-4 bg-input flex-shrink-0" />
+          {spaces.map(sp => (
+            <span key={sp.name} className="inline-flex items-center gap-1.5 font-sans text-[12px] font-semibold text-foreground whitespace-nowrap">
+              <span aria-hidden className="vf-swatch w-[3px] h-3.5 rounded-[1px] flex-shrink-0" style={{ background: sp.colour }} />{sp.name}
+            </span>
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -87,8 +143,7 @@ export const calPill = (on: boolean) =>
 export interface CalDayEvent {
   ev: any;
   isLead: boolean;
-  tone: CalTone;
-  label: string;
+  sig: CalSignal;
   time: string | null;
 }
 
@@ -169,7 +224,7 @@ export function CalendarDayPanel(p: {
                     {e.ev.guestCount ? <span className="font-sans text-[13px] font-semibold tabular-nums text-foreground flex-shrink-0">{e.ev.guestCount}</span> : null}
                   </span>
                   {sub && <span className="font-sans text-[12px] text-muted-foreground truncate">{sub}</span>}
-                  <CalSig tone={e.tone}>{e.label}</CalSig>
+                  <CalSig sig={e.sig}>{e.sig.label}</CalSig>
                 </button>
               </li>
             );
