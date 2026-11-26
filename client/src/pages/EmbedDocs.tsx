@@ -48,7 +48,7 @@ const MESSAGES: Msg[] = [
 ];
 
 const CHANGELOG: { date: string; note: string }[] = [
-  { date: "2026-11-26", note: "vf-prefill: change the form's event answers from your page without reloading the frame (vf-ready, vf-prefill-applied, VenueFlow.prefill in embed.js). Prefilled values no longer overwrite answers the visitor changed in the form, and data-format accepts \"standing\"." },
+  { date: "2026-11-26", note: "vf-prefill: change the form's event answers from your page without reloading the frame (vf-ready, vf-prefill-applied, VenueFlow.prefill in embed.js). Prefilled values no longer overwrite answers the visitor changed in the form, and data-format accepts \"standing\". vf-prefill takes choices only, never free text." },
   { date: "2026-09-30", note: "Width control — data-width and data-max-width (default 520px; none/full for a full-bleed form that fills its container)." },
   { date: "2026-09-30", note: "Styling API (bg/transparent, text/label/border colours, font inherit, radius, shadow, button style); data-prefill for any field; vf-step-changed; frame ids on every message; documented, origin-pinned messages." },
   { date: "earlier", note: "One-line loader, auto-resize, floating placement, accent/font, UTM & click-id capture, conversion events." },
@@ -252,15 +252,18 @@ export default function EmbedDocs() {
   date: "2026-12-05",       // YYYY-MM-DD
   guests: 120,              // or "100-120"
   format: "standing",       // seated, standing / cocktail, both
-  fields: { budgetRange: "10_20k" }  // other fields by id, like data-prefill
+  fields: { budgetRange: "10_20k" }  // budgetRange, spaceId, eventTime or source
 }, "${origin}");`}</code></pre>
           <ul className="text-sm text-gray-600 list-disc pl-5 space-y-1">
             <li>Only messages from the page that embeds the frame are taken, and only in an embedded form.</li>
             <li>A field takes your value when it is empty, or when the value is different from the last one you sent for it. Sending the same value again never overwrites what the visitor typed.</li>
-            <li>Name, email, phone and company are never changed this way, and the form never moves step or submits.</li>
+            <li>Only the choices are taken: event type, date, guests, format, and in <Code>fields</Code> the budget range, space, time and how they heard about you. The visitor's own words (the message, the occasion, who to invoice) and their name, email, phone and company are never changed this way, and the form never moves step or submits.</li>
             <li>With <Code>embed.js</Code>, call <Code>{`VenueFlow.prefill({ date: "2026-12-05", guests: 120 })`}</Code>; it waits for <Code>vf-ready</Code> for you. <Code>VenueFlow.onPrefillApplied</Code> receives the reply.</li>
             <li>An older form never sends <Code>vf-ready</Code>: if none arrives, keep changing <Code>src</Code> as before (use <Code>iframe.contentWindow.location.replace(url)</Code> so Back still leaves your page).</li>
           </ul>
+          <p className="text-sm text-gray-600 mt-3">
+            When a visitor's browser blocks the frame's storage (some Safari and Firefox settings), the form keeps what they have typed, for up to an hour, in the frame's own window name, so a reload of the frame doesn't wipe it. A page that navigates the frame elsewhere could read that name, so only point the frame at the form.
+          </p>
         </section>
 
         {/* Tracking */}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NAME_DRAFT_KEEP_MS, clearNameDraft, readNameDraft, writeNameDraft, type NameDraft } from "../client/src/lib/framedDraft";
+import { NAME_DRAFT_KEEP_MS, clearNameDraft, frameTag, readNameDraft, writeNameDraft, type NameDraft } from "../client/src/lib/framedDraft";
 
 /** The window.name fallback when the frame can't use storage (client/src/lib/framedDraft.ts). */
 const now = 1_800_000_000_000;
@@ -22,9 +22,11 @@ describe("keeping the answers in window.name", () => {
     expect(name).not.toContain("mfz0.secret");
     expect(name).not.toContain("leadId");
   });
-  it("is only for this venue, and only for a while", () => {
+  it("is only for this venue, and only for an hour (the host could read it)", () => {
+    expect(NAME_DRAFT_KEEP_MS).toBe(60 * 60_000);
     const name = writeNameDraft("", draft());
     expect(readNameDraft(name, "other-venue", now)).toBeNull();
+    expect(readNameDraft(name, "bar-franco", now + NAME_DRAFT_KEEP_MS)).not.toBeNull();
     expect(readNameDraft(name, "bar-franco", now + NAME_DRAFT_KEEP_MS + 1)).toBeNull();
   });
   it("ignores a name that isn't one of ours, or is broken", () => {
@@ -41,5 +43,17 @@ describe("keeping the answers in window.name", () => {
   it("drops anything that isn't a plain answer", () => {
     const name = writeNameDraft("", draft({ fields: { guestCount: "25", bad: 7 as unknown as string, "<x>": "y" } }));
     expect(readNameDraft(name, "bar-franco", now)!.fields).toEqual({ guestCount: "25" });
+  });
+});
+
+describe("telling this frame from a new one", () => {
+  it("names an unnamed frame once, and knows it again after the venue's page reloads it", () => {
+    const first = frameTag("", () => "k3j2h1g0");
+    expect(first).toEqual({ tag: "vf-frame:k3j2h1g0", name: "vf-frame:k3j2h1g0" });
+    expect(frameTag(first.name, () => "other123")).toEqual(first);
+  });
+  it("leaves a host's own frame name alone, and then can't tell frames apart", () => {
+    expect(frameTag("enquiry-form", () => "k3j2h1g0")).toEqual({ tag: null, name: "enquiry-form" });
+    expect(frameTag("vf-frame:<bad>", () => "k3j2h1g0")).toEqual({ tag: null, name: "vf-frame:<bad>" });
   });
 });

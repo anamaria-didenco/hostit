@@ -7,16 +7,38 @@
  *
  * Only the answers, the step, the venue and the prefill values seen are kept
  * here, never the lead's token or the "form opened at" token: a page the host
- * navigates into the same frame could read window.name. Used only while
- * localStorage throws; cleared on "Enquiry Received!" and START FRESH. Pure;
+ * navigates into the same frame could read window.name (so could the host
+ * itself, by pointing the frame at its own page). Used only while
+ * localStorage throws, for an hour at most (as long as a step-1 lead is
+ * picked up again); cleared on "Enquiry Received!" and START FRESH. Pure;
  * tested in server/leadFormStorage.test.ts.
  */
-import { parsePrefillMap } from "./enquiryProgress";
+import { RESUME_LEAD_MS, parsePrefillMap } from "./enquiryProgress";
 
 const PREFIX = "vf-draft:";
 
 /** How long a kept draft is used (window.name lasts as long as the tab). */
-export const NAME_DRAFT_KEEP_MS = 12 * 3_600_000;
+export const NAME_DRAFT_KEEP_MS = RESUME_LEAD_MS;
+
+// ─── Which frame this is ─────────────────────────────────────────────────────
+
+const FRAME_PREFIX = "vf-frame:";
+
+/**
+ * A name for this frame, kept in its window.name, so a later load can tell
+ * "the venue's page reloaded this same frame" (window.name survives that)
+ * from a whole-page reload or another page (a new frame starts unnamed).
+ * Only a frame with no name of its own gets one: a host page that names its
+ * frame (for links that target it) keeps that name, and nothing is told
+ * apart. `make` is the random part (tests pass their own).
+ */
+export function frameTag(name: string | null | undefined, make: () => string): { tag: string | null; name: string } {
+  const n = name ?? "";
+  if (n.startsWith(FRAME_PREFIX) && /^[a-z0-9]{6,24}$/.test(n.slice(FRAME_PREFIX.length))) return { tag: n, name: n };
+  if (n) return { tag: null, name: n };
+  const tag = FRAME_PREFIX + make().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16).padEnd(6, "0");
+  return { tag, name: tag };
+}
 
 export type NameDraft = {
   slug: string;

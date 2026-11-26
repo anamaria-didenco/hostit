@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  NO_DATE_KEY, applyPrefill, matchEventType, normalisePrefill, prefillFromUrl, vfPrefillFrom,
+  NO_DATE_KEY, applyPrefill, matchEventType, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom,
 } from "../client/src/lib/enquiryPrefill";
 
 /** The website form's prefill rule (client/src/lib/enquiryPrefill.ts), for reloads and vf-prefill messages. */
@@ -77,6 +77,33 @@ describe("applying prefill over what the visitor typed", () => {
     expect(r.form).toEqual({ eventType: "Christmas Party", eventDetail: "" });
   });
 
+  it("a field the page never sent before only fills an empty one, unless it's one of the named ones", () => {
+    // The page hadn't sent a message before: one now can't be the visitor's latest choice on the page.
+    const r = applyPrefill({ message: "My own words", budgetRange: "10_20k" }, { message: "host text", budgetRange: "5_10k", guestCount: "60" }, { guestCount: "40" });
+    expect(r.form).toEqual({ message: "My own words", budgetRange: "10_20k", guestCount: "60" });
+    expect(r.kept.sort()).toEqual(["budgetRange", "message"]);
+    expect(applyPrefill({}, { message: "host text" }, { guestCount: "40" }).form).toEqual({ message: "host text" });
+    // A named one the page sends for the first time is the visitor's choice on the page (a date picked there).
+    expect(applyPrefill({ eventDate: "2027-02-18" }, { eventDate: "2027-03-01" }, { guestCount: "40" }).form.eventDate).toBe("2027-03-01");
+  });
+
+  it("the venue's page loading the frame bare, then with its 40 / seated, keeps the visitor's 25 / Cocktail", () => {
+    // Before a whole-page reload: the visitor typed 25 and picked Cocktail; the page's last values were 40 / seated.
+    let remembered: Record<string, string> = { guestCount: "40", eventFormat: "seated" };
+    let form: Record<string, string> = { guestCount: "25", eventFormat: "cocktail" };
+    // Load 1: the frame's bare src, no prefill in its URL.
+    form = applyPrefill(form, {}, remembered).form;
+    remembered = rememberPrefill(remembered, {});
+    expect(remembered).toEqual({ guestCount: "40", eventFormat: "seated" });
+    // Load 2, about 0.6 s later: the page adds its finder's values to the src.
+    const r = applyPrefill(form, { guestCount: "40", eventFormat: "seated" }, remembered);
+    expect(r.form).toEqual({ guestCount: "25", eventFormat: "cocktail" });
+    expect(r.kept.sort()).toEqual(["eventFormat", "guestCount"]);
+    // Then a real change on the page still wins.
+    remembered = rememberPrefill(remembered, { guestCount: "40", eventFormat: "seated" });
+    expect(applyPrefill(r.form, { guestCount: "60", eventFormat: "seated" }, remembered).form).toEqual({ guestCount: "60", eventFormat: "cocktail" });
+  });
+
   it("counts a field that already holds the value as applied, without changing anything", () => {
     const r = applyPrefill({ guestCount: "40" }, { guestCount: "40" }, { guestCount: "40" });
     expect(r).toEqual({ form: { guestCount: "40" }, applied: ["guestCount"], kept: [] });
@@ -113,6 +140,16 @@ describe("vf-prefill messages from the host page", () => {
     }, TYPES, { allowContact: false });
     expect(r.values).toEqual({ guestCount: "100-120", eventFormat: "cocktail", budgetRange: "10_20k", spaceId: "2" });
     expect(r.ignored.sort()).toEqual(["<script>", "email", "eventDate", "eventType", "firstName"].sort());
+  });
+  it("takes only choices from the host page, never the visitor's own words", () => {
+    const r = normalisePrefill({
+      guests: 40,
+      fields: { message: "host text", eventDetail: "Ruby wedding", invoicingNote: "Acme", budgetRange: "10_20k", spaceId: 2, eventTime: "19:00", source: "Instagram" },
+    }, TYPES, { allowContact: false, onlyChoices: true });
+    expect(r.values).toEqual({ guestCount: "40", budgetRange: "10_20k", spaceId: "2", eventTime: "19:00", source: "Instagram" });
+    expect(r.ignored.sort()).toEqual(["eventDetail", "invoicingNote", "message"]);
+    // A time that isn't one is no prefill.
+    expect(normalisePrefill({ fields: { eventTime: "99:99" } }, TYPES, { allowContact: false, onlyChoices: true })).toEqual({ values: {}, ignored: ["eventTime"] });
   });
   it("a whole message: the visitor's answers stay unless the page sends something new", () => {
     const form = { firstName: "Mere", email: "mere@example.test", guestCount: "25", eventFormat: "cocktail" };

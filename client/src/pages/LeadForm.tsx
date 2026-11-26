@@ -11,14 +11,14 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { clearsChoice, onArrowChoose, rovingTabIndex } from "@/lib/rovingKeys";
 import { scrollBehavior } from "@/lib/scrollBehavior";
-import { canReuseLead, enquiryStorageKeys, leadForSubmit, leadToSupersede, normaliseEmail, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
-import { NO_DATE_KEY, applyPrefill, normalisePrefill, prefillFromUrl, vfPrefillFrom } from "@/lib/enquiryPrefill";
+import { canReuseLead, enquiryStorageKeys, holdsSentConfirmation, leadForSubmit, leadToSupersede, normaliseEmail, pageKey, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs, type EnquiryProgress, type HeldLead } from "@/lib/enquiryProgress";
+import { NO_DATE_KEY, applyPrefill, normalisePrefill, prefillFromUrl, rememberPrefill, vfPrefillFrom } from "@/lib/enquiryPrefill";
 import { autoReplyNote, autoReplyState, buildEnquiryMessage, eventDateForWire, guestCountError, guestCountNote, guestCountToConfirm, guestCountValue, type AutoReplyState } from "@/lib/enquiryFields";
 import { describeEnquiryError } from "@/lib/enquiryErrors";
 import { isEnquiryTimeout } from "@/lib/requestTimeout";
-import { clearNameDraft, readNameDraft, writeNameDraft } from "@/lib/framedDraft";
+import { clearNameDraft, frameTag, readNameDraft, writeNameDraft } from "@/lib/framedDraft";
 import { createPartialPinger, type PingTarget } from "@/lib/partialPing";
-import { ENQUIRY_LIMITS, isValidEnquiryEmail, tidyEnquiryEmail } from "@shared/enquiryRules";
+import { ENQUIRY_LIMITS, STEP_ONE_FIELDS, isValidEnquiryEmail, tidyEnquiryEmail } from "@shared/enquiryRules";
 import { isRealDateKey, isWallTime, wallDateKeyInTz } from "@shared/enquiryWallTime";
 import { CLIENT_MIN_TOKEN_AGE_MS, PARTIAL_PING_EVERY_MS, SENT_CONFIRMATION_KEEP_MS, SUBMIT_WAITS_FOR_CAPTURE_MS } from "@shared/enquiryTiming";
 
@@ -514,20 +514,26 @@ const WALKTHROUGH_TIME_OPTIONS = [
 type WalkthroughTimeKey = typeof WALKTHROUGH_TIME_OPTIONS[number]['key'];
 const MAX_WALKTHROUGH_DAYS = 5;
 
-function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, onRequested }: {
-  ownerId: number; leadId: number; leadToken: string; clientEmail: string; big: boolean;
-  accentColor: string; accentTextColor: string; onRequested: () => void;
+function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, requested, onRequested }: {
+  ownerId: number; leadId: number;
+  /** Null after a reload outside the tab that sent it: what was asked for is shown, nothing can be changed. */
+  leadToken: string | null;
+  clientEmail: string; big: boolean;
+  accentColor: string; accentTextColor: string;
+  /** Already asked for (kept with the sent enquiry, shown after a reload). */
+  requested?: string | null;
+  onRequested: (summary: string) => void;
 }) {
   const optionsQ = trpc.leads.walkthroughOptions.useQuery({ ownerId }, { staleTime: 60_000, refetchOnWindowFocus: false });
   const [dates, setDates] = useState<string[]>([]);
   const [timeOfDay, setTimeOfDay] = useState<WalkthroughTimeKey>('any');
   const [note, setNote] = useState('');
-  const [done, setDone] = useState<{ summary: string; emailed: boolean } | null>(null);
+  const [done, setDone] = useState<{ summary: string; emailed: boolean } | null>(() => requested ? { summary: requested, emailed: false } : null);
   const [changing, setChanging] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = trpc.leads.requestWalkthrough.useMutation({
-    onSuccess: (r) => { setDone({ summary: r.summary, emailed: r.emailed }); setChanging(false); setError(null); onRequested(); },
+    onSuccess: (r) => { setDone({ summary: r.summary, emailed: r.emailed }); setChanging(false); setError(null); onRequested(r.summary); },
     onError: () => setError("We couldn't send that just now — please try again."),
   });
   const days = optionsQ.data?.days ?? [];
@@ -556,14 +562,16 @@ function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, acce
               ? <>We&rsquo;ve emailed a copy to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>
               : <>We&rsquo;ve emailed you a copy.</>)}
           </p>
-          <button type="button" onClick={() => setChanging(true)}
-            className="mt-2 whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change my request</button>
+          {leadToken && (
+            <button type="button" onClick={() => setChanging(true)}
+              className="mt-2 whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change my request</button>
+          )}
         </div>
       </div>
     );
   }
 
-  if (optionsQ.isLoading || !optionsQ.data?.enabled) return null;
+  if (!leadToken || optionsQ.isLoading || !optionsQ.data?.enabled) return null;
 
   return (
     <div className={wrap}>
@@ -618,7 +626,7 @@ function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, acce
       {error && <p role="alert" className="text-xs text-red-700 mt-2">{error}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <button type="button" disabled={request.isPending}
-          onClick={() => request.mutate({ ownerId, leadId, leadToken, dates, timeOfDay, note: note.trim() || undefined })}
+          onClick={() => leadToken && request.mutate({ ownerId, leadId, leadToken, dates, timeOfDay, note: note.trim() || undefined })}
           className="rounded-full px-4 py-2 text-xs font-bold tracking-wide uppercase shadow-sm disabled:opacity-60"
           style={{ backgroundColor: accentColor, color: accentTextColor }}>
           {request.isPending ? 'Sending…' : changing ? 'Update request' : 'Request a walkthrough'}
@@ -913,6 +921,27 @@ export default function LeadForm() {
     } catch { /* no window.name either */ }
     return null;
   });
+  // This frame's own name (window.name survives the venue's page reloading
+  // the frame, not a whole-page reload or another page), and the page it is
+  // on: "Enquiry Received!" comes back only where it was sent.
+  const [thisFrame] = useState<string | null>(() => {
+    if (!isEmbed || !storageOk) return null;
+    try {
+      const f = frameTag(window.name, () => Math.random().toString(36).slice(2));
+      if (f.name !== window.name) window.name = f.name;
+      return f.tag;
+    } catch { return null; }
+  });
+  const [thisPage] = useState(() => pageKey(sp.get("vf_landing") || (isEmbed ? document.referrer : window.location.href)));
+  // The sent enquiry's token, for the walkthrough offer after a reload: this
+  // tab only (sessionStorage), never kept where another tab could use it.
+  const sentTokenKey = `vf-lead-sent-${storageKeys.slug}`;
+  const readSentToken = (): { leadId: number; token: string } | null => {
+    try {
+      const d = JSON.parse(sessionStorage.getItem(sentTokenKey) ?? "null");
+      return d && Number.isInteger(d.leadId) && d.leadId > 0 && typeof d.token === "string" && d.token.length <= 64 ? { leadId: d.leadId, token: d.token } : null;
+    } catch { return null; }
+  };
   const [storedProgress] = useState<EnquiryProgress | null>(() => {
     if (!storageOk) {
       return nameDraft?.ownerId ? {
@@ -981,8 +1010,13 @@ export default function LeadForm() {
   });
   const formRef = useRef(form);
   formRef.current = form;
-  // The prefill values seen last (kept in the progress record), for that rule.
-  const [lastPrefill, setLastPrefill] = useState<Record<string, string>>(urlPrefill);
+  // The prefill values seen last (kept in the progress record), for that
+  // rule: this load's on top of the ones remembered, so a load whose URL has
+  // none (the venue's page loads the frame bare first, then with its
+  // finder's "40, seated") doesn't make the next load's look new.
+  const [lastPrefill, setLastPrefill] = useState<Record<string, string>>(() => rememberPrefill(storedProgress?.prefill, urlPrefill));
+  // This page's own prefill (its URL, then any vf-prefill), for a fresh form.
+  const thisLoadPrefillRef = useRef<Record<string, string>>(urlPrefill);
   const lastPrefillRef = useRef(lastPrefill);
   lastPrefillRef.current = lastPrefill;
   const [showDraftNote, setShowDraftNote] = useState(draftRestored);
@@ -1043,6 +1077,11 @@ export default function LeadForm() {
   // attach the chosen slot to.
   const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
   const [submittedLeadToken, setSubmittedLeadToken] = useState<string | null>(null);
+  // A walkthrough already asked for on the enquiry a reload shows again.
+  const [restoredWalkthrough, setRestoredWalkthrough] = useState<string | null>(null);
+  // An enquiry this device sent from another page (or one that can't be
+  // told apart) in the last hour: the form says so above step 1.
+  const [sentElsewhereAt, setSentElsewhereAt] = useState<number | null>(null);
   const submittedRef = useRef(false);
   // Enquiries already announced to the host page, so a repeated SUBMIT (the
   // server answers "already received") is never counted twice.
@@ -1126,13 +1165,27 @@ export default function LeadForm() {
     try {
       if (hasAny) localStorage.setItem(draftKey, JSON.stringify(form));
       else localStorage.removeItem(draftKey);
-      if (!hasAny) localStorage.removeItem(storageKeys.progress);
-      else if (ownerId && resumeChecked) {
+      // "Enquiry Received!" kept for a reload stays until the visitor starts
+      // another enquiry (types their details): the venue's page loads the
+      // frame empty, then with its own "40, seated", neither of which is
+      // anything the visitor did.
+      const saved = parseProgress(localStorage.getItem(storageKeys.progress), storageKeys.slug);
+      const keepSent = holdsSentConfirmation(saved, Date.now(), SENT_CONFIRMATION_KEEP_MS)
+        && !STEP_ONE_FIELDS.some(f => (form[f] ?? '').trim());
+      const sentFields = keepSent && saved ? {
+        sentLeadId: saved.sentLeadId, sentLeadToken: null, sentAt: saved.sentAt,
+        sentPage: saved.sentPage, sentFrame: saved.sentFrame, walkthroughSummary: saved.walkthroughSummary,
+      } : {};
+      // Nothing is written or removed before the saved record has been read against the venue.
+      if (!hasAny) {
+        if (resumeChecked && !keepSent) localStorage.removeItem(storageKeys.progress);
+      } else if (ownerId && resumeChecked) {
         localStorage.setItem(storageKeys.progress, serializeProgress({
           slug: storageKeys.slug, ownerId, step,
           leadId: held.leadId, leadToken: held.leadToken, leadEmail: held.leadEmail, leadAt: held.leadAt,
           formToken: formToken?.token ?? null, formTokenAt: formToken?.at ?? null,
           prefill: lastPrefill,
+          ...sentFields,
         }));
       }
     } catch { /* storage disabled/full — draft persistence is a nicety, not required */ }
@@ -1145,16 +1198,31 @@ export default function LeadForm() {
   // "Enquiry Received!" survives a reload for a while (the venue's page
   // reloads the frame when its calendar is used, and an empty step 1 invited
   // a second, "unfinished" enquiry). localStorage only, and nothing about the
-  // visitor: the enquiry's id and token (for the walkthrough offer) and when.
+  // visitor: the enquiry's id, when, and the page and frame it was sent
+  // from. Its token (for the walkthrough offer) stays in this tab only.
   const rememberSent = (leadId: number | null, leadToken: string | null) => {
     if (!storageOk || !ownerId) return;
     try {
       localStorage.setItem(storageKeys.progress, serializeProgress({
         slug: storageKeys.slug, ownerId, step: 1,
         leadId: null, leadToken: null, leadEmail: null, leadAt: null, formToken: null, formTokenAt: null,
-        prefill: lastPrefillRef.current, sentLeadId: leadId, sentLeadToken: leadToken, sentAt: Date.now(),
+        prefill: lastPrefillRef.current, sentLeadId: leadId, sentLeadToken: null, sentAt: Date.now(),
+        sentPage: thisPage, sentFrame: thisFrame, walkthroughSummary: null,
       }));
     } catch { /* no storage: a reload shows the form */ }
+    try {
+      if (leadId && leadToken) sessionStorage.setItem(sentTokenKey, JSON.stringify({ leadId, token: leadToken }));
+      else sessionStorage.removeItem(sentTokenKey);
+    } catch { /* the walkthrough just isn't offered again after a reload */ }
+  };
+  // The walkthrough asked for, kept with the sent record, so a reload shows
+  // it as asked for instead of offering it (and alerting the venue) again.
+  const rememberWalkthrough = (summary: string) => {
+    if (!storageOk) return;
+    try {
+      const saved = parseProgress(localStorage.getItem(storageKeys.progress), storageKeys.slug);
+      if (saved?.sentAt != null) localStorage.setItem(storageKeys.progress, serializeProgress({ ...saved, walkthroughSummary: summary.slice(0, 300) }));
+    } catch { /* a reload offers it again */ }
   };
 
   // The step-2 "still here" ping (lib/partialPing.ts): the venue's
@@ -1204,13 +1272,15 @@ export default function LeadForm() {
         { isEmbed, parent: window.parent !== window ? window.parent : null, parentOrigin, frameId },
       );
       if (!input) return;
-      const { values, ignored } = normalisePrefill(input, EVENT_TYPES, { allowContact: false });
+      // Choices only: never the visitor's own words or contact details.
+      const { values, ignored } = normalisePrefill(input, EVENT_TYPES, { allowContact: false, onlyChoices: true });
       const r = applyPrefill(formRef.current, values, lastPrefillRef.current);
       formRef.current = r.form;
       setForm(r.form);
-      const seen = { ...lastPrefillRef.current, ...values };
+      const seen = rememberPrefill(lastPrefillRef.current, values);
       lastPrefillRef.current = seen;
       setLastPrefill(seen);
+      thisLoadPrefillRef.current = rememberPrefill(thisLoadPrefillRef.current, values);
       postToParent({ type: "vf-prefill-applied", applied: r.applied, kept: r.kept, ignored });
     };
     window.addEventListener("message", onMessage);
@@ -1247,7 +1317,12 @@ export default function LeadForm() {
     pinger.stop();
     submittedRef.current = false;
     clearDraft();
-    setForm({});
+    try { sessionStorage.removeItem(sentTokenKey); } catch { /* nothing kept */ }
+    // A fresh form as this page opens it: the date, guests and format the
+    // venue's page put in the frame's address are kept.
+    setForm(applyPrefill({}, thisLoadPrefillRef.current, null).form);
+    setRestoredWalkthrough(null);
+    setSentElsewhereAt(null);
     setCustomFieldValues({});
     setEmbedStep(1);
     setResumedStep2(false);
@@ -1308,7 +1383,7 @@ export default function LeadForm() {
       if (gen !== genRef.current) return;
       const current = heldRef.current;
       if (canReuseLead(current, values.email)) return;
-      const supersede = leadToSupersede(current, values.email);
+      const supersede = leadToSupersede(current, values);
       if (!supersede) setHeld(NO_HELD);
       await waitForFormToken();
       if (gen !== genRef.current) return;
@@ -1318,7 +1393,11 @@ export default function LeadForm() {
         // leadId 0 means the server's bot check kept nothing: no lead to reuse.
         if (data.leadId > 0 && data.leadToken) {
           const same = supersede?.leadId === data.leadId;
-          setHeld({ leadId: data.leadId, leadToken: data.leadToken, leadEmail: normaliseEmail(values.email), leadAt: same ? (current.leadAt ?? Date.now()) : Date.now(), fromThisPage: true });
+          setHeld({
+            leadId: data.leadId, leadToken: data.leadToken, leadEmail: normaliseEmail(values.email),
+            leadAt: same ? (current.leadAt ?? Date.now()) : Date.now(), fromThisPage: true,
+            leadName: { firstName: values.firstName, lastName: values.lastName ?? "" },
+          });
           // Never after the enquiry itself was announced.
           if (!partialPostedRef.current.has(data.leadId) && !submittedRef.current) {
             partialPostedRef.current.add(data.leadId);
@@ -1349,6 +1428,8 @@ export default function LeadForm() {
     setSubmittedLeadId(id > 0 ? id : null);
     setSubmittedLeadToken(id > 0 ? token : null);
     setAutoReply(autoReplyState(data));
+    setRestoredWalkthrough(null);
+    setSentElsewhereAt(null);
     clearDraft();
     rememberSent(id > 0 ? id : null, id > 0 ? token : null);
     // ── Conversion signal ───────────────────────────────────────────────
@@ -1475,7 +1556,7 @@ export default function LeadForm() {
       if (pending) await Promise.race([pending.catch(() => {}), sleep(SUBMIT_WAITS_FOR_CAPTURE_MS)]);
       // The lead to complete: the visitor's own step 1 (no wait: the server
       // already timed it), or for a corrected email the lead this page saved.
-      const target = leadForSubmit(heldRef.current, sent.email);
+      const target = leadForSubmit(heldRef.current, sent);
       if (!target?.own) await waitForFormToken();
       const when = eventDateForWire({ eventDate: sent.eventDate, eventTime: sent.eventTime, noDateYet: sent[NO_DATE_KEY] === "1" });
       const extra = eventExtraFor(sent.eventType, eventFields.some(f => f.id === 'eventFormat'));
@@ -1696,19 +1777,26 @@ export default function LeadForm() {
   // first render, so nothing is shown or saved before it's checked.
   if (!resumeChecked && venue?.ownerId) {
     setResumeChecked(true);
-    // Sent from this device a little while ago: show "Enquiry Received!"
-    // again (the walkthrough offer too), not an empty step 1. The enquiry
-    // sent is never used for another SUBMIT: "Send another enquiry" starts clean.
-    const sent = sentConfirmation(storedProgress, { ownerId: venue.ownerId, nowMs: Date.now(), keepMs: SENT_CONFIRMATION_KEEP_MS });
-    if (sent) {
+    // Sent from this device a little while ago: on the page it was sent
+    // from, show "Enquiry Received!" again, not an empty step 1; any other
+    // page shows the form, with a line saying an enquiry was sent
+    // (sentConfirmation). The enquiry sent is never used for another
+    // SUBMIT: "Send another enquiry" starts clean.
+    const sent = sentConfirmation(storedProgress, {
+      ownerId: venue.ownerId, nowMs: Date.now(), keepMs: SENT_CONFIRMATION_KEEP_MS,
+      page: thisPage, frame: thisFrame, tabToken: storageOk ? readSentToken() : null,
+    });
+    if (sent?.samePage) {
       submittedRef.current = true;
       setSubmitted(true);
       setSubmittedLeadId(sent.leadId);
       setSubmittedLeadToken(sent.leadToken);
+      setRestoredWalkthrough(sent.walkthroughSummary);
       setEmbedStep(1);
       setHeld(NO_HELD);
       lastFocusKey.current = "done-1"; // not something the visitor did: focus stays put
     } else {
+      if (sent) setSentElsewhereAt(sent.sentAt);
       const r = resumeFrom(storedProgress, { ownerId: venue.ownerId, detailsValid: detailFields.every(f => isFieldFilled(f)), email: form.email, nowMs: Date.now() });
       setResumedStep2(r.step === 2);
       if (r.step !== embedStep || r.leadId !== held.leadId) {
@@ -2114,12 +2202,28 @@ export default function LeadForm() {
         full-page confirmation screens (see WalkthroughRequest). Needs the
         lead submit() just created and its proof-of-ownership token. ───── */
   function renderWalkthroughStep(size: 'sm' | 'lg') {
-    if (!venue?.ownerId || !submittedLeadId || !submittedLeadToken || formConfig?.walkthroughEnabled === false) return null;
+    if (!venue?.ownerId || !submittedLeadId || formConfig?.walkthroughEnabled === false) return null;
+    // After a reload: offered again only in the tab that sent it, soon after
+    // (the token), and one already asked for is shown as asked for.
+    if (!submittedLeadToken && !restoredWalkthrough) return null;
     return (
       <WalkthroughRequest ownerId={venue.ownerId} leadId={submittedLeadId} leadToken={submittedLeadToken}
         clientEmail={(form.email ?? '').trim()} big={size === 'lg'}
         accentColor={formButtonColor} accentTextColor={textOnButton}
-        onRequested={() => postToParent({ type: "vf-walkthrough-requested" })} />
+        requested={restoredWalkthrough}
+        onRequested={(summary) => { rememberWalkthrough(summary); postToParent({ type: "vf-walkthrough-requested" }); }} />
+    );
+  }
+
+  /* ── An enquiry this device sent a little while ago, from another page (or
+        one we can't tell apart): said above the form, not shown again. ── */
+  function renderSentNote(size: 'sm' | 'lg') {
+    if (sentElsewhereAt == null || submitted) return null;
+    const time = new Intl.DateTimeFormat("en-NZ", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(sentElsewhereAt));
+    return (
+      <div role="status" className={`rounded border border-gray-200 bg-gray-50 ${size === 'lg' ? 'px-4 py-2.5 text-sm mb-5' : 'px-3 py-2 text-xs mb-3'} text-gray-600`}>
+        Your enquiry was sent at {time}, thank you. To send another one, fill in the form below.
+      </div>
     );
   }
 
@@ -2229,6 +2333,7 @@ export default function LeadForm() {
           // visitor already committed to by tapping an ad. Same fields, same
           // renderField()/reqMark() as the wizard steps — just laid out flat.
           <div className="px-4 pb-4 pt-3 space-y-3">
+            {renderSentNote('sm')}
             {renderDraftNote('sm')}
             {renderHoneypot()}
             {eventFields.some(f => f.id === 'eventType') && (
@@ -2364,6 +2469,7 @@ export default function LeadForm() {
                     if (venue?.ownerId) saveStep1(venue.ownerId);
                     setEmbedStep(2);
                   }}>
+                  {renderSentNote('sm')}
                   {renderDraftNote('sm')}
                   {renderHoneypot()}
                   <div className="grid grid-cols-2 gap-2">
@@ -2571,6 +2677,7 @@ export default function LeadForm() {
             {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
             <div className="rounded-xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-7" style={{ backgroundColor: formCardBg }}>
 
+              {sentElsewhereAt != null && <div className="-mb-3">{renderSentNote('lg')}</div>}
               {showDraftNote && <div className="-mb-3">{renderDraftNote('lg')}</div>}
 
               {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   FORM_TOKEN_REUSE_MS, FRESH_TOKEN_SAFE_MS, RESUME_LEAD_MS, canReuseLead, enquiryStorageKeys, formTokenToSend, leadForSubmit, leadStillResumable,
   leadToSupersede, parseProgress, pickFormToken, pickTokenToSend, resumeFrom, sentConfirmation, serializeProgress, tokenWaitMs,
+  WALKTHROUGH_AFTER_RELOAD_MS, holdsSentConfirmation, pageKey, pageKeyIsSpecific,
   type EnquiryProgress, type HeldLead,
 } from "../client/src/lib/enquiryProgress";
 import { MIN_FORM_FILL_MS } from "./enquiryConversion";
@@ -13,7 +14,7 @@ const saved = (over: Partial<EnquiryProgress> = {}): EnquiryProgress => ({
   leadId: 433, leadToken: "tok_abcdefghijklmnopqrstuvwxyz0123", leadEmail: "aroha@example.test", leadAt: 1_800_000_060_000,
   formToken: "mfz0q3k0.abcdefghijklmnopqrstuv", formTokenAt: 1_800_000_000_000,
   prefill: { guestCount: "40", eventFormat: "seated" },
-  sentLeadId: null, sentLeadToken: null, sentAt: null,
+  sentLeadId: null, sentLeadToken: null, sentAt: null, sentPage: null, sentFrame: null, walkthroughSummary: null,
   ...over,
 });
 
@@ -150,56 +151,103 @@ describe("what else the record keeps", () => {
     expect(parseProgress(JSON.stringify({ ...saved(), prefill: ["40"] }), "bar-franco")!.prefill).toBeNull();
     expect(parseProgress(JSON.stringify({ ...saved(), prefill: undefined }), "bar-franco")!.prefill).toBeNull(); // a record from before
   });
-  it("keeps the enquiry just sent: its id and token only together, its time on its own", () => {
-    const sent = saved({ sentLeadId: 501, sentLeadToken: "tok_sent", sentAt: 1_800_000_900_000 });
-    expect(parseProgress(serializeProgress(sent), "bar-franco")).toMatchObject({ sentLeadId: 501, sentLeadToken: "tok_sent", sentAt: 1_800_000_900_000 });
-    const noToken = parseProgress(serializeProgress(saved({ sentLeadId: 501, sentAt: 1_800_000_900_000 })), "bar-franco")!;
-    expect(noToken).toMatchObject({ sentLeadId: null, sentLeadToken: null, sentAt: 1_800_000_900_000 });
+  it("keeps the enquiry just sent: its id, its time, the page and frame it was sent from", () => {
+    const sent = saved({ sentLeadId: 501, sentAt: 1_800_000_900_000, sentPage: "https://www.example.test/functions/", sentFrame: "vf-frame:abc123", walkthroughSummary: "Tue 3 Dec, morning" });
+    expect(parseProgress(serializeProgress(sent), "bar-franco")).toMatchObject({
+      sentLeadId: 501, sentAt: 1_800_000_900_000, sentPage: "https://www.example.test/functions/", sentFrame: "vf-frame:abc123", walkthroughSummary: "Tue 3 Dec, morning",
+    });
+    // Nothing about a sent enquiry without its time.
+    expect(parseProgress(serializeProgress(saved({ sentLeadId: 501, sentPage: "https://www.example.test/" })), "bar-franco")).toMatchObject({ sentLeadId: null, sentPage: null });
   });
 });
 
 describe("Enquiry Received! after a reload", () => {
   const sentAt = 1_800_000_900_000;
-  const rec = saved({ step: 1, leadId: null, leadToken: null, leadEmail: null, leadAt: null, sentLeadId: 501, sentLeadToken: "tok_sent", sentAt });
-  const at = (ms: number) => ({ ownerId: 7, nowMs: sentAt + ms, keepMs: SENT_CONFIRMATION_KEEP_MS });
-  it("shows again for an hour, with what the walkthrough offer needs", () => {
+  const page = "https://www.example.test/functions/";
+  const rec = saved({ step: 1, leadId: null, leadToken: null, leadEmail: null, leadAt: null, sentLeadId: 501, sentAt, sentPage: page, sentFrame: "vf-frame:abc123" });
+  const tab = { leadId: 501, token: "tok_sent" };
+  const at = (ms: number, more: Partial<Parameters<typeof sentConfirmation>[1]> = {}) => ({ ownerId: 7, nowMs: sentAt + ms, keepMs: SENT_CONFIRMATION_KEEP_MS, page, frame: "vf-frame:abc123", tabToken: tab, ...more });
+  it("shows again on the page it was sent from for an hour", () => {
     expect(SENT_CONFIRMATION_KEEP_MS).toBe(60 * 60_000);
-    expect(sentConfirmation(rec, at(5 * 60_000))).toEqual({ leadId: 501, leadToken: "tok_sent" });
-    expect(sentConfirmation(rec, at(SENT_CONFIRMATION_KEEP_MS))).not.toBeNull();
+    expect(sentConfirmation(rec, at(5 * 60_000))).toEqual({ samePage: true, sentAt, leadId: 501, leadToken: "tok_sent", walkthroughSummary: null });
+    expect(sentConfirmation(rec, at(SENT_CONFIRMATION_KEEP_MS))?.samePage).toBe(true);
   });
   it("is gone after that (the next person on a shared device gets a clean form), and never for another venue", () => {
     expect(sentConfirmation(rec, at(SENT_CONFIRMATION_KEEP_MS + 1))).toBeNull();
-    expect(sentConfirmation(rec, { ...at(1000), ownerId: 8 })).toBeNull();
+    expect(sentConfirmation(rec, at(1000, { ownerId: 8 }))).toBeNull();
     expect(sentConfirmation(saved(), at(1000))).toBeNull(); // nothing sent
   });
+  it("the same frame (the venue's page reloaded it) or the same page by its own address", () => {
+    expect(sentConfirmation(rec, at(1000, { page: "https://www.example.test/" }))?.samePage).toBe(true); // same frame
+    expect(sentConfirmation(rec, at(1000, { frame: null }))?.samePage).toBe(true); // same specific page
+  });
+  it("on another page, or one that can't be told apart from another, says an enquiry was sent and offers nothing", () => {
+    const other = sentConfirmation(rec, at(1000, { frame: "vf-frame:zzz999", page: "https://www.example.test/weddings/" }));
+    expect(other).toEqual({ samePage: false, sentAt, leadId: null, leadToken: null, walkthroughSummary: null });
+    // A cross-site frame usually gets only the site's origin as its referrer: every page looks the same.
+    const originOnly = saved({ ...rec, sentPage: "https://www.example.test/" });
+    expect(sentConfirmation(originOnly, at(1000, { frame: null, page: "https://www.example.test/" }))?.samePage).toBe(false);
+  });
+  it("offers the walkthrough again only in the tab that sent it, and only for 10 minutes", () => {
+    expect(WALKTHROUGH_AFTER_RELOAD_MS).toBe(10 * 60_000);
+    expect(sentConfirmation(rec, at(WALKTHROUGH_AFTER_RELOAD_MS))?.leadToken).toBe("tok_sent");
+    expect(sentConfirmation(rec, at(WALKTHROUGH_AFTER_RELOAD_MS + 1))).toMatchObject({ samePage: true, leadId: 501, leadToken: null });
+    expect(sentConfirmation(rec, at(1000, { tabToken: null }))?.leadToken).toBeNull(); // another tab
+    expect(sentConfirmation(rec, at(1000, { tabToken: { leadId: 9, token: "other" } }))?.leadToken).toBeNull();
+  });
+  it("shows a walkthrough already asked for as asked for", () => {
+    const asked = saved({ ...rec, walkthroughSummary: "Tue 3 Dec or Wed 4 Dec, morning" });
+    expect(sentConfirmation(asked, at(30 * 60_000, { tabToken: null }))).toMatchObject({ samePage: true, leadToken: null, walkthroughSummary: "Tue 3 Dec or Wed 4 Dec, morning" });
+  });
   it("still shows for a dropped bot-check 'success' (nothing to offer a walkthrough for)", () => {
-    const fake = saved({ sentLeadId: null, sentLeadToken: null, sentAt });
-    expect(sentConfirmation(fake, at(1000))).toEqual({ leadId: null, leadToken: null });
+    const fake = saved({ ...rec, sentLeadId: null });
+    expect(sentConfirmation(fake, at(1000))).toMatchObject({ samePage: true, leadId: null, leadToken: null });
+  });
+  it("is kept while it can still be shown, so an empty form doesn't wipe it", () => {
+    expect(holdsSentConfirmation(rec, sentAt + 59 * 60_000, SENT_CONFIRMATION_KEEP_MS)).toBe(true);
+    expect(holdsSentConfirmation(rec, sentAt + 61 * 60_000, SENT_CONFIRMATION_KEEP_MS)).toBe(false);
+    expect(holdsSentConfirmation(saved(), sentAt, SENT_CONFIRMATION_KEEP_MS)).toBe(false);
+  });
+  it("names a page by its address without the query, and only a path names one page", () => {
+    expect(pageKey("https://www.example.test/functions/?prefillGuests=40#form")).toBe("https://www.example.test/functions/");
+    expect(pageKey("")).toBeNull();
+    expect(pageKey("not a url")).toBeNull();
+    expect(pageKeyIsSpecific("https://www.example.test/functions/")).toBe(true);
+    expect(pageKeyIsSpecific("https://www.example.test/")).toBe(false);
+    expect(pageKeyIsSpecific(null)).toBe(false);
   });
 });
 
 describe("which lead SUBMIT completes and NEXT updates", () => {
-  const own: HeldLead = { leadId: 433, leadToken: "tok", leadEmail: "aroha@example.test", leadAt: 1, fromThisPage: true };
-  const restored: HeldLead = { ...own, fromThisPage: false };
+  const aroha = { firstName: "Aroha", lastName: "Testwell" };
+  const own: HeldLead = { leadId: 433, leadToken: "tok", leadEmail: "aroha@example.test", leadAt: 1, fromThisPage: true, leadName: aroha };
+  const restored: HeldLead = { ...own, fromThisPage: false, leadName: null };
+  const as = (email: string, name = aroha) => ({ ...name, email });
   it("the visitor's own step 1 for the same email (the free completion: no wait for the timing token)", () => {
-    expect(leadForSubmit(own, " Aroha@Example.test")).toEqual({ leadId: 433, leadToken: "tok", own: true });
-    expect(leadForSubmit(restored, "aroha@example.test")).toEqual({ leadId: 433, leadToken: "tok", own: true }); // a reload's resume, as before
+    expect(leadForSubmit(own, as(" Aroha@Example.test"))).toEqual({ leadId: 433, leadToken: "tok", own: true });
+    expect(leadForSubmit(restored, as("aroha@example.test"))).toEqual({ leadId: 433, leadToken: "tok", own: true }); // a reload's resume, as before
+    // Same email, name changed: still the same person, as before.
+    expect(leadForSubmit(own, as("aroha@example.test", { firstName: "Aroha", lastName: "Te Wiata" }))?.own).toBe(true);
   });
-  it("for a corrected email, only the lead this page load saved (counted and checked by the server)", () => {
-    expect(leadForSubmit(own, "aroha@example.test.nz")).toEqual({ leadId: 433, leadToken: "tok", own: false });
-    expect(leadForSubmit(restored, "mere@example.test")).toBeNull(); // maybe another person on a shared device
+  it("for a corrected email, only the lead this page load saved, under the same name (counted and checked by the server)", () => {
+    expect(leadForSubmit(own, as("aroha@example.test.nz", { firstName: " aroha", lastName: "TESTWELL " }))).toEqual({ leadId: 433, leadToken: "tok", own: false });
+    expect(leadForSubmit(restored, as("mere@example.test"))).toBeNull(); // maybe another person on a shared device
+    // Another name and another email: the next person on the same tab gets their own lead.
+    expect(leadForSubmit(own, as("ben@example.test", { firstName: "Ben", lastName: "Second" }))).toBeNull();
+    expect(leadForSubmit({ ...own, leadName: null }, as("aroha@example.test.nz"))).toBeNull();
   });
   it("nothing without a real lead or an email", () => {
-    expect(leadForSubmit(null, "aroha@example.test")).toBeNull();
-    expect(leadForSubmit({ ...own, leadId: 0 }, "aroha@example.test")).toBeNull();
-    expect(leadForSubmit({ ...own, leadToken: null }, "aroha@example.test")).toBeNull();
-    expect(leadForSubmit(own, "  ")).toBeNull();
+    expect(leadForSubmit(null, as("aroha@example.test"))).toBeNull();
+    expect(leadForSubmit({ ...own, leadId: 0 }, as("aroha@example.test"))).toBeNull();
+    expect(leadForSubmit({ ...own, leadToken: null }, as("aroha@example.test"))).toBeNull();
+    expect(leadForSubmit(own, as("  "))).toBeNull();
   });
-  it("NEXT after BACK and an email fix updates this page's lead; resumed or after START FRESH, it's a new lead", () => {
-    expect(leadToSupersede(own, "aroha@gmail.example.test")).toEqual({ leadId: 433, leadToken: "tok" });
-    expect(leadToSupersede(own, "AROHA@example.test")).toBeNull(); // same email: nothing to save
-    expect(leadToSupersede(restored, "mere@example.test")).toBeNull();
-    expect(leadToSupersede({ leadId: null, leadToken: null, leadEmail: null, leadAt: null, fromThisPage: false }, "mere@example.test")).toBeNull();
+  it("NEXT after BACK and an email fix updates this page's lead; resumed, after START FRESH or under another name, it's a new lead", () => {
+    expect(leadToSupersede(own, as("aroha@gmail.example.test"))).toEqual({ leadId: 433, leadToken: "tok" });
+    expect(leadToSupersede(own, as("AROHA@example.test"))).toBeNull(); // same email: nothing to save
+    expect(leadToSupersede(restored, as("mere@example.test"))).toBeNull();
+    expect(leadToSupersede(own, as("ben@example.test", { firstName: "Ben", lastName: "Testwell" }))).toBeNull();
+    expect(leadToSupersede({ leadId: null, leadToken: null, leadEmail: null, leadAt: null, fromThisPage: false }, as("mere@example.test"))).toBeNull();
   });
 });
 

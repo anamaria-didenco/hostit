@@ -26,7 +26,8 @@
  *   - window.VenueFlow.prefill({ eventType, date, guests, format, fields },
  *     frameId?) changes the form's event answers without reloading it (sent
  *     as a vf-prefill message once the form says vf-ready). Answers the
- *     visitor changed in the form stay as they are.
+ *     visitor changed in the form stay as they are, and only choices are
+ *     taken (never the message or other free text).
  *
  * Supports multiple venue script tags on one page. Safe to load once.
  */
@@ -501,7 +502,8 @@
 
   window.VenueFlow = window.VenueFlow || {};
   // Change the event answers in the form(s) on this page without reloading
-  // them: { eventType, date: "YYYY-MM-DD", guests, format, fields: { id: value } }.
+  // them: { eventType, date: "YYYY-MM-DD", guests, format, fields: { id: value } }
+  // (fields: budgetRange, spaceId, eventTime or source).
   // Pass a frameId to reach one form only. Before the form is ready the
   // values wait, and the latest call wins.
   window.VenueFlow.prefill = function (values, frameId) {

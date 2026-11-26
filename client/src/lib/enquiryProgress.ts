@@ -12,6 +12,7 @@
  * Pure functions over strings and plain values, so they can be tested without
  * a browser; LeadForm.tsx does the localStorage reads and writes.
  */
+import { sameEnquiryName } from "@shared/enquiryRules";
 
 export type EnquiryProgress = {
   /** The venue slug in the form's URL ("default" for the slug-less form). */
@@ -35,25 +36,33 @@ export type EnquiryProgress = {
    */
   prefill?: Record<string, string> | null;
   /**
-   * After "Enquiry Received!": the enquiry sent, its token (for the
-   * walkthrough offer) and when (this device's clock). A reload in the next
-   * SENT_CONFIRMATION_KEEP_MS shows the confirmation again instead of an
-   * empty form. Never reused for another SUBMIT.
+   * After "Enquiry Received!": the enquiry sent and when (this device's
+   * clock), the page it was sent from and the frame that sent it, and the
+   * walkthrough asked for, if any. In the next SENT_CONFIRMATION_KEEP_MS that
+   * page shows the confirmation again instead of an empty form; any other
+   * shows the form with a line saying an enquiry was sent. Never reused for
+   * another SUBMIT. The enquiry's token is never kept here (see sentToken).
    */
   sentLeadId?: number | null;
   sentLeadToken?: string | null;
   sentAt?: number | null;
+  sentPage?: string | null;
+  sentFrame?: string | null;
+  walkthroughSummary?: string | null;
 };
 
 export type CapturedLead = { leadId: number | null; leadToken: string | null; leadEmail: string | null; leadAt: number | null };
 
 /**
- * The step-1 lead this page holds, and whether this page load saved it
- * (fromThisPage). Only a lead saved by this page load is ever completed or
- * updated with a different email: one restored after a reload, or held
- * before START FRESH, may be someone else's on a shared device.
+ * The step-1 lead this page holds, whether this page load saved it
+ * (fromThisPage), and the name it was saved under. Only a lead saved by this
+ * page load, and only under the same name, is ever completed or updated with
+ * a different email: one restored after a reload, held before START FRESH,
+ * or a new name with a new email, may be someone else's on a shared device.
  */
-export type HeldLead = CapturedLead & { fromThisPage: boolean };
+export type HeldLead = CapturedLead & { fromThisPage: boolean; leadName?: StepOneName | null };
+
+export type StepOneName = { firstName?: string | null; lastName?: string | null };
 
 /** The draft's localStorage key, and this one's beside it. Per venue slug. */
 export function enquiryStorageKeys(slug: string | null | undefined) {
@@ -118,9 +127,8 @@ export function parseProgress(raw: string | null | undefined, slug: string): Enq
   const leadAt = typeof d.leadAt === "number" && Number.isFinite(d.leadAt) ? d.leadAt : null;
   const hasLead = !!(leadId && leadToken);
   const sentAt = finiteNumber(d.sentAt);
-  const sentLeadId = posInt(d.sentLeadId);
-  const sentLeadToken = shortString(d.sentLeadToken, 64);
-  const sentLead = sentAt != null && !!(sentLeadId && sentLeadToken);
+  const sentLeadId = sentAt != null ? posInt(d.sentLeadId) : null;
+  const sentLeadToken = sentLeadId ? shortString(d.sentLeadToken, 64) : null;
   return {
     slug, ownerId,
     step: d.step === 2 ? 2 : 1,
@@ -131,9 +139,12 @@ export function parseProgress(raw: string | null | undefined, slug: string): Enq
     formToken: formToken && formTokenAt != null ? formToken : null,
     formTokenAt: formToken && formTokenAt != null ? formTokenAt : null,
     prefill: parsePrefillMap(d.prefill),
-    sentLeadId: sentLead ? sentLeadId : null,
-    sentLeadToken: sentLead ? sentLeadToken : null,
+    sentLeadId,
+    sentLeadToken,
     sentAt,
+    sentPage: sentAt != null ? shortString(d.sentPage, 500) : null,
+    sentFrame: sentAt != null ? shortString(d.sentFrame, 40) : null,
+    walkthroughSummary: sentLeadId ? shortString(d.walkthroughSummary, 300) : null,
   };
 }
 
@@ -171,38 +182,107 @@ export function leadStillResumable(leadAt: number | null | undefined, nowMs: num
  * after a reload or START FRESH is never given another email: that may be
  * another person on a shared device.
  */
-export function leadForSubmit(held: HeldLead | null | undefined, email: string | null | undefined): { leadId: number; leadToken: string; own: boolean } | null {
+export function leadForSubmit(held: HeldLead | null | undefined, sent: StepOneName & { email?: string | null }): { leadId: number; leadToken: string; own: boolean } | null {
   if (!held || !posInt(held.leadId) || !held.leadToken) return null;
-  if (canReuseLead(held, email)) return { leadId: held.leadId!, leadToken: held.leadToken, own: true };
-  return held.fromThisPage && normaliseEmail(email) ? { leadId: held.leadId!, leadToken: held.leadToken, own: false } : null;
+  if (canReuseLead(held, sent.email)) return { leadId: held.leadId!, leadToken: held.leadToken, own: true };
+  return correctedEmailAllowed(held, sent) ? { leadId: held.leadId!, leadToken: held.leadToken, own: false } : null;
+}
+
+/**
+ * Whether the held lead may take a different email: saved by this page load
+ * and the name on step 1 unchanged. Fixing a mistyped email keeps the name;
+ * a new name with a new email is another person (a shared tablet at an expo,
+ * a front-desk computer), who gets their own lead, and the first person's
+ * stays as it was, still unfinished.
+ */
+function correctedEmailAllowed(held: HeldLead, now: StepOneName & { email?: string | null }): boolean {
+  return held.fromThisPage && !!normaliseEmail(now.email) && !!held.leadName && sameEnquiryName(held.leadName, now);
 }
 
 /**
  * The lead NEXT asks startCapture to update when the email was changed after
  * an earlier NEXT on this page load (BACK, fix the email, NEXT): the same row
  * gets the corrected details instead of a second lead being saved and the
- * first left behind as "Unfinished". Null when the email is unchanged (nothing
- * to save) or the held lead didn't come from this page load (a new lead).
+ * first left behind as "Unfinished". Null when the email is unchanged
+ * (nothing to save), the held lead didn't come from this page load, or the
+ * name changed too (another person: a new lead).
  */
-export function leadToSupersede(held: HeldLead | null | undefined, email: string | null | undefined): { leadId: number; leadToken: string } | null {
-  if (!held || !held.fromThisPage || !posInt(held.leadId) || !held.leadToken) return null;
-  if (!normaliseEmail(email) || canReuseLead(held, email)) return null;
+export function leadToSupersede(held: HeldLead | null | undefined, now: StepOneName & { email?: string | null }): { leadId: number; leadToken: string } | null {
+  if (!held || !posInt(held.leadId) || !held.leadToken) return null;
+  if (canReuseLead(held, now.email) || !correctedEmailAllowed(held, now)) return null;
   return { leadId: held.leadId!, leadToken: held.leadToken };
 }
 
 /**
- * The enquiry just sent from this device, when a reload should show its
- * "Enquiry Received!" again (within `keepMs` of sending, for this venue).
- * leadId/leadToken are null when there's no walkthrough to offer.
+ * The page a form is on, for telling "the page it was sent from" apart from
+ * another of the venue's pages: the host page's address (embed.js passes it
+ * as vf_landing; otherwise the frame's referrer) or, outside a frame, the
+ * form's own, without the query or #part. Null when there isn't one.
+ */
+export function pageKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return `${u.origin}${u.pathname}`.slice(0, 500);
+  } catch { return null; }
+}
+
+/**
+ * Whether a page key names one page. Browsers send a cross-site frame only
+ * the host's origin as its referrer by default, which every page of the
+ * venue's site shares, so that alone can't say two loads are the same page.
+ */
+export function pageKeyIsSpecific(key: string | null | undefined): boolean {
+  if (!key) return false;
+  try { return new URL(key).pathname.replace(/\/+$/, "") !== ""; } catch { return false; }
+}
+
+/** How long after sending, a reload in the same tab still offers the walkthrough. */
+export const WALKTHROUGH_AFTER_RELOAD_MS = 10 * 60_000;
+
+/**
+ * The enquiry sent from this device in the last `keepMs` (for this venue),
+ * and how a load should show it:
+ *  - samePage: the same frame (the venue's page reloaded it, say for its
+ *    calendar: the frame keeps its window.name), or the same page by a
+ *    specific address. "Enquiry Received!" again, as after SUBMIT.
+ *  - otherwise: another page of the venue's site, or one that can't be told
+ *    apart from one (a whole-page reload, when the browser sends only the
+ *    site's origin). The form, with a line saying when an enquiry was sent.
+ * The walkthrough is offered again only on the same page, in the same tab
+ * (`tabToken`, kept in sessionStorage, for this enquiry) and within
+ * WALKTHROUGH_AFTER_RELOAD_MS: another person on a shared device mustn't be
+ * able to add one to the first person's enquiry. One already asked for is
+ * shown as asked for (walkthroughSummary).
  */
 export function sentConfirmation(
   stored: EnquiryProgress | null,
-  now: { ownerId: number; nowMs: number; keepMs: number },
-): { leadId: number | null; leadToken: string | null } | null {
+  now: { ownerId: number; nowMs: number; keepMs: number; page?: string | null; frame?: string | null; tabToken?: { leadId: number; token: string } | null },
+): { samePage: boolean; sentAt: number; leadId: number | null; leadToken: string | null; walkthroughSummary: string | null } | null {
   if (!stored || stored.ownerId !== now.ownerId || stored.sentAt == null) return null;
   const age = now.nowMs - stored.sentAt;
   if (age < -60_000 || age > now.keepMs) return null;
-  return { leadId: stored.sentLeadId ?? null, leadToken: stored.sentLeadToken ?? null };
+  const sameFrame = !!stored.sentFrame && stored.sentFrame === now.frame;
+  const samePage = sameFrame || (pageKeyIsSpecific(stored.sentPage) && stored.sentPage === now.page);
+  const leadId = samePage ? stored.sentLeadId ?? null : null;
+  const tab = now.tabToken && leadId && now.tabToken.leadId === leadId ? now.tabToken.token : null;
+  return {
+    samePage,
+    sentAt: stored.sentAt,
+    leadId,
+    leadToken: tab && age <= WALKTHROUGH_AFTER_RELOAD_MS ? tab : null,
+    walkthroughSummary: samePage ? stored.walkthroughSummary ?? null : null,
+  };
+}
+
+/**
+ * Whether a saved record still holds a confirmation to show (an enquiry sent
+ * in the last `keepMs`): the form being empty mustn't wipe it.
+ */
+export function holdsSentConfirmation(stored: EnquiryProgress | null, nowMs: number, keepMs: number): boolean {
+  if (!stored || stored.sentAt == null) return false;
+  const age = nowMs - stored.sentAt;
+  return age >= -60_000 && age <= keepMs;
 }
 
 /**
