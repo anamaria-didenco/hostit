@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { formatWait, daysAwayLabel, UPCOMING_DAYS } from "@shared/needsToday";
+import { daysAwayLabel, UPCOMING_DAYS, NEEDS_GROUP_CAP, type EnquiryNeeds } from "@shared/needsToday";
+import { LANE_INK, LANE_MARK, type Lane } from "@shared/enquiryLane";
 import { dayLabel, hhmmLabel } from "@/lib/overviewDates";
 import { rowOf, type UpcomingEventRow } from "@/components/TodayPanel";
 
@@ -12,11 +13,22 @@ import { rowOf, type UpcomingEventRow } from "@/components/TodayPanel";
  * signal rows (most urgent first, one action each), the next seven days, and a
  * Today card. Every number and row comes from the queries the Overview already
  * used (dashboard.stats, dashboard.needsAttention, dashboard.upcoming,
- * bookings.clashes, runsheets.startTimeMismatches).
+ * bookings.clashes, runsheets.startTimeMismatches), and the enquiries in it
+ * are the Enquiries list's own rows (shared/enquiryFilters.ts), so they are
+ * the same people, counted the same way, as the badge and the list's tabs.
+ *
+ * The signal colours are the Enquiries list's lane colours
+ * (shared/enquiryLane.ts): red is late or wrong, amber is waiting on you,
+ * blue is new.
  */
 
 type Tone = "red" | "amber" | "blue" | "green" | "muted";
-const FG: Record<Tone, string> = { red: "#c0392b", amber: "#8a5f18", blue: "#2f5488", green: "#3f7350", muted: "#6b7078" };
+/** Dot colour (3:1 or more) and text colour (4.5:1 or more) for each tone. */
+const MARK: Record<Tone, string> = { red: LANE_MARK.red, amber: LANE_MARK.amber, blue: LANE_MARK.blue, green: LANE_MARK.green, muted: "#6b7078" };
+const FG: Record<Tone, string> = { red: LANE_INK.red, amber: LANE_INK.amber, blue: LANE_INK.blue, green: LANE_INK.green, muted: "#6b7078" };
+
+/** The Overview tone for an Enquiries lane. */
+const LANE_TONE: Record<Lane, Tone> = { red: "red", amber: "amber", blue: "blue", green: "green", grey: "muted", calm: "muted" };
 
 const btn = "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-[6px] border-[1.5px] font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const btnOutline = `${btn} border-input bg-card text-foreground hover:border-primary`;
@@ -39,7 +51,7 @@ export function OvHead({ title, meta, action, as: H = "h2" }: { title: string; m
 export function Sig({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 font-sans text-[13px] font-bold whitespace-nowrap min-w-0" style={{ color: FG[tone] }}>
-      <span aria-hidden className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: FG[tone] }} />
+      <span aria-hidden className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: MARK[tone] }} />
       <span className="truncate">{children}</span>
     </span>
   );
@@ -82,7 +94,7 @@ export function OverviewSummaryStrip({ tiles, onTile, label = "Summary" }: { til
             <span className={`font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] ${inv ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{t.label}</span>
             <span className="font-sans text-[26px] leading-tight font-semibold tabular-nums">{t.value}</span>
             <span className={`font-sans text-[12px] font-semibold ${inv ? "text-primary-foreground/80" : ""}`}
-              style={inv ? undefined : { color: FG[t.noteTone ?? "muted"] }}>{t.note}</span>
+              style={inv ? undefined : { color: t.noteTone ? FG[t.noteTone] : "var(--muted-foreground)" }}>{t.note}</span>
           </button>
         );
       })}
@@ -105,8 +117,14 @@ export interface OverviewNeedsTodayProps {
   onOpenLink: (link: string) => void;
   onGoCalendarList: () => void;
   onGoTasksOverdue: () => void;
-  onGoEnquiries: (view: "new" | "followup") => void;
+  onGoEnquiries: (view: "reply" | "followup") => void;
   onGoDeposits: () => void;
+  /**
+   * Enquiries waiting on you: the Enquiries list's own Needs reply and
+   * Follow-up due rows (the sidebar badge and the "Needs follow-up" tile count
+   * these), not the server's older rule. Undefined until the enquiries load.
+   */
+  enquiries?: EnquiryNeeds;
   /** Double-bookings kept over the clash warning (bookings.clashes). */
   clashes?: Clash[];
   onResolveClash: (bookingId: number) => void;
@@ -131,6 +149,8 @@ interface Row {
   sub?: React.ReactNode;
   when?: string;
   action: React.ReactNode;
+  /** Where it sorts, when not by its tone (TONE_RANK). */
+  rank?: number;
 }
 
 const TONE_RANK: Record<Tone, number> = { red: 0, amber: 1, blue: 2, green: 3, muted: 4 };
@@ -186,7 +206,7 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
   }
 
   if (data) {
-    const { tonight, tasks, enquiries, deposits, runsheets, alerts } = data;
+    const { tasks } = data;
     // Overdue tasks — red.
     for (const t of tasks.items.filter(t => !doneIds.has(t.id))) {
       rows.push({
@@ -206,23 +226,36 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
         ),
       });
     }
-    // Enquiries: first reply overdue (red), follow-ups overdue (red) or due today (amber).
-    for (const l of enquiries.items) {
-      const awaiting = l.reason === "awaiting_reply";
-      const days = l.followUpDaysOverdue ?? 0;
+  }
+
+  // Enquiries waiting on you, as the Enquiries list shows them: Needs reply
+  // (a first reply, or the client wrote back), then Follow-up due. Each keeps
+  // its lane colour and the words on its row.
+  const shownReply = (p.enquiries?.reply ?? []).slice(0, NEEDS_GROUP_CAP);
+  const shownFollowup = (p.enquiries?.followup ?? []).slice(0, NEEDS_GROUP_CAP);
+  for (const [group, list] of [["reply", shownReply], ["followup", shownFollowup]] as const) {
+    for (const l of list) {
+      const tone = LANE_TONE[l.lane];
+      const reply = group === "reply";
       rows.push({
-        key: `lead-${l.leadId}`, tone: awaiting || days > 0 ? "red" : "amber",
-        signal: awaiting ? "Reply overdue" : days > 0 ? "Follow-up overdue" : "Follow-up due",
-        signalSub: awaiting ? `waiting ${formatWait(l.waitingHours ?? 0)}` : days > 0 ? `${days} day${days !== 1 ? "s" : ""}` : "today",
+        key: `lead-${l.leadId}`, tone, signal: l.text, signalSub: l.sub,
+        // Someone waiting on a reply comes straight after the red rows, whatever
+        // their colour: a first reply is blue ("new") on the list however long
+        // it has waited, but it is still the venue's to answer today.
+        rank: reply && tone !== "red" ? 0.5 : undefined,
         initials: initialsOf(l.name),
         name: nameBtn(l.name, () => p.onOpenLead(l.leadId)),
         sub: l.eventType ?? undefined,
         action: (
-          <button type="button" onClick={() => p.onOpenLead(l.leadId)} aria-label={`${awaiting ? "Reply to" : "Open"} ${l.name}`}
-            className={awaiting || days > 0 ? btnPrimary : btnOutline}>{awaiting ? "Reply" : "Follow up"}</button>
+          <button type="button" onClick={() => p.onOpenLead(l.leadId)} aria-label={`${reply ? "Reply to" : "Follow up with"} ${l.name}`}
+            className={tone === "red" ? btnPrimary : btnOutline}>{reply ? "Reply" : "Follow up"}</button>
         ),
       });
     }
+  }
+
+  if (data) {
+    const { tonight, deposits, runsheets, alerts } = data;
     // Alerts still worth a look: a double-booking is red, the rest amber.
     // A double-booking already listed from the clash check isn't listed twice.
     const clashBookingIds = new Set((p.clashes ?? []).flatMap(c => [c.a.bookingId, c.b?.bookingId]).filter((v): v is number => v != null));
@@ -296,19 +329,26 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
     });
   }
 
-  // Stable sort: red, then amber; within a tone the server's most-urgent order holds.
-  const sorted = rows.map((r, i) => ({ r, i })).sort((a, b) => TONE_RANK[a.r.tone] - TONE_RANK[b.r.tone] || a.i - b.i).map(x => x.r);
+  // Stable sort: red, then replies, then amber; within a group the most-urgent order holds.
+  const rankOf = (r: Row) => r.rank ?? TONE_RANK[r.tone];
+  const sorted = rows.map((r, i) => ({ r, i })).sort((a, b) => rankOf(a.r) - rankOf(b.r) || a.i - b.i).map(x => x.r);
   const urgent = sorted.filter(r => r.tone === "red").length;
 
   // What's past the five-per-group cap, and where it lives.
   const more: { n: number; label: string; go?: () => void }[] = [];
-  if (data) {
-    const { tasks, enquiries, deposits, runsheets, alerts } = data;
-    const shownAwaiting = enquiries.items.filter(i => i.reason === "awaiting_reply").length;
-    const moreAwaiting = enquiries.awaitingTotal - shownAwaiting > 0;
+  if (p.enquiries) {
+    // The same counts as the list's Needs reply and Follow-up due tabs.
     more.push(
+      { n: p.enquiries.reply.length - shownReply.length, label: "waiting on a reply", go: () => p.onGoEnquiries("reply") },
+      { n: p.enquiries.followup.length - shownFollowup.length, label: "follow-ups due", go: () => p.onGoEnquiries("followup") },
+    );
+  }
+  if (data) {
+    const { tonight, tasks, deposits, runsheets, alerts } = data;
+    more.push(
+      // Events today past the cap aren't checked for a run sheet here.
+      { n: tonight.total - tonight.items.length, label: "events today", go: p.onGoCalendarList },
       { n: tasks.total - tasks.items.length, label: "overdue tasks", go: p.onGoTasksOverdue },
-      { n: enquiries.total - enquiries.items.length, label: "enquiries", go: () => p.onGoEnquiries(moreAwaiting ? "new" : "followup") },
       { n: deposits.total - deposits.items.length, label: "deposits due", go: p.onGoDeposits },
       { n: runsheets.total - runsheets.items.length, label: "events without a run sheet", go: p.onGoCalendarList },
       { n: alerts.total - alerts.items.length, label: "in the alerts bell" },
@@ -319,7 +359,7 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
   return (
     <section aria-label="Needs you today" className="flex flex-col gap-2.5 min-w-0">
       <OvHead title="Needs you today" meta={sorted.length ? (urgent ? `${urgent} urgent · most urgent first` : "Most urgent first") : undefined} />
-      {!data && sorted.length === 0 ? (
+      {(!data || !p.enquiries) && sorted.length === 0 ? (
         <p className="font-sans text-[13px] text-muted-foreground m-0 py-2">Loading…</p>
       ) : sorted.length === 0 ? (
         <div className="rounded-[8px] border-[1.5px] border-border bg-card px-4 py-3.5">

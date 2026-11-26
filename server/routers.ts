@@ -3335,7 +3335,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .query(async ({ input, ctx }) => {
         return getBookingsByMonth(ctx.user.id, input.year, input.month);
       }),
-    /** Overview "Double-bookings to resolve": upcoming flagged events, one row per clashing pair. */
+    /** Overview "Needs you today" (its double-booked rows): upcoming flagged events, one row per clashing pair. */
     clashes: protectedProcedure
       .query(async ({ ctx }) => {
         const { listDoubleBookings } = await import('./doubleBookings');

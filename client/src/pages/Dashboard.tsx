@@ -121,6 +121,7 @@ import { AlertTriangle } from "lucide-react";
 import { hhmmLabel } from "@/lib/overviewDates";
 import { CalendarLegend, CalendarDayPanel, calSignal, calChipStyle, CalDot, CalSig, calBtn, calBtnPrimary, calBtnSmall, calPill, CAL_TONE, type CalDayEvent, type CalDayClash } from "@/components/CalendarParts";
 import { OverviewSummaryStrip, OverviewNeedsToday, OverviewToday, OverviewSetup } from "@/components/OverviewParts";
+import { needsTodayEnquiries } from "@shared/needsToday";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -1251,9 +1252,8 @@ export default function Dashboard() {
   // Overview calendar: start at this week (default) or show the whole month.
   const [overviewShowPast, setOverviewShowPast] = useState(false);
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
-  // "Needs you today" used to sit at the top of the Overview; it now lives
-  // under the calendar as an opt-in panel, off by default and remembered per
-  // browser.
+  // "Needs you today" is on the Overview; the Calendar can also show it under
+  // the grid as an opt-in panel, off by default and remembered per browser.
   const [showCalendarNeeds, setShowCalendarNeeds] = useState<boolean>(() => {
     try { return localStorage.getItem('vfhq_calendar_needs') === '1'; } catch { return false; }
   });
@@ -1333,7 +1333,21 @@ export default function Dashboard() {
   // staff (read-only) don't get the card.
   const { data: doubleBookings } = trpc.bookings.clashes.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 60_000 });
   const resolveClash = trpc.bookings.resolveClash.useMutation({
-    onSuccess: () => { toast.success("Marked resolved"); void utils.bookings.invalidate(); },
+    onSuccess: (r) => {
+      toast.success("Marked resolved");
+      // The clash's alerts go with it: drop them from "Needs you today" now
+      // (the server stops listing them once the flag is cleared), or the row
+      // comes back from the alerts as soon as the pair leaves the clash list.
+      const cleared = new Set(r.cleared);
+      utils.dashboard.needsAttention.setData(undefined, (old) => {
+        if (!old) return old;
+        const items = old.alerts.items.filter(a => !(a.kind === 'double_booking' && a.bookingId != null && cleared.has(a.bookingId)));
+        const gone = old.alerts.items.length - items.length;
+        return gone ? { ...old, alerts: { total: Math.max(0, old.alerts.total - gone), items }, total: Math.max(0, old.total - gone) } : old;
+      });
+      void utils.dashboard.needsAttention.invalidate();
+      void utils.bookings.invalidate();
+    },
     onError: (e) => toast.error(e.message || "Couldn't mark it resolved"),
   });
   const alignStartTime = trpc.runsheets.alignStartTime.useMutation({
@@ -3608,6 +3622,13 @@ export default function Dashboard() {
     () => viewCounts(enquiryRows, listState.filters, listState.q, listCtx)[effectiveView(listState)],
     [enquiryRows, listState, listCtx],
   );
+  // "Needs you today" (Overview and the Calendar panel): the list's own Needs
+  // reply and Follow-up due rows, in the list's order, with each row's lane
+  // and words, so they are the same people the badge and the tabs count.
+  const needsEnquiries = React.useMemo(
+    () => (allLeads ? needsTodayEnquiries(enquiryRows, listCtx) : undefined),
+    [allLeads, enquiryRows, listCtx],
+  );
   // The Board: every enquiry the search and filters (not Status) let through.
   const boardRowById = React.useMemo(() => {
     const m = new Map<number, ListRow>();
@@ -4293,8 +4314,9 @@ export default function Dashboard() {
                       onOpenLink={(link) => { void openAlertLink(link); }}
                       onGoCalendarList={showCalendarList}
                       onGoTasksOverdue={() => tileAction('overdue_tasks')}
-                      onGoEnquiries={(view) => showEnquiries({ view: view === 'new' ? 'reply' : 'followup' })}
+                      onGoEnquiries={(view) => showEnquiries({ view })}
                       onGoDeposits={() => tileAction('deposits_due')}
+                      enquiries={needsEnquiries}
                       clashes={doubleBookings}
                       onResolveClash={(id) => resolveClash.mutate({ id })}
                       resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
@@ -6129,9 +6151,9 @@ export default function Dashboard() {
           {/* "Needs you today" — opt-in, flush under the calendar grid (toggled
               from the toolbar, off by default). When it's on, the calendar pane
               sizes to its content and the whole page scrolls in <main>, so this
-              sits directly beneath the grid rather than a screen below it. It
-              hides itself when there is nothing to do, so an empty panel never
-              shows. */}
+              sits directly beneath the grid rather than a screen below it. The
+              same list as the Overview's; with nothing to do it says "All
+              clear", since it was asked for. */}
           {tab === "calendar" && showCalendarNeeds && !isStaff && (
             <div id="calendar-needs-today" className="px-3 md:px-8 pt-5 pb-8 bg-background border-t-[1.5px] border-border">
               <OverviewNeedsToday
@@ -6140,11 +6162,13 @@ export default function Dashboard() {
                 onOpenLink={(link) => { void openAlertLink(link); }}
                 onGoCalendarList={showCalendarList}
                 onGoTasksOverdue={() => tileAction('overdue_tasks')}
-                onGoEnquiries={(view) => showEnquiries({ view: view === 'new' ? 'reply' : 'followup' })}
+                onGoEnquiries={(view) => showEnquiries({ view })}
                 onGoDeposits={() => tileAction('deposits_due')}
+                enquiries={needsEnquiries}
                 clashes={doubleBookings}
                 onResolveClash={(id) => resolveClash.mutate({ id })}
                 resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
+                mismatches={startTimeMismatches}
                 onAlignStartTime={(runsheetId, keep) => alignStartTime.mutate({ runsheetId, keep })}
                 aligningRunsheetId={alignStartTime.isPending ? (alignStartTime.variables?.runsheetId ?? null) : null}
                 fmtDay={(d) => formatEventDate(d, { weekday: 'short', day: 'numeric', month: 'short' })}

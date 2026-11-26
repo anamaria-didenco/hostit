@@ -61,7 +61,7 @@ export async function flagOverriddenClash(ownerId: number, bookingId: number): P
   await notifyVenue(ownerId, {
     kind: "double_booking",
     title: `Double booking: ${who} on ${fmtNzDay(b.eventDate)}`,
-    body: `${who} was saved on a date and space that's already taken.\n${clashes.map(c => c.summary).join("\n")}\nIt's listed under "Double-bookings to resolve" on the Overview until one moves or it's marked resolved.`,
+    body: `${who} was saved on a date and space that's already taken.\n${clashes.map(c => c.summary).join("\n")}\nIt's listed under "Needs you today" on the Overview until one moves or it's marked resolved.`,
     bookingId: b.id,
     leadId: b.leadId,
     link: bookingLink(b.id),
