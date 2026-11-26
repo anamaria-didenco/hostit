@@ -4230,7 +4230,6 @@ export default function Dashboard() {
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             const actionStats = visibleStats.filter(s => !(s as any).perf);
             const perfStats = visibleStats.filter(s => (s as any).perf);
-            const firstName = (user?.name ?? '').trim().split(/\s+/)[0];
             const setupSteps = [
               { key: 'venueDetails', label: 'Name your venue', sub: 'Venue → Details', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('details'); } },
               { key: 'spaces', label: 'Add your spaces', sub: 'Venue → Spaces', go: () => { setTab('settings'); setSettingsSubTab('venue'); setVenueSettingsSection('spaces'); } },
@@ -4241,17 +4240,33 @@ export default function Dashboard() {
             const setupTodo = setupStatus ? setupSteps.filter(st => !(setupStatus as any)[st.key]) : [];
             return (
             <div className="px-4 md:px-8 pt-5 md:pt-7 pb-10 flex flex-col gap-5">
-              {/* Greeting header */}
-              <header className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                  <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-                    {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </span>
-                  <h1 className="m-0 font-sans text-[26px] md:text-[30px] font-semibold tracking-[-0.015em] text-foreground leading-tight">
-                    Kia ora{firstName ? `, ${firstName}` : ''}<span className="sr-only"> — Overview</span>
-                  </h1>
-                </div>
-                <div className="flex items-center gap-2">
+              {/* The calendar leads the page; the heading is for screen readers. */}
+              <h1 className="sr-only">Overview</h1>
+              {/* The full month calendar, across the whole width, first thing on the page. */}
+              {monthCalendarCard}
+
+
+              {/* Then new enquiries: the ones nobody has answered yet, newest first. */}
+              <div className="flex justify-end -mb-2">
+                <button
+                    onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
+                    className={calBtnPrimary}>
+                    <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
+                  </button>
+              </div>
+              {!isStaff && (
+                <OverviewNewEnquiries
+                  rows={newEnquiryRows.slice(0, 6)}
+                  total={newEnquiryRows.length}
+                  loading={!allLeads}
+                  tz={venueTz}
+                  nowMs={listNowMs}
+                  onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
+                  onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
+                />
+              )}
+
+              <div className="flex justify-end -mb-2">
                   <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
                     <PopoverTrigger asChild>
                       <button className={calBtn}>
@@ -4275,30 +4290,7 @@ export default function Dashboard() {
                       ))}
                     </PopoverContent>
                   </Popover>
-                  <button
-                    onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                    className={calBtnPrimary}>
-                    <Plus className="w-4 h-4" strokeWidth={2.4} aria-hidden /> Add enquiry
-                  </button>
-                </div>
-              </header>
-
-              {/* New enquiries first: the ones nobody has answered yet, newest first. */}
-              {!isStaff && (
-                <OverviewNewEnquiries
-                  rows={newEnquiryRows.slice(0, 6)}
-                  total={newEnquiryRows.length}
-                  loading={!allLeads}
-                  tz={venueTz}
-                  nowMs={listNowMs}
-                  onOpen={(id) => { void openAlertLink(`/dashboard?tab=enquiries&leadId=${id}`); }}
-                  onViewAll={() => showEnquiries({ view: 'all', filters: { status: ['new'] } })}
-                />
-              )}
-
-              {/* The full month calendar, across the whole width. */}
-              {monthCalendarCard}
-
+              </div>
               {/* Summary strip — action counts first; each opens exactly the
                   records it counted. The vanity numbers wait in a collapsed row. */}
               <OverviewSummaryStrip tiles={actionStats.map(toTile)} onTile={tileAction} />
