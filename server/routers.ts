@@ -44,7 +44,7 @@ import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, updateLeadStatus, updateLead, markLeadLost,
+  getLeads, getLeadById, createLead, completePartialLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -95,11 +95,13 @@ const validDateString = z
 // ownerId), shared by leads.submit AND leads.startCapture — a bot hammering
 // startCapture without ever calling submit still burns the same budget,
 // rather than getting a second, unlimited quota. One write is not counted:
-// a submit that completes the caller's own still-partial lead (its leadToken
-// verifies). That is the second half of one enquiry whose first half,
+// the one submit that completes the caller's own still-partial lead (its
+// leadToken verifies, same email, and it wins the atomic claim in
+// leads.submit). That is the second half of one enquiry whose first half,
 // startCapture, already counted — and it inserts nothing — so three people
 // on one office connection no longer have the third refused at SUBMIT, while
-// rows created per bucket stay capped at 5. Skipped under
+// rows created per bucket stay capped at 5, and each counted startCapture
+// buys at most one uncounted completion. Skipped under
 // `NODE_ENV=test` because the vitest suite calls these many times from the
 // same (unknown IP, ownerId 1) bucket.
 async function enforceLeadRateLimit(ctx: any, ownerId: number) {
@@ -808,20 +810,30 @@ export const appRouter = router({
         // the token must match, and the row must still be an untouched
         // partial. Any enquiry staff have since worked on is left alone.
         // The token is an HMAC the server only hands out with a lead it saved
-        // (startCapture, after its own rate limit and bot checks), so the DB
-        // is read only for a real one.
+        // (startCapture), so the DB is read only for a real one.
         const claimed = input.leadId && isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
           ? await getLeadById(input.leadId, input.ownerId)
           : undefined;
-        const ownPartial = claimed && claimed.internalNotes === PARTIAL_LEAD_NOTE && claimed.status === "new" ? claimed : undefined;
-        // Finishing your own partial doesn't count against the limit (see
-        // enforceLeadRateLimit); anything else does.
-        if (!ownPartial) await enforceLeadRateLimit(ctx, input.ownerId);
+        const partial = claimed && claimed.internalNotes === PARTIAL_LEAD_NOTE && claimed.status === "new" ? claimed : undefined;
+        // Finishing it with the email it was saved with is the second half of
+        // one enquiry whose first half, startCapture, already counted against
+        // the rate limit. So it isn't counted again, and the timing token is
+        // skipped: the venue's own page may have reloaded the form (a new
+        // token) seconds before SUBMIT. That is only a provisional pass: the
+        // request that actually completes the row keeps it. The row is
+        // claimed atomically below (completePartialLead), so a burst of
+        // submits with one token gets one free completion and the rest are
+        // counted and checked like any other. This is no proof of a person:
+        // startCapture lets a missing timing token through (cached pages), so
+        // a script can get a partial without loading the form. It gains
+        // nothing a plain submit doesn't: one completion per counted write.
+        const sameEmail = (a: string | null | undefined, b: string | null | undefined) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+        const finishingOwn = !!partial && sameEmail(partial.email, input.email);
+        if (!finishingOwn) await enforceLeadRateLimit(ctx, input.ownerId);
         const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
-        // A bot gets a convincing success and nothing is stored or sent.
-        // Finishing your own partial skips the timing token: step 1 already
-        // passed it, and the venue's page may have reloaded the form since.
-        if (isBotSubmission(input.ownerId, input.hp, input.formToken, { timingPassed: !!ownPartial })) return { id: 0, leadToken: "" } as any;
+        // A bot gets a convincing success and nothing is stored or sent. The
+        // honeypot always counts.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken, { timingPassed: finishingOwn })) return { id: 0, leadToken: "" } as any;
         if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
           throw new Error("Please complete the quick security check above the button, then send again.");
         }
@@ -870,18 +882,20 @@ export const appRouter = router({
         };
 
         let lead = null;
-        if (ownPartial) {
+        if (partial) {
           // Completing a lead startCapture already created at step 1 —
           // update that row rather than insert a second one, and clear the
-          // "Partial" marker (unless a staff member already overwrote it
-          // with a real note in the meantime — that's theirs, not ours to
-          // erase: ownPartial is only set while the row is untouched).
-          await updateLead(ownPartial.id, input.ownerId, {
-            ...leadData,
-            internalNotes: null,
-            updatedAt: new Date(),
-          });
-          lead = await getLeadById(ownPartial.id, input.ownerId);
+          // "Partial" marker. Only while it is still the untouched partial
+          // (a staff note written meanwhile is theirs, not ours to erase),
+          // and only for one request: of several racing to finish it, one
+          // gets the row and the others get null.
+          lead = await completePartialLead(partial.id, input.ownerId, leadData);
+        }
+        if (!lead && finishingOwn) {
+          // Another request finished this partial between the read above and
+          // here. This one gets no free pass: counted, and timing-checked.
+          await enforceLeadRateLimit(ctx, input.ownerId);
+          if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
         }
         if (!lead) {
           // No leadId (or its row vanished) — startCapture never ran, or
