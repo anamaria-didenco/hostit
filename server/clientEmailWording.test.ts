@@ -440,6 +440,13 @@ describe("follow-up sequence defaults", () => {
     const def = SEQUENCE_BY_KEY.enquiry_no_reply.defaults;
     expectNoInjectedMarkup(render(def.subject, def.body, { firstName: HOSTILE, eventType: "<b>x</b>" }));
   });
+
+  it("wording the venue wrote fills {{eventType}} exactly as before", () => {
+    const own = render("About your {{eventType}} — {{venueName}}", "Hi {{firstName}},\n\nHow is your {{eventType}} coming along?", { firstName: "Ava", eventType: "Other" });
+    expect(own.subject).toBe("About your Other — The Larder Room");
+    expect(own.text).toContain("How is your Other coming along?");
+    expect(render("Hi", "Your {{eventType}}", { firstName: "Ava", eventType: " " }).text).toBe("Your event");
+  });
 });
 
 describe("saved sequences holding an earlier default", () => {
