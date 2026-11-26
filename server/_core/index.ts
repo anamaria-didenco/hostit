@@ -587,13 +587,8 @@ async function startServer() {
     // Weekly enquiry/pipeline report email (Mon ~8am NZ by default).
     startEnquiryReportScheduler();
     startXeroSyncScheduler();
-    // Follow-ups, reply-overdue alerts, hold expiry, inbox polling… (server/backgroundJobs.ts),
-    // and the retries of enquiry emails that didn't go (server/enquiryEmails.ts).
-    void (async () => {
-      (await import("../enquiryEmails")).registerEnquiryEmailJobs();
-      const { startBackgroundJobs } = await import("../backgroundJobs");
-      await startBackgroundJobs();
-    })();
+    // Follow-ups, reply-overdue alerts, hold expiry, inbox polling… (server/backgroundJobs.ts)
+    void (async () => { const { startBackgroundJobs } = await import("../backgroundJobs"); await startBackgroundJobs(); })();
     // Bar Franco's Event menus 2026 (once per venue), then the general backfill
     // of missing beer / non-alcoholic categories — in that order, so the
     // backfill sees the updated catalogue.

@@ -494,7 +494,7 @@ export async function runEnquiryEmailRetries(now: Date = new Date()): Promise<nu
   return sent;
 }
 
-/** Registered from server/_core/index.ts, next to the other background jobs. */
+/** Registered in server/backgroundJobs.ts, with the other background jobs. */
 export function registerEnquiryEmailJobs() {
   registerJob("enquiry-emails", 2 * 60_000, async () => { await runEnquiryEmailRetries(); });
 }

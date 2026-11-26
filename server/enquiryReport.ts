@@ -14,6 +14,7 @@
  * Never throws — failures are logged so they can't crash the server loop.
  */
 import { smtpTls } from "./smtpTls";
+import { SMTP_TIMEOUTS } from "@shared/emailDelivery";
 import { getDb } from "./db";
 import { leads, bookings, venueSettings } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -226,6 +227,8 @@ export async function sendEnquiryReport(
       host: vs.smtpHost, port, secure,
       auth: { user: vs.smtpUser, pass: vs.smtpPass },
       tls: smtpTls(),
+      // A mail server that doesn't answer fails in seconds, not minutes.
+      ...SMTP_TIMEOUTS,
     } as any);
     const fromName = vs.smtpFromName ?? vs.name ?? "VenueFlowHQ";
     const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
