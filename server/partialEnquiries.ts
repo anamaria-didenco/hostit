@@ -10,17 +10,22 @@
  * dedupeKey). If they finish the form inside those 20 minutes, the normal
  * "New Event Enquiry" email goes instead and this never fires.
  *
- * Nor does it fire when the same person has since come back: a newer lead
- * for the same venue with the same email (finished, or started again) means
- * this one was left behind, not abandoned. Nothing is merged or deleted.
+ * Nor does it fire when the same person has since come back: a newer
+ * enquiry for the same venue with the same email (finished, or started
+ * again) means this one was left behind, not abandoned. Only an enquiry that
+ * reaches the venue itself counts: not one staff typed or imported, an
+ * Express Book request (that sends the venue no email) or a health check
+ * (hidden from the list), so none of those can silence this alert. Nothing
+ * is merged or deleted.
  */
-import { and, eq, gte, lte, notExists, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, notExists, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "./db";
 import { leads } from "../drizzle/schema";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { notifyVenue, type VenueAlert } from "./notify";
 import { registerJob } from "./jobs";
+import { NON_ENQUIRY_SOURCES } from "./speedToLead";
 
 /** How long a step-1 enquiry is given to finish before the venue is told. */
 export const PARTIAL_ALERT_AFTER_MS = 20 * 60_000;
@@ -78,9 +83,11 @@ export async function alertUnfinishedEnquiries(now = new Date()): Promise<number
     lte(leads.createdAt, new Date(now.getTime() - PARTIAL_ALERT_AFTER_MS)),
     gte(leads.createdAt, new Date(now.getTime() - PARTIAL_ALERT_WINDOW_MS)),
     // The person came back (the form reloaded, or they tried again later)
-    // and a newer lead of theirs exists: that one is the enquiry to act on.
+    // and a newer enquiry of theirs exists: that one is the one to act on.
     notExists(db.select({ one: sql`1` }).from(newer).where(and(
       eq(newer.ownerId, leads.ownerId),
+      isNotNull(newer.source),
+      notInArray(newer.source, NON_ENQUIRY_SOURCES),
       sql`lower(trim(${newer.email})) = lower(trim(${leads.email}))`,
       sql`(${newer.createdAt} > ${leads.createdAt} or (${newer.createdAt} = ${leads.createdAt} and ${newer.id} > ${leads.id}))`,
     ))),

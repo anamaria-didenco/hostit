@@ -327,4 +327,36 @@ d("unfinished-enquiry alerts when the person came back (DB)", () => {
     const [left] = await db.select().from(leads).where(eq(leads.id, finishedLater));
     expect(left.internalNotes).toBe(PARTIAL_LEAD_NOTE);
   });
+
+  it("isn't silenced by a newer lead that never reaches the venue as an enquiry", async () => {
+    const db = (await getDb())!;
+    const t = tag();
+    const ins = async (v: any) => (await db.insert(leads).values(v).returning({ id: leads.id }))[0].id;
+    const ids: number[] = [];
+    for (const source of ["express_book", "healthcheck", "manual", "csv_import", "xero", null]) {
+      const email = `src-${source ?? "none"}.${t}@example.test`;
+      ids.push(await ins(partial(email, 10)));
+      await ins({ ...complete(email.toUpperCase(), 12), source });
+    }
+    await alertUnfinishedEnquiries(at(40));
+    const alerted = (await db.select({ leadId: venueNotifications.leadId }).from(venueNotifications)
+      .where(and(eq(venueNotifications.ownerId, OWNER), eq(venueNotifications.kind, "partial_enquiry"), inArray(venueNotifications.leadId, ids)))).map(r => r.leadId);
+    expect(alerted.sort()).toEqual([...ids].sort());
+  });
+
+  it("still alerts when someone sends the visitor's email through Express Book or as a health check", async () => {
+    const db = (await getDb())!;
+    const t = tag();
+    const victims = [`victim-xb.${t}@example.test`, `victim-hc.${t}@example.test`];
+    const caps = [];
+    for (const email of victims) caps.push(await publicCaller().leads.startCapture({ ...person(email), formToken: openedAgo(10_000) }));
+    // Someone else, from another connection, with the same email addresses.
+    await publicCaller().expressBook.submit({ ownerId: OWNER, firstName: "Not", lastName: "Them", email: victims[0].toUpperCase(), eventType: "Other", eventDate: "2031-05-05", guestCount: 2 });
+    const hc: any = await publicCaller().leads.submit({ ownerId: OWNER, firstName: "Not", email: victims[1], source: "healthcheck", formToken: openedAgo(10_000) });
+    expect(hc.id).toBeGreaterThan(0);
+    await alertUnfinishedEnquiries(new Date(Date.now() + 25 * 60_000));
+    const alerted = (await db.select({ leadId: venueNotifications.leadId }).from(venueNotifications)
+      .where(and(eq(venueNotifications.ownerId, OWNER), eq(venueNotifications.kind, "partial_enquiry"), inArray(venueNotifications.leadId, caps.map(c => c.leadId))))).map(r => r.leadId);
+    expect(alerted.sort()).toEqual(caps.map(c => c.leadId).sort());
+  });
 });
