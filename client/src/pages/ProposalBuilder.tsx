@@ -19,6 +19,7 @@ import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNa
 import { isProposalLocked, proposalMoney } from "@shared/proposalTotals";
 import { percentError } from "@shared/settingsValidation";
 import { markInvalid } from "@/lib/fieldErrorAria";
+import { ProposalStepper, ProposalSection, PbSectionHead, PbCallout, useActiveStep, type ProposalStep } from "@/components/ProposalBuilderParts";
 
 // Unsaved work is kept on this device until it's saved, so a reload, a closed
 // tab or a Back press doesn't lose a long proposal. Storage can be blocked
@@ -636,13 +637,13 @@ export default function ProposalBuilder() {
 
   // Short enough for the phone header; the hint says what to do.
   const saveState: { label: string; hint: string; cls: string } | null =
-    locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-gray-500" }
-    : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-gray-500" }
-    : dirty && titleMissing ? { label: "Not saved", hint: titleMissing, cls: "text-red-700" }
-    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-red-700" }
-    : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-red-700" }
-    : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-amber-700" }
-    : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-sage-dark" }
+    locked ? { label: "Read-only", hint: "The client has answered this proposal, so it can't be changed.", cls: "text-muted-foreground" }
+    : saving ? { label: "Saving…", hint: "Saving your changes.", cls: "text-muted-foreground" }
+    : dirty && titleMissing ? { label: "Not saved", hint: titleMissing, cls: "text-[#c0392b]" }
+    : dirty && moneyError ? { label: "Not saved", hint: moneyError, cls: "text-[#c0392b]" }
+    : dirty && autosaveFailedOn === formSnapshot + drinksSnapshot ? { label: "Couldn't save", hint: "Check your connection, then press Save Changes. Your changes are kept on this device.", cls: "text-[#c0392b]" }
+    : dirty ? { label: savedProposal ? "Unsaved changes" : "Not saved yet", hint: canAutosave ? "Saving shortly." : savedProposal ? "Press Save Changes to update the client's page." : "Press Save Draft to save this proposal.", cls: "text-[#8a5f18]" }
+    : savedProposal ? { label: "All saved", hint: "Every change is saved.", cls: "text-[#3f7350]" }
     : null;
 
   // Sending always saves first, so the client never gets a stale version.
@@ -657,6 +658,29 @@ export default function ProposalBuilder() {
   const proposalUrl = savedProposal?.publicToken
     ? `${window.location.origin}/proposal/${savedProposal.publicToken}`
     : null;
+
+  // ── Layout: the form's sections, the minimum-spend check ──────────────────
+  // Same figures as the minimum spend breakdown in Pricing.
+  const minSpendNum = _minSpendNum() || 0;
+  const minSpendTotal = _foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount;
+  // Same query as the photos card, so the stepper knows whether there are any.
+  const { data: proposalPhotos } = trpc.proposals.photos.list.useQuery(
+    { proposalId: savedProposal?.id ?? 0 }, { enabled: !!savedProposal?.id });
+  const steps: ProposalStep[] = [
+    { id: "details", label: "Event details", filled: !!title.trim() && !!eventDate && !!guestCount && !!spaceName,
+      hint: "Who it's for, the date, the guest count and the space." },
+    { id: "menu", label: "Menu", filled: selectedMenuPackageIds.length + foodLinesAdded > 0,
+      hint: "Pick the menu packages, or add dishes from your catalogue." },
+    { id: "drinks", label: "Drinks", filled: selectedDrinks.length + customDrinks.length + selectedSampleItems.length > 0,
+      hint: "Set the bar arrangement and tick the drinks to show." },
+    { id: "pricing", label: "Pricing", filled: menuOptions.length > 0 || total > 0,
+      hint: "Check the lines, GST, deposit and any minimum spend." },
+    { id: "terms", label: "Terms & notes", filled: !!termsAndConditions.trim(),
+      hint: "Your standard terms are pre-filled. Check the cancellation window." },
+    { id: "photos", label: "Photos", filled: (proposalPhotos?.length ?? 0) > 0,
+      hint: "Show the space, a set table or the food." },
+  ];
+  const activeStep = useActiveStep(steps.map(s => s.id));
 
   if (loading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -675,144 +699,148 @@ export default function ProposalBuilder() {
 
   if (noEnquiry) return null; // on the way to Enquiries (see above)
 
+  const previewOpen = showPreview && !!savedProposal?.publicToken;
+  const statusLabel = status ? (PROPOSAL_STATUS_TEXT[status] ?? PROPOSAL_STATUS_TEXT.draft).label : "New proposal";
+  const leadName = lead ? [lead.firstName, lead.lastName].filter(Boolean).join(" ") : "";
+  const sectionProps = (i: number) => ({ step: steps[i], index: i, total: steps.length, next: steps[i + 1], disabled: locked });
+
   return (
-    <div className="min-h-screen bg-parchment font-dm">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
-        <Button asChild variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900 font-inter text-xs gap-1 mr-4 min-h-[44px]">
+    <div className="min-h-screen bg-background font-sans text-foreground">
+      {/* Top bar: back, the proposal, save state, actions */}
+      <header className="bg-card border-b-[1.5px] border-border min-h-16 flex items-center gap-3 px-4 sm:px-7 sticky top-0 z-40 overflow-x-auto">
+        <Button asChild variant="ghost" size="sm" className="text-primary hover:text-primary font-semibold text-[13px] gap-1 px-2 min-h-[44px] flex-shrink-0">
           <Link href="/dashboard">
             <ChevronLeft className="w-4 h-4" aria-hidden /> Dashboard
           </Link>
         </Button>
-        {/* At phone widths the brand + page title wrapped into each other
-            and pushed "Save Draft" off-screen; keep them on one line and drop
-            the brand mark where there's no room for both. */}
-        <div className="hidden sm:flex items-center mr-3">
-          <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
-        </div>
-        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0 sr-only sm:not-sr-only">{locked ? "View Proposal" : savedProposal ? "Edit Proposal" : "Proposal Builder"}</h1>
-        <div className="ml-auto flex items-center gap-2">
+        <span className="hidden sm:block w-[1.5px] h-[22px] bg-border flex-shrink-0" aria-hidden />
+        <div className="min-w-0 flex-1 flex items-baseline gap-2">
+          <h1 className="font-sans text-[17px] font-semibold text-foreground m-0 truncate sr-only sm:not-sr-only">
+            <span className="sr-only">{locked ? "View proposal" : savedProposal ? "Edit proposal" : "Proposal builder"}: </span>
+            {title.trim() || "Untitled proposal"}
+          </h1>
+          <span className="hidden md:inline text-[13px] font-medium text-muted-foreground whitespace-nowrap">{statusLabel}{leadName ? ` · ${leadName}` : ""}</span>
           {saveState && (
-            <span role="status" title={saveState.hint} className={`font-inter text-[11px] whitespace-nowrap ${saveState.cls}`}>
+            <span role="status" title={saveState.hint} className={`inline-flex items-center gap-1.5 text-[12px] font-bold whitespace-nowrap ${saveState.cls}`}>
+              <i className="w-[7px] h-[7px] rounded-full bg-current flex-shrink-0" aria-hidden />
               {saveState.label}<span className="sr-only">. {saveState.hint}</span>
             </span>
           )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
           {savedProposal?.publicToken && (
-            <Button onClick={() => setShowPreview(v => !v)} variant="ghost" size="sm" aria-pressed={showPreview}
-              className="hidden lg:inline-flex text-gray-500 hover:text-gray-800 font-inter text-xs gap-1">
-              {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              {showPreview ? "Hide preview" : "Live preview"}
+            <Button onClick={() => setShowPreview(v => !v)} variant="outline" aria-pressed={showPreview}
+              className={`hidden lg:inline-flex h-[38px] rounded-md border-[1.5px] text-[13px] font-semibold gap-1.5 ${showPreview ? "border-primary bg-accent text-primary hover:bg-accent" : "border-input bg-card"}`}>
+              {showPreview ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
+              {showPreview ? "Hide preview" : "Preview as client"}
             </Button>
           )}
           {savedProposal?.publicToken && (
-            <Button
-              onClick={handleDownloadPdf}
-              disabled={pdfLoading}
-              variant="ghost"
-              size="sm"
-              className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1"
-            >
-              <Download className="w-3.5 h-3.5" />
+            <Button onClick={handleDownloadPdf} disabled={pdfLoading} variant="outline"
+              className="h-[38px] rounded-md border-[1.5px] border-input bg-card text-[13px] font-semibold gap-1.5">
+              <Download className="w-4 h-4" aria-hidden />
               {pdfLoading ? "PDF..." : "PDF"}
             </Button>
           )}
           {!locked && (
-            <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
-              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent aria-disabled:pointer-events-none aria-disabled:opacity-50">
+            <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined} variant="outline"
+              className="h-[38px] rounded-md border-[1.5px] border-input bg-card text-[13px] font-semibold aria-disabled:pointer-events-none aria-disabled:opacity-50">
               {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
             </Button>
           )}
           {canSend && (
             <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
-              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1 aria-disabled:pointer-events-none aria-disabled:opacity-50">
-              <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : status === "draft" ? "Send to Client" : "Resend"}
+              className="hidden sm:inline-flex h-[38px] rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-[13px] font-semibold gap-1.5 aria-disabled:pointer-events-none aria-disabled:opacity-50">
+              <Send className="w-4 h-4" aria-hidden /> {sendProposal.isPending ? "Sending..." : status === "draft" ? (lead?.firstName ? `Send to ${lead.firstName}` : "Send to Client") : "Resend"}
             </Button>
           )}
         </div>
       </header>
 
-      <main className={showPreview && savedProposal?.publicToken
-        ? "max-w-[1600px] mx-auto p-6 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6"
-        : "max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6"}>
-        {/* Left: Form (read-only once the client has answered) */}
-        <fieldset disabled={locked} className={`${showPreview && savedProposal?.publicToken ? "" : "lg:col-span-2"} space-y-5 min-w-0`}>
+      <main className={previewOpen
+        ? "max-w-[1600px] mx-auto px-4 sm:px-7 py-6 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6"
+        : "max-w-[1440px] mx-auto px-4 sm:px-7 py-6 grid lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[220px_minmax(0,1fr)_340px] gap-6"}>
+        {/* Left: sections (wide screens) */}
+        {!previewOpen && (
+          <aside className="hidden xl:block xl:sticky xl:top-24 xl:self-start">
+            <ProposalStepper steps={steps} active={activeStep} orientation="vertical" />
+          </aside>
+        )}
+
+        {/* Middle: the form, one section after another */}
+        <div className="space-y-8 min-w-0">
+          <ProposalStepper steps={steps} active={activeStep} orientation="horizontal"
+            className={`sticky top-[72px] z-30 ${previewOpen ? "" : "xl:hidden"}`} />
+
+          <fieldset disabled={locked} className="space-y-4 min-w-0 m-0 p-0 border-0 empty:hidden">
           {pendingDraft && (
-            <div role="alert" className="bg-amber-50 border-2 border-amber-200 p-4 font-dm text-sm text-amber-900">
+            <div role="alert" className="rounded-lg border-[1.5px] p-4 text-sm text-foreground" style={{ background: "#f7efdd", borderColor: "#e9d7b3" }}>
               <p className="m-0">
                 You have changes from {new Date(pendingDraft.savedAt).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })} that weren't saved. Restore them?
               </p>
               <div className="flex gap-2 mt-3">
-                <Button size="sm" onClick={restoreDraft} className="bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs">Restore changes</Button>
-                <Button size="sm" variant="outline" onClick={discardDraft} className="font-inter rounded-lg text-xs bg-transparent">Discard</Button>
+                <Button size="sm" onClick={restoreDraft} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-md text-[12.5px] h-8">Restore changes</Button>
+                <Button size="sm" variant="outline" onClick={discardDraft} className="font-semibold rounded-md text-[12.5px] h-8 border-[1.5px] border-input bg-card">Discard</Button>
               </div>
             </div>
           )}
           {/* Editing an existing proposal */}
           {!!editId && existingLoading && (
-            <div className="bg-cream-card border border-border p-4 font-dm text-sm text-muted-foreground">Loading proposal…</div>
+            <div className="bg-card border-[1.5px] border-border rounded-lg p-4 font-dm text-sm text-muted-foreground">Loading proposal…</div>
           )}
           {!!editId && !existingLoading && !existingProposal && (
-            <div role="alert" className="bg-red-50 border-2 border-red-200 p-4 font-dm text-sm text-red-800">
+            <div role="alert" className="rounded-lg border-[1.5px] p-4 text-sm text-foreground" style={{ background: "#fbecea", borderColor: "#f0c7c2" }}>
               {existingError?.message || "We couldn't find that proposal."} <Link href="/dashboard" className="underline underline-offset-2">Back to the dashboard</Link>
             </div>
           )}
           {savedProposal && <ProposalStatusPanel proposal={savedProposal} />}
+          </fieldset>
 
+          <ProposalSection {...sectionProps(0)}>
           {/* Lead Info Banner */}
           {lead && (
             <ClientContactCard lead={lead as any} leadId={leadId}
               heading={locked ? "PROPOSAL FOR" : savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}
               canEdit={!isStaff && !locked} onSaved={() => setPreviewNonce(n => n + 1)} />
           )}
-
           {/* Proposal Title & Intro */}
-          <div className="bg-cream-card border border-border p-5 shadow-sm">
-            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">PROPOSAL DETAILS</h2>
+          <div className="bg-card border-[1.5px] border-border rounded-lg p-5">
+            <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary mb-4">Proposal</h3>
             <div className="space-y-3">
               <div>
                 <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
                 <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
                   aria-required="true" aria-invalid={showTitleError || undefined} aria-describedby={showTitleError ? "pb-title-error" : undefined}
-                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
+                  className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary font-dm" />
                 {showTitleError && <p id="pb-title-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{titleMissing}</p>}
               </div>
               <div>
                 <label htmlFor="pb-intro" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
                 <Textarea id="pb-intro" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
-                  rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
+                  rows={3} className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
             </div>
           </div>
-
-          {/* Photos */}
-          {savedProposal?.id ? (
-            <ProposalPhotosCard proposalId={savedProposal.id} token={savedProposal.publicToken} locked={locked} onChanged={() => setPreviewNonce(n => n + 1)} />
-          ) : (
-            <div className="bg-cream-card border border-dashed border-border p-4 font-dm text-xs text-muted-foreground flex items-center gap-2">
-              <Camera className="w-4 h-4" aria-hidden /> Save the draft to add photos of the space, table settings or food.
-            </div>
-          )}
-
           {/* Event Details */}
-          <div className="bg-cream-card border border-border p-4 md:p-5 shadow-sm">
-            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
+          <div className="bg-card border-[1.5px] border-border rounded-lg p-4 md:p-5">
+            <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary mb-4">The event</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="pb-event-date" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
                 <Input id="pb-event-date" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
-                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
+                  className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">GUEST COUNT</label>
                 <Input type="number" aria-label="Guest count" value={guestCount} onChange={e => setGuestCount(e.target.value)}
-                  placeholder="50" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
+                  placeholder="50" className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div className="sm:col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT SPACE</label>
                 {spaces && spaces.length > 0 ? (
                   <Select value={spaceName} onValueChange={setSpaceName} disabled={locked}>
-                    <SelectTrigger aria-label="Event space" className="rounded-none border-2 focus:ring-0 focus:border-primary h-10">
+                    <SelectTrigger aria-label="Event space" className="rounded-md border-[1.5px] focus:ring-0 focus:border-primary h-10">
                       <SelectValue placeholder="Select a space…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -829,20 +857,22 @@ export default function ProposalBuilder() {
               </div>
             </div>
           </div>
+          </ProposalSection>
 
+          <ProposalSection {...sectionProps(1)}>
           {/* Menu Packages */}
-          <div className="bg-cream-card border border-border shadow-sm">
+          <div className="bg-card border-[1.5px] border-border rounded-lg">
             <button
               type="button"
               aria-expanded={menuSectionOpen}
               onClick={() => setMenuSectionOpen(o => !o)}
-              className="w-full flex items-center justify-between p-5 hover:bg-sage-tint/50 transition-colors"
+              className="w-full flex items-center justify-between p-5 hover:bg-muted transition-colors"
             >
               <div className="flex items-center gap-2">
                 <ChefHat className="w-4 h-4 text-sage-green" />
-                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">MENU OPTIONS</h2>
+                <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">Menu options</h3>
                 {selectedMenuPackageIds.length > 0 && (
-                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 rounded-full">{selectedMenuPackageIds.length} SELECTED</span>
+                  <span className="text-primary font-bold text-[12px]">{selectedMenuPackageIds.length} SELECTED</span>
                 )}
               </div>
               {menuSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
@@ -890,7 +920,7 @@ export default function ProposalBuilder() {
                                       </div>
                                       <div className="text-right shrink-0">
                                         {pkg.pricePerHead && (
-                                          <div className={`font-alfa text-sm ${g.text}`}>${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head + GST</span></div>
+                                          <div className={`font-semibold tabular-nums text-sm ${g.text}`}>${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head + GST</span></div>
                                         )}
                                         {selected && (
                                           <div className={`font-bebas text-xs tracking-widest mt-0.5 ${g.text}`}>✓ SELECTED</div>
@@ -916,129 +946,8 @@ export default function ProposalBuilder() {
               </div>
             )}
           </div>
-
-          {/* Line Items */}
-          <div className="bg-cream-card border border-border p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING</h2>
-              <Button size="sm" variant="ghost" onClick={() => setLineItems(prev => [...prev, { description: "", qty: 1, unitPrice: 0, total: 0 }])}
-                className="font-bebas tracking-widest text-xs text-primary gap-1">
-                <Plus className="w-3 h-3" /> ADD ITEM
-              </Button>
-            </div>
-
-            {/* Header. On a phone each line stacks: the description on its own
-                row, then qty, price, total and remove (side by side the
-                description box was crushed to 28px). */}
-            <div className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-x-2 gap-y-1 mb-2">
-              <div className="col-span-4 sm:col-span-1 font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
-              <div />
-            </div>
-
-            {doubledPackages.length > 0 && (
-              <div role="alert" className="mb-4 border-2 border-red-700 bg-red-50 p-3 space-y-2">
-                <p className="font-dm text-sm text-red-900">
-                  <b>{doubledPackages.map(d => packageNameFromLine(d.description)).join(" and ")}</b>{" "}
-                  {doubledPackages.length === 1 ? "is" : "are"} on this proposal twice, so the total is too high. An earlier bug caused this; it's fixed now.
-                  {locked && ` The client has already ${status} this total, so talk to them and start a new proposal if it needs fixing.`}
-                </p>
-                {!locked && (<>
-                  <button type="button" onClick={() => setLineItems(prev => withoutDuplicatePackageLines(prev))}
-                    className="bg-red-800 text-white font-dm text-sm font-semibold px-3 py-2 hover:bg-red-900">
-                    Remove the extra {doubledPackages.reduce((n, d) => n + d.extra, 0) === 1 ? "line" : "lines"}
-                  </button>
-                  <span className="font-dm text-xs text-red-900 ml-2">Then save.</span>
-                </>)}
-              </div>
-            )}
-            <div className="space-y-2 mb-4">
-              {lineItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
-                  <div className="min-w-0 col-span-4 sm:col-span-1">
-                    <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
-                      aria-label={`Description, line item ${i + 1}`}
-                      placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
-                  </div>
-                  <div>
-                    <Input aria-label={`Quantity for ${item.description || `line item ${i + 1}`}`} type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
-                  </div>
-                  <div>
-                    <Input aria-label={`Unit price for ${item.description || `line item ${i + 1}`}`} type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
-                  </div>
-                  <div className="text-right font-dm text-sm font-semibold text-ink whitespace-nowrap">
-                    {currency(item.total)}
-                  </div>
-                  <div className="flex justify-center">
-                    {lineItems.length > 1 && (
-                      <button
-                        onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
-                        aria-label={`Remove line item${item.description ? `: ${item.description}` : ` ${i + 1}`}`}
-                        title="Remove line item"
-                        className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
-                        <Trash2 className="w-4 h-4" aria-hidden />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Totals */}
-            <div className="border-t-2 border-dashed border-border pt-4 space-y-2">
-              <div className="flex justify-between font-dm text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{menuOptions.length ? "Priced per menu" : currency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between items-center font-dm text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">GST</span>
-                  <Input id="pb-gst" aria-label="GST percentage" type="number" min={0} max={100} value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
-                    aria-invalid={taxError ? true : undefined} aria-describedby={taxError ? "pb-gst-error" : undefined}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
-                  <span className="text-muted-foreground">%</span>
-                </div>
-                <span>{menuOptions.length ? "" : currency(taxAmount)}</span>
-              </div>
-              {taxError && <p id="pb-gst-error" className="font-dm text-xs text-red-700 -mt-1">{taxError}</p>}
-              {menuOptions.length ? (
-                <div className="border-t-2 border-border pt-2 space-y-2">
-                  <div className="font-bebas text-xs tracking-widest text-muted-foreground">CLIENT CHOOSES ONE MENU</div>
-                  {menuOptions.map(o => (
-                    <div key={o.line} className="flex justify-between items-baseline gap-3 font-dm text-sm border border-border bg-white px-3 py-2">
-                      <span className="font-semibold text-ink min-w-0">{o.name}</span>
-                      <span className="text-right whitespace-nowrap">
-                        <span className="font-alfa text-base text-primary">{currency(o.total)}</span>
-                        <span className="block text-xs text-muted-foreground">incl. GST · deposit {currency(o.deposit)}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-              <div className="flex justify-between font-alfa text-lg text-ink border-t-2 border-border pt-2">
-                <span>TOTAL (NZD)</span>
-                <span className="text-primary">{currency(total)}</span>
-              </div>
-              )}
-              <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input aria-label="Deposit required (percentage)" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
-                    className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
-                  <span className="text-sage-green text-xs">%</span>
-                </div>
-                <span className="font-alfa text-lg text-ink">{menuOptions.length ? <span className="font-dm text-xs text-muted-foreground">per menu, above</span> : currency(deposit)}</span>
-              </div>
-              {depositError && <p id="pb-deposit-error" className="font-dm text-xs text-red-700 -mt-1">{depositError}</p>}
-            </div>
-          </div>
-
           {/* Food Items */}
-          <div className="bg-cream-card border border-border shadow-sm">
+          <div className="bg-card border-[1.5px] border-border rounded-lg">
             <button
               type="button"
               aria-expanded={foodSectionOpen}
@@ -1047,9 +956,9 @@ export default function ProposalBuilder() {
             >
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-primary" />
-                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">FOOD ITEMS</h2>
+                <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">Food items</h3>
                 {foodLinesAdded > 0 && (
-                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                  <span className="text-primary font-bold text-[12px]">
                     {foodLinesAdded} ADDED
                   </span>
                 )}
@@ -1062,11 +971,11 @@ export default function ProposalBuilder() {
                 {groupedFoodCatalogue.length > 0 && (
                   <div className="pt-4">
                     <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">PICK FROM YOUR MENU CATALOGUE</div>
-                    <p className="font-dm text-xs text-muted-foreground mb-3">Adds a line to Pricing above — set the quantity there. Prices exclude GST; GST is added to the total. This list follows Settings → Menu &amp; Catalogue.</p>
+                    <p className="font-dm text-xs text-muted-foreground mb-3">Adds a line to Pricing — set the quantity there. Prices exclude GST; GST is added to the total. This list follows Settings → Menu &amp; Catalogue.</p>
                     <div className="space-y-3 max-h-72 overflow-y-auto border border-border p-3 bg-white/40">
                       {groupedFoodCatalogue.map(g => (
                         <div key={g.category.id}>
-                          <div className="font-playfair italic text-sm text-primary mb-1 border-b border-primary/20 pb-1">{g.category.name}</div>
+                          <div className="font-sans font-bold text-sm text-foreground mb-1 border-b-[1.5px] border-border pb-1">{g.category.name}</div>
                           <div className="space-y-1">
                             {g.items.map((it: any) => {
                               const line = catalogueLineDescription(it);
@@ -1087,7 +996,7 @@ export default function ProposalBuilder() {
                                     disabled={already}
                                     aria-label={already ? `${it.name} added` : `Add ${it.name}`}
                                     onClick={() => addPricingLine(line, catalogueDefaultQty(it, covers), it.price / 100)}
-                                    className="font-bebas tracking-widest rounded-none px-3 text-xs"
+                                    className="font-bebas tracking-widest rounded-md px-3 text-xs"
                                   >
                                     {already ? 'ADDED' : 'ADD'}
                                   </Button>
@@ -1108,14 +1017,14 @@ export default function ProposalBuilder() {
                       onChange={e => setNewFoodItem(p => ({ ...p, name: e.target.value }))}
                       placeholder="Dish name"
                       aria-label="Dish name"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newFoodItem.description}
                       onChange={e => setNewFoodItem(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
                       aria-label="Dish description"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
                       <Input
@@ -1124,9 +1033,9 @@ export default function ProposalBuilder() {
                         value={newFoodItem.pricePerHead}
                         onChange={e => setNewFoodItem(p => ({ ...p, pricePerHead: e.target.value }))}
                         placeholder="$/head"
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                        className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
-                      <Button size="sm" onClick={addFoodItem} aria-label="Add food item" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
+                      <Button size="sm" onClick={addFoodItem} aria-label="Add food item" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-md px-3">
                         <Plus className="w-3.5 h-3.5" aria-hidden />
                       </Button>
                     </div>
@@ -1135,9 +1044,11 @@ export default function ProposalBuilder() {
               </div>
             )}
           </div>
+          </ProposalSection>
 
+          <ProposalSection {...sectionProps(2)}>
           {/* Drinks Selection */}
-          <div className="bg-cream-card border border-border shadow-sm">
+          <div className="bg-card border-[1.5px] border-border rounded-lg">
             <button
               type="button"
               aria-expanded={drinksSectionOpen}
@@ -1146,9 +1057,9 @@ export default function ProposalBuilder() {
             >
               <div className="flex items-center gap-2">
                 <Wine className="w-4 h-4 text-primary" />
-                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">DRINKS SELECTION</h2>
+                <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">Drinks selection</h3>
                 {selectedDrinks.length > 0 && (
-                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                  <span className="text-primary font-bold text-[12px]">
                     {selectedDrinks.length + customDrinks.length} SELECTED
                   </span>
                 )}
@@ -1186,7 +1097,7 @@ export default function ProposalBuilder() {
                         value={tabAmount}
                         onChange={e => setTabAmount(e.target.value)}
                         placeholder="e.g. 1500"
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm w-36"
+                        className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm w-36"
                       />
                     </div>
                   )}
@@ -1196,7 +1107,7 @@ export default function ProposalBuilder() {
                 <p className="font-dm text-xs text-muted-foreground">Event menus 2026. Prices exclude GST; wines are per bottle.</p>
                 {DRINKS_MENU.map(cat => (
                   <div key={cat.category}>
-                    <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">{cat.category}</div>
+                    <div className="font-sans font-bold text-sm text-foreground mb-2 border-b-[1.5px] border-border pb-1">{cat.category}</div>
                     <div className="space-y-1.5">
                       {cat.items.map((item: any) => (
                         <label
@@ -1244,10 +1155,10 @@ export default function ProposalBuilder() {
                   <div className="font-dm text-xs text-muted-foreground mb-3">Tick the dishes to show on the proposal. Price it with the Shared Franco or Tutto Franco package above.</div>
                   {[...SHARED_MENU_SECTIONS, ...previousSampleSections].map(cat => (
                     <div key={cat.category} className="mb-4">
-                      <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">
+                      <div className="font-sans font-bold text-sm text-foreground mb-2 border-b-[1.5px] border-border pb-1">
                         {cat.category}
-                        {cat.note && <span className="font-dm not-italic text-xs text-muted-foreground ml-2">({cat.note})</span>}
-                        {cat.retired && <span className="font-dm not-italic text-xs text-muted-foreground ml-2">· previous menu, untick to remove</span>}
+                        {cat.note && <span className="font-dm font-normal text-xs text-muted-foreground ml-2">({cat.note})</span>}
+                        {cat.retired && <span className="font-dm font-normal text-xs text-muted-foreground ml-2">· previous menu, untick to remove</span>}
                       </div>
                       <div className="space-y-1.5">
                         {cat.items.map(item => (
@@ -1281,7 +1192,7 @@ export default function ProposalBuilder() {
                     <div className="space-y-3 max-h-72 overflow-y-auto border border-border p-3 bg-white/40">
                       {groupedDrinkCatalogue.map(g => (
                         <div key={g.category.id}>
-                          <div className="font-playfair italic text-sm text-primary mb-1 border-b border-primary/20 pb-1">{g.category.name}</div>
+                          <div className="font-sans font-bold text-sm text-foreground mb-1 border-b-[1.5px] border-border pb-1">{g.category.name}</div>
                           <div className="space-y-1">
                             {g.items.map((it: any) => {
                               const already = customDrinks.some(cd => cd.name === it.name);
@@ -1301,7 +1212,7 @@ export default function ProposalBuilder() {
                                       description: it.description ?? undefined,
                                       price: it.price / 100,
                                     }])}
-                                    className="font-bebas tracking-widest rounded-none px-3 text-xs"
+                                    className="font-bebas tracking-widest rounded-md px-3 text-xs"
                                   >
                                     {already ? 'ADDED' : 'ADD'}
                                   </Button>
@@ -1336,14 +1247,14 @@ export default function ProposalBuilder() {
                       onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
                       placeholder="Drink name"
                       aria-label="Drink name"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newCustomDrink.description}
                       onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
                       aria-label="Drink description"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
                       <Input
@@ -1352,9 +1263,9 @@ export default function ProposalBuilder() {
                         onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
                         placeholder="Price"
                         aria-label="Drink price"
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                        className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
-                      <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
+                      <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-md px-3">
                         <Plus className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -1366,7 +1277,7 @@ export default function ProposalBuilder() {
                   <Button
                     onClick={handleSaveDrinks}
                     disabled={saveDrinks.isPending}
-                    className="w-full bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest rounded-none h-10 gap-2"
+                    className="w-full bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest rounded-md h-10 gap-2"
                   >
                     <Wine className="w-4 h-4" />
                     {saveDrinks.isPending ? "SAVING DRINKS..." : "SAVE DRINKS SELECTION"}
@@ -1375,13 +1286,166 @@ export default function ProposalBuilder() {
               </div>
             )}
           </div>
+          </ProposalSection>
 
+          <ProposalSection {...sectionProps(3)}>
+            {minSpendNum > 0 && (
+              minSpendTotal >= minSpendNum ? (
+                <PbCallout tone="green" title={`Clears the ${currencyWhole(minSpendNum)} minimum spend`}>
+                  {autoBarTab && autoBarTabAmount > 0
+                    ? `The bar tab makes up the last ${currencyWhole(autoBarTabAmount)}.`
+                    : minSpendTotal > minSpendNum ? `By ${currencyWhole(minSpendTotal - minSpendNum)}.` : "Right on it."}
+                </PbCallout>
+              ) : (
+                <PbCallout tone="amber" title={`${currencyWhole(minSpendNum - minSpendTotal)} under the ${currencyWhole(minSpendNum)} minimum spend`}>
+                  Add to the pricing, or tick the auto bar tab below to make up the rest.
+                </PbCallout>
+              )
+            )}
+          {/* Line Items */}
+          <div className="bg-card border-[1.5px] border-border rounded-lg p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary">Line items</h3>
+              <Button size="sm" variant="ghost" onClick={() => setLineItems(prev => [...prev, { description: "", qty: 1, unitPrice: 0, total: 0 }])}
+                className="font-bebas tracking-widest text-xs text-primary gap-1">
+                <Plus className="w-3 h-3" /> ADD ITEM
+              </Button>
+            </div>
+
+            {/* Header. On a phone each line stacks: the description on its own
+                row, then qty, price, total and remove (side by side the
+                description box was crushed to 28px). */}
+            <div className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-x-2 gap-y-1 mb-2">
+              <div className="col-span-4 sm:col-span-1 font-bebas text-xs tracking-widest text-muted-foreground">DESCRIPTION</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-center">QTY</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">UNIT PRICE</div>
+              <div className="font-bebas text-xs tracking-widest text-muted-foreground text-right">TOTAL</div>
+              <div />
+            </div>
+
+            {doubledPackages.length > 0 && (
+              <div role="alert" className="mb-4 rounded-lg border-[1.5px] border-[#f0c7c2] bg-[#fbecea] p-3 space-y-2">
+                <p className="font-dm text-sm text-red-900">
+                  <b>{doubledPackages.map(d => packageNameFromLine(d.description)).join(" and ")}</b>{" "}
+                  {doubledPackages.length === 1 ? "is" : "are"} on this proposal twice, so the total is too high. An earlier bug caused this; it's fixed now.
+                  {locked && ` The client has already ${status} this total, so talk to them and start a new proposal if it needs fixing.`}
+                </p>
+                {!locked && (<>
+                  <button type="button" onClick={() => setLineItems(prev => withoutDuplicatePackageLines(prev))}
+                    className="bg-red-800 text-white font-dm text-sm font-semibold px-3 py-2 hover:bg-red-900">
+                    Remove the extra {doubledPackages.reduce((n, d) => n + d.extra, 0) === 1 ? "line" : "lines"}
+                  </button>
+                  <span className="font-dm text-xs text-red-900 ml-2">Then save.</span>
+                </>)}
+              </div>
+            )}
+            <div className="space-y-2 mb-4">
+              {lineItems.map((item, i) => (
+                <div key={i} className="grid grid-cols-[56px_80px_minmax(0,1fr)_44px] sm:grid-cols-[minmax(0,1fr)_56px_80px_84px_44px] gap-2 items-center">
+                  <div className="min-w-0 col-span-4 sm:col-span-1">
+                    <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
+                      aria-label={`Description, line item ${i + 1}`}
+                      placeholder="Item description" className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
+                  </div>
+                  <div>
+                    <Input aria-label={`Quantity for ${item.description || `line item ${i + 1}`}`} type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
+                  </div>
+                  <div>
+                    <Input aria-label={`Unit price for ${item.description || `line item ${i + 1}`}`} type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
+                  </div>
+                  <div className="text-right font-dm text-sm font-semibold text-ink whitespace-nowrap">
+                    {currency(item.total)}
+                  </div>
+                  <div className="flex justify-center">
+                    {lineItems.length > 1 && (
+                      <button
+                        onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
+                        aria-label={`Remove line item${item.description ? `: ${item.description}` : ` ${i + 1}`}`}
+                        title="Remove line item"
+                        className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
+                        <Trash2 className="w-4 h-4" aria-hidden />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals */}
+            <div className="border-t-2 border-dashed border-border pt-4 space-y-2">
+              <div className="flex justify-between font-dm text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>{menuOptions.length ? "Priced per menu" : currency(subtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center font-dm text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">GST</span>
+                  <Input id="pb-gst" aria-label="GST percentage" type="number" min={0} max={100} value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                    aria-invalid={taxError ? true : undefined} aria-describedby={taxError ? "pb-gst-error" : undefined}
+                    className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
+                  <span className="text-muted-foreground">%</span>
+                </div>
+                <span>{menuOptions.length ? "" : currency(taxAmount)}</span>
+              </div>
+              {taxError && <p id="pb-gst-error" className="font-dm text-xs text-red-700 -mt-1">{taxError}</p>}
+              {menuOptions.length ? (
+                <div className="border-t-2 border-border pt-2 space-y-2">
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground">CLIENT CHOOSES ONE MENU</div>
+                  {menuOptions.map(o => (
+                    <div key={o.line} className="flex justify-between items-baseline gap-3 font-dm text-sm border border-border bg-white px-3 py-2">
+                      <span className="font-semibold text-ink min-w-0">{o.name}</span>
+                      <span className="text-right whitespace-nowrap">
+                        <span className="font-semibold tabular-nums text-base text-primary">{currency(o.total)}</span>
+                        <span className="block text-xs text-muted-foreground">incl. GST · deposit {currency(o.deposit)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+              <div className="flex justify-between font-semibold tabular-nums text-lg text-ink border-t-2 border-border pt-2">
+                <span>TOTAL (NZD)</span>
+                <span className="text-primary">{currency(total)}</span>
+              </div>
+              )}
+              <div id="pb-deposit-row" className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
+                  <Input aria-label="Deposit required (percentage)" type="number" min={0} max={100} value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                    className="rounded-md border-[1.5px] border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
+                  <span className="text-sage-green text-xs">%</span>
+                </div>
+                <span className="font-semibold tabular-nums text-lg text-ink">{menuOptions.length ? <span className="font-dm text-xs text-muted-foreground">per menu, above</span> : currency(deposit)}</span>
+              </div>
+              {depositError && <p id="pb-deposit-error" className="font-dm text-xs text-red-700 -mt-1">{depositError}</p>}
+            </div>
+          </div>
+            {!menuOptions.length && total > 0 && (
+              <div className="bg-card border-[1.5px] border-border rounded-lg p-5 space-y-2">
+                <PbSectionHead title="Payment schedule" meta="From the totals above" />
+                <ol className="m-0 p-0 list-none">
+                  {(depositPercent > 0 && depositPercent < 100
+                    ? [{ label: "Deposit, secures the date", note: `${depositPercent}% of the total`, amount: deposit },
+                       { label: "Balance", note: "The rest of the total", amount: total - deposit }]
+                    : [{ label: depositPercent >= 100 ? "Full amount up front" : "Full amount", note: depositPercent >= 100 ? "Deposit is 100%" : "No deposit set", amount: total }]
+                  ).map((r, i) => (
+                    <li key={r.label} className="grid grid-cols-[24px_minmax(0,1fr)_auto] sm:grid-cols-[24px_minmax(0,1fr)_160px_110px] gap-x-3 items-center py-2.5 border-b-[1.5px] border-[#ececed] last:border-b-0 text-[14px]">
+                      <span className="tabular-nums text-[12px] font-extrabold text-primary">{i + 1}</span>
+                      <span className="font-semibold min-w-0">{r.label}</span>
+                      <span className="hidden sm:block text-[13px] text-muted-foreground">{r.note}</span>
+                      <span className="tabular-nums text-right font-semibold">{currency(r.amount)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           {/* Quote / Min-Spend Calculator */}
-          <div className="bg-cream-card border border-border shadow-sm">
+          <div className="bg-card border-[1.5px] border-border rounded-lg">
             <div className="w-full flex items-center gap-3 p-5">
-              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground m-0">PRICING &amp; MINIMUM SPEND</h2>
+              <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Minimum spend &amp; hire</h3>
               {Number(minimumSpend) > 0 && (
-                <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
+                <span className="text-[12px] text-muted-foreground tabular-nums">
                   MIN {currencyWhole(parseFloat(minimumSpend))}
                 </span>
               )}
@@ -1395,7 +1459,7 @@ export default function ProposalBuilder() {
                     <Input
                       type="number" min="0" placeholder="e.g. 5000" aria-label="Minimum spend (NZD)"
                       value={minimumSpend} onChange={e => setMinimumSpend(e.target.value)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                     />
                   </div>
                   <div>
@@ -1403,14 +1467,14 @@ export default function ProposalBuilder() {
                     <Input
                       type="number" min="0" placeholder={`Auto: ${currency(_lineSubtotal())}`} aria-label="Food total override (NZD)"
                       value={foodTotalOverride} onChange={e => setFoodTotalOverride(e.target.value)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                      className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                     />
                     <p className="font-dm text-xs text-muted-foreground mt-1">Leave blank to use line items total</p>
                   </div>
                 </div>
 
                 {/* Auto Bar Tab Toggle */}
-                <div className="flex items-center gap-3 p-3 bg-powder/30 border border-border">
+                <div className="flex items-center gap-3 p-3 bg-background border border-border">
                   <input
                     type="checkbox" id="autoBarTab"
                     checked={autoBarTab} onChange={e => setAutoBarTab(e.target.checked)}
@@ -1423,15 +1487,15 @@ export default function ProposalBuilder() {
 
                 {/* Min Spend Breakdown */}
                 {Number(minimumSpend) > 0 && (
-                  <div className="bg-ink text-cream p-4 space-y-2">
-                    <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-2">MINIMUM SPEND BREAKDOWN</div>
+                  <div className="bg-background border-[1.5px] border-border rounded-lg p-4 space-y-2">
+                    <div className="font-bebas text-xs tracking-widest text-primary mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">
-                      <span className="text-cream/60">Food &amp; Beverage</span>
+                      <span className="text-muted-foreground">Food &amp; Beverage</span>
                       <span>{currency(_foodBase())}</span>
                     </div>
                     {hireItems.map((item, i) => (
                       <div key={i} className="flex justify-between font-dm text-sm">
-                        <span className="text-cream/60">{item.name || `Hire Item ${i + 1}`}</span>
+                        <span className="text-muted-foreground">{item.name || `Hire Item ${i + 1}`}</span>
                         <span>{currency((item.qty * item.unitPrice))}</span>
                       </div>
                     ))}
@@ -1441,9 +1505,9 @@ export default function ProposalBuilder() {
                         <span>{currency(autoBarTabAmount)}</span>
                       </div>
                     )}
-                    <div className="border-t border-cream/20 pt-2 flex justify-between font-bebas text-sm">
+                    <div className="border-t border-border pt-2 flex justify-between font-bebas text-sm">
                       <span>TOTAL vs MINIMUM SPEND</span>
-                      <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-forest" : "text-red-400"}>
+                      <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-[#3f7350]" : "text-[#8a5f18]"}>
                         {currency((_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount))} / {currency(parseFloat(minimumSpend))}
                       </span>
                     </div>
@@ -1460,25 +1524,25 @@ export default function ProposalBuilder() {
                     </button>
                   </div>
                   {hireItems.length === 0 && (
-                    <p className="font-dm text-xs text-muted-foreground italic">No hire items yet. Add styling, AV, linen, centrepieces, etc.</p>
+                    <p className="font-dm text-xs text-muted-foreground">No hire items yet. Add styling, AV, linen, centrepieces, etc.</p>
                   )}
                   {hireItems.map((item, i) => (
                     <div key={i} className="grid grid-cols-12 gap-2 mb-2 items-start">
                       <div className="col-span-4">
                         <Input aria-label={`Hire item ${i + 1} name`} placeholder="Item name" value={item.name} onChange={e => updateHireItem(i, 'name', e.target.value)}
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                          className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-3">
                         <Input aria-label={`Hire item ${i + 1} description`} placeholder="Description" value={item.description} onChange={e => updateHireItem(i, 'description', e.target.value)}
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                          className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-2">
                         <Input type="number" min="1" aria-label={`Hire item ${i + 1} quantity`} placeholder="Qty" value={item.qty} onChange={e => updateHireItem(i, 'qty', parseInt(e.target.value) || 1)}
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                          className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-2">
                         <Input type="number" min="0" aria-label={`Hire item ${i + 1} price`} placeholder="Price" value={item.unitPrice} onChange={e => updateHireItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                          className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <button type="button" onClick={() => removeHireItem(i)} aria-label={`Remove hire item ${item.name || i + 1}`}
@@ -1495,30 +1559,43 @@ export default function ProposalBuilder() {
                   <label htmlFor="pb-quote-notes" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
                   <Textarea id="pb-quote-notes" value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
                     placeholder="Any additional notes about this quote..." rows={2}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
+                    className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
                 </div>
 
-                <p className="font-dm text-xs text-muted-foreground italic">Pricing &amp; minimum spend save together with the proposal — just hit Save.</p>
+                <p className="font-dm text-xs text-muted-foreground">Pricing &amp; minimum spend save together with the proposal — just hit Save.</p>
               </div>
             )}
           </div>
+          </ProposalSection>
 
+          <ProposalSection {...sectionProps(4)}>
           {/* Terms */}
-          <div className="bg-cream-card border border-border p-5 shadow-sm">
-            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TERMS & CONDITIONS</h2>
+          <div className="bg-card border-[1.5px] border-border rounded-lg p-5">
+            <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary mb-3">Terms &amp; conditions</h3>
             <Textarea aria-label="Terms and conditions" value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
-              rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
+              rows={5} className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
-
           {/* Internal Notes */}
-          <div className="bg-cream-card border border-dashed border-border p-5">
-            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
+          <div className="bg-card border-[1.5px] border-dashed border-border rounded-lg p-5">
+            <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary mb-2">Internal notes <span className="font-dm text-xs font-normal tracking-normal text-muted-foreground normal-case">(not shown to client)</span></h3>
             <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)}
               aria-label="Internal notes (not shown to the client)"
               placeholder="Notes for your team only..." rows={2}
-              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
+              className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
-        </fieldset>
+          </ProposalSection>
+
+          <ProposalSection {...sectionProps(5)}>
+          {/* Photos */}
+          {savedProposal?.id ? (
+            <ProposalPhotosCard proposalId={savedProposal.id} token={savedProposal.publicToken} locked={locked} onChanged={() => setPreviewNonce(n => n + 1)} />
+          ) : (
+            <div className="bg-card border-[1.5px] border-dashed border-border rounded-lg p-4 font-dm text-xs text-muted-foreground flex items-center gap-2">
+              <Camera className="w-4 h-4" aria-hidden /> Save the draft to add photos of the space, table settings or food.
+            </div>
+          )}
+          </ProposalSection>
+        </div>
 
         {/* Right: live preview of the client's page */}
         {showPreview && savedProposal?.publicToken && (
@@ -1528,18 +1605,18 @@ export default function ProposalBuilder() {
               <span className="font-dm text-[11px] text-muted-foreground">{canAutosave ? "Updates as you edit" : "Updates when you save"}</span>
             </div>
             <iframe key={previewNonce} title="Client view preview" src={`/proposal/${savedProposal.publicToken}?preview=${previewNonce}`}
-              className="w-full h-[calc(100vh-8rem)] border-2 border-border bg-white" />
+              className="w-full h-[calc(100vh-8rem)] border-[1.5px] border-border rounded-lg bg-white" />
           </div>
         )}
 
         {/* Right: Summary & Actions */}
-        <div className={`space-y-4 lg:sticky lg:top-20 lg:self-start ${showPreview && savedProposal?.publicToken ? "lg:hidden" : ""}`}>
+        <div className={`space-y-4 lg:sticky lg:top-24 lg:self-start ${previewOpen ? "lg:hidden" : ""}`}>
 
           {/* Appearance — hidden; managed via Venue Settings */}
-          {false && <div className="bg-cream-card border border-border shadow-sm">
+          {false && <div className="bg-card border-[1.5px] border-border rounded-lg">
             <button
               type="button"
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-sage-tint/50 transition-colors"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted transition-colors"
               onClick={() => setAppearanceSectionOpen(o => !o)}
             >
               <div className="flex items-center gap-2">
@@ -1589,7 +1666,7 @@ export default function ProposalBuilder() {
                     value={appearanceLogoUrl}
                     onChange={e => setAppearanceLogoUrl(e.target.value)}
                     placeholder="https://example.com/logo.png"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
+                    className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
                   />
                   {appearanceLogoUrl && (
                     <div className="mt-1.5 p-2 bg-ink rounded-sm flex items-center justify-center h-12">
@@ -1609,7 +1686,7 @@ export default function ProposalBuilder() {
                     value={appearanceVenuePhotoUrl}
                     onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
                     placeholder="https://example.com/venue.jpg"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
+                    className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
                   />
                   {appearanceVenuePhotoUrl && (
                     <div className="mt-1.5 h-16 bg-cover bg-center rounded-sm border border-border" style={{ backgroundImage: `url(${appearanceVenuePhotoUrl})` }} />
@@ -1621,7 +1698,7 @@ export default function ProposalBuilder() {
                   type="button"
                   onClick={handleSaveAppearance}
                   disabled={updateVenue.isPending}
-                  className="w-full bg-sage-green hover:bg-sage-green/90 text-white font-bebas tracking-widest rounded-none h-9 text-xs gap-1"
+                  className="w-full bg-sage-green hover:bg-sage-green/90 text-white font-bebas tracking-widest rounded-md h-9 text-xs gap-1"
                 >
                   <Palette className="w-3.5 h-3.5" />
                   {updateVenue.isPending ? "SAVING..." : "SAVE APPEARANCE"}
@@ -1630,65 +1707,74 @@ export default function ProposalBuilder() {
             )}
           </div>}
 
-          {/* Expiry */}
-          <div className="bg-cream-card border border-border p-4 shadow-sm">
-            <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
-            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} disabled={locked}
-              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm" />
-            <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
+          {/* Summary */}
+          <div className="bg-card border-[1.5px] border-border rounded-lg px-5 py-[18px] space-y-2.5">
+            <PbSectionHead title="Summary" />
+            <dl className="m-0 space-y-2 text-[13.5px]">
+              {([
+                ["For", leadName || "—"],
+                ["Event", lead?.eventType || "—"],
+                ["Date", eventDate ? new Date(eventDate).toLocaleDateString("en-NZ") : "—"],
+                ["Guests", guestCount || "—"],
+                ["Space", spaceName || "—"],
+              ] as const).map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="m-0 font-semibold text-right min-w-0 tabular-nums">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="h-[1.5px] bg-[#ececed]" aria-hidden />
+            {menuOptions.length ? (
+              <div className="space-y-2 text-[13.5px]">
+                <div className="text-[12px] text-muted-foreground">Client chooses one menu</div>
+                {menuOptions.map(o => (
+                  <div key={o.line} className="flex justify-between gap-2">
+                    <span className="min-w-0">{o.name}</span>
+                    <span className="tabular-nums font-semibold whitespace-nowrap">{currencyWhole(o.total)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (<>
+              <div className="space-y-2 text-[13.5px]">
+                <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">{currencyWhole(subtotal)}</span></div>
+                <div className="flex justify-between"><span>GST {taxPercent}%</span><span className="tabular-nums">{currencyWhole(taxAmount)}</span></div>
+              </div>
+              <div className="flex justify-between items-baseline pt-1">
+                <span className="font-bold">Total</span>
+                <span className="tabular-nums text-[26px] font-semibold">{currencyWhole(total)}</span>
+              </div>
+              <div className="text-[12px] text-muted-foreground tabular-nums">
+                {[covers > 0 && total > 0 ? `${currencyWhole(total / covers)} per head` : null, `Deposit (${depositPercent}%) ${currencyWhole(deposit)}`].filter(Boolean).join(" · ")}
+              </div>
+            </>)}
+            {minSpendNum > 0 && (
+              <div className={`inline-flex items-center gap-1.5 text-[13px] font-bold ${minSpendTotal >= minSpendNum ? "text-[#3f7350]" : "text-[#8a5f18]"}`}>
+                <i className="w-[7px] h-[7px] rounded-full bg-current" aria-hidden />
+                {minSpendTotal >= minSpendNum ? `Clears ${currencyWhole(minSpendNum)} minimum` : `${currencyWhole(minSpendNum - minSpendTotal)} under minimum`}
+              </div>
+            )}
           </div>
 
-          {/* Summary */}
-          <div className="bg-cream-card border border-border border-t-2 border-t-primary p-5 shadow-sm">
-            <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL SUMMARY</div>
-            <div className="space-y-2 font-dm text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">For</span>
-                <span className="text-ink">{lead ? `${lead.firstName} ${lead.lastName ?? ""}` : "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Event</span>
-                <span>{lead?.eventType || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Date</span>
-                <span>{eventDate ? new Date(eventDate).toLocaleDateString("en-NZ") : "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Guests</span>
-                <span>{guestCount || "—"}</span>
-              </div>
-              <div className="border-t border-border pt-2 mt-2">
-                {menuOptions.length ? menuOptions.map(o => (
-                  <div key={o.line} className="flex justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground min-w-0">{o.name}</span>
-                    <span className="font-alfa text-primary whitespace-nowrap">{currencyWhole(o.total)}</span>
-                  </div>
-                )) : (<>
-                <div className="flex justify-between font-alfa text-xl">
-                  <span className="text-muted-foreground text-sm">TOTAL</span>
-                  <span className="text-primary">{currencyWhole(total)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>Deposit ({depositPercent}%)</span>
-                  <span>{currencyWhole(deposit)}</span>
-                </div>
-                </>)}
-              </div>
-            </div>
+          {/* Expiry */}
+          <div className="bg-card border-[1.5px] border-border rounded-lg p-4">
+            <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
+            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} disabled={locked}
+              className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-sm" />
+            <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
 
           {/* Actions */}
           <div className="space-y-2">
             {!locked && (
               <Button onClick={() => { if (!saving) handleSave(); }} disabled={!!editId && !savedProposal} aria-disabled={saving || undefined}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 aria-disabled:pointer-events-none aria-disabled:opacity-50">
+                className="w-full bg-card border-[1.5px] border-input text-foreground hover:bg-muted font-semibold text-[13px] rounded-md h-[38px] aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
               </Button>
             )}
             {canSend && (
               <Button onClick={() => { if (!sendProposal.isPending && !saving) handleSend(); }} aria-disabled={sendProposal.isPending || saving || undefined}
-                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2 aria-disabled:pointer-events-none aria-disabled:opacity-50">
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-[13px] rounded-md h-[38px] gap-2 aria-disabled:pointer-events-none aria-disabled:opacity-50">
                 <Send className="w-4 h-4" />
                 {sendProposal.isPending ? "SENDING..." : status === "draft" ? "SAVE & SEND TO CLIENT" : "SAVE & RESEND TO CLIENT"}
               </Button>
@@ -1707,11 +1793,11 @@ export default function ProposalBuilder() {
               </div>
             )}
             {proposalUrl && status && status !== "draft" && (
-              <div className="bg-white border-2 border-border p-3">
+              <div className="bg-card border-[1.5px] border-border rounded-lg p-3">
                 <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CLIENT LINK</div>
-                <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-linen p-2 border border-border">{proposalUrl}</div>
+                <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-background p-2 rounded-md">{proposalUrl}</div>
                 <Button size="sm" onClick={() => { navigator.clipboard.writeText(proposalUrl); toast.success("Link copied"); }}
-                  className="w-full bg-ink text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
+                  className="w-full bg-card border-[1.5px] border-input text-foreground hover:bg-muted font-semibold rounded-md text-[12.5px] h-8 gap-1">
                   <Copy className="w-3 h-3" /> COPY LINK
                 </Button>
               </div>
@@ -1721,7 +1807,7 @@ export default function ProposalBuilder() {
           {/* Preview hint */}
           {savedProposal?.publicToken && (
             <a href={`/proposal/${savedProposal.publicToken}`} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs gap-1">
+              <Button variant="outline" size="sm" className="w-full border-[1.5px] border-input bg-card font-semibold rounded-md text-[12.5px] h-8 gap-1">
                 <FileText className="w-3 h-3" /> PREVIEW CLIENT VIEW
               </Button>
             </a>
@@ -1734,7 +1820,7 @@ export default function ProposalBuilder() {
               disabled={pdfLoading}
               variant="outline"
               size="sm"
-              className="w-full border-2 border-ink/30 text-ink hover:bg-ink hover:text-cream font-bebas tracking-widest rounded-none text-xs gap-1.5 transition-all"
+              className="w-full border-[1.5px] border-input bg-card text-foreground hover:bg-muted font-semibold rounded-md text-[12.5px] h-8 gap-1.5"
             >
               <Download className="w-3 h-3" />
               {pdfLoading ? "GENERATING PDF..." : "DOWNLOAD PDF"}
@@ -1746,13 +1832,15 @@ export default function ProposalBuilder() {
   );
 }
 
+// One signal colour per status: blue = with the client, green = accepted,
+// amber = needs attention (expired), grey = not live.
 const PROPOSAL_STATUS_TEXT: Record<string, { label: string; cls: string }> = {
-  draft: { label: "Draft", cls: "bg-stone-100 text-stone-700" },
-  sent: { label: "Sent", cls: "bg-blue-100 text-blue-800" },
-  viewed: { label: "Opened by client", cls: "bg-amber-100 text-amber-900" },
-  accepted: { label: "Accepted", cls: "bg-emerald-100 text-emerald-800" },
-  declined: { label: "Declined", cls: "bg-red-100 text-red-800" },
-  expired: { label: "Expired", cls: "bg-stone-100 text-stone-700" },
+  draft: { label: "Draft", cls: "text-muted-foreground" },
+  sent: { label: "Sent", cls: "text-primary" },
+  viewed: { label: "Opened by client", cls: "text-primary" },
+  accepted: { label: "Accepted", cls: "text-[#3f7350]" },
+  declined: { label: "Declined", cls: "text-muted-foreground" },
+  expired: { label: "Expired", cls: "text-[#8a5f18]" },
 };
 
 const fmtWhen = (d: string | Date) => new Date(d).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
@@ -1768,10 +1856,12 @@ function ProposalStatusPanel({ proposal }: { proposal: any }) {
     : proposal.status === "sent" || proposal.status === "viewed" ? "The client already has the link — saved changes show on their page straight away."
     : "Not sent yet — only your team can see it.";
   return (
-    <div className="bg-white border-2 border-border p-4">
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <span className="font-bebas text-xs tracking-widest text-muted-foreground">{locked ? "READ-ONLY PROPOSAL" : "EDITING SAVED PROPOSAL"}</span>
-        <span className={`font-dm text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+    <div className="bg-card border-[1.5px] border-border rounded-lg p-4">
+      <div className="flex items-center gap-3 flex-wrap mb-1">
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">{locked ? "Read-only proposal" : "Editing saved proposal"}</span>
+        <span className={`inline-flex items-center gap-1.5 text-[13px] font-bold ${st.cls}`}>
+          <i className="w-[7px] h-[7px] rounded-full bg-current flex-shrink-0" aria-hidden />{st.label}
+        </span>
       </div>
       <div className="font-dm text-xs text-ink">
         {[
@@ -1838,16 +1928,16 @@ function ProposalPhotosCard({ proposalId, token, locked, onChanged }: { proposal
   };
   const act = async (p: Promise<unknown>) => { try { await p; await refresh(); } catch (e: any) { toast.error(e?.message || "Couldn't save that change"); } };
   return (
-    <div className="bg-cream-card border border-border p-5 shadow-sm">
+    <div className="bg-card border-[1.5px] border-border rounded-lg p-5">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h2 className="font-bebas text-xs tracking-widest text-muted-foreground m-0">PHOTOS</h2>
+        <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Photos</h3>
         {!locked && (
           <>
             <input ref={fileRef} id="pb-photos" type="file" accept="image/jpeg,image/png,image/webp,image/*" multiple className="sr-only"
               onChange={e => void onFiles(e.target.files)} />
             <Button type="button" size="sm" variant="ghost" disabled={busy || photos.length >= 12} onClick={() => fileRef.current?.click()}
-              className="font-bebas tracking-widest text-xs text-primary gap-1">
-              <Plus className="w-3 h-3" /> {busy ? "ADDING..." : "ADD PHOTOS"}
+              className="font-semibold text-[12.5px] text-primary gap-1">
+              <Plus className="w-3 h-3" aria-hidden /> {busy ? "Adding..." : "Add photos"}
             </Button>
           </>
         )}
@@ -1858,12 +1948,12 @@ function ProposalPhotosCard({ proposalId, token, locked, onChanged }: { proposal
         <div className="flex gap-3 overflow-x-auto pb-2">
           {photos.map((ph, i) => (
             <div key={ph.id} className="w-44 shrink-0">
-              <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} className="w-full aspect-[4/3] object-cover border border-border" />
+              <img src={`/api/proposal-photo/${token}/${ph.id}`} alt={ph.caption || `Photo ${i + 1}`} className="w-full aspect-[4/3] object-cover rounded-md border border-border" />
               {!locked && (
                 <>
                   <Input aria-label={`Caption for photo ${i + 1}`} defaultValue={ph.caption ?? ""} placeholder="Caption (optional)"
                     onBlur={e => { if ((e.target.value || "") !== (ph.caption ?? "")) void act(update.mutateAsync({ id: ph.id, caption: e.target.value })); }}
-                    className="mt-1 rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8" />
+                    className="mt-1 rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary text-xs h-8" />
                   <div className="flex items-center justify-between mt-1">
                     <div className="flex">
                       <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => void act(update.mutateAsync({ id: ph.id, move: "earlier" }))}
@@ -1917,13 +2007,13 @@ function ClientContactCard({ lead, leadId, heading, canEdit, onSaved }: {
     <div className="min-w-0">
       <label htmlFor={`pb-c-${key}`} className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">{label}</label>
       <Input id={`pb-c-${key}`} type={type} autoComplete={autoComplete} value={f[key]} onChange={e => setF(p => ({ ...p, [key]: e.target.value }))}
-        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm text-sm h-9 bg-white" />
+        className="rounded-md border-[1.5px] focus-visible:ring-0 focus-visible:border-primary font-dm text-sm h-9 bg-white" />
     </div>
   );
   return (
-    <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
+    <div className="bg-card border-[1.5px] border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{heading}</div>
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground mb-1">{heading}</div>
         {canEdit && !editing && (
           <button type="button" onClick={start} className="inline-flex items-center gap-1 font-bebas text-xs tracking-widest text-primary hover:underline min-h-[32px]">
             <Pencil className="w-3 h-3" aria-hidden /> EDIT CONTACT
@@ -1941,13 +2031,13 @@ function ClientContactCard({ lead, leadId, heading, canEdit, onSaved }: {
           </div>
           {err && <p role="alert" className="font-dm text-sm text-red-700 m-0">{err}</p>}
           <div className="flex gap-2">
-            <Button type="button" onClick={save} disabled={update.isPending} className="bg-primary text-white font-bebas tracking-widest rounded-none text-xs h-9">{update.isPending ? "SAVING..." : "SAVE"}</Button>
-            <Button type="button" variant="outline" onClick={() => setEditing(false)} className="font-bebas tracking-widest rounded-none text-xs h-9 bg-transparent">CANCEL</Button>
+            <Button type="button" onClick={save} disabled={update.isPending} className="bg-primary text-white font-semibold rounded-md text-[13px] h-9">{update.isPending ? "SAVING..." : "SAVE"}</Button>
+            <Button type="button" variant="outline" onClick={() => setEditing(false)} className="font-semibold rounded-md text-[13px] h-9 bg-transparent">CANCEL</Button>
           </div>
         </div>
       ) : (
         <>
-          <div className="font-alfa text-lg text-ink">{[lead.firstName, lead.lastName].filter(Boolean).join(" ")}{lead.company ? <span className="font-dm text-sm text-muted-foreground"> · {lead.company}</span> : null}</div>
+          <div className="text-[18px] font-semibold text-foreground">{[lead.firstName, lead.lastName].filter(Boolean).join(" ")}{lead.company ? <span className="font-dm text-sm text-muted-foreground"> · {lead.company}</span> : null}</div>
           <div className="font-dm text-sm text-muted-foreground">
             {[lead.email || (canEdit ? "No email yet" : null), lead.phone, lead.eventType || "Event"].filter(Boolean).join(" · ")}
           </div>

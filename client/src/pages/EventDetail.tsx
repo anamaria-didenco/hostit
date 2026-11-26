@@ -9,14 +9,12 @@ import { showCascadedToast } from "@/lib/cascadedToast";
 import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  ArrowLeft, FileText, Clock, MapPin, Users, DollarSign, CheckCircle,
-  Calendar, Mail, Phone, Edit3, Save, X, ExternalLink, Printer,
-  ClipboardList, LayoutGrid, ChefHat, MessageSquare, Package, Layers,
+  ArrowLeft, FileText, DollarSign, Mail, Edit3, Save, X, Printer,
+  ClipboardList, LayoutGrid, MessageSquare, Package, Layers,
   Link2, PenLine, Plus, Trash2, Eye,
   Link as LinkIcon
 } from "lucide-react";
@@ -25,9 +23,8 @@ import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateT
 import EventSpendSection from "@/components/EventSpendSection";
 import { downloadBeo } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
-import { currency } from "@/lib/money";
+import { currency, currencyWhole } from "@/lib/money";
 import NoTotalSet from "@/components/NoTotalSet";
-import { DoubleBookedTag } from "@/components/DateHold";
 import { pageTitle } from "@shared/pageTitle";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import LeadProposals from "@/components/LeadProposals";
@@ -35,12 +32,22 @@ import LinkedTasks from "@/components/LinkedTasks";
 import RecordPaymentButton from "@/components/RecordPaymentDialog";
 import ClientSubmissionPanel from "@/components/ClientSubmissionPanel";
 import { savedToastLabel } from "@/lib/editToast";
+import {
+  Card, SectionHead, Signal, Callout, FactsBand, PrepList, PaidBar, SIG,
+  BTN_OUTLINE, BTN_PRIMARY, BTN_SM, FIELD_LABEL, initialsOf, relDays,
+  type CalloutData, type PrepItem, type SigTone,
+} from "@/components/EventDetailParts";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
   "Christmas Party", "Gala Dinner", "Product Launch", "Conference",
   "Baby Shower", "Hen's Party", "Fundraiser", "Other"
 ];
+
+// Booking status → its one signal colour. Red is kept for overdue/clash only.
+const STATUS_TONE: Record<string, SigTone> = {
+  confirmed: "green", finished: "green", tentative: "amber", cancelled: "gray",
+};
 
 // The edit form's values for a booking. Also kept as the baseline that Save
 // diffs against, so only fields the user actually touched are sent.
@@ -64,6 +71,8 @@ function formFromBooking(booking: any) {
   };
 }
 
+const nzDay = (d: Date | string | number) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
+
 export default function EventDetail() {
   const [, params] = useRoute("/event/:id");
   const [, setLocation] = useLocation();
@@ -75,6 +84,10 @@ export default function EventDetail() {
   const [form, setForm] = useState<any>({});
   const [baseline, setBaseline] = useState<any>({});
   const filledForId = useRef<number | null>(null);
+  // The module tabs' selection lives here so the header's "Client portal"
+  // button can open that tab. ?tab= still picks the first one.
+  const [moduleTab, setModuleTab] = useState(() => new URLSearchParams(window.location.search).get('tab') ?? 'comms');
+  const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const utils = trpc.useUtils();
   const { data: booking, isLoading, isError, refetch, isFetching } = trpc.bookings.getById.useQuery(
@@ -97,6 +110,11 @@ export default function EventDetail() {
     { enabled: !!user?.id && bookingId > 0 }
   );
   const existingRunsheet = existingRunsheets?.[0] ?? null;
+  // The event's one checklist (the run sheet's), for the prep list's "n of m".
+  const { data: eventChecklist } = trpc.checklists.getForBooking.useQuery(
+    { bookingId },
+    { enabled: !!user?.id && bookingId > 0 }
+  );
 
   const { data: venueSettings } = trpc.venue.get.useQuery({}, { enabled: !!user?.id });
   const pipelineStages = useMemo(() => {
@@ -167,8 +185,8 @@ export default function EventDetail() {
 
   if (loading || isLoading) {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center">
-        <div className="font-bebas tracking-widest text-ink/65 text-sm">LOADING EVENT...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">Loading event…</div>
       </div>
     );
   }
@@ -176,14 +194,14 @@ export default function EventDetail() {
   // A failed load isn't "not found" — offer a retry instead.
   if (!booking && isError) {
     return (
-      <main className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="font-cormorant text-2xl text-ink">Couldn't load this event</h1>
-        <p className="font-dm text-sm text-ink/70">Check your connection and try again.</p>
+      <main className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4 text-center font-sans">
+        <h1 className="text-[24px] font-semibold text-foreground">Couldn't load this event</h1>
+        <p className="text-[14px] text-muted-foreground">Check your connection and try again.</p>
         <div className="flex items-center gap-3">
-          <button onClick={() => refetch()} disabled={isFetching} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 disabled:opacity-50">
-            {isFetching ? "TRYING..." : "TRY AGAIN"}
+          <button onClick={() => refetch()} disabled={isFetching} className={BTN_PRIMARY}>
+            {isFetching ? "Trying…" : "Try again"}
           </button>
-          <Link href="/dashboard" className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-4 py-2">BACK TO DASHBOARD</Link>
+          <Link href="/dashboard" className={BTN_OUTLINE}>Back to dashboard</Link>
         </div>
       </main>
     );
@@ -191,9 +209,9 @@ export default function EventDetail() {
 
   if (!booking) {
     return (
-      <main className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4">
-        <h1 className="font-cormorant text-2xl text-ink">Event not found</h1>
-        <Link href="/dashboard" className="btn-forest font-bebas tracking-widest text-xs px-4 py-2">BACK TO DASHBOARD</Link>
+      <main className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 font-sans">
+        <h1 className="text-[24px] font-semibold text-foreground">Event not found</h1>
+        <Link href="/dashboard" className={BTN_PRIMARY}>Back to dashboard</Link>
       </main>
     );
   }
@@ -236,406 +254,409 @@ export default function EventDetail() {
     updateBooking.mutate(patch);
   };
 
-  const statusColor = getStatusInfo(booking.status).color;
+  const openProposal = () => {
+    if (booking.proposalId) {
+      setLocation(`/proposals/new?proposalId=${booking.proposalId}`);
+    } else if (booking.leadId) {
+      setLocation(`/proposals/new?leadId=${booking.leadId}`);
+    } else {
+      toast.error("This booking has no linked enquiry — start a proposal from the enquiry first.");
+    }
+  };
+  const openPortalTab = () => {
+    setModuleTab('portal');
+    requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  // ── Derived, all from data already on the page ──────────────────────────
+  const clientName = `${booking.firstName ?? ''} ${booking.lastName ?? ''}`.trim() || 'Event';
+  const statusLabel = getStatusInfo(booking.status).label;
+  const statusText = statusLabel ? statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1) : '';
+  const statusTone: SigTone = STATUS_TONE[booking.status] ?? "blue";
+  const isCancelled = booking.status === 'cancelled';
+  const when = relDays(booking.eventDate);
+  // Over once its last day (end date, else the start date) is behind us.
+  const lastDay = booking.eventEndDate ?? booking.eventDate;
+  const eventPassed = !!lastDay && nzDay(lastDay) < nzDay(Date.now());
+  const depositNzd = Number(booking.depositNzd ?? 0);
+  const depositPending = booking.depositRequired !== false && !booking.depositPaid;
+  const balanceOverdue = hasTotal && outstanding > 0 && eventPassed && !isCancelled;
+  const paymentsHref = `/payments?bookingId=${bookingId}`;
+  const runsheetHref = existingRunsheet ? `/runsheet?id=${existingRunsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`;
+  const checklistItems: any[] = ((eventChecklist as any)?.instance?.items ?? []) as any[];
+  const checklistTicked = checklistItems.filter((i) => i.checked).length;
+
+  // Why this event needs you, most urgent first; one callout at a time.
+  const calloutLink = (href: string, label: string, red: boolean) => (
+    <Link href={href} className="font-sans text-[13px] font-bold underline underline-offset-2" style={{ color: red ? SIG.red : SIG.amber }}>{label}</Link>
+  );
+  const callout: CalloutData | null = booking.clashFlaggedAt
+    ? { tone: "red", title: "Double-booked.", body: "Another event has this date and space.", action: calloutLink('/dashboard?tab=overview', 'Resolve on Overview', true) }
+    : balanceOverdue
+    ? { tone: "red", title: "Balance overdue.", body: `The event has been and ${currency(outstanding)} is still outstanding.`, action: !isStaff ? calloutLink(paymentsHref, 'Payments', true) : undefined }
+    : depositPending && !isCancelled && !eventPassed
+    ? { tone: "amber", title: "Deposit not paid.", body: depositNzd > 0 ? `The ${currency(depositNzd)} deposit hasn't come in yet.` : "No deposit has been recorded for this event yet.", action: !isStaff ? calloutLink(paymentsHref, 'Payments', false) : undefined }
+    : !hasTotal && !isCancelled
+    ? { tone: "amber", title: "No total set.", body: "Add a total so the balance and payments can be tracked.", action: !isStaff && !editing ? (
+        <button type="button" onClick={() => setEditing(true)} className="font-sans text-[13px] font-bold underline underline-offset-2" style={{ color: SIG.amber }}>Set a total</button>
+      ) : undefined }
+    : null;
+
+  const dateLong = booking.eventDate
+    ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
+  const sameYear = booking.eventDate && new Date(booking.eventDate).getFullYear() === new Date().getFullYear();
+  const dateShort = booking.eventDate
+    ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) })
+    : "—";
+  const multiDay = !!booking.eventEndDate && !!booking.eventDate && nzDay(booking.eventEndDate) !== nzDay(booking.eventDate);
+  const startT = fmtEventTime(booking.eventDate);
+  const endT = fmtEventTime(booking.eventEndDate);
+  const timeStr = startT ? (endT && !multiDay ? `${startT} – ${endT}` : startT) : "—";
+  const facts = [
+    { label: "Date", value: <span title={dateLong}>{dateShort}</span> },
+    ...(multiDay ? [{ label: "Until", value: <span title={endT ? `${new Date(booking.eventEndDate!).toLocaleDateString("en-NZ")} ${endT}` : undefined}>{new Date(booking.eventEndDate!).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}{endT ? ` · ${endT}` : ""}</span> }] : []),
+    { label: "Time", value: timeStr },
+    { label: "Guests", value: booking.guestCount ?? "—", inv: true },
+    { label: "Space", value: <span title={booking.spaceName || undefined}>{booking.spaceName || "—"}</span> },
+    { label: "Type", value: booking.eventType || "—" },
+    { label: "Total", value: hasTotal ? currencyWhole(Number(booking.totalNzd)) : "Not set" },
+  ];
+
+  const prep: PrepItem[] = [
+    booking.proposalId
+      ? { key: "proposal", label: "Proposal", note: "On file", state: "done", action: <button type="button" onClick={openProposal} className={BTN_SM}>Open</button> }
+      : { key: "proposal", label: "Proposal", note: "Not started", state: "idle", action: <button type="button" onClick={openProposal} className={BTN_SM}>Start</button> },
+    booking.depositRequired === false
+      ? { key: "deposit", label: "Deposit", note: "Not needed", state: "done" }
+      : booking.depositPaid
+      ? { key: "deposit", label: "Deposit", note: depositNzd > 0 ? `${currency(depositNzd)} paid` : "Paid", state: "done" }
+      : { key: "deposit", label: "Deposit", note: depositNzd > 0 ? `${currency(depositNzd)} not paid yet` : "Not paid yet", state: isCancelled ? "idle" : "attention",
+          action: <Link href={paymentsHref} className={BTN_SM}>Payments</Link> },
+    hasTotal
+      ? { key: "total", label: "Total", note: currency(Number(booking.totalNzd)), state: "done" }
+      : { key: "total", label: "Total", note: "No total set", state: isCancelled ? "idle" : "attention",
+          action: !isStaff && !editing ? <button type="button" onClick={() => setEditing(true)} className={BTN_SM}>Set</button> : undefined },
+    existingRunsheet
+      ? { key: "runsheet", label: "Run sheet", note: existingRunsheet.title || "Created", state: "done", action: <Link href={runsheetHref} className={BTN_SM}>Open</Link> }
+      : { key: "runsheet", label: "Run sheet", note: "Not started", state: "idle", action: <Link href={runsheetHref} className={BTN_SM}>Start</Link> },
+    checklistItems.length > 0
+      ? { key: "checklist", label: "Checklist", note: `${checklistTicked} of ${checklistItems.length} ticked`, state: checklistTicked === checklistItems.length ? "done" : "idle",
+          action: <Link href={`/checklist?bookingId=${bookingId}`} className={BTN_SM}>Open</Link> }
+      : { key: "checklist", label: "Checklist", note: "Not set up", state: "idle", action: <Link href={`/checklist?bookingId=${bookingId}`} className={BTN_SM}>Set up</Link> },
+    !hasTotal
+      ? { key: "balance", label: "Balance", note: "Needs a total first", state: "idle" }
+      : outstanding <= 0
+      ? { key: "balance", label: "Balance", note: "Paid in full", state: "done" }
+      : { key: "balance", label: "Balance", note: `${currency(outstanding)} ${balanceOverdue ? "overdue" : "to pay"}`, state: balanceOverdue ? "overdue" : "idle",
+          action: <Link href={paymentsHref} className={BTN_SM}>Payments</Link> },
+  ];
+
+  const docRow = "w-full flex items-center gap-2.5 min-h-[38px] px-1 py-1.5 rounded-[6px] font-sans text-[13.5px] font-semibold text-left text-foreground hover:bg-accent transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary";
 
   return (
-    <div className="min-h-screen bg-cream">
+    <div className="min-h-screen bg-background text-foreground font-sans">
       <ClashDialogHost />
       {beoPreviewOpen && (
-        <BeoPreviewOverlay bookingId={booking.id} name={`${booking.firstName ?? ''} ${booking.lastName ?? ''}`.trim() || 'Event'} onClose={() => setBeoPreviewOpen(false)} />
+        <BeoPreviewOverlay bookingId={booking.id} name={clientName} onClose={() => setBeoPreviewOpen(false)} />
       )}
-      {/* Header */}
-      <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-4">
-        <button onClick={() => setLocation('/dashboard')} className="text-cream hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs">
-          <ArrowLeft className="w-4 h-4" /> DASHBOARD
+
+      <main className="max-w-[1240px] mx-auto px-4 md:px-8 pt-6 pb-12 flex flex-col gap-5">
+        <button type="button" onClick={() => setLocation('/dashboard')}
+          className="self-start inline-flex items-center gap-1.5 font-sans text-[13px] font-semibold text-primary hover:underline -mb-1">
+          <ArrowLeft className="w-4 h-4" aria-hidden /> Dashboard
         </button>
-        <div className="h-4 w-px bg-gold/20" />
-        <span className="font-cormorant text-cream font-semibold text-base">
-          {booking.firstName} {booking.lastName} — {booking.eventType || "Event"}
-        </span>
-      </nav>
 
-      <main>
-      <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Left — Event Details */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Status + Quick Info */}
-          <div className="dante-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-              <div className="min-w-0">
-                <div className="gold-rule max-w-xs mb-2"><span>EVENT DETAILS</span></div>
-                <h1 className="font-cormorant text-ink font-semibold" style={{ fontSize: '1.8rem' }}>
-                  {booking.firstName} {booking.lastName}
-                </h1>
-                <div className="font-dm text-sm text-ink/70 mt-1 break-words">{booking.email}</div>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
-                  {getStatusInfo(booking.status).label.toUpperCase()}
+        {/* Header: who, what, where it stands */}
+        <header className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span aria-hidden className="w-12 h-12 rounded-full bg-accent text-primary text-[16px] font-bold flex items-center justify-center flex-shrink-0">
+              {initialsOf(booking.firstName, booking.lastName)}
+            </span>
+            <div className="min-w-0 flex flex-col gap-1">
+              <h1 className="m-0 text-[30px] leading-tight font-semibold tracking-[-0.015em] break-words">{clientName}</h1>
+              <div className="flex items-center gap-3.5 flex-wrap">
+                {statusText && <Signal tone={statusTone}>{statusText}</Signal>}
+                <span className="text-[13px] text-muted-foreground">
+                  {booking.eventType || "Event"}{when ? ` · ${when}` : ""}
                 </span>
-                <DoubleBookedTag flaggedAt={booking.clashFlaggedAt} className="!text-xs !px-3 !py-1" />
-                {editing ? (
-                  <>
-                    <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink flex items-center gap-1 px-2 py-1">
-                      <X className="w-3 h-3" /> CANCEL
-                    </button>
-                    <button onClick={handleSave} disabled={updateBooking.isPending}
-                      className="btn-gold font-bebas tracking-widest text-xs px-3 py-1 flex items-center gap-1">
-                      <Save className="w-3 h-3" /> {updateBooking.isPending ? "SAVING..." : "SAVE"}
-                    </button>
-                  </>
-                ) : isStaff ? null : (
-                  <>
-                    <RecordPaymentButton bookingId={bookingId}
-                      className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1" />
-                    <button onClick={() => setEditing(true)}
-                      className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1">
-                      <Edit3 className="w-3 h-3" /> EDIT
-                    </button>
-                  </>
-                )}
               </div>
             </div>
-
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="ev-first-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">FIRST NAME</label>
-                  <Input id="ev-first-name" value={form.firstName} onChange={e => setForm((p: any) => ({ ...p, firstName: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="ev-last-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">LAST NAME</label>
-                  <Input id="ev-last-name" value={form.lastName} onChange={e => setForm((p: any) => ({ ...p, lastName: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="ev-email" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EMAIL</label>
-                  <Input id="ev-email" type="email" value={form.email} onChange={e => setForm((p: any) => ({ ...p, email: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="ev-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT TYPE</label>
-                  <Select value={form.eventType} onValueChange={v => setForm((p: any) => ({ ...p, eventType: v }))}>
-                    <SelectTrigger id="ev-type" className="font-dm text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
-                    <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div id="ev-starts" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT STARTS</div>
-                  <div className="flex gap-2" role="group" aria-labelledby="ev-starts">
-                    <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event start date" />
-                    <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event start time" />
-                  </div>
-                </div>
-                <div>
-                  <div id="ev-ends" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT ENDS</div>
-                  <div className="flex gap-2" role="group" aria-labelledby="ev-ends">
-                    <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event end date" />
-                    <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event end time" />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="ev-guests" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">GUEST COUNT</label>
-                  <Input id="ev-guests" type="number" value={form.guestCount} onChange={e => setForm((p: any) => ({ ...p, guestCount: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SPACE / ROOM</label>
-                  {/* Several spaces can be picked (e.g. Restaurant + La Saletta), or Full venue. */}
-                  <SpacesMultiSelect value={form.spaceName ?? ""} onChange={v => setForm((p: any) => ({ ...p, spaceName: v }))} />
-                </div>
-                <div>
-                  <label htmlFor="ev-total" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TOTAL (NZD)</label>
-                  <Input id="ev-total" type="number" value={form.totalNzd} onChange={e => setForm((p: any) => ({ ...p, totalNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
-                </div>
-                <div>
-                  <label htmlFor="ev-deposit" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DEPOSIT (NZD)</label>
-                  <Input id="ev-deposit" type="number" value={form.depositNzd} onChange={e => setForm((p: any) => ({ ...p, depositNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
-                </div>
-                <div>
-                  <label htmlFor="ev-status" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">STATUS</label>
-                  <Select value={form.status} onValueChange={v => setForm((p: any) => ({ ...p, status: v }))}>
-                    <SelectTrigger id="ev-status" className="font-dm text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="tentative">Tentative</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                      <SelectItem value="finished">Finished</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2 pt-5">
-                  <input type="checkbox" id="depositPaid" checked={form.depositPaid}
-                    onChange={e => setForm((p: any) => ({ ...p, depositPaid: e.target.checked }))}
-                    className="w-4 h-4 accent-forest" />
-                  <label htmlFor="depositPaid" className="font-bebas text-xs tracking-widest text-ink/70">DEPOSIT PAID</label>
-                </div>
-                <div className="md:col-span-2">
-                  <label htmlFor="ev-notes" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">INTERNAL NOTES</label>
-                  <Textarea id="ev-notes" value={form.notes} onChange={e => setForm((p: any) => ({ ...p, notes: e.target.value }))} rows={3} className="font-dm text-sm" />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="flex items-start gap-2">
-                  <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/65">DATE</div>
-                    <div className="font-dm text-sm text-ink">
-                      {new Date(booking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                      {fmtEventTime(booking.eventDate) && (
-                        <span className="text-ink/70"> · {fmtEventTime(booking.eventDate)}</span>
-                      )}
-                    </div>
-                    {booking.eventEndDate && (
-                      <div className="font-dm text-xs text-ink/70">
-                        until {new Date(booking.eventEndDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
-                        {fmtEventTime(booking.eventEndDate) && ` · ${fmtEventTime(booking.eventEndDate)}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/65">GUESTS</div>
-                    <div className="font-dm text-sm text-ink">{booking.guestCount ?? "—"}</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/65">SPACE</div>
-                    <div className="font-dm text-sm text-ink">{booking.spaceName || "—"}</div>
-                  </div>
-                </div>
-                {/* Full width on a phone: in a half-width column the address broke mid-word. */}
-                <div className="flex items-start gap-2 col-span-2 md:col-span-1">
-                  <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <div className="font-bebas text-xs tracking-widest text-ink/65">EMAIL</div>
-                    <div className="font-dm text-sm text-ink break-words">{booking.email}</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <FileText className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/65">EVENT TYPE</div>
-                    <div className="font-dm text-sm text-ink">{booking.eventType || "—"}</div>
-                  </div>
-                </div>
-                {booking.notes && (
-                  <div className="col-span-2 md:col-span-3 flex items-start gap-2">
-                    <ClipboardList className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/65">NOTES</div>
-                      <div className="font-dm text-sm text-ink whitespace-pre-wrap">{booking.notes}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <>
+                <button onClick={() => setEditing(false)} className={BTN_OUTLINE}>
+                  <X className="w-4 h-4" aria-hidden /> Cancel
+                </button>
+                <button onClick={handleSave} disabled={updateBooking.isPending} className={BTN_PRIMARY}>
+                  <Save className="w-4 h-4" aria-hidden /> {updateBooking.isPending ? "Saving…" : "Save"}
+                </button>
+              </>
+            ) : isStaff ? null : (
+              <>
+                <button onClick={() => setEditing(true)} className={BTN_OUTLINE}>
+                  <Edit3 className="w-4 h-4" aria-hidden /> Edit
+                </button>
+                <button onClick={openPortalTab} className={BTN_OUTLINE}>
+                  <Link2 className="w-4 h-4" aria-hidden /> Client portal
+                </button>
+                <RecordPaymentButton bookingId={bookingId} className={BTN_PRIMARY} />
+              </>
             )}
           </div>
+        </header>
 
-          {/* Financials */}
-          <div className="dante-card p-6">
-            <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>FINANCIALS</span></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">TOTAL</div>
-                {hasTotal ? (
-                  <div className="font-cormorant text-2xl font-semibold text-ink">
-                    {currency(Number(booking.totalNzd))}
-                  </div>
-                ) : <NoTotalSet />}
+        {callout && <Callout c={callout} />}
+
+        {editing ? (
+          <Card className="px-5 py-4">
+            <SectionHead title="Edit event" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+              <div>
+                <label htmlFor="ev-first-name" className={FIELD_LABEL}>First name</label>
+                <Input id="ev-first-name" value={form.firstName} onChange={e => setForm((p: any) => ({ ...p, firstName: e.target.value }))} className="text-sm" />
               </div>
-              <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">DEPOSIT</div>
-                <div className="font-cormorant text-2xl font-semibold text-ink">
-                  {currency(Number(booking.depositNzd ?? 0))}
+              <div>
+                <label htmlFor="ev-last-name" className={FIELD_LABEL}>Last name</label>
+                <Input id="ev-last-name" value={form.lastName} onChange={e => setForm((p: any) => ({ ...p, lastName: e.target.value }))} className="text-sm" />
+              </div>
+              <div>
+                <label htmlFor="ev-email" className={FIELD_LABEL}>Email</label>
+                <Input id="ev-email" type="email" value={form.email} onChange={e => setForm((p: any) => ({ ...p, email: e.target.value }))} className="text-sm" />
+              </div>
+              <div>
+                <label htmlFor="ev-type" className={FIELD_LABEL}>Event type</label>
+                <Select value={form.eventType} onValueChange={v => setForm((p: any) => ({ ...p, eventType: v }))}>
+                  <SelectTrigger id="ev-type" className="text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div id="ev-starts" className={FIELD_LABEL}>Event starts</div>
+                <div className="flex gap-2" role="group" aria-labelledby="ev-starts">
+                  <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="text-sm flex-1" aria-label="Event start date" />
+                  <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="text-sm w-28" aria-label="Event start time" />
                 </div>
               </div>
-              <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">PAID</div>
-                <div className="font-cormorant text-2xl font-semibold text-forest">
-                  {currency(totalPaid)}
+              <div>
+                <div id="ev-ends" className={FIELD_LABEL}>Event ends</div>
+                <div className="flex gap-2" role="group" aria-labelledby="ev-ends">
+                  <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="text-sm flex-1" aria-label="Event end date" />
+                  <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="text-sm w-28" aria-label="Event end time" />
                 </div>
               </div>
-              {/* With no total there is nothing to be outstanding against —
-                  "$0.00" read as "settled". */}
-              <div className={`text-center p-3 border ${!hasTotal ? 'bg-cream border-gold/20' : outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
-                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">OUTSTANDING</div>
-                {hasTotal ? (
-                  <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
-                    {currency(outstanding)}
-                  </div>
-                ) : <NoTotalSet />}
+              <div>
+                <label htmlFor="ev-guests" className={FIELD_LABEL}>Guest count</label>
+                <Input id="ev-guests" type="number" value={form.guestCount} onChange={e => setForm((p: any) => ({ ...p, guestCount: e.target.value }))} className="text-sm" />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Space / room</label>
+                {/* Several spaces can be picked (e.g. Restaurant + La Saletta), or Full venue. */}
+                <SpacesMultiSelect value={form.spaceName ?? ""} onChange={v => setForm((p: any) => ({ ...p, spaceName: v }))} />
+              </div>
+              <div>
+                <label htmlFor="ev-total" className={FIELD_LABEL}>Total (NZD)</label>
+                <Input id="ev-total" type="number" value={form.totalNzd} onChange={e => setForm((p: any) => ({ ...p, totalNzd: e.target.value }))} className="text-sm" placeholder="0.00" />
+              </div>
+              <div>
+                <label htmlFor="ev-deposit" className={FIELD_LABEL}>Deposit (NZD)</label>
+                <Input id="ev-deposit" type="number" value={form.depositNzd} onChange={e => setForm((p: any) => ({ ...p, depositNzd: e.target.value }))} className="text-sm" placeholder="0.00" />
+              </div>
+              <div>
+                <label htmlFor="ev-status" className={FIELD_LABEL}>Status</label>
+                <Select value={form.status} onValueChange={v => setForm((p: any) => ({ ...p, status: v }))}>
+                  <SelectTrigger id="ev-status" className="text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="tentative">Tentative</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="finished">Finished</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 pt-5">
+                <input type="checkbox" id="depositPaid" checked={form.depositPaid}
+                  onChange={e => setForm((p: any) => ({ ...p, depositPaid: e.target.checked }))}
+                  className="w-4 h-4 accent-[var(--primary)]" />
+                <label htmlFor="depositPaid" className="font-sans text-[13px] font-semibold">Deposit paid</label>
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="ev-notes" className={FIELD_LABEL}>Internal notes</label>
+                <Textarea id="ev-notes" value={form.notes} onChange={e => setForm((p: any) => ({ ...p, notes: e.target.value }))} rows={3} className="text-sm" />
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              {booking.depositRequired === false ? (
-                <span className="font-bebas text-xs tracking-widest px-2 py-1 bg-cream border border-gold/20 text-ink/65">DEPOSIT NOT NEEDED</span>
-              ) : (
-                <span className={`font-bebas text-xs tracking-widest px-2 py-1 ${booking.depositPaid ? 'bg-blue-100 text-forest' : 'bg-amber-100 text-amber-700'}`}>
-                  {booking.depositPaid ? "✓ DEPOSIT PAID" : "⚠ DEPOSIT PENDING"}
-                </span>
+          </Card>
+        ) : (
+          <FactsBand facts={facts} />
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+          {/* Main column */}
+          <div className="flex flex-col gap-5 min-w-0">
+            <PrepList items={prep} />
+
+            {booking.notes && !editing && (
+              <Card className="px-5 py-4">
+                <SectionHead title="Notes" />
+                <p className="m-0 text-[14px] leading-relaxed whitespace-pre-wrap break-words">{booking.notes}</p>
+              </Card>
+            )}
+
+            {/* What the client submitted through their portal (final numbers,
+                dietaries, uploaded files). Hidden until they've sent something. */}
+            <ClientSubmissionPanel bookingId={bookingId} />
+
+            {/* Comms, contracts, budget plan, equipment, seating, portal: one row of tabs */}
+            <div ref={tabsRef} className="scroll-mt-4">
+              <EventModuleTabs bookingId={bookingId} booking={booking} activeTab={moduleTab} setActiveTab={setModuleTab} />
+            </div>
+
+            {/* Event spend & profitability tracking */}
+            <Card className="px-5 py-4">
+              <SectionHead title="Budget & spend" />
+              <EventSpendSection bookingId={bookingId} />
+            </Card>
+          </div>
+
+          {/* Side column */}
+          <aside className="flex flex-col gap-5 min-w-0" aria-label="Money, documents and client">
+            {/* Money */}
+            <Card className="px-[18px] py-4 flex flex-col gap-3">
+              <SectionHead title="Money" />
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[13px] text-muted-foreground">Total</span>
+                {hasTotal
+                  ? <span className="text-[24px] font-semibold tabular-nums">{currency(Number(booking.totalNzd))}</span>
+                  : <NoTotalSet className="font-sans text-[14px] font-semibold text-muted-foreground" />}
+              </div>
+              {hasTotal && <PaidBar total={Number(booking.totalNzd)} paid={totalPaid} outstanding={outstanding} overdue={balanceOverdue} />}
+              {!hasTotal && totalPaid !== 0 && (
+                <div className="text-[13px]"><span className="font-semibold tabular-nums">{currency(totalPaid)}</span> <span className="text-muted-foreground">paid so far</span></div>
               )}
-              <Link href={`/payments?bookingId=${bookingId}`} className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-3 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
-                <DollarSign className="w-3 h-3" /> MANAGE PAYMENTS
-              </Link>
-            </div>
-            <BookingInvoices bookingId={bookingId} />
-          </div>
-
-          {/* What the client submitted through their portal (final numbers,
-              dietaries, uploaded files). Hidden until they've sent something. */}
-          <ClientSubmissionPanel bookingId={bookingId} />
-
-          {/* Event spend & profitability tracking */}
-          <div className="dante-card p-6">
-            <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>BUDGET &amp; SPEND</span></div>
-            <EventSpendSection bookingId={bookingId} />
-          </div>
-
-          {/* Payment history */}
-          {(payments ?? []).length > 0 && (
-            <div className="dante-card p-6">
-              <div role="heading" aria-level={2} className="gold-rule max-w-xs mb-4"><span>PAYMENT HISTORY</span></div>
-              <div className="space-y-2">
-                {(payments ?? []).map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between py-2 border-b border-gold/10 last:border-0">
-                    <div>
-                      <div className="font-dm text-sm text-ink">{p.description || p.type?.replace(/_/g, ' ')}</div>
-                      <div className="font-dm text-xs text-ink/70">
-                        {new Date(p.paidAt || p.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
-                        {p.method && ` · ${p.method}`}
-                      </div>
-                    </div>
-                    {p.type === 'refund' ? (
-                      <div className="font-cormorant text-lg font-semibold text-red-500">
-                        −{currency(Number(p.amount))}
-                      </div>
-                    ) : (
-                      <div className="font-cormorant text-lg font-semibold text-forest">
-                        +{currency(Number(p.amount))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="flex items-center justify-between gap-2 pt-2 border-t-[1.5px]" style={{ borderColor: "#ececed" }}>
+                <span className="text-[13px] text-muted-foreground">Deposit <span className="tabular-nums text-foreground font-semibold">{currency(depositNzd)}</span></span>
+                {booking.depositRequired === false
+                  ? <Signal tone="gray">Not needed</Signal>
+                  : booking.depositPaid ? <Signal tone="green">Paid</Signal> : <Signal tone="amber">Pending</Signal>}
               </div>
-            </div>
-          )}
-        </div>
+              <Link href={paymentsHref} className={`${BTN_OUTLINE} w-full`}>
+                <DollarSign className="w-4 h-4" aria-hidden /> Manage payments
+              </Link>
 
-        {/* Right — Quick Actions */}
-        <div className="space-y-4">
-          <div className="dante-card p-5">
-            <div role="heading" aria-level={2} className="gold-rule max-w-full mb-4"><span>QUICK ACTIONS</span></div>
-            {/* No space-y: the actions were links wrapping buttons, which
-                ignored it, so they have always sat flush; kept that way. */}
-            <div>
-              {/* One link each, styled as a button (a link wrapped round a button
-                  was two Tab stops and read "link, button" for every action). */}
-              <Link href={existingRunsheet ? `/runsheet?id=${existingRunsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                <Clock className="w-4 h-4 text-gold" />
-                {existingRunsheet ? 'EDIT RUNSHEET' : 'CREATE RUNSHEET'}
-              </Link>
-              <Link href={`/floor-plan?bookingId=${bookingId}`}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                <LayoutGrid className="w-4 h-4" />
-                FLOOR PLAN
-              </Link>
-              <Link href={`/checklist?bookingId=${bookingId}`}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                <ClipboardList className="w-4 h-4" />
-                CHECKLIST
-              </Link>
-              <Link href={`/payments?bookingId=${bookingId}`}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                <DollarSign className="w-4 h-4" />
-                PAYMENTS
-              </Link>
+              {(payments ?? []).length > 0 && (
+                <div className="pt-1">
+                  <SectionHead title="Payment history" level={3} meta={(payments ?? []).length} />
+                  <ul className="m-0 p-0 list-none">
+                    {(payments ?? []).map((p: any) => (
+                      <li key={p.id} className="flex items-center justify-between gap-2 py-2 border-b-[1.5px] last:border-b-0" style={{ borderColor: "#ececed" }}>
+                        <div className="min-w-0">
+                          <div className="text-[13.5px] font-semibold truncate">{p.description || p.type?.replace(/_/g, ' ')}</div>
+                          <div className="text-[12px] text-muted-foreground">
+                            {new Date(p.paidAt || p.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                            {p.method && ` · ${p.method}`}
+                          </div>
+                        </div>
+                        {p.type === 'refund' ? (
+                          <div className="text-[14px] font-semibold tabular-nums" style={{ color: SIG.red }}>−{currency(Number(p.amount))}</div>
+                        ) : (
+                          <div className="text-[14px] font-semibold tabular-nums" style={{ color: SIG.green }}>+{currency(Number(p.amount))}</div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <BookingInvoices bookingId={bookingId} />
+            </Card>
+
+            {!isStaff && <LinkedTasks bookingId={booking.id} leadId={booking.leadId} className="" ruleHeading />}
+
+            {/* Documents */}
+            <Card className="px-[18px] py-4">
+              <SectionHead title="Documents" />
+              <div className="flex flex-col">
+                <button type="button" onClick={openProposal} className={docRow}>
+                  <FileText className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">{booking.proposalId ? 'Open proposal builder' : 'Start proposal'}</span>
+                </button>
+                {booking.leadId && !isStaff && <div className="py-1"><LeadProposals leadId={booking.leadId} compact /></div>}
+                <button type="button" onClick={() => setBeoPreviewOpen(true)}
+                  title="Read the full BEO (run of day, menu, dietaries) without downloading anything"
+                  className={docRow}>
+                  <Eye className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">Preview BEO</span>
+                </button>
+                <button type="button" onClick={() => downloadBeo(booking.id)}
+                  title="The event order for the team: no prices or signature lines"
+                  className={docRow}>
+                  <Printer className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">Download BEO PDF</span>
+                  <span className="text-[12px] font-normal text-muted-foreground">Team copy</span>
+                </button>
+                <button type="button" onClick={() => downloadBeo(booking.id, { copy: 'client' })}
+                  title="The event order with prices, totals and signature lines, to send to the client"
+                  className={docRow}>
+                  <Printer className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">Download client copy</span>
+                  <span className="text-[12px] font-normal text-muted-foreground">With prices</span>
+                </button>
+                <Link href={runsheetHref} className={docRow}>
+                  <ClipboardList className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">{existingRunsheet ? 'Edit run sheet' : 'Create run sheet'}</span>
+                </Link>
+                <Link href={`/floor-plan?bookingId=${bookingId}`} className={docRow}>
+                  <LayoutGrid className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">Floor plan</span>
+                </Link>
+                <Link href={`/checklist?bookingId=${bookingId}`} className={docRow}>
+                  <ClipboardList className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">Checklist</span>
+                </Link>
+                <button type="button" onClick={() => getBeoToken.mutate({ id: booking.id })} disabled={getBeoToken.isPending} className={docRow}>
+                  <LinkIcon className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+                  <span className="flex-1">
+                    {getBeoToken.isPending ? 'Creating link…'
+                      : (booking as any).beoShareToken ? 'Copy live event pack link' : 'Create live event pack link'}
+                  </span>
+                </button>
+                {(booking as any).beoShareToken && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Revoke the current event-pack link? Anyone using the existing link will lose access.')) {
+                        revokeBeoToken.mutate({ id: booking.id });
+                      }
+                    }}
+                    disabled={revokeBeoToken.isPending}
+                    className="self-start inline-flex items-center gap-1.5 min-h-8 px-1 mt-1 font-sans text-[12.5px] text-muted-foreground hover:text-[#c0392b] transition-colors disabled:opacity-50">
+                    <X className="w-3.5 h-3.5" aria-hidden />
+                    {revokeBeoToken.isPending ? 'Revoking…' : 'Revoke event-pack link'}
+                  </button>
+                )}
+              </div>
+            </Card>
+
+            {/* Client */}
+            <Card className="px-[18px] py-4">
+              <SectionHead title="Client" />
+              <div className="flex flex-col gap-0.5">
+                <div className="text-[14px] font-semibold">{clientName}</div>
+                {booking.email
+                  ? <a href={`mailto:${booking.email}`} className="text-[13px] text-primary hover:underline break-words">{booking.email}</a>
+                  : <div className="text-[13px] text-muted-foreground">No email on file</div>}
+              </div>
               {booking.leadId && (
                 <button
+                  type="button"
                   onClick={() => setLocation(`/dashboard?tab=enquiries&leadId=${booking.leadId}`)}
-                  className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
-                  <Mail className="w-4 h-4" />
-                  VIEW ENQUIRY
+                  className={`${BTN_SM} mt-3`}>
+                  <Mail className="w-3.5 h-3.5" aria-hidden /> View enquiry
                 </button>
               )}
-            </div>
-          </div>
-
-          {!isStaff && <LinkedTasks bookingId={booking.id} leadId={booking.leadId} className="" ruleHeading />}
-
-          {/* Generate Documents */}
-          <div className="dante-card p-5">
-            <div role="heading" aria-level={2} className="gold-rule max-w-full mb-4"><span>DOCUMENTS</span></div>
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  if (booking.proposalId) {
-                    setLocation(`/proposals/new?proposalId=${booking.proposalId}`);
-                  } else if (booking.leadId) {
-                    setLocation(`/proposals/new?leadId=${booking.leadId}`);
-                  } else {
-                    toast.error("This booking has no linked enquiry — start a proposal from the enquiry first.");
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
-                <FileText className="w-4 h-4" />
-                {booking.proposalId ? 'OPEN PROPOSAL BUILDER' : 'START PROPOSAL'}
-              </button>
-              {booking.leadId && !isStaff && <LeadProposals leadId={booking.leadId} compact />}
-              <button
-                onClick={() => setBeoPreviewOpen(true)}
-                title="Read the full BEO (run of day, menu, dietaries) without downloading anything"
-                className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                <Eye className="w-4 h-4 text-gold" />
-                PREVIEW BEO
-              </button>
-              <button
-                onClick={() => downloadBeo(booking.id)}
-                title="The event order for the team: no prices or signature lines"
-                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
-                <Printer className="w-4 h-4" />
-                DOWNLOAD BEO PDF
-              </button>
-              <button
-                onClick={() => downloadBeo(booking.id, { copy: 'client' })}
-                title="The event order with prices, totals and signature lines, to send to the client"
-                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
-                <Printer className="w-4 h-4" />
-                DOWNLOAD CLIENT COPY
-              </button>
-              <button
-                onClick={() => getBeoToken.mutate({ id: booking.id })}
-                disabled={getBeoToken.isPending}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
-                <LinkIcon className="w-4 h-4" />
-                {getBeoToken.isPending ? 'CREATING LINK…'
-                  : (booking as any).beoShareToken ? 'COPY LIVE EVENT PACK LINK' : 'CREATE LIVE EVENT PACK LINK'}
-              </button>
-              {(booking as any).beoShareToken && (
-                <button
-                  onClick={() => {
-                    if (confirm('Revoke the current event-pack link? Anyone using the existing link will lose access.')) {
-                      revokeBeoToken.mutate({ id: booking.id });
-                    }
-                  }}
-                  disabled={revokeBeoToken.isPending}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-xs font-dm text-ink/70 hover:text-red-600 transition-colors disabled:opacity-50">
-                  <X className="w-3 h-3" />
-                  {revokeBeoToken.isPending ? 'Revoking…' : 'Revoke event-pack link'}
-                </button>
-              )}
-            </div>
-          </div>
+            </Card>
+          </aside>
         </div>
-      </div>
-
-      {/* ─── Tabbed Modules ─────────────────────────────────────────────────── */}
-      <EventModuleTabs bookingId={bookingId} booking={booking} />
       </main>
     </div>
   );
@@ -643,38 +664,32 @@ export default function EventDetail() {
 
 // ─── EventModuleTabs ──────────────────────────────────────────────────────────
 const MODULE_TABS = [
-  { id: 'comms', label: 'COMMS', icon: MessageSquare },
-  { id: 'contracts', label: 'CONTRACTS', icon: PenLine },
-  { id: 'budget', label: 'BUDGET PLAN', icon: DollarSign },
-  { id: 'equipment', label: 'EQUIPMENT', icon: Package },
-  { id: 'seating', label: 'SEATING', icon: Layers },
-  { id: 'portal', label: 'CLIENT PORTAL', icon: Link2 },
+  { id: 'comms', label: 'Comms' },
+  { id: 'contracts', label: 'Contracts' },
+  { id: 'budget', label: 'Budget plan' },
+  { id: 'equipment', label: 'Equipment' },
+  { id: 'seating', label: 'Seating' },
+  { id: 'portal', label: 'Client portal' },
 ];
 
-function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: any }) {
-  const initialTab = new URLSearchParams(window.location.search).get('tab') ?? 'comms';
-  const [activeTab, setActiveTab] = useState(initialTab);
+function EventModuleTabs({ bookingId, booking, activeTab, setActiveTab }: { bookingId: number; booking: any; activeTab: string; setActiveTab: (t: string) => void }) {
   return (
-    <div className="max-w-6xl mx-auto px-4 pb-12">
-      <div className="flex border-b border-gold/20 mb-6 overflow-x-auto">
-        {MODULE_TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              aria-pressed={activeTab === tab.id}
-              className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-gold text-amber-700'
-                  : 'border-transparent text-ink/65 hover:text-ink/70'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
+    <Card className="px-5 pb-5">
+      <div className="flex gap-1 border-b-[1.5px] border-border mb-4 -mx-1 overflow-x-auto">
+        {MODULE_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            aria-pressed={activeTab === tab.id}
+            className={`px-3 py-2.5 font-sans text-[14px] font-semibold whitespace-nowrap border-b-2 -mb-[1.5px] transition-colors ${
+              activeTab === tab.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       {activeTab === 'comms' && <CommsTab bookingId={bookingId} />}
       {activeTab === 'contracts' && <ContractsTab bookingId={bookingId} booking={booking} />}
@@ -682,9 +697,10 @@ function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: a
       {activeTab === 'equipment' && <EquipmentTab bookingId={bookingId} />}
       {activeTab === 'seating' && <SeatingTab bookingId={bookingId} booking={booking} />}
       {activeTab === 'portal' && <PortalTab bookingId={bookingId} booking={booking} />}
-    </div>
+    </Card>
   );
 }
+
 
 // ─── Communications Tab ───────────────────────────────────────────────────────
 function CommsTab({ bookingId }: { bookingId: number }) {
@@ -700,20 +716,18 @@ function CommsTab({ bookingId }: { bookingId: number }) {
     onSuccess: () => utils.comms.list.invalidate({ bookingId }),
     onError: () => toast.error("Couldn't delete the log entry — try again"),
   });
-  const TYPE_ICONS: Record<string, string> = { note: '📝', email: '📧', call: '📞', sms: '💬', meeting: '🤝' };
-  const TYPE_COLORS: Record<string, string> = { note: 'bg-gray-100 text-gray-600', email: 'bg-blue-100 text-blue-700', call: 'bg-green-100 text-green-700', sms: 'bg-purple-100 text-purple-700', meeting: 'bg-amber-100 text-amber-700' };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-bebas tracking-widest text-ink/70 text-sm">COMMUNICATIONS LOG</h2>
-        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ENTRY</button>
+        <h2 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Communications log</h2>
+        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add entry</button>
       </div>
       {showForm && (
-        <div className="dante-card p-4 space-y-3">
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="comms-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
-              <select id="comms-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="comms-type" className={FIELD_LABEL}>Type</label>
+              <select id="comms-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border-[1.5px] border-input rounded-[6px] bg-card px-2 h-9 text-sm">
                 <option value="note">Note</option>
                 <option value="email">Email</option>
                 <option value="call">Call</option>
@@ -722,54 +736,53 @@ function CommsTab({ bookingId }: { bookingId: number }) {
               </select>
             </div>
             <div>
-              <label htmlFor="comms-direction" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DIRECTION</label>
-              <select id="comms-direction" value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="comms-direction" className={FIELD_LABEL}>DIRECTION</label>
+              <select id="comms-direction" value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border-[1.5px] border-input rounded-[6px] bg-card px-2 h-9 text-sm">
                 <option value="internal">Internal</option>
                 <option value="inbound">Inbound</option>
                 <option value="outbound">Outbound</option>
               </select>
             </div>
             <div>
-              <label htmlFor="comms-subject" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SUBJECT</label>
+              <label htmlFor="comms-subject" className={FIELD_LABEL}>SUBJECT</label>
               <Input id="comms-subject" value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Optional subject" className="text-sm" />
             </div>
             <div>
-              <label htmlFor="comms-contact" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTACT NAME</label>
+              <label htmlFor="comms-contact" className={FIELD_LABEL}>CONTACT NAME</label>
               <Input id="comms-contact" value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Optional" className="text-sm" />
             </div>
           </div>
           <div>
-            <label htmlFor="comms-body" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES / BODY *</label>
+            <label htmlFor="comms-body" className={FIELD_LABEL}>NOTES / BODY *</label>
             <Textarea id="comms-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'SAVE'}</button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Save'}</button>
+            <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
       )}
-      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {isLoading && <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>}
       {!isLoading && (!comms || comms.length === 0) && (
         <div className="text-center py-12">
-          <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden="true" />
-          <p className="text-sm text-gray-500">No communications logged yet.</p>
+          <MessageSquare className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">No communications logged yet.</p>
         </div>
       )}
       <div className="space-y-2">
         {(comms ?? []).map((c: any) => (
-          <div key={c.id} className="dante-card p-4 flex items-start gap-3">
-            <span className="text-lg">{TYPE_ICONS[c.type] ?? '📝'}</span>
+          <div key={c.id} className="bg-card border-[1.5px] border-border rounded-[8px] p-4 flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${TYPE_COLORS[c.type] ?? 'bg-gray-100 text-gray-600'}`}>{c.type}</span>
-                {c.direction !== 'internal' && <span className="text-xs text-gray-400">{c.direction}</span>}
-                {c.subject && <span className="text-sm font-medium text-ink">{c.subject}</span>}
-                <span className="text-xs text-gray-400 ml-auto">{new Date(c.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">{c.type}</span>
+                {c.direction !== 'internal' && <span className="text-xs text-muted-foreground">{c.direction}</span>}
+                {c.subject && <span className="text-sm font-medium text-foreground">{c.subject}</span>}
+                <span className="text-xs text-muted-foreground ml-auto">{new Date(c.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              <p className="text-sm text-ink/80 whitespace-pre-wrap">{c.body}</p>
-              {c.contactName && <p className="text-xs text-gray-400 mt-1">Contact: {c.contactName}{c.contactEmail ? ` · ${c.contactEmail}` : ''}</p>}
+              <p className="text-sm text-foreground whitespace-pre-wrap">{c.body}</p>
+              {c.contactName && <p className="text-xs text-muted-foreground mt-1">Contact: {c.contactName}{c.contactEmail ? ` · ${c.contactEmail}` : ''}</p>}
             </div>
-            <button onClick={() => { if (confirm('Delete this logged communication? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete communication" className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
+            <button onClick={() => { if (confirm('Delete this logged communication? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete communication" className="text-muted-foreground hover:text-[#c0392b] flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
           </div>
         ))}
       </div>
@@ -813,56 +826,56 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
     onSuccess: () => utils.contracts.list.invalidate({ bookingId }),
     onError: () => toast.error("Couldn't delete the contract — try again"),
   });
-  const STATUS_COLORS: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', signed: 'bg-green-100 text-green-700', declined: 'bg-red-100 text-red-700', expired: 'bg-gray-100 text-gray-400' };
+  const STATUS_TONE: Record<string, SigTone> = { draft: 'gray', sent: 'blue', signed: 'green', declined: 'red', expired: 'gray' };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">CONTRACTS & E-SIGNATURES</h3>
-        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> NEW CONTRACT</button>
+        <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Contracts & e-signatures</h3>
+        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> New contract</button>
       </div>
       {showForm && (
-        <div className="dante-card p-4 space-y-3">
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label htmlFor="contract-title" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
+              <label htmlFor="contract-title" className={FIELD_LABEL}>CONTRACT TITLE *</label>
               <Input id="contract-title" aria-required="true" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
             </div>
             <div>
-              <label htmlFor="contract-client-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
+              <label htmlFor="contract-client-name" className={FIELD_LABEL}>CLIENT NAME</label>
               <Input id="contract-client-name" value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
             </div>
             <div>
-              <label htmlFor="contract-client-email" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
+              <label htmlFor="contract-client-email" className={FIELD_LABEL}>CLIENT EMAIL</label>
               <Input id="contract-client-email" type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
             </div>
           </div>
           <div>
-            <label htmlFor="contract-body" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
+            <label htmlFor="contract-body" className={FIELD_LABEL}>CONTRACT BODY *</label>
             <Textarea id="contract-body" aria-required="true" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'CREATE CONTRACT'}</button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Create contract'}</button>
+            <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
       )}
-      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {isLoading && <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>}
       {!isLoading && (!contracts || contracts.length === 0) && (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted-foreground">
           <PenLine className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No contracts yet. Create one to send to your client for signing.</p>
         </div>
       )}
       <div className="space-y-3">
         {(contracts ?? []).map((c: any) => (
-          <div key={c.id} className="dante-card p-4">
+          <div key={c.id} className="bg-card border-[1.5px] border-border rounded-[8px] p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold text-ink text-sm">{c.title}</span>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
+                  <span className="font-semibold text-foreground text-sm">{c.title}</span>
+                  <Signal tone={STATUS_TONE[c.status] ?? 'gray'} className="capitalize">{c.status}</Signal>
                 </div>
-                <div className="text-xs text-stone-600">
+                <div className="text-xs text-muted-foreground">
                   {c.clientName && <span>For: {c.clientName}</span>}
                   {c.clientEmail && <span> · {c.clientEmail}</span>}
                   <span> · Created {new Date(c.createdAt).toLocaleDateString('en-NZ')}</span>
@@ -870,9 +883,9 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
                   {c.expiresAt && c.status !== 'signed' && <span> · {Number(c.expiresAt) < Date.now() ? 'Expired' : 'Sign by'} {new Date(Number(c.expiresAt)).toLocaleDateString('en-NZ')}</span>}
                 </div>
                 {c.signedAt && (
-                  <div className="text-xs text-green-800 mt-1">
+                  <div className="text-xs text-[#3f7350] mt-1">
                     Signed by <strong>{c.signerName}</strong> on {new Date(Number(c.signedAt)).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
-                    {c.signerIp && <span className="text-stone-600"> · from {c.signerIp}</span>}
+                    {c.signerIp && <span className="text-muted-foreground"> · from {c.signerIp}</span>}
                   </div>
                 )}
               </div>
@@ -880,30 +893,30 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
                 {(c.status === 'draft' || c.status === 'sent') && (
                   <button onClick={() => send.mutate({ id: c.id })} disabled={send.isPending}
                     title={c.status === 'draft' ? 'Email the client their signing link (or get a link to send yourself)' : 'Email the signing link again'}
-                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50">
-                    {send.isPending && send.variables?.id === c.id ? 'SENDING…' : c.status === 'draft' ? 'SEND TO CLIENT' : 'RESEND'}
+                    className={BTN_SM}>
+                    {send.isPending && send.variables?.id === c.id ? 'Sending…' : c.status === 'draft' ? 'Send to client' : 'Resend'}
                   </button>
                 )}
-                <button onClick={() => { if (confirm('Delete this contract? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete contract" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
+                <button onClick={() => { if (confirm('Delete this contract? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete contract" className="text-muted-foreground hover:text-[#c0392b]"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
               </div>
             </div>
             {c.status === 'sent' && (
-              <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="mt-2 pt-2 border-t-[1.5px] border-[#ececed]">
                 {signingLink ? (
                   <>
-                    <div className="text-xs text-stone-600 mb-1">Signing link — the client's event page, where they read and sign:</div>
+                    <div className="text-xs text-muted-foreground mb-1">Signing link — the client's event page, where they read and sign:</div>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{signingLink}</code>
-                      <button onClick={() => { navigator.clipboard.writeText(signingLink); toast.success('Link copied'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-stone-700 hover:bg-gray-50">COPY</button>
+                      <code className="text-xs bg-background border-[1.5px] border-border px-2 py-1 rounded-[6px] flex-1 truncate">{signingLink}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(signingLink); toast.success('Link copied'); }} className={BTN_SM}>Copy</button>
                     </div>
                   </>
                 ) : (
-                  <div className="text-xs text-stone-600">No signing link yet — press Resend to create one.</div>
+                  <div className="text-xs text-muted-foreground">No signing link yet — press Resend to create one.</div>
                 )}
               </div>
             )}
             {c.status === 'draft' && (
-              <p className="mt-2 pt-2 border-t border-gray-100 text-xs text-stone-600">Not sent yet. Send to client creates their signing link and emails it if your email is set up.</p>
+              <p className="mt-2 pt-2 border-t-[1.5px] border-[#ececed] text-xs text-muted-foreground">Not sent yet. Send to client creates their signing link and emails it if your email is set up.</p>
             )}
           </div>
         ))}
@@ -941,88 +954,88 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-bebas tracking-widest text-ink/70 text-sm">BUDGET PLAN</h3>
-          <p className="font-dm text-xs text-ink/65 mt-0.5">Estimated vs actual lines for planning. Real supplier spend and profit are tracked under “Budget &amp; Spend” on the main page.</p>
+          <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Budget plan</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Estimated vs actual lines for planning. Real supplier spend and profit are tracked under “Budget &amp; spend” on this page.</p>
         </div>
-        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ITEM</button>
+        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[{ label: 'EST. INCOME', val: totalEstIncome, color: 'text-green-600' }, { label: 'ACT. INCOME', val: totalActIncome, color: 'text-green-700' }, { label: 'EST. EXPENSE', val: totalEstExpense, color: 'text-red-500' }, { label: 'ACT. EXPENSE', val: totalActExpense, color: 'text-red-600' }].map(s => (
-          <div key={s.label} className="dante-card p-3 text-center">
-            <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">{s.label}</div>
-            <div className={`font-cormorant text-xl font-semibold ${s.color}`}>{currency(s.val)}</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 border-[1.5px] border-input rounded-[8px] bg-card overflow-hidden">
+        {[{ label: 'Est. income', val: totalEstIncome }, { label: 'Act. income', val: totalActIncome }, { label: 'Est. expense', val: totalEstExpense }, { label: 'Act. expense', val: totalActExpense }].map((s, i) => (
+          <div key={s.label} className={`px-4 py-3 flex flex-col gap-1 border-[#ececed] ${i % 2 === 0 ? 'border-r-[1.5px]' : 'md:border-r-[1.5px]'} ${i < 2 ? 'border-b-[1.5px] md:border-b-0' : ''} ${i === 3 ? 'md:border-r-0' : ''}`}>
+            <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">{s.label}</div>
+            <div className="text-[22px] font-semibold tabular-nums">{currency(s.val)}</div>
           </div>
         ))}
       </div>
       {showForm && (
-        <div className="dante-card p-4 space-y-3">
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label htmlFor="budget-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <label htmlFor="budget-name" className={FIELD_LABEL}>ITEM NAME *</label>
               <Input id="budget-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
             </div>
             <div>
-              <label htmlFor="budget-type" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
-              <select id="budget-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-type" className={FIELD_LABEL}>Type</label>
+              <select id="budget-type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border-[1.5px] border-input rounded-[6px] bg-card px-2 h-9 text-sm">
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
               </select>
             </div>
             <div>
-              <label htmlFor="budget-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select id="budget-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="budget-category" className={FIELD_LABEL}>Category</label>
+              <select id="budget-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border-[1.5px] border-input rounded-[6px] bg-card px-2 h-9 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="budget-estimated" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
+              <label htmlFor="budget-estimated" className={FIELD_LABEL}>ESTIMATED ($)</label>
               <Input id="budget-estimated" type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
             <div>
-              <label htmlFor="budget-actual" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
+              <label htmlFor="budget-actual" className={FIELD_LABEL}>ACTUAL ($)</label>
               <Input id="budget-actual" type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ name: form.name, category: form.category, type: form.type, estimatedAmount: Number(form.estimatedAmount) || 0, actualAmount: Number(form.actualAmount) || 0, bookingId })} disabled={!form.name || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'ADD'}</button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => create.mutate({ name: form.name, category: form.category, type: form.type, estimatedAmount: Number(form.estimatedAmount) || 0, actualAmount: Number(form.actualAmount) || 0, bookingId })} disabled={!form.name || create.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{create.isPending ? 'Saving…' : 'Add'}</button>
+            <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
       )}
-      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {isLoading && <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>}
       {!isLoading && (!items || items.length === 0) && (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted-foreground">
           <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No budget items yet. Track estimated vs actual costs here.</p>
         </div>
       )}
       {items && items.length > 0 && (
-        <div className="dante-card overflow-hidden">
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-background">
               <tr>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">ITEM</th>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">CATEGORY</th>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">TYPE</th>
-                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/70">ESTIMATED</th>
-                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/70">ACTUAL</th>
+                <th className="text-left p-3 font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Item</th>
+                <th className="text-left p-3 font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Category</th>
+                <th className="text-left p-3 font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Type</th>
+                <th className="text-right p-3 font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Estimated</th>
+                <th className="text-right p-3 font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Actual</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
               {(items ?? []).map((item: any) => (
-                <tr key={item.id} className="border-t border-gray-50 hover:bg-gray-50">
-                  <td className="p-3 font-medium text-ink">{item.name}</td>
-                  <td className="p-3 text-gray-500 capitalize">{item.category}</td>
+                <tr key={item.id} className="border-t-[1.5px] border-[#ececed] hover:bg-background">
+                  <td className="p-3 font-medium text-foreground">{item.name}</td>
+                  <td className="p-3 text-muted-foreground capitalize">{item.category}</td>
                   <td className="p-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{item.type}</span>
+                    <span className="text-[13px] capitalize" style={{ color: item.type === 'income' ? SIG.green : undefined }}>{item.type}</span>
                   </td>
-                  <td className="p-3 text-right text-gray-700">${Number(item.estimatedAmount ?? 0).toFixed(2)}</td>
+                  <td className="p-3 text-right tabular-nums">${Number(item.estimatedAmount ?? 0).toFixed(2)}</td>
                   <td className="p-3 text-right">
-                    <input type="number" aria-label="Actual amount" defaultValue={item.actualAmount ?? 0} onBlur={e => update.mutate({ id: item.id, actualAmount: Number(e.target.value) })} className="w-24 text-right border border-gray-200 rounded px-2 py-0.5 text-sm" />
+                    <input type="number" aria-label="Actual amount" defaultValue={item.actualAmount ?? 0} onBlur={e => update.mutate({ id: item.id, actualAmount: Number(e.target.value) })} className="w-24 text-right tabular-nums border-[1.5px] border-input rounded-[6px] px-2 py-0.5 text-sm" />
                   </td>
                   <td className="p-3 text-right">
-                    <button onClick={() => { if (confirm('Delete this budget line? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete budget line" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
+                    <button onClick={() => { if (confirm('Delete this budget line? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete budget line" className="text-muted-foreground hover:text-[#c0392b]"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
                   </td>
                 </tr>
               ))}
@@ -1052,72 +1065,73 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
     onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }),
     onError: () => toast.error("Couldn't delete the equipment — try again"),
   });
-  const STATUS_COLORS: Record<string, string> = { needed: 'bg-yellow-100 text-yellow-700', confirmed: 'bg-blue-100 text-blue-700', delivered: 'bg-green-100 text-green-700', returned: 'bg-gray-100 text-gray-500' };
+  const STATUS_TONE: Record<string, SigTone> = { needed: 'amber', confirmed: 'blue', delivered: 'green', returned: 'gray' };
   const CATEGORIES = ['av', 'furniture', 'linen', 'lighting', 'catering', 'decor', 'transport', 'other'];
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">EQUIPMENT & INVENTORY</h3>
-        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ITEM</button>
+        <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Equipment & inventory</h3>
+        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Add item</button>
       </div>
       {showForm && (
-        <div className="dante-card p-4 space-y-3">
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label htmlFor="equipment-name" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
+              <label htmlFor="equipment-name" className={FIELD_LABEL}>ITEM NAME *</label>
               <Input id="equipment-name" aria-required="true" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
             </div>
             <div>
-              <label htmlFor="equipment-category" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
-              <select id="equipment-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+              <label htmlFor="equipment-category" className={FIELD_LABEL}>Category</label>
+              <select id="equipment-category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border-[1.5px] border-input rounded-[6px] bg-card px-2 h-9 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="equipment-quantity" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
+              <label htmlFor="equipment-quantity" className={FIELD_LABEL}>QUANTITY</label>
               <Input id="equipment-quantity" type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
             </div>
             <div className="col-span-2">
-              <label htmlFor="equipment-notes" className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
+              <label htmlFor="equipment-notes" className={FIELD_LABEL}>NOTES</label>
               <Input id="equipment-notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => add.mutate({ name: form.name, category: form.category, quantity: Number(form.quantity) || 1, notes: form.notes || undefined, bookingId })} disabled={!form.name || add.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{add.isPending ? 'SAVING...' : 'ADD'}</button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => add.mutate({ name: form.name, category: form.category, quantity: Number(form.quantity) || 1, notes: form.notes || undefined, bookingId })} disabled={!form.name || add.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{add.isPending ? 'Saving…' : 'Add'}</button>
+            <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
       )}
-      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {isLoading && <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>}
       {!isLoading && (!items || items.length === 0) && (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted-foreground">
           <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No equipment tracked yet. Add items needed for this event.</p>
         </div>
       )}
       <div className="space-y-2">
         {(items ?? []).map((item: any) => (
-          <div key={item.id} className="dante-card p-3 flex items-center gap-3">
+          <div key={item.id} className="bg-card border-[1.5px] border-border rounded-[8px] p-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-ink text-sm">{item.name}</span>
-                <span className="text-xs text-gray-400">× {item.quantity}</span>
-                <span className="text-xs text-gray-400 capitalize">{item.category}</span>
+                <span className="font-medium text-foreground text-sm">{item.name}</span>
+                <span className="text-xs text-muted-foreground">× {item.quantity}</span>
+                <span className="text-xs text-muted-foreground capitalize">{item.category}</span>
               </div>
-              {item.notes && <p className="text-xs text-gray-400 mt-0.5">{item.notes}</p>}
+              {item.notes && <p className="text-xs text-muted-foreground mt-0.5">{item.notes}</p>}
             </div>
             <select
               value={item.status}
               aria-label={`Status for ${item.name}`}
               onChange={e => updateItem.mutate({ id: item.id, status: e.target.value as any })}
-              className={`text-xs font-semibold px-2 py-1 rounded-full border-0 ${STATUS_COLORS[item.status] ?? 'bg-gray-100 text-gray-500'}`}
+              className="h-8 rounded-[6px] border-[1.5px] border-input bg-card px-2 font-sans text-[12.5px] font-bold"
+              style={{ color: SIG[STATUS_TONE[item.status] ?? 'gray'] }}
             >
               <option value="needed">Needed</option>
               <option value="confirmed">Confirmed</option>
               <option value="delivered">Delivered</option>
               <option value="returned">Returned</option>
             </select>
-            <button onClick={() => { if (confirm('Delete this equipment item? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete equipment item" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
+            <button onClick={() => { if (confirm('Delete this equipment item? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete equipment item" className="text-muted-foreground hover:text-[#c0392b]"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
           </div>
         ))}
       </div>
@@ -1166,27 +1180,27 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">SEATING CHART</h3>
+        <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Seating chart</h3>
         <div className="flex gap-2">
-          <button onClick={() => addTable('round')} className="border border-forest/30 text-forest text-xs font-bebas tracking-widest px-3 py-2 hover:bg-forest/5">+ ROUND TABLE</button>
-          <button onClick={() => addTable('rect')} className="border border-forest/30 text-forest text-xs font-bebas tracking-widest px-3 py-2 hover:bg-forest/5">+ RECT TABLE</button>
-          <button onClick={() => save.mutate({ bookingId, canvasData: JSON.stringify(tables), guestCount: totalSeats })} disabled={save.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{save.isPending ? 'SAVING...' : 'SAVE CHART'}</button>
+          <button onClick={() => addTable('round')} className={BTN_SM}>+ Round table</button>
+          <button onClick={() => addTable('rect')} className={BTN_SM}>+ Rect table</button>
+          <button onClick={() => save.mutate({ bookingId, canvasData: JSON.stringify(tables), guestCount: totalSeats })} disabled={save.isPending} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}>{save.isPending ? 'Saving…' : 'Save chart'}</button>
         </div>
       </div>
-      <div className="flex gap-4 text-xs text-gray-500">
+      <div className="flex gap-4 text-xs text-muted-foreground">
         <span>Tables: {tables.length}</span>
         <span>Total seats: {totalSeats}</span>
-        {guestCount > 0 && <span className={totalSeats >= guestCount ? 'text-green-600' : 'text-red-500'}>Guests: {guestCount} ({totalSeats >= guestCount ? '✓ Enough seats' : `${guestCount - totalSeats} more needed`})</span>}
+        {guestCount > 0 && <span style={{ color: totalSeats >= guestCount ? SIG.green : SIG.amber, fontWeight: 700 }}>Guests: {guestCount} ({totalSeats >= guestCount ? '✓ Enough seats' : `${guestCount - totalSeats} more needed`})</span>}
       </div>
       <div
-        className="relative bg-[#f9f7f2] border-2 border-dashed border-gold/30 rounded-lg overflow-hidden select-none"
+        className="relative bg-background border-[1.5px] border-dashed border-input rounded-lg overflow-hidden select-none"
         style={{ height: 500 }}
         onMouseMove={handleMouseMove}
         onMouseUp={() => setDragging(null)}
         onMouseLeave={() => setDragging(null)}
       >
         {tables.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/50">
             <div className="text-center">
               <Layers className="w-12 h-12 mx-auto mb-2 opacity-30" />
               <p className="text-sm">Add tables above to start building your seating chart</p>
@@ -1200,26 +1214,26 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
             onMouseDown={e => handleMouseDown(e, table.id)}
           >
             {table.shape === 'round' ? (
-              <div className="w-20 h-20 rounded-full bg-[#4f72e0]/10 border-2 border-[#4f72e0]/40 flex flex-col items-center justify-center">
-                <span className="text-xs font-bebas tracking-widest text-[#4f72e0]">{table.label}</span>
-                <span className="text-xs text-[#4f72e0]/60">{table.seats} seats</span>
+              <div className="w-20 h-20 rounded-full bg-accent border-[1.5px] border-primary/50 flex flex-col items-center justify-center">
+                <span className="text-xs font-bold text-primary">{table.label}</span>
+                <span className="text-xs text-muted-foreground">{table.seats} seats</span>
               </div>
             ) : (
-              <div className="w-28 h-16 bg-[#c9a84c]/10 border-2 border-[#c9a84c]/40 flex flex-col items-center justify-center">
-                <span className="text-xs font-bebas tracking-widest text-[#c9a84c]">{table.label}</span>
-                <span className="text-xs text-[#c9a84c]/60">{table.seats} seats</span>
+              <div className="w-28 h-16 bg-accent border-[1.5px] border-primary/50 rounded-[6px] flex flex-col items-center justify-center">
+                <span className="text-xs font-bold text-primary">{table.label}</span>
+                <span className="text-xs text-muted-foreground">{table.seats} seats</span>
               </div>
             )}
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setTables(prev => prev.filter(t => t.id !== table.id))}
               aria-label="Remove table"
-              className="absolute -top-2 -right-2 w-5 h-5 bg-red-400 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-500"
+              className="absolute -top-2 -right-2 w-5 h-5 bg-foreground text-white rounded-full text-xs flex items-center justify-center hover:bg-[#c0392b]"
             ><span aria-hidden>×</span></button>
           </div>
         ))}
       </div>
-      <p className="text-xs text-gray-400">Drag tables to position them. Click × to remove.</p>
+      <p className="text-xs text-muted-foreground">Drag tables to position them. Click × to remove.</p>
     </div>
   );
 }
@@ -1253,18 +1267,18 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">CLIENT PORTAL LINKS</h3>
-        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> CREATE LINK</button>
+        <h3 className="font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] text-primary m-0">Client portal links</h3>
+        <button onClick={() => setShowForm(v => !v)} className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}><Plus className="w-3.5 h-3.5" aria-hidden /> Create link</button>
       </div>
-      <p className="text-xs text-gray-400">Share a secure link with your client so they can view their event details, approve proposals, and sign contracts — no login required.</p>
+      <p className="text-xs text-muted-foreground">Share a secure link with your client so they can view their event details, approve proposals, and sign contracts — no login required.</p>
       {showForm && (
-        <div className="dante-card p-4 space-y-3">
-          <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">PERMISSIONS</div>
+        <div className="bg-card border-[1.5px] border-border rounded-[8px] p-4 space-y-3">
+          <div className={FIELD_LABEL}>Permissions</div>
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(PERM_LABELS).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={(perms as any)[key]} onChange={e => setPerms(p => ({ ...p, [key]: e.target.checked }))} className="w-4 h-4 accent-forest" />
-                <span className="text-sm text-ink/80">{label}</span>
+                <input type="checkbox" checked={(perms as any)[key]} onChange={e => setPerms(p => ({ ...p, [key]: e.target.checked }))} className="w-4 h-4 accent-[var(--primary)]" />
+                <span className="text-sm text-foreground">{label}</span>
               </label>
             ))}
           </div>
@@ -1272,15 +1286,15 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
             <button
               onClick={() => create.mutate({ bookingId, clientName: `${booking?.firstName ?? ''} ${booking?.lastName ?? ''}`.trim(), clientEmail: booking?.email, permissions: perms })}
               disabled={create.isPending}
-              className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2"
-            >{create.isPending ? 'CREATING...' : 'CREATE PORTAL LINK'}</button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+              className={`${BTN_PRIMARY} !h-8 !text-[12.5px] !px-2.5`}
+            >{create.isPending ? 'Creating…' : 'Create portal link'}</button>
+            <button onClick={() => setShowForm(false)} className={BTN_SM}>Cancel</button>
           </div>
         </div>
       )}
-      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {isLoading && <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>}
       {!isLoading && (!tokens || tokens.length === 0) && (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted-foreground">
           <Link2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No portal links yet. Create one to share with your client.</p>
         </div>
@@ -1290,31 +1304,31 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
           const url = `${window.location.origin}/portal/${t.token}`;
           const permsObj = t.permissions ? (() => { try { return JSON.parse(t.permissions); } catch { return {}; } })() : {};
           return (
-            <div key={t.id} className="dante-card p-4">
+            <div key={t.id} className="bg-card border-[1.5px] border-border rounded-[8px] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-ink mb-1">{t.clientName || 'Client'}</div>
-                  <div className="text-xs text-gray-400 mb-2">
+                  <div className="text-sm font-medium text-foreground mb-1">{t.clientName || 'Client'}</div>
+                  <div className="text-xs text-muted-foreground mb-2">
                     Created {new Date(t.createdAt).toLocaleDateString('en-NZ')}
                     {t.lastAccessedAt && ` · Last accessed ${new Date(t.lastAccessedAt).toLocaleDateString('en-NZ')}`}
                   </div>
                   <div className="flex flex-wrap gap-1 mb-2">
                     {Object.entries(PERM_LABELS).filter(([k]) => permsObj[k]).map(([k, label]) => (
-                      <span key={k} className="text-xs bg-forest/10 text-forest px-2 py-0.5 rounded-full">{label}</span>
+                      <span key={k} className="text-[12px] text-muted-foreground after:content-['·'] after:ml-1.5 last:after:content-none">{label}</span>
                     ))}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 min-w-[12rem] truncate">{url}</code>
-                    <button onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-gray-500 hover:bg-gray-50 flex-shrink-0">COPY</button>
+                    <code className="text-xs bg-background border-[1.5px] border-border px-2 py-1 rounded-[6px] flex-1 min-w-[12rem] truncate">{url}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }} className={`${BTN_SM} flex-shrink-0`}>Copy</button>
                     <button onClick={() => emailLink.mutate({ id: t.id })} disabled={emailLink.isPending}
                       title={`Email this link to ${t.clientEmail || booking?.email || 'the client'}`}
-                      className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-stone-700 hover:bg-gray-50 flex-shrink-0 disabled:opacity-50">
-                      {emailLink.isPending && emailLink.variables?.id === t.id ? 'SENDING…' : 'EMAIL TO CLIENT'}
+                      className={`${BTN_SM} flex-shrink-0`}>
+                      {emailLink.isPending && emailLink.variables?.id === t.id ? 'Sending…' : 'Email to client'}
                     </button>
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-bebas tracking-widest px-2 py-1 border border-forest/30 text-forest hover:bg-forest/5 flex-shrink-0">PREVIEW</a>
+                    <a href={url} target="_blank" rel="noopener noreferrer" className={`${BTN_SM} flex-shrink-0`}>Preview</a>
                   </div>
                 </div>
-                <button onClick={() => { if (confirm('Delete this portal link? Anyone using it will lose access. This cannot be undone.')) del.mutate({ id: t.id }); }} aria-label="Delete portal link" className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
+                <button onClick={() => { if (confirm('Delete this portal link? Anyone using it will lose access. This cannot be undone.')) del.mutate({ id: t.id }); }} aria-label="Delete portal link" className="text-muted-foreground hover:text-[#c0392b] flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
               </div>
             </div>
           );

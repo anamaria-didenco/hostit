@@ -63,7 +63,7 @@
      Red            #c0392b  → alerts / overdue / destructive
    ─────────────────────────────────────────────────────────────────────────────
    Typography:
-     Spectral (serif)        → display, figures, venue names, $ amounts, times
+     Hanken Grotesk only — Spectral retired; figures use tabular numerals
      Hanken Grotesk (sans)   → all UI: body, eyebrows, labels, section heads
 ─────────────────────────────────────────────────────────────────────────────── */
 
@@ -72,29 +72,29 @@
   --radius: 0.375rem;
 
   /* Editorial type families */
-  --font-display: 'Spectral', Georgia, serif;
+  --font-display: 'Hanken Grotesk', system-ui, sans-serif;  /* one family: Spectral retired */
   --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 
   /* ── Surfaces = warm cream paper ── */
-  --background:             #fffdf9;
-  --foreground:             #211d18;   /* Ink */
+  --background:             #f8f8f7;
+  --foreground:             #1a1a1e;   /* Ink */
 
-  --card:                   #fffdf9;
-  --card-foreground:        #211d18;
-  --popover:                #fffdf9;
-  --popover-foreground:     #211d18;
+  --card:                   #ffffff;
+  --card-foreground:        #1a1a1e;
+  --popover:                #ffffff;
+  --popover-foreground:     #1a1a1e;
 
   /* ── Primary = VenueFlow deep blue ── */
   --primary:                #2f5488;
   --primary-foreground:     #ffffff;
 
   /* Secondary = warm sand fill */
-  --secondary:              #f4efe6;
-  --secondary-foreground:   #211d18;
+  --secondary:              #f0f0f2;
+  --secondary-foreground:   #1a1a1e;
 
   /* Muted = warm sand + warm grey text */
-  --muted:                  #f4efe6;
-  --muted-foreground:       #6a6256;
+  --muted:                  #f0f0f2;
+  --muted-foreground:       #5a5f67;
 
   /* Accent = cool blue tint */
   --accent:                 #e8edf6;
@@ -105,20 +105,20 @@
   --destructive-foreground: #ffffff;
 
   /* Borders = warm paper-grey */
-  --border:                 #e3ddd0;
-  --input:                  #e6dccb;
+  --border:                 #e2e2e5;
+  --input:                  #dedee2;
   --ring:                   #2f5488;
   /* Text-box outlines. A field's fill is the same cream as the page, so its
      border is the only edge you can see: 3.8:1 on cream (WCAG asks for 3:1).
      --input stays soft because cards and outline buttons use it too. */
-  --field-border:           #8a8073;
+  --field-border:           #84878f;
 
   /* ── Charts ── */
   --chart-1: #2f5488;   /* deep blue */
   --chart-2: #b07c25;   /* amber */
   --chart-3: #6b98e7;   /* light blue */
   --chart-4: #c0392b;   /* red */
-  --chart-5: #8a8073;   /* warm grey */
+  --chart-5: #84878f;   /* grey */
 
   /* ── Sidebar = light text on deep blue ── */
   --sidebar:                    #2f5488;
@@ -664,7 +664,7 @@
   --secondary:              #f4efe6;
   --secondary-foreground:   #211d18;
   --muted:                  #f4efe6;
-  --muted-foreground:       #6a6256;
+  --muted-foreground:       #5a5f67;
   --accent:                 #e8edf6;
   --accent-foreground:      #2f5488;
   --destructive:            #c0392b;
