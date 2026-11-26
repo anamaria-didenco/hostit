@@ -8,11 +8,14 @@ const t = initTRPC.context<TrpcContext>().create({
   // A date-clash CONFLICT (server/availability.ts) carries the clash list so
   // the UI can show what's in the way and offer "Book anyway".
   errorFormatter({ shape, error }) {
+    // Which input field a validation failure is about ("email"), so a form
+    // can put the message at that field.
+    const field = invalidField(error);
     const clashes = (error.cause as { clashes?: unknown } | undefined)?.clashes;
-    if (Array.isArray(clashes)) return { ...shape, data: { ...shape.data, clashes } };
+    if (Array.isArray(clashes)) return { ...shape, data: { ...shape.data, clashes, field } };
     const message = userFacingMessage(error);
-    if (message !== shape.message) return { ...shape, message, data: { ...shape.data, stack: undefined } };
-    return shape;
+    if (message !== shape.message) return { ...shape, message, data: { ...shape.data, stack: undefined, field } };
+    return { ...shape, data: { ...shape.data, field } };
   },
 });
 
@@ -31,6 +34,14 @@ const FIELD_LABELS: Record<string, string> = {
   firstName: "First name", lastName: "Last name", email: "Email", phone: "Phone",
   company: "Company", message: "Message", guestCount: "Guest count", eventDate: "Event date",
 };
+
+/** The top-level input field the first validation issue is about, if any. */
+export function invalidField(error: TRPCError): string | undefined {
+  if (error.code !== "BAD_REQUEST") return undefined;
+  const issues = (error.cause as { issues?: { path?: PropertyKey[] }[] } | undefined)?.issues;
+  const key = Array.isArray(issues) ? issues[0]?.path?.[0] : undefined;
+  return typeof key === "string" && key ? key : undefined;
+}
 
 /** One readable sentence for validation and database failures; every other
  *  error keeps the message its procedure chose. */

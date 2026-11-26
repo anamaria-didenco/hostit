@@ -24,6 +24,7 @@ import { venueUpdateErrors } from "@shared/settingsValidation";
 import { normaliseTaskPriority } from "@shared/taskFields";
 import { CHECKLIST_ITEM_MAX_CHARS, EVENT_CHECKLIST_CATEGORIES } from "@shared/eventChecklistEdit";
 import { publicVenue } from "./publicVenue";
+import { isWallTime } from "@shared/enquiryWallTime";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -718,6 +719,11 @@ export const appRouter = router({
         // "form opened at" token from leads.formConfig.
         hp: z.string().max(500).optional(),
         formToken: z.string().max(80).optional(),
+        // The lead this page already saved at step 1, and its token, sent
+        // when the visitor went BACK and changed their email. Not used yet:
+        // a new lead is saved as before.
+        leadId: z.number().int().positive().optional(),
+        leadToken: z.string().max(64).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
@@ -773,6 +779,10 @@ export const appRouter = router({
         company: z.string().max(200).optional(),
         eventType: z.string().max(100).optional(),
         eventDate: validDateString.optional(),
+        // The picked time as the venue's wall clock ("19:00"), sent with a
+        // bare "YYYY-MM-DD" eventDate. Not used yet: forms still send the
+        // time inside eventDate, and that is what is stored.
+        eventTime: z.string().max(5).refine(v => v === "" || isWallTime(v), { message: "Please pick a time from the list" }).optional(),
         // The enquirer explicitly chose "no date yet" — kept as its own flag
         // so the board can say "Date TBC" instead of a blank.
         dateFlexible: z.boolean().optional(),
@@ -1210,6 +1220,17 @@ export const appRouter = router({
 
         return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent } : lead;
       }),
+
+    // Public: "still here" from the form while a visitor fills in step 2,
+    // for their own step-1 lead (leadToken). Not used yet: nothing is kept,
+    // and the answer is always that the lead isn't being watched.
+    touchPartial: publicProcedure
+      .input(z.object({
+        ownerId: z.number().int().positive(),
+        leadId: z.number().int().positive(),
+        leadToken: z.string().max(64),
+      }))
+      .mutation(async (): Promise<{ alive: boolean }> => ({ alive: false })),
 
     // Public: the enquiry form's settings that the page needs before anyone
     // types — spaces (with prices only where the venue publishes them),

@@ -68,6 +68,13 @@ export function isBotSubmission(ownerId: number, honeypot?: string | null, formT
 
 // ─── Public form config ──────────────────────────────────────────────────────
 
+/** A time zone name this runtime knows, else null (a typo in Settings must not break the form). */
+function knownTimeZone(tz: string | null | undefined): string | null {
+  const name = tz?.trim();
+  if (!name) return null;
+  try { new Intl.DateTimeFormat("en-NZ", { timeZone: name }); return name; } catch { return null; }
+}
+
 export async function getPublicFormConfig(ownerId: number) {
   const db = await getDb();
   const base = {
@@ -79,6 +86,9 @@ export async function getPublicFormConfig(ownerId: number) {
     }>,
     turnstileSiteKey: turnstileSiteKey(),
     formToken: formStartToken(ownerId, Date.now(), ENV.cookieSecret),
+    // The venue's time zone, so the form's "today" (the date picker's first
+    // day) is the venue's.
+    timeZone: VENUE_TZ,
   };
   if (!db) return base;
   const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
@@ -87,6 +97,7 @@ export async function getPublicFormConfig(ownerId: number) {
     .orderBy(eventSpaces.id);
   return {
     ...base,
+    timeZone: knownTimeZone(vs?.timezone) ?? VENUE_TZ,
     showAvailability: (vs?.showAvailabilityOnForm ?? 1) !== 0,
     walkthroughEnabled: parseWalkthroughSettings(vs).enabled,
     spaces: rows.map(s => {
