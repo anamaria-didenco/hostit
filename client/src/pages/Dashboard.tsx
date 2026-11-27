@@ -5918,8 +5918,10 @@ export default function Dashboard() {
                       {ev.guestCount && <span className="text-muted-foreground tabular-nums">{ev.guestCount} guests</span>}
                       <span className="mt-0.5 inline-flex items-center gap-1.5 font-bold text-[11.5px] min-w-0" style={{ color: sig.ink }}>
                         <CalDot sig={sig} />
-                        <span className="truncate">{calWords(ev, sig, isHeld)}</span>
+                        <span className="truncate">{isHeld && sig.red ? sig.label : calWords(ev, sig, isHeld)}</span>
                       </span>
+                      {/* A narrow card: a held date that is also red gets its hold on a line of its own. */}
+                      {isHeld && sig.red && <span className="text-muted-foreground truncate">On hold to {fmtHoldDay(ev.holdUntil)}</span>}
                     </button>
                   );
                 };
