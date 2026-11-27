@@ -22,7 +22,7 @@ export type SigTone = keyof typeof SIG;
 export const BTN = "inline-flex items-center justify-center gap-1.5 h-[38px] px-3.5 rounded-[6px] border-[1.5px] font-sans text-[13px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 export const BTN_OUTLINE = `${BTN} bg-card border-input text-foreground hover:bg-accent`;
 export const BTN_PRIMARY = `${BTN} bg-primary border-primary text-primary-foreground hover:brightness-110`;
-export const BTN_SM = "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-[6px] border-[1.5px] bg-card border-input text-foreground hover:bg-accent font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+export const BTN_SM = "inline-flex items-center justify-center gap-1.5 h-8 pointer-coarse:h-11 px-2.5 rounded-[6px] border-[1.5px] bg-card border-input text-foreground hover:bg-accent font-sans text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 /** Field labels in the edit forms (was font-bebas). */
 export const FIELD_LABEL = "font-sans text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground block mb-1";
@@ -114,7 +114,9 @@ function PrepMark({ state }: { state: PrepState }) {
   return <span className="w-[18px] h-[18px] rounded-full border-[1.5px]" style={{ borderColor: c }} aria-hidden />;
 }
 
-const PREP_SR: Record<PrepState, string> = { done: "Done", attention: "Needs attention", overdue: "Overdue", idle: "Not started" };
+// Words for the mark, which is a shape and colour only. "idle" is anything still
+// to do that isn't late or flagged, which may already be under way (1 of 3 ticked).
+const PREP_SR: Record<PrepState, string> = { done: "Done", attention: "Needs attention", overdue: "Overdue", idle: "To do" };
 
 export function PrepList({ items }: { items: PrepItem[] }) {
   const done = items.filter((i) => i.state === "done").length;

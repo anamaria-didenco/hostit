@@ -1312,13 +1312,17 @@
   /* Selected or current items. forced-color-adjust: none (no text backplate)
      is inherited, so everything inside (a count, an "On" label) is given the
      highlight text colour too, or it would keep its own colour on Highlight. */
-  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) { forced-color-adjust: none; background-color: Highlight !important; color: HighlightText !important; }
-  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today):focus-visible { outline-color: CanvasText !important; }
-  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) :not(.vf-swatch) { color: HighlightText !important; background-color: transparent !important; }
-  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) .vf-swatch { outline-color: HighlightText; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today, [role="gridcell"]) { forced-color-adjust: none; background-color: Highlight !important; color: HighlightText !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today, [role="gridcell"]):focus-visible { outline-color: CanvasText !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today, [role="gridcell"]) :not(.vf-swatch) { color: HighlightText !important; background-color: transparent !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today, [role="gridcell"]) .vf-swatch { outline-color: HighlightText; }
   /* The enquiry lanes' dots are borders, so they stay as discs in the system
      colour; on a selected view tab they follow its highlight text. */
-  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today) [data-lane-dot] { border-color: HighlightText !important; }
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]):not(.vf-today, [role="gridcell"]) [data-lane-dot] { border-color: HighlightText !important; }
+  /* The calendar's selected day is a whole cell of events: a Highlight ring,
+     not a Highlight fill, so its chips and today's circle keep their colours
+     (its normal ring is a box-shadow, which forced colours removes). */
+  [role="gridcell"][aria-selected="true"] { outline: 3px solid Highlight !important; outline-offset: -3px; }
 }
 
 /* Short screens: a laptop zoomed to 200-400%, or a phone on its side. The

@@ -39,14 +39,22 @@ export function useActiveStep(ids: string[]): string {
         const el = document.getElementById(stepDomId(id));
         if (el && el.getBoundingClientRect().top <= 160) current = id;
       }
-      // At the very bottom the last section is the one being read.
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = ids[ids.length - 1];
+      // Scrolled to the very bottom, the last section is the one being read.
+      // Only once the page has been scrolled: before the proposal has loaded the
+      // page is short, so it "ends" on screen and the last step would be marked.
+      const doc = document.documentElement;
+      const scrolls = doc.scrollHeight > window.innerHeight + 4;
+      if (scrolls && window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 4) current = ids[ids.length - 1];
       setActive(current);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
+    // The sections fill in after the proposal loads (and grow as lines are
+    // added): check again whenever the page changes size, not only on scroll.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => onScroll()) : null;
+    ro?.observe(document.body);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); ro?.disconnect(); };
   }, [key]);
   return active;
 }

@@ -86,6 +86,15 @@ function daysBetween(a: number, b: number): number {
 }
 
 /**
+ * A follow-up date that has arrived, in the list's words: "Follow up today"
+ * on the day, "Follow-up overdue · 2d" from a whole day after (`days` >= 1).
+ */
+export function followUpDue(dueMs: number, nowMs: number): { days: number; text: string } {
+  const days = daysBetween(nowMs, dueMs);
+  return { days, text: days >= 1 ? `Follow-up overdue · ${days}d` : "Follow up today" };
+}
+
+/**
  * Compute the signal for one enquiry. Pure: everything time-dependent comes in
  * through `ctx` so it's deterministic and unit-testable.
  */
@@ -150,13 +159,13 @@ export function enquirySignal(lead: SignalLead, ctx: SignalContext = {}): Enquir
   if (fu.needs) {
     if (fu.reason === "overdue") {
       const dueMs = lead.followUpDate ? new Date(lead.followUpDate as any).getTime() : now;
-      const overdueDays = daysBetween(now, dueMs);
+      const due = followUpDue(dueMs, now);
       return {
         group: "followup",
         kind: "followup_overdue",
-        tone: overdueDays >= 1 ? "red" : "amber",
+        tone: due.days >= 1 ? "red" : "amber",
         icon: "bell",
-        text: overdueDays >= 1 ? `Follow-up overdue · ${overdueDays}d` : "Follow up today",
+        text: due.text,
         sortKey: HOUR + Math.max(0, now - dueMs), // overdue sorts above idle
       };
     }
