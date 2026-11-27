@@ -5921,7 +5921,7 @@ export default function Dashboard() {
                         <span className="truncate">{isHeld && sig.red ? sig.label : calWords(ev, sig, isHeld)}</span>
                       </span>
                       {/* A narrow card: a held date that is also red gets its hold on a line of its own. */}
-                      {isHeld && sig.red && <span className="text-muted-foreground truncate">On hold to {fmtHoldDay(ev.holdUntil)}</span>}
+                      {isHeld && sig.red && <span className="text-muted-foreground break-words">On hold to {fmtHoldDay(ev.holdUntil)}</span>}
                     </button>
                   );
                 };
