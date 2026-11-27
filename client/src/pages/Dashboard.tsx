@@ -2012,6 +2012,11 @@ export default function Dashboard() {
       statusColour: getStatusInfo(ev.status)?.swatch ?? '#8a8073',
     });
   };
+  // An event's words in the Week, Day and List views. A held date says until
+  // when; if the list also marks it red (a date clash), the red words lead,
+  // so the reason for the red is never the colour alone.
+  const calWords = (ev: any, sig: ReturnType<typeof calSignal>, held: boolean) =>
+    !held ? sig.label : sig.red ? `${sig.label} · on hold to ${fmtHoldDay(ev.holdUntil)}` : `On hold · to ${fmtHoldDay(ev.holdUntil)}`;
   // The legend: the statuses the calendar can show (lost enquiries never are;
   // cancelled only while "Show cancelled" is on), and the spaces whose colour
   // the venue chose (an event's left edge).
@@ -5415,7 +5420,6 @@ export default function Dashboard() {
                                     const isLead = ev._kind === 'lead';
                                     const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
-                                    const overdue = isLead && isOverdueLead(ev);
                                     const sig = signalOf(ev, isLead);
                                     const statusText = statusWords(getStatusInfo(ev.status).label);
                                     return (
@@ -5433,7 +5437,7 @@ export default function Dashboard() {
                                           <CalMark sig={sig} />
                                           {time && <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground leading-none">{time}</span>}
                                           <span className="truncate font-semibold text-[11.5px] leading-none">{[ev.firstName, ev.lastName].filter(Boolean).join(' ')}</span>
-                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusText ? ` (${statusText})` : ''}${overdue && !sig.label.startsWith('Follow-up overdue') ? ', follow-up overdue' : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}${isHold && sig.label !== 'On hold' ? ', date on hold' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
+                                          <span className="sr-only">{`, ${sig.label}${sig.label !== statusText ? ` (${statusText})` : ''}${!isLead && ev.clashFlaggedAt && sig.label !== 'Double-booked' ? ', double-booked' : ''}${isHold && sig.label !== 'On hold' ? ', date on hold' : ''}, ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? `, ${ev.guestCount} guests` : ''}${ev.spaceName ? `, ${ev.spaceName}` : ''}, ${friendlyDay(dateStr)}`}</span>
                                         </button>
                                       </div>
                                     );
@@ -5579,7 +5583,7 @@ export default function Dashboard() {
                                 {(() => {
                                   const isLead = e._kind === 'lead';
                                   const sig = calSignalOf(e, isLead);
-                                  return <CalSig sig={sig}>{isLead && holdState(e) === 'held' ? `On hold · to ${fmtHoldDay(e.holdUntil)}` : sig.label}</CalSig>;
+                                  return <CalSig sig={sig}>{calWords(e, sig, isLead && holdState(e) === 'held')}</CalSig>;
                                 })()}
                               </button>
                             ))}
@@ -5830,7 +5834,7 @@ export default function Dashboard() {
                                   {(() => {
                                     const isLead = item._type === 'lead';
                                     const sig = calSignalOf(item, isLead);
-                                    return <CalSig sig={sig}>{isLead && holdState(item) === 'held' ? `On hold · to ${fmtHoldDay(item.holdUntil)}` : sig.label}</CalSig>;
+                                    return <CalSig sig={sig}>{calWords(item, sig, isLead && holdState(item) === 'held')}</CalSig>;
                                   })()}
                                   {item._type === 'booking' && item.depositRequired !== false && (
                                     <span className="font-sans text-[12px] text-muted-foreground">{item.depositPaid ? '· Deposit paid' : '· Deposit pending'}</span>
@@ -5905,7 +5909,7 @@ export default function Dashboard() {
                       {ev.guestCount && <span className="text-muted-foreground tabular-nums">{ev.guestCount} guests</span>}
                       <span className="mt-0.5 inline-flex items-center gap-1.5 font-bold text-[11.5px] min-w-0" style={{ color: sig.ink }}>
                         <CalDot sig={sig} />
-                        <span className="truncate">{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</span>
+                        <span className="truncate">{calWords(ev, sig, isHeld)}</span>
                       </span>
                     </button>
                   );
@@ -6008,8 +6012,8 @@ export default function Dashboard() {
                       className="w-full text-left rounded-[8px] border-[1.5px] px-4 py-3 hover:border-primary transition-colors grid gap-3 md:gap-4 items-center grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[150px_minmax(0,1fr)_auto]"
                       style={sig.red ? { background: CAL_TONE.red.bg, borderColor: CAL_TONE.red.border } : { background: 'var(--card)', borderColor: 'var(--border)', ...(isHeld ? { borderStyle: 'dashed', borderColor: sig.mark } : {}) }}>
                       <span className="hidden md:flex flex-col gap-[3px] min-w-0">
-                        <CalSig sig={sig}>{isHeld ? 'On hold' : sig.label}</CalSig>
-                        {isHeld && <span className="font-sans text-[12px] text-muted-foreground">to {fmtHoldDay(ev.holdUntil)}</span>}
+                        <CalSig sig={sig}>{isHeld && !sig.red ? 'On hold' : sig.label}</CalSig>
+                        {isHeld && <span className="font-sans text-[12px] text-muted-foreground">{sig.red ? 'On hold to' : 'to'} {fmtHoldDay(ev.holdUntil)}</span>}
                       </span>
                       <span className="min-w-0">
                         <span className="flex items-center gap-2 flex-wrap">
@@ -6020,7 +6024,7 @@ export default function Dashboard() {
                           {ev.eventType && <span>{ev.eventType}</span>}
                           {ev.spaceName && <span>{ev.spaceName}</span>}
                         </span>
-                        <span className="md:hidden mt-1 flex"><CalSig sig={sig}>{isHeld ? `On hold · to ${fmtHoldDay(ev.holdUntil)}` : sig.label}</CalSig></span>
+                        <span className="md:hidden mt-1 flex"><CalSig sig={sig}>{calWords(ev, sig, isHeld)}</CalSig></span>
                       </span>
                       <span className="font-sans text-[15px] font-semibold tabular-nums text-foreground">{ev.guestCount ? <>{ev.guestCount}<span className="sr-only"> guests</span></> : ''}</span>
                     </button>
