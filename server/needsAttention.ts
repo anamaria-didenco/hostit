@@ -114,7 +114,7 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     todayKey: zonedYmd(now, tz),
     tonight: { total: 0, items: [] as TonightItem[] },
     tasks: { total: 0, items: [] as TaskItem[] },
-    enquiries: { total: 0, awaitingTotal: 0, followUpTotal: 0, items: [] as EnquiryItem[], replyOverdueIds: [] as number[] },
+    enquiries: { total: 0, awaitingTotal: 0, followUpTotal: 0, items: [] as EnquiryItem[], replyOverdueIds: [] as number[], replyPendingIds: [] as number[] },
     deposits: { total: 0, items: [] as DepositItem[] },
     runsheets: { total: 0, items: [] as RunsheetItem[] },
     alerts: { total: 0, items: [] as AlertItem[] },
@@ -176,10 +176,12 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
   ));
   const awaiting: EnquiryItem[] = [];
   const awaitingIds = new Set<number>();
+  // Awaiting a first reply, but still inside the venue's reply hours.
+  const replyPendingIds: number[] = [];
   if (replyEnabled) {
     for (const l of candidates) {
       if (l.respondedAt != null || !isAwaitingFirstReply(l)) continue;
-      if (replyDueAt(l.createdAt, replyHours, DEFAULT_BUSINESS_HOURS).getTime() > nowMs) continue;
+      if (replyDueAt(l.createdAt, replyHours, DEFAULT_BUSINESS_HOURS).getTime() > nowMs) { replyPendingIds.push(l.id); continue; }
       awaitingIds.add(l.id);
       awaiting.push({
         leadId: l.id, name: fullName(l), eventType: l.eventType ?? null, reason: "awaiting_reply",
@@ -259,10 +261,12 @@ export async function getNeedsAttention(ownerId: number, now: Date = new Date())
     tasks: { total: overdueRows.length, items: taskItems },
     enquiries: {
       total: awaiting.length + followUps.length, awaitingTotal: awaiting.length, followUpTotal: followUps.length, items: enquiryItems,
-      // Every enquiry whose first reply is overdue, not just the shown ones: the
-      // Overview lists the Enquiries list's Needs reply rows, and leaves out a
-      // brand-new enquiry that isn't in here (shared/needsToday.ts).
+      // Every enquiry whose first reply is overdue, and every one still inside
+      // the reply hours, not just the shown ones: the Overview lists the
+      // Enquiries list's Needs reply rows, and leaves a brand-new enquiry out
+      // while it is inside the reply hours (shared/needsToday.ts).
       replyOverdueIds: awaiting.map(a => a.leadId),
+      replyPendingIds,
     },
     deposits: { total: depositAll.length, items: depositAll.slice(0, cap) },
     runsheets: { total: noSheetAll.length, items: noSheetAll.slice(0, cap) },

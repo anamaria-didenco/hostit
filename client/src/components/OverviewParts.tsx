@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { daysAwayLabel, UPCOMING_DAYS, NEEDS_GROUP_CAP, type EnquiryNeeds } from "@shared/needsToday";
+import { daysAwayLabel, UPCOMING_DAYS, NEEDS_GROUP_CAP, needLane, type EnquiryNeeds } from "@shared/needsToday";
 import { LANE_INK, LANE_MARK, type Lane } from "@shared/enquiryLane";
 import { statusPalette } from "@shared/statusPalette";
 import { dayLabel, hhmmLabel } from "@/lib/overviewDates";
@@ -134,7 +134,7 @@ export interface OverviewNeedsTodayProps {
   /**
    * Enquiries waiting on you: the Enquiries list's own Needs reply and
    * Follow-up due rows (shared/needsToday.ts needsTodayEnquiries; a brand-new
-   * enquiry only once its reply is overdue). Undefined until they load.
+   * enquiry only once it is time to chase it). Undefined until they load.
    */
   enquiries?: EnquiryNeeds;
   /** Double-bookings kept over the clash warning (bookings.clashes). */
@@ -242,20 +242,22 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
 
   // Enquiries waiting on you, as the Enquiries list shows them: Needs reply
   // (a first reply once it is overdue, or the client wrote back), then
-  // Follow-up due. Each keeps its lane colour and the words on its row.
+  // Follow-up due. Each keeps its lane colour and the words on its row. Each
+  // group comes red rows first (needsTodayEnquiries), so the cap below never
+  // hides a red row behind an amber one.
   const shownReply = (p.enquiries?.reply ?? []).slice(0, NEEDS_GROUP_CAP);
   const shownFollowup = (p.enquiries?.followup ?? []).slice(0, NEEDS_GROUP_CAP);
   for (const [group, list] of [["reply", shownReply], ["followup", shownFollowup]] as const) {
     for (const l of list) {
-      // A first reply past the venue's reply hours is red "Reply overdue", as
-      // it always was here, with the list's wait under it; the list itself
-      // shows it blue ("new"). A red lane (a date clash) keeps its own words.
-      const overdue = !!l.replyOverdue && l.lane !== "red";
-      const tone = overdue ? "red" : LANE_TONE[l.lane];
+      // A brand-new enquiry listed for a reason its list row doesn't show (the
+      // list shows it blue, "new") says why: red "Reply overdue" with how long
+      // the first reply has waited, as it always was here, or its follow-up
+      // date. A red lane (a date clash) keeps its own words.
+      const tone = LANE_TONE[needLane(l)];
       const reply = group === "reply";
       rows.push({
         key: `lead-${l.leadId}`, tone,
-        signal: overdue ? "Reply overdue" : l.text, signalSub: overdue ? l.text : l.sub,
+        signal: l.due?.text ?? l.text, signalSub: l.due ? l.due.sub : l.sub,
         // Someone waiting on a reply comes straight after the red rows, before
         // the other amber ones: it is the venue's to answer today.
         rank: reply && tone !== "red" ? 0.5 : undefined,

@@ -3654,13 +3654,16 @@ export default function Dashboard() {
     [enquiryRows, listState, listCtx],
   );
   // "Needs you today" (Overview and the Calendar panel): the list's own Needs
-  // reply and Follow-up due rows, in the list's order, with each row's lane
-  // and words, so they are the people the tabs list. A brand-new enquiry only
-  // once its reply is overdue (the server's rule, as before): inside the
-  // venue's reply hours it isn't waiting on anything yet.
+  // reply and Follow-up due rows, in the list's order (red rows first), with
+  // each row's lane and words, so they are the people the tabs list. A
+  // brand-new enquiry only once it is time to chase it (the server's reply
+  // hours, as before): inside them it isn't waiting on anything yet.
   const { data: needsAttention } = trpc.dashboard.needsAttention.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 15_000, refetchOnWindowFocus: true });
   const needsEnquiries = React.useMemo(
-    () => (allLeads && needsAttention ? needsTodayEnquiries(enquiryRows, listCtx, new Set(needsAttention.enquiries.replyOverdueIds)) : undefined),
+    () => (allLeads && needsAttention ? needsTodayEnquiries(enquiryRows, listCtx, {
+      overdueIds: new Set(needsAttention.enquiries.replyOverdueIds),
+      pendingIds: new Set(needsAttention.enquiries.replyPendingIds),
+    }) : undefined),
     [allLeads, needsAttention, enquiryRows, listCtx],
   );
   // Each enquiry's lane on the list, for the calendar: an enquiry the list
