@@ -3664,14 +3664,21 @@ export default function Dashboard() {
   // each row's lane and words, so they are the people the tabs list. A
   // brand-new enquiry only once it is time to chase it (the server's reply
   // hours, as before): inside them it isn't waiting on anything yet.
-  const { data: needsAttention } = trpc.dashboard.needsAttention.useQuery(undefined, { enabled: !!user && !isStaff, staleTime: 15_000, refetchOnWindowFocus: true });
+  // Worked out only while a "Needs you today" is on screen (the Overview, or
+  // the Calendar with its panel open): the query is several database reads,
+  // refetched on every focus, and the card shares it (one fetch).
+  const needsTodayShown = !!user && !isStaff && (tab === 'overview' || (tab === 'calendar' && showCalendarNeeds));
+  const { data: needsAttention, isError: needsAttentionError, refetch: refetchNeedsAttention } = trpc.dashboard.needsAttention.useQuery(undefined, { enabled: needsTodayShown, staleTime: 15_000, refetchOnWindowFocus: true });
   const needsEnquiries = React.useMemo(
-    () => (allLeads && needsAttention ? needsTodayEnquiries(enquiryRows, listCtx, {
+    () => (needsTodayShown && allLeads && needsAttention ? needsTodayEnquiries(enquiryRows, listCtx, {
       overdueIds: new Set(needsAttention.enquiries.replyOverdueIds),
       pendingIds: new Set(needsAttention.enquiries.replyPendingIds),
     }) : undefined),
-    [allLeads, needsAttention, enquiryRows, listCtx],
+    [needsTodayShown, allLeads, needsAttention, enquiryRows, listCtx],
   );
+  // Either query failed: the card says so where the enquiry rows would be.
+  const needsEnquiriesError = !needsEnquiries && (!!leadsError || needsAttentionError);
+  const retryNeedsEnquiries = () => { void refetchLeads(); void refetchNeedsAttention(); };
   // Each enquiry's lane on the list, for the calendar: an enquiry the list
   // marks red (late or wrong) is red on the calendar too, in the same words.
   const leadLaneById = React.useMemo(
@@ -4366,6 +4373,8 @@ export default function Dashboard() {
                       onGoEnquiries={(view) => showEnquiries({ view })}
                       onGoDeposits={() => tileAction('deposits_due')}
                       enquiries={needsEnquiries}
+                      enquiriesError={needsEnquiriesError}
+                      onRetryEnquiries={retryNeedsEnquiries}
                       clashes={doubleBookings}
                       onResolveClash={(id) => resolveClash.mutate({ id })}
                       resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}
@@ -6213,6 +6222,8 @@ export default function Dashboard() {
                 onGoEnquiries={(view) => showEnquiries({ view })}
                 onGoDeposits={() => tileAction('deposits_due')}
                 enquiries={needsEnquiries}
+                enquiriesError={needsEnquiriesError}
+                onRetryEnquiries={retryNeedsEnquiries}
                 clashes={doubleBookings}
                 onResolveClash={(id) => resolveClash.mutate({ id })}
                 resolvingClashId={resolveClash.isPending ? (resolveClash.variables?.id ?? null) : null}

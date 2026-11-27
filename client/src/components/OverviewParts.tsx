@@ -137,6 +137,9 @@ export interface OverviewNeedsTodayProps {
    * enquiry only once it is time to chase it). Undefined until they load.
    */
   enquiries?: EnquiryNeeds;
+  /** The enquiries couldn't be loaded: the card says so instead of waiting. */
+  enquiriesError?: boolean;
+  onRetryEnquiries?: () => void;
   /** Double-bookings kept over the clash warning (bookings.clashes). */
   clashes?: Clash[];
   onResolveClash: (bookingId: number) => void;
@@ -174,7 +177,7 @@ const TONE_RANK: Record<Tone, number> = { red: 0, amber: 1, blue: 2, green: 3, m
 export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
-  const { data } = trpc.dashboard.needsAttention.useQuery(undefined, { staleTime: 15_000, refetchOnWindowFocus: true });
+  const { data, isError, refetch } = trpc.dashboard.needsAttention.useQuery(undefined, { staleTime: 15_000, refetchOnWindowFocus: true });
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const complete = trpc.tasks.complete.useMutation({
     onSuccess: () => {
@@ -374,17 +377,29 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
   }
   const moreShown = more.filter(m => m.n > 0);
 
+  // A part that couldn't load says so, rather than "Loading…" for ever or an
+  // "All clear" that may not be true.
+  const listFailed = isError && !data;
+  const enquiriesFailed = !p.enquiries && !!p.enquiriesError;
+  const loading = sorted.length === 0 && ((!data && !listFailed) || (!p.enquiries && !enquiriesFailed));
+  const failed = listFailed || enquiriesFailed ? (
+    <p role="status" className="font-sans text-[13px] text-muted-foreground m-0 py-1 flex flex-wrap items-center gap-x-2">
+      {listFailed ? "Couldn't load this list." : "Couldn't load the enquiries for this list."}
+      <button type="button" className={linkBtn} onClick={() => { if (listFailed) void refetch(); if (enquiriesFailed) p.onRetryEnquiries?.(); }}>Try again</button>
+    </p>
+  ) : null;
+
   return (
     <section aria-label="Needs you today" className="flex flex-col gap-2.5 min-w-0">
       <OvHead title="Needs you today" meta={sorted.length ? (urgent ? `${urgent} urgent · most urgent first` : "Most urgent first") : undefined} />
-      {(!data || !p.enquiries) && sorted.length === 0 ? (
+      {loading ? (
         <p className="font-sans text-[13px] text-muted-foreground m-0 py-2">Loading…</p>
-      ) : sorted.length === 0 ? (
+      ) : sorted.length === 0 ? (failed ??
         <div className="rounded-[8px] border-[1.5px] border-border bg-card px-4 py-3.5">
           <Sig tone="green">All clear</Sig>
           <p className="font-sans text-[13px] text-muted-foreground m-0 mt-1">Nothing is waiting on you right now.</p>
         </div>
-      ) : (
+      ) : (<>
         <ul className="flex flex-col gap-2 m-0 p-0 list-none">
           {sorted.map(r => (
             <li key={r.key}
@@ -405,7 +420,8 @@ export function OverviewNeedsToday(p: OverviewNeedsTodayProps) {
             </li>
           ))}
         </ul>
-      )}
+        {failed}
+      </>)}
       {moreShown.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {moreShown.map(m => m.go
