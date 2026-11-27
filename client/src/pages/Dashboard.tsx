@@ -1398,10 +1398,11 @@ export default function Dashboard() {
         case 'ArrowLeft': e.preventDefault(); navCalendar(-1); break;
         case 'ArrowRight': e.preventDefault(); navCalendar(1); break;
         case 't': case 'T': e.preventDefault(); navCalendarToday(); break;
-        case 'm': case 'M': e.preventDefault(); setCalendarView('month'); break;
-        case 'w': case 'W': e.preventDefault(); setCalendarView('week'); break;
-        case 'd': case 'D': e.preventDefault(); setCalendarView('day'); break;
-        case 'l': case 'L': e.preventDefault(); setCalendarView('list'); break;
+        // The same switch as the view buttons: Week and Day open on the day picked in the month.
+        case 'm': case 'M': e.preventDefault(); switchCalendarView('month'); break;
+        case 'w': case 'W': e.preventDefault(); switchCalendarView('week'); break;
+        case 'd': case 'D': e.preventDefault(); switchCalendarView('day'); break;
+        case 'l': case 'L': e.preventDefault(); switchCalendarView('list'); break;
       }
     };
     window.addEventListener('keydown', onKey);
